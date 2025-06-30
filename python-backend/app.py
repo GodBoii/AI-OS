@@ -217,7 +217,7 @@ class ConnectionManager:
         if is_deepsearch:
             agent = get_deepsearch(user_id=user_id, **config)
         else:
-            agent = get_llm_os(user_id=user_id, **config)
+            agent = get_llm_os(user_id=user_id, socketio_instance=socketio, **config)
 
         self.sessions[sid] = {
             "agent": agent, 

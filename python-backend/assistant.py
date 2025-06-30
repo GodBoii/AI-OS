@@ -37,6 +37,7 @@ from sandbox_tools import SandboxTools
     
 def get_llm_os(
     user_id: Optional[str] = None,
+    socketio_instance: Optional[Any] = None,
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
@@ -143,7 +144,7 @@ def get_llm_os(
     if coding_assistant:
         _coding_assistant = Agent(
             name="Coding Assistant",
-            tools=[SandboxTools()],
+            tools=[SandboxTools(socketio_instance=socketio_instance)],
             role="Coding agent",
             instructions=["Please proceed as an expert developer with the following approach:",
                            " - Deep Analysis:",
