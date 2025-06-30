@@ -143,7 +143,7 @@ def get_llm_os(
     if coding_assistant:
         _coding_assistant = Agent(
             name="Coding Assistant",
-            tools=[PythonTools()],
+            tools=[SandboxTools()],
             role="Coding agent",
             instructions=["Please proceed as an expert developer with the following approach:",
                            " - Deep Analysis:",
