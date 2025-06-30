@@ -164,7 +164,10 @@ def get_llm_os(
             debug_mode=debug_mode
         )
         team.append(_coding_assistant)
-        extra_instructions.append("To write code, delegate the task to the `Coding Assistant`.")
+        extra_instructions.append("To execute a shell command, you MUST follow this two-step process: "
+                                  "1. First, call the `prepare_sandbox_terminal()` tool to create a terminal window for the user. This tool will return a unique `artifactId`. "
+                                  "2. Second, call the `execute_command_in_terminal()` tool, passing the command you want to run and the `artifactId` you received from the first step."
+                                  "3. Finally, call the `close_sandbox_terminal()` tool to close the terminal window.")
 
     if web_crawler:
         _web_crawler = Agent(
