@@ -2,77 +2,67 @@
 import os
 import requests
 from agno.tools import Toolkit
-import uuid # Import the uuid library
-
-socketio = None
 
 class SandboxTools(Toolkit):
-    # The __init__ method now accepts the socketio object
-    def __init__(self, socketio_instance):
+    def __init__(self, socketio_instance=None): # socketio_instance is no longer needed here
         super().__init__(
             name="sandbox_tools",
-            tools=[self.prepare_sandbox_terminal, self.execute_command_in_terminal]
+            tools=[self.create_sandbox, self.execute_in_sandbox, self.close_sandbox]
         )
-        # Store the socketio instance on the object itself, not as a global
-        self.socketio = socketio_instance
         self.sandbox_api_url = os.getenv("SANDBOX_API_URL")
         if not self.sandbox_api_url:
             raise ValueError("SANDBOX_API_URL environment variable is not set.")
 
-    def prepare_sandbox_terminal(self) -> str:
-        """Prepares a new terminal window..."""
-        # Use the instance's socketio object
-        if not self.socketio:
-            return "Error: Socket.IO instance not available."
-
-        artifact_id = f"terminal-{uuid.uuid4()}"
-
-        # Use self.socketio to emit
-        self.socketio.emit('sandbox-command-started', {
-            'artifactId': artifact_id,
-            'command': None,
-            'status': 'waiting'
-        })
-        return artifact_id
-
-    def execute_command_in_terminal(self, command: str, artifactId: str) -> str:
-        """Executes a shell command..."""
-        # Use the instance's socketio object
-        if not self.socketio:
-            return "Error: Socket.IO instance not available."
-
-        # Use self.socketio to emit
-        self.socketio.emit('sandbox-command-update', {
-            'artifactId': artifactId,
-            'command': command
-        })
-
-        # ... (rest of the function remains the same, but uses self.socketio) ...
-        api_endpoint = f"{self.sandbox_api_url}/execute"
-        payload = {"command": command}
-        final_output = ""
-
+    def create_sandbox(self) -> str:
+        """
+        Creates a new, stateful sandbox session for executing commands.
+        This MUST be called before any command execution.
+        Returns a unique sandbox_id that must be used for all subsequent calls.
+        """
         try:
-            response = requests.post(api_endpoint, json=payload, timeout=310)
+            response = requests.post(f"{self.sandbox_api_url}/sessions")
+            response.raise_for_status()
+            data = response.json()
+            return f"Sandbox created with ID: {data['sandbox_id']}"
+        except requests.RequestException as e:
+            return f"Error creating sandbox: {e}"
+
+    def execute_in_sandbox(self, sandbox_id: str, command: str) -> str:
+        """
+        Executes a shell command inside a specific sandbox session.
+        Args:
+            sandbox_id (str): The ID of the sandbox session, obtained from create_sandbox.
+            command (str): The shell command to execute.
+        """
+        try:
+            response = requests.post(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/exec",
+                json={"command": command}
+            )
             response.raise_for_status()
             data = response.json()
             
-            self.socketio.emit('sandbox-command-finished', {
-                'artifactId': artifactId,
-                'stdout': data.get('stdout', ''),
-                'stderr': data.get('stderr', ''),
-                'exitCode': data.get('exit_code', -1)
-            })
-
-            if data.get("stdout"): final_output += f"STDOUT:\n{data['stdout']}\n"
-            if data.get("stderr"): final_output += f"STDERR:\n{data['stderr']}\n"
-            final_output += f"Exit Code: {data['exit_code']}"
-
+            output = ""
+            if data.get("stdout"):
+                output += f"STDOUT:\n{data['stdout']}\n"
+            if data.get("stderr"):
+                output += f"STDERR:\n{data['stderr']}\n"
+            output += f"Exit Code: {data['exit_code']}"
+            return output
+            
         except requests.RequestException as e:
-            error_message = f"Error communicating with the sandbox service: {e}"
-            self.socketio.emit('sandbox-command-finished', {
-                'artifactId': artifactId, 'stdout': '', 'stderr': error_message, 'exitCode': -1
-            })
-            final_output = error_message
+            return f"Error executing command: {e}"
 
-        return final_output
+    def close_sandbox(self, sandbox_id: str) -> str:
+        """
+        Terminates and cleans up a sandbox session.
+        This should be called when the task is complete to free up resources.
+        Args:
+            sandbox_id (str): The ID of the sandbox session to close.
+        """
+        try:
+            response = requests.delete(f"{self.sandbox_api_url}/sessions/{sandbox_id}")
+            response.raise_for_status()
+            return response.json().get("message", "Session terminated.")
+        except requests.RequestException as e:
+            return f"Error closing sandbox: {e}"

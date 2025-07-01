@@ -6,6 +6,7 @@ import logging
 import json
 import uuid
 import traceback
+import requests
 from pathlib import Path
 from flask import Flask, request, jsonify, redirect, url_for, session
 from flask_socketio import SocketIO, emit
@@ -214,17 +215,20 @@ class ConnectionManager:
         config['enable_google_email'] = True
         config['enable_google_drive'] = True
 
+        sandbox_tracker_set = set()
+
         if is_deepsearch:
             agent = get_deepsearch(user_id=user_id, **config)
         else:
-            agent = get_llm_os(user_id=user_id, socketio_instance=socketio, **config)
+            agent = get_llm_os(user_id=user_id, socketio_instance=socketio, sandbox_tracker_set=sandbox_tracker_set, **config)
 
         self.sessions[sid] = {
             "agent": agent, 
             "config": config,
             "history": [],
             "user_id": user_id,
-            "created_at": datetime.datetime.now().isoformat()
+            "created_at": datetime.datetime.now().isoformat(),
+            "sandbox_ids": sandbox_tracker_set
         }
         
         self.isolated_assistants[sid] = IsolatedAssistant(sid)
@@ -233,11 +237,22 @@ class ConnectionManager:
 
     def terminate_session(self, sid):
         if sid in self.sessions:
-            session_info = self.sessions.get(sid)
+            session_info = self.sessions.pop(sid)
             if not session_info: return
             agent = session_info.get("agent")
             history = session_info.get("history", [])
             user_id = session_info.get("user_id")
+
+            sandbox_ids_to_clean = session_info.get("sandbox_ids", set())
+            if sandbox_ids_to_clean:
+                logger.info(f"Cleaning up {len(sandbox_ids_to_clean)} sandbox sessions for SID {sid}.")
+                sandbox_api_url = os.getenv("SANDBOX_API_URL")
+                for sandbox_id in sandbox_ids_to_clean:
+                    try:
+                        requests.delete(f"{sandbox_api_url}/sessions/{sandbox_id}", timeout=10)
+                        logger.info(f"Successfully terminated sandbox {sandbox_id}.")
+                    except requests.RequestException as e:
+                        logger.error(f"Failed to clean up sandbox {sandbox_id}: {e}")
 
             if agent and hasattr(agent, 'session_metrics') and agent.session_metrics:
                 try:

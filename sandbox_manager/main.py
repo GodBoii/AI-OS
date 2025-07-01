@@ -1,78 +1,76 @@
 # sandbox_manager/main.py
-import os
+import uvicorn
 import docker
+import uuid
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel
 
-# --- Pydantic Models for API Data Validation ---
-class ExecutionRequest(BaseModel):
-    command: str = Field(..., description="The shell command to execute in the sandbox.")
-    timeout: int = Field(60, description="Timeout in seconds for the command execution.")
-
-class ExecutionResponse(BaseModel):
-    stdout: str
-    stderr: str
-    exit_code: int
-
-# --- FastAPI Application ---
 app = FastAPI()
-# Initialize Docker client from the environment
-# This will connect to the Docker daemon on the host machine
-try:
-    docker_client = docker.from_env()
-except docker.errors.DockerException as e:
-    # This will fail if the Docker daemon is not running or accessible
-    print(f"FATAL: Could not connect to Docker daemon. {e}")
-    docker_client = None
+docker_client = docker.from_env()
+SANDBOX_IMAGE = "godboi/aios-sandbox:latest"
 
-# --- API Endpoints ---
-@app.get("/health")
-def health_check():
-    """Simple health check to ensure the service is running."""
-    return {"status": "ok"}
+class CommandRequest(BaseModel):
+    command: str
 
-@app.post("/execute", response_model=ExecutionResponse)
-def execute_command(request: ExecutionRequest):
-    """
-    Executes a command in a new, isolated Docker container.
-    """
-    if not docker_client:
-        raise HTTPException(status_code=500, detail="Docker client is not available.")
+# Dictionary to keep track of active containers (optional but good practice)
+active_sessions = {}
 
-    # The name of the sandbox image you pushed to Docker Hub
-    # IMPORTANT: Store this in an environment variable in production
-    sandbox_image = os.getenv("SANDBOX_IMAGE", "your-dockerhub-username/sandbox-image:latest")
-
+@app.post("/sessions")
+def create_session():
+    """Creates a new sandbox container and returns its session ID."""
+    sandbox_id = str(uuid.uuid4())
+    container_name = f"sandbox-session-{sandbox_id}"
     try:
-        # Run the command in a new container.
-        # This is a blocking call that waits for the container to finish.
         container = docker_client.containers.run(
-            image=sandbox_image,
-            command=f"/bin/bash -c '{request.command}'",
-            detach=False,  # Run in the foreground and wait for completion
-            remove=True,   # Automatically remove the container when it exits
-            # --- SECURITY: Resource Limits ---
-            mem_limit="256m",       # Max memory the container can use
-            cpu_shares=512,         # Relative CPU weight (default is 1024)
-            network_disabled=True,  # Disable networking for untrusted code
+            SANDBOX_IMAGE,
+            name=container_name,
+            detach=True,        # Run in the background
+            tty=True,           # Keep the container running
+            auto_remove=False,  # Do not remove automatically
+            user='sandboxuser',
+            working_dir='/home/sandboxuser'
         )
+        active_sessions[sandbox_id] = container.id
+        return {"sandbox_id": sandbox_id}
+    except docker.errors.APIError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create sandbox container: {e}")
 
-        # The result is returned as bytes, so we decode it
-        stdout = container.decode('utf-8')
-        stderr = "" # Stderr is captured by the exception below if command fails
-        exit_code = 0
-
-    except docker.errors.ContainerError as e:
-        # This error is raised if the command in the container exits with a non-zero status
-        stdout = e.container.logs(stdout=True).decode('utf-8')
-        stderr = e.container.logs(stderr=True).decode('utf-8')
-        exit_code = e.exit_status
-    
-    except docker.errors.ImageNotFound:
-        raise HTTPException(status_code=500, detail=f"Sandbox image '{sandbox_image}' not found.")
-    
+@app.post("/sessions/{sandbox_id}/exec")
+def execute_in_session(sandbox_id: str, request: CommandRequest):
+    """Executes a command in an existing sandbox session."""
+    container_name = f"sandbox-session-{sandbox_id}"
+    try:
+        container = docker_client.containers.get(container_name)
+        exit_code, (stdout, stderr) = container.exec_run(
+            cmd=f"/bin/bash -c '{request.command}'",
+            user='sandboxuser'
+        )
+        return {
+            "stdout": stdout.decode('utf-8') if stdout else "",
+            "stderr": stderr.decode('utf-8') if stderr else "",
+            "exit_code": exit_code
+        }
+    except docker.errors.NotFound:
+        raise HTTPException(status_code=404, detail="Sandbox session not found.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An error occurred during execution: {e}")
 
-    return ExecutionResponse(stdout=stdout, stderr=stderr, exit_code=exit_code)
+@app.delete("/sessions/{sandbox_id}")
+def terminate_session(sandbox_id: str):
+    """Stops and removes a sandbox container."""
+    container_name = f"sandbox-session-{sandbox_id}"
+    try:
+        container = docker_client.containers.get(container_name)
+        container.stop()
+        container.remove()
+        if sandbox_id in active_sessions:
+            del active_sessions[sandbox_id]
+        return {"message": "Sandbox session terminated successfully."}
+    except docker.errors.NotFound:
+        # It's okay if it's already gone
+        return {"message": "Sandbox session already terminated."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to terminate session: {e}")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -144,21 +144,14 @@ def get_llm_os(
     if coding_assistant:
         _coding_assistant = Agent(
             name="Coding Assistant",
-            tools=[SandboxTools(socketio_instance=socketio_instance)],
+            tools=[SandboxTools()],
             role="Coding agent",
-            instructions=["Please proceed as an expert developer with the following approach:",
-                           " - Deep Analysis:",
-                           " - Step-by-step evaluation: Analyze the code and its functionality thoroughly.",
-                           " - Logical reasoning: Think deeply and logically about every aspect.",
-                           " - Diagnosis:",
-                           " - Issue Identification: Determine what the problem is with full technical details.",
-                           " - Specification Detailing: Provide precise descriptions and specifications of the issue.",
-                           " - Root Cause Analysis: List all underlying factors and causes contributing to the problem.",
-                           " - Solution Strategy:",
-                           " - Propose Solutions: List potential fixes and approaches to resolve the identified issue.",
-                           " - Comprehensive Explanation: Offer a one-paragraph reasoning summarizing the overall analysis without jumping to conclusions.",
-                           "To write and run code, first write the code to a file using",
-                           "then run it with execute_shell_command(command='python3 file.py')"
+            instructions=["You have access to a stateful sandbox for code execution.",
+                            "IMPORTANT: You MUST follow this three-step process for any shell command or code execution task:",
+                            "1. **Create Session**: First, call the `create_sandbox()` tool. This will return a `sandbox_id`.",
+                            "2. **Execute Commands**: Use the `execute_in_sandbox()` tool for ALL subsequent commands. You must pass the `sandbox_id` you received from step 1 with every call. You can call this multiple times to install packages, write files, and run code.",
+                            "3. **Close Session**: Once the entire task is complete and you have the final result, you MUST call the `close_sandbox(sandbox_id)` tool to clean up the environment.",
+                            "Never assume a sandbox exists. Always create one for a new task."
                         ],
             description="You can write and run code to fulfill users' requests",
             model=Gemini(id="gemini-2.5-flash"),
