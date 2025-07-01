@@ -37,7 +37,7 @@ from sandbox_tools import SandboxTools
     
 def get_llm_os(
     user_id: Optional[str] = None,
-    socketio_instance: Optional[Any] = None,
+    sandbox_tracker_set: Optional[Set[str]] = None,
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
@@ -144,7 +144,7 @@ def get_llm_os(
     if coding_assistant:
         _coding_assistant = Agent(
             name="Coding Assistant",
-            tools=[SandboxTools()],
+            tools=[SandboxTools(sandbox_tracker_set=sandbox_tracker_set)],
             role="Coding agent",
             instructions=["You have access to a stateful sandbox for code execution.",
                             "IMPORTANT: You MUST follow this three-step process for any shell command or code execution task:",
