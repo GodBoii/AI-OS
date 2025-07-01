@@ -42,6 +42,10 @@ const validReceiveChannels = [
     'webview-page-loaded',
     'webview-content-captured',
     'window-state-changed',
+    'sandbox-command-started',
+    'sandbox-command-update',  // <-- ADD THIS
+    'sandbox-command-finished',
+
     // Browse AI related channels
     'browse-ai-webview-created',
     'browse-ai-webview-closed',

@@ -253,6 +253,64 @@ class ArtifactHandler {
             setTimeout(() => notification.remove(), 300);
         }, 3000);
     }
+
+    showTerminal(artifactId) {
+        const container = document.getElementById('artifact-container');
+        const contentDiv = container.querySelector('.artifact-content');
+        container.querySelector('.artifact-title').textContent = 'Sandbox Terminal';
+
+        // Show a waiting state initially
+        contentDiv.innerHTML = `
+            <div class="terminal-output">
+                <pre><code><span class="log-line log-status">Waiting for command...</span></code></pre>
+            </div>
+        `;
+
+        container.classList.remove('hidden');
+        container.dataset.activeArtifactId = artifactId;
+    }
+
+    updateCommand(artifactId, command) {
+        const container = document.getElementById('artifact-container');
+        if (container.dataset.activeArtifactId !== artifactId) return;
+        const codeEl = container.querySelector('code');
+        if (codeEl) {
+            // Replace "Waiting..." with the actual command and a spinner
+            codeEl.innerHTML = `
+                <span class="log-line log-command">$ ${command}</span>
+                <span class="log-line log-status terminal-spinner">Running...</span>
+            `;
+        }
+    }
+
+    updateTerminalOutput(artifactId, stdout, stderr, exitCode) {
+        const container = document.getElementById('artifact-container');
+        if (container.dataset.activeArtifactId !== artifactId) return;
+        const codeEl = container.querySelector('code');
+        
+        if (codeEl) {
+            const spinner = codeEl.querySelector('.terminal-spinner');
+            if (spinner) spinner.remove();
+
+            if (stdout) {
+                const stdoutSpan = document.createElement('span');
+                stdoutSpan.className = 'log-line log-stdout';
+                stdoutSpan.textContent = stdout;
+                codeEl.appendChild(stdoutSpan);
+            }
+            if (stderr) {
+                const stderrSpan = document.createElement('span');
+                stderrSpan.className = 'log-line log-error';
+                stderrSpan.textContent = stderr;
+                codeEl.appendChild(stderrSpan);
+            }
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'log-line log-status';
+            statusSpan.textContent = `\n--- Process finished with exit code ${exitCode} ---`;
+            codeEl.appendChild(statusSpan);
+        }
+    }
+
 }
 
 export const artifactHandler = new ArtifactHandler();

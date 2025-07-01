@@ -78,6 +78,9 @@ class AuthService {
         console.log('Processed name:', processedName);
         
         try {
+            const processedName = typeof name === 'string' ? name.trim() : '';
+            
+            // Step 1: Create the user in Supabase Auth
             const { data, error } = await this.supabase.auth.signUp({
                 email: email,
                 password: password,
@@ -87,57 +90,33 @@ class AuthService {
                     }
                 }
             });
-            
+        
             if (error) {
                 console.error('Signup error:', error);
                 return { success: false, error: error.message };
             }
-            
-            console.log('Signup response:', data);
-            console.log('User metadata after signup:', data.user?.user_metadata);
-            
+        
+            // Step 2: If user creation was successful, manually insert their profile
             if (data.user) {
-                if (!data.user.user_metadata?.name && processedName) {
-                    console.log('Name not found in user_metadata, updating it manually');
-                    try {
-                        const { data: updateData, error: updateError } = await this.supabase.auth.updateUser({
-                            data: { name: processedName }
-                        });
-                        
-                        if (updateError) {
-                            console.error('Error updating user metadata:', updateError);
-                        } else {
-                            console.log('User metadata updated successfully:', updateData.user.user_metadata);
-                            data.user.user_metadata = updateData.user.user_metadata;
-                        }
-                    } catch (updateError) {
-                        console.error('Failed to update user metadata:', updateError);
-                    }
-                }
-                
-                try {
-                    const { error: profileError } = await this.supabase
-                        .from('profiles')
-                        .upsert({
-                            id: data.user.id,
-                            email: email,
-                            name: processedName,
-                            updated_at: new Date().toISOString()
-                        });
-                        
-                    if (profileError) {
-                        console.error('Error updating profile:', profileError);
-                    } else {
-                        console.log('Profile updated successfully');
-                    }
-                } catch (profileError) {
-                    console.error('Failed to update profile:', profileError);
+                const { error: profileError } = await this.supabase
+                    .from('profiles')
+                    .insert({ 
+                        id: data.user.id,          // Use the ID from the new user
+                        email: data.user.email,    // Use the email from the new user
+                        name: processedName 
+                    });
+        
+                if (profileError) {
+                    console.error('Error creating profile after signup:', profileError);
+                    // This tells the user that signup failed at the profile step
+                    return { success: false, error: `User created, but profile could not be saved: ${profileError.message}` };
                 }
             }
             
             return { success: true, data };
+        
         } catch (error) {
-            console.error('Signup error:', error);
+            console.error('Signup error during catch:', error);
             return { success: false, error: error.message };
         }
     }

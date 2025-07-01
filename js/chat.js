@@ -17,7 +17,6 @@ let chatConfig = {
         internet_search: true,
         coding_assistant: true,
         investment_assistant: true,
-        shell_tools: true,
         web_crawler: true,
         enable_github: true,
         enable_google_email: true,
@@ -133,6 +132,26 @@ function setupIpcListeners() {
                     <span class="step-text">${toolName}</span>
                 `;
             }
+        }
+    });
+
+    ipcRenderer.on('sandbox-command-started', (data) => {
+        if (window.artifactHandler) {
+            // This now just opens a waiting terminal
+            window.artifactHandler.showTerminal(data.artifactId);
+        }
+    });
+    
+    ipcRenderer.on('sandbox-command-update', (data) => {
+        if (window.artifactHandler) {
+            // This updates the terminal with the command being run
+            window.artifactHandler.updateCommand(data.artifactId, data.command);
+        }
+    });
+    
+    ipcRenderer.on('sandbox-command-finished', (data) => {
+        if (window.artifactHandler) {
+            window.artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
         }
     });
 
@@ -596,7 +615,7 @@ function init() {
         contextHandler.clearSelectedContext();
         chatConfig = {
             memory: false, tasks: false,
-            tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, shell_tools: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
+            tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
             deepsearch: false
         };
         document.getElementById('ai_os').checked = true;
