@@ -22,11 +22,9 @@ class AIOS_PatchedAgent(Agent):
         pass
         
 from agno.tools import Toolkit
-from agno.tools.shell import ShellTools
 from agno.tools.calculator import CalculatorTools
 from agno.tools.googlesearch import GoogleSearchTools
 from agno.tools.yfinance import YFinanceTools
-from agno.tools.python import PythonTools
 from agno.tools.crawl4ai import Crawl4aiTools
 from agno.models.google import Gemini
 from typing import List, Optional
@@ -41,7 +39,6 @@ def get_llm_os(
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
-    shell_tools: bool = False,
     coding_assistant: bool = False,
     investment_assistant: bool = False,
     use_memory: bool = False, 

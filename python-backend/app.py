@@ -220,7 +220,7 @@ class ConnectionManager:
         if is_deepsearch:
             agent = get_deepsearch(user_id=user_id, **config)
         else:
-            agent = get_llm_os(user_id=user_id, socketio_instance=socketio, sandbox_tracker_set=sandbox_tracker_set, **config)
+            agent = get_llm_os(user_id=user_id, sandbox_tracker_set=sandbox_tracker_set, **config)
 
         self.sessions[sid] = {
             "agent": agent, 
