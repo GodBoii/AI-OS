@@ -237,8 +237,9 @@ class ConnectionManager:
 
     def terminate_session(self, sid):
         if sid in self.sessions:
-            session_info = self.sessions.pop(sid)
+            session_info = self.sessions.pop(sid) # <-- This removes the key
             if not session_info: return
+            
             agent = session_info.get("agent")
             history = session_info.get("history", [])
             user_id = session_info.get("user_id")
@@ -282,7 +283,7 @@ class ConnectionManager:
                 except Exception as e:
                     logger.error(f"Failed to save conversation history for SID {sid}: {e}\n{traceback.format_exc()}")
             
-            del self.sessions[sid]
+            # The redundant `del self.sessions[sid]` is now removed.
             if sid in self.isolated_assistants:
                 self.isolated_assistants[sid].terminate()
                 del self.isolated_assistants[sid]

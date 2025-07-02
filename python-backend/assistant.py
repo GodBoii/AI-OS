@@ -146,8 +146,6 @@ def get_llm_os(
                             "IMPORTANT: You MUST follow this three-step process for any shell command or code execution task:",
                             "1. **Create Session**: First, call the `create_sandbox()` tool. This will return a `sandbox_id`.",
                             "2. **Execute Commands**: Use the `execute_in_sandbox()` tool for ALL subsequent commands. You must pass the `sandbox_id` you received from step 1 with every call. You can call this multiple times to install packages, write files, and run code.",
-                            "3. **Close Session**: Once the entire task is complete and you have the final result, you MUST call the `close_sandbox(sandbox_id)` tool to clean up the environment.",
-                            "Never assume a sandbox exists. Always create one for a new task."
                         ],
             description="You can write and run code to fulfill users' requests",
             model=Gemini(id="gemini-2.5-flash"),
