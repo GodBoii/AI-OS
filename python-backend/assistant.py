@@ -3,7 +3,7 @@ from pathlib import Path
 from textwrap import dedent
 import logging
 
-from typing import Optional, List, Any, Set
+from typing import Optional, List, Dict, Any, Set
 
 from agno.agent import Agent, AgentSession
 from agno.utils.log import log_debug
@@ -36,6 +36,7 @@ from sandbox_tools import SandboxTools
 def get_llm_os(
     user_id: Optional[str] = None,
     sandbox_tracker_set: Optional[Set[str]] = None,
+    session_info: Optional[Dict[str, Any]] = None, 
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
@@ -138,24 +139,28 @@ def get_llm_os(
 
     team: List[Agent] = []
     if coding_assistant:
+        # The session_info from the parent is passed directly to the tool
+        # This gives the tool access to the session's state
+        sandbox_tools = SandboxTools(session_info=session_info) if session_info else None
+
         _coding_assistant = Agent(
             name="Coding Assistant",
-            tools=[SandboxTools(sandbox_tracker_set=sandbox_tracker_set)],
+            tools=[sandbox_tools] if sandbox_tools else [], # Pass the initialized tool
             role="Coding agent",
-            instructions=["You have access to a stateful sandbox for code execution.",
-                            "IMPORTANT: You MUST follow this three-step process for any shell command or code execution task:",
-                            "1. **Create Session**: First, call the `create_sandbox()` tool. This will return a `sandbox_id`.",
-                            "2. **Execute Commands**: Use the `execute_in_sandbox()` tool for ALL subsequent commands. You must pass the `sandbox_id` you received from step 1 with every call. You can call this multiple times to install packages, write files, and run code.",
-                        ],
+            # --- NEW, SIMPLIFIED INSTRUCTIONS ---
+            instructions=[
+                "You have access to a stateful sandbox for code execution.",
+                "For any task requiring one or more shell commands, you MUST follow this simple process:",
+                "1. At the beginning of the task, call the `create_or_get_sandbox()` tool. It will return the `sandbox_id` for this session.",
+                "2. Use the `execute_in_sandbox()` tool for ALL commands, passing the `sandbox_id` you received.",
+                "The system handles all creation, reuse, and cleanup. Your job is just to get the ID and use it."
+            ],
             description="You can write and run code to fulfill users' requests",
             model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
         team.append(_coding_assistant)
-        extra_instructions.append("To execute a shell command, you MUST follow this two-step process: "
-                                  "1. First, call the `prepare_sandbox_terminal()` tool to create a terminal window for the user. This tool will return a unique `artifactId`. "
-                                  "2. Second, call the `execute_command_in_terminal()` tool, passing the command you want to run and the `artifactId` you received from the first step."
-                                  "3. Finally, call the `close_sandbox_terminal()` tool to close the terminal window.")
+        extra_instructions.append("To execute a shell command, any task related to code execution, terminal execution, or any other task that requires a sandbox, coding related task, you MUST delegate the task to the `Coding Assistant`.")
 
     if web_crawler:
         _web_crawler = Agent(

@@ -1,5 +1,4 @@
-
-# app.py 
+# app.py (Complete, Updated Version)
 
 import os
 import logging
@@ -98,7 +97,7 @@ class IsolatedAssistant:
                 supported_params = {
                     'message': complete_message,
                     'stream': True,
-                    'stream_intermediate_steps': True, # <-- MODIFICATION: Enable intermediate steps
+                    'stream_intermediate_steps': True,
                     'user_id': str(user.id)
                 }
                 if 'images' in params and images: supported_params['images'] = images
@@ -110,14 +109,12 @@ class IsolatedAssistant:
                 
                 self.current_response_content = ""
                 
-                # --- MODIFIED STREAMING LOGIC ---
                 for chunk in agent.run(**supported_params):
                     if not chunk or not hasattr(chunk, 'event'):
                         continue
 
                     eventlet.sleep(0)
                     
-                    # Handle final response content
                     if chunk.event == RunEvent.run_response_content.value and chunk.content:
                         self.current_response_content += chunk.content
                         socketio.emit("response", {
@@ -126,7 +123,6 @@ class IsolatedAssistant:
                             "id": self.message_id,
                         }, room=self.sid)
                     
-                    # Handle tool call start
                     elif chunk.event == RunEvent.tool_call_started.value and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_start",
@@ -134,15 +130,12 @@ class IsolatedAssistant:
                             "id": self.message_id
                         }, room=self.sid)
 
-                    # Handle tool call completion
                     elif chunk.event == RunEvent.tool_call_completed.value and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_end",
                             "name": chunk.tool.tool_name,
                             "id": self.message_id
                         }, room=self.sid)
-
-                # --- END OF MODIFIED LOGIC ---
 
                 socketio.emit("response", {
                     "content": "",
@@ -215,21 +208,32 @@ class ConnectionManager:
         config['enable_google_email'] = True
         config['enable_google_drive'] = True
 
-        sandbox_tracker_set = set()
-
-        if is_deepsearch:
-            agent = get_deepsearch(user_id=user_id, **config)
-        else:
-            agent = get_llm_os(user_id=user_id, sandbox_tracker_set=sandbox_tracker_set, **config)
-
-        self.sessions[sid] = {
-            "agent": agent, 
+        # --- MODIFICATION START ---
+        # Create a single dictionary to hold all state for this session.
+        # This dictionary will be passed to the tools, allowing them to be stateful.
+        session_info = {
+            "agent": None,  # Will be populated below
             "config": config,
             "history": [],
             "user_id": user_id,
             "created_at": datetime.datetime.now().isoformat(),
-            "sandbox_ids": sandbox_tracker_set
+            "sandbox_ids": set(),      # For tracking all created sandboxes for cleanup
+            "active_sandbox_id": None  # For tracking the one active sandbox to reuse
         }
+        
+        # Pass the entire session_info dictionary to the agent factory.
+        # This allows the tools inside the agent to access and modify session state.
+        if is_deepsearch:
+            # Assuming get_deepsearch is updated similarly if it needs stateful tools
+            agent = get_deepsearch(user_id=user_id, session_info=session_info, **config)
+        else:
+            # The `sandbox_tracker_set` is now replaced by passing the whole `session_info` dict.
+            agent = get_llm_os(user_id=user_id, session_info=session_info, **config)
+
+        # Store the agent back into the session_info dict and then store the whole dict.
+        session_info["agent"] = agent
+        self.sessions[sid] = session_info
+        # --- MODIFICATION END ---
         
         self.isolated_assistants[sid] = IsolatedAssistant(sid)
         logger.info(f"Created session {sid} for user {user_id} with config {config}")
@@ -237,13 +241,14 @@ class ConnectionManager:
 
     def terminate_session(self, sid):
         if sid in self.sessions:
-            session_info = self.sessions.pop(sid) # <-- This removes the key
+            session_info = self.sessions.pop(sid)
             if not session_info: return
             
             agent = session_info.get("agent")
             history = session_info.get("history", [])
             user_id = session_info.get("user_id")
 
+            # This logic correctly cleans up all sandboxes tracked during the session.
             sandbox_ids_to_clean = session_info.get("sandbox_ids", set())
             if sandbox_ids_to_clean:
                 logger.info(f"Cleaning up {len(sandbox_ids_to_clean)} sandbox sessions for SID {sid}.")
@@ -283,7 +288,6 @@ class ConnectionManager:
                 except Exception as e:
                     logger.error(f"Failed to save conversation history for SID {sid}: {e}\n{traceback.format_exc()}")
             
-            # The redundant `del self.sessions[sid]` is now removed.
             if sid in self.isolated_assistants:
                 self.isolated_assistants[sid].terminate()
                 del self.isolated_assistants[sid]
@@ -525,14 +529,14 @@ def on_send_message(data: str):
             connection_manager.terminate_session(sid)
             emit("status", {"message": "Session terminated"}, room=sid)
             return
-        session = connection_manager.get_session(sid)
-        if not session:
+        session_data = connection_manager.get_session(sid)
+        if not session_data:
             config = data.get("config", {})
             agent = connection_manager.create_session(
                 sid, user_id=str(user.id), config=config, is_deepsearch=is_deepsearch
             )
         else:
-            agent = session["agent"]
+            agent = session_data["agent"]
         message_id = data.get("id") or str(uuid.uuid4())
         isolated_assistant = connection_manager.isolated_assistants.get(sid)
         if not isolated_assistant:
