@@ -54,7 +54,6 @@ def get_llm_os(
     if not db_url_full:
         raise ValueError("DATABASE_URL environment variable is not set. Please set it in Render.")
     
-    # Both classes use SQLAlchemy, which needs the driver name in the URL.
     db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
 
     # Configure memory

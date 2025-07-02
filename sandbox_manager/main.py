@@ -67,7 +67,6 @@ def terminate_session(sandbox_id: str):
             del active_sessions[sandbox_id]
         return {"message": "Sandbox session terminated successfully."}
     except docker.errors.NotFound:
-        # It's okay if it's already gone
         return {"message": "Sandbox session already terminated."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to terminate session: {e}")

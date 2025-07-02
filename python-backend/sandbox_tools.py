@@ -90,7 +90,6 @@ class SandboxTools(Toolkit):
             response = requests.delete(f"{self.sandbox_api_url}/sessions/{sandbox_id}", timeout=30)
             response.raise_for_status()
             
-            # If a tracker set exists, remove the ID from it as it's now closed.
             if self.sandbox_tracker_set is not None and sandbox_id in self.sandbox_tracker_set:
                 self.sandbox_tracker_set.remove(sandbox_id)
                 
