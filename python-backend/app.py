@@ -1,5 +1,3 @@
-# app.py (Complete, Updated Version)
-
 import os
 import logging
 import json
@@ -12,6 +10,7 @@ from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import eventlet
 import datetime
+from typing import Union
 
 from authlib.integrations.flask_client import OAuth
 
@@ -19,9 +18,12 @@ from assistant import get_llm_os
 from deepsearch import get_deepsearch
 from supabase_client import supabase_client
 
+# --- MODIFICATION: Import Team and Team-related events ---
 from agno.agent import Agent
+from agno.team import Team
 from agno.media import Image, Audio, Video, File
 from agno.run.response import RunEvent
+from agno.run.team import TeamRunEvent
 from gotrue.errors import AuthApiError
 
 load_dotenv()
@@ -84,7 +86,8 @@ class IsolatedAssistant:
         self.message_id = None
         self.current_response_content = ""
 
-    def run_safely(self, agent: Agent, message: str, user, context=None, images=None, audio=None, videos=None, files=None):
+    # --- MODIFICATION: Update type hint to accept Agent or Team ---
+    def run_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
         def _run_agent(agent, message, user, context, images, audio, videos, files):
             try:
                 if context:
@@ -115,7 +118,9 @@ class IsolatedAssistant:
 
                     eventlet.sleep(0)
                     
-                    if chunk.event == RunEvent.run_response_content.value and chunk.content:
+                    # --- MODIFICATION: Handle both Agent and Team events ---
+                    if (chunk.event == RunEvent.run_response_content.value or
+                        chunk.event == TeamRunEvent.run_response_content.value) and chunk.content:
                         self.current_response_content += chunk.content
                         socketio.emit("response", {
                             "content": chunk.content,
@@ -123,14 +128,16 @@ class IsolatedAssistant:
                             "id": self.message_id,
                         }, room=self.sid)
                     
-                    elif chunk.event == RunEvent.tool_call_started.value and hasattr(chunk, 'tool'):
+                    elif (chunk.event == RunEvent.tool_call_started.value or
+                          chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_start",
                             "name": chunk.tool.tool_name,
                             "id": self.message_id
                         }, room=self.sid)
 
-                    elif chunk.event == RunEvent.tool_call_completed.value and hasattr(chunk, 'tool'):
+                    elif (chunk.event == RunEvent.tool_call_completed.value or
+                          chunk.event == TeamRunEvent.tool_call_completed.value) and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_end",
                             "name": chunk.tool.tool_name,
@@ -199,7 +206,8 @@ class ConnectionManager:
         self.sessions = {}
         self.isolated_assistants = {}
 
-    def create_session(self, sid: str, user_id: str, config: dict, is_deepsearch: bool = False) -> Agent:
+    # --- MODIFICATION: Update type hint to return Agent or Team ---
+    def create_session(self, sid: str, user_id: str, config: dict, is_deepsearch: bool = False) -> Union[Agent, Team]:
         if sid in self.sessions:
             self.terminate_session(sid)
 
@@ -208,32 +216,23 @@ class ConnectionManager:
         config['enable_google_email'] = True
         config['enable_google_drive'] = True
 
-        # --- MODIFICATION START ---
-        # Create a single dictionary to hold all state for this session.
-        # This dictionary will be passed to the tools, allowing them to be stateful.
         session_info = {
-            "agent": None,  # Will be populated below
+            "agent": None,
             "config": config,
             "history": [],
             "user_id": user_id,
             "created_at": datetime.datetime.now().isoformat(),
-            "sandbox_ids": set(),      # For tracking all created sandboxes for cleanup
-            "active_sandbox_id": None  # For tracking the one active sandbox to reuse
+            "sandbox_ids": set(),
+            "active_sandbox_id": None
         }
         
-        # Pass the entire session_info dictionary to the agent factory.
-        # This allows the tools inside the agent to access and modify session state.
         if is_deepsearch:
-            # Assuming get_deepsearch is updated similarly if it needs stateful tools
             agent = get_deepsearch(user_id=user_id, session_info=session_info, **config)
         else:
-            # The `sandbox_tracker_set` is now replaced by passing the whole `session_info` dict.
             agent = get_llm_os(user_id=user_id, session_info=session_info, **config)
 
-        # Store the agent back into the session_info dict and then store the whole dict.
         session_info["agent"] = agent
         self.sessions[sid] = session_info
-        # --- MODIFICATION END ---
         
         self.isolated_assistants[sid] = IsolatedAssistant(sid)
         logger.info(f"Created session {sid} for user {user_id} with config {config}")
@@ -248,7 +247,6 @@ class ConnectionManager:
             history = session_info.get("history", [])
             user_id = session_info.get("user_id")
 
-            # This logic correctly cleans up all sandboxes tracked during the session.
             sandbox_ids_to_clean = session_info.get("sandbox_ids", set())
             if sandbox_ids_to_clean:
                 logger.info(f"Cleaning up {len(sandbox_ids_to_clean)} sandbox sessions for SID {sid}.")
@@ -265,8 +263,10 @@ class ConnectionManager:
                     final_metrics = agent.session_metrics
                     input_tokens, output_tokens = final_metrics.input_tokens, final_metrics.output_tokens
                     if input_tokens > 0 or output_tokens > 0:
+                        # Ensure user_id is a string for the query
+                        user_id_str = str(agent.user_id) if hasattr(agent, 'user_id') else user_id
                         supabase_client.from_('request_logs').insert({
-                            'user_id': str(agent.user_id), 'input_tokens': input_tokens, 'output_tokens': output_tokens
+                            'user_id': user_id_str, 'input_tokens': input_tokens, 'output_tokens': output_tokens
                         }).execute()
                 except Exception as e:
                     logger.error(f"Failed to log usage metrics for session {sid} on termination: {e}\n{traceback.format_exc()}")
