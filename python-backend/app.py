@@ -1,3 +1,5 @@
+# python-backend/app.py
+
 import os
 import logging
 import json
@@ -10,7 +12,7 @@ from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import eventlet
 import datetime
-from typing import Union
+from typing import Union, Dict, Any
 
 from authlib.integrations.flask_client import OAuth
 
@@ -18,12 +20,11 @@ from assistant import get_llm_os
 from deepsearch import get_deepsearch
 from supabase_client import supabase_client
 
-# --- MODIFICATION: Import Team and Team-related events ---
 from agno.agent import Agent
 from agno.team import Team
 from agno.media import Image, Audio, Video, File
-from agno.run.response import RunEvent
-from agno.run.team import TeamRunEvent
+from agno.run.response import RunEvent, RunResponse
+from agno.run.team import TeamRunEvent, TeamRunResponse
 from gotrue.errors import AuthApiError
 
 load_dotenv()
@@ -80,13 +81,43 @@ oauth.register(
     }
 )
 
+# --- MODIFICATION START ---
+# The entire IsolatedAssistant class is replaced with this improved version.
+
 class IsolatedAssistant:
     def __init__(self, sid):
         self.sid = sid
         self.message_id = None
         self.current_response_content = ""
 
-    # --- MODIFICATION: Update type hint to accept Agent or Team ---
+    def _process_and_emit_response(self, chunk: Union[RunResponse, TeamRunResponse]):
+        """
+        Recursively processes a response chunk and emits socket events.
+        This is the core of the fix, allowing the server to handle nested team responses.
+        """
+        if not chunk:
+            return
+
+        # Emit the content from the current agent/team
+        if chunk.content:
+            # The top-level coordinator's final response is aggregated here
+            if not hasattr(chunk, 'member_responses') or not chunk.member_responses:
+                 self.current_response_content += chunk.content
+
+            socketio.emit("response", {
+                "content": chunk.content,
+                "streaming": True,
+                "id": self.message_id,
+                "agent_name": chunk.agent_name if hasattr(chunk, 'agent_name') else None,
+                "team_name": chunk.team_name if hasattr(chunk, 'team_name') else None,
+            }, room=self.sid)
+
+        # If it's a team response, recursively process each member's response
+        if hasattr(chunk, 'member_responses') and chunk.member_responses:
+            for member_response in chunk.member_responses:
+                self._process_and_emit_response(member_response)
+
+
     def run_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
         def _run_agent(agent, message, user, context, images, audio, videos, files):
             try:
@@ -118,21 +149,19 @@ class IsolatedAssistant:
 
                     eventlet.sleep(0)
                     
-                    # --- MODIFICATION: Handle both Agent and Team events ---
-                    if (chunk.event == RunEvent.run_response_content.value or
-                        chunk.event == TeamRunEvent.run_response_content.value) and chunk.content:
-                        self.current_response_content += chunk.content
-                        socketio.emit("response", {
-                            "content": chunk.content,
-                            "streaming": True,
-                            "id": self.message_id,
-                        }, room=self.sid)
-                    
+                    # Handle both Agent and Team content events
+                    if (chunk.event == RunEvent.run_response_stream.value or
+                        chunk.event == TeamRunEvent.run_response_stream.value):
+                        self._process_and_emit_response(chunk.response)
+
+                    # Handle both Agent and Team tool call events
                     elif (chunk.event == RunEvent.tool_call_started.value or
                           chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_start",
                             "name": chunk.tool.tool_name,
+                            "agent_name": chunk.tool.agent_name,
+                            "team_name": chunk.tool.team_name,
                             "id": self.message_id
                         }, room=self.sid)
 
@@ -141,9 +170,12 @@ class IsolatedAssistant:
                         socketio.emit("agent_step", {
                             "type": "tool_end",
                             "name": chunk.tool.tool_name,
+                            "agent_name": chunk.tool.agent_name,
+                            "team_name": chunk.tool.team_name,
                             "id": self.message_id
                         }, room=self.sid)
 
+                # Signal the end of the entire stream
                 socketio.emit("response", {
                     "content": "",
                     "done": True,
@@ -201,12 +233,14 @@ class IsolatedAssistant:
     def terminate(self):
         pass
 
+# --- MODIFICATION END ---
+
+
 class ConnectionManager:
     def __init__(self):
         self.sessions = {}
         self.isolated_assistants = {}
 
-    # --- MODIFICATION: Update type hint to return Agent or Team ---
     def create_session(self, sid: str, user_id: str, config: dict, is_deepsearch: bool = False) -> Union[Agent, Team]:
         if sid in self.sessions:
             self.terminate_session(sid)
@@ -263,7 +297,6 @@ class ConnectionManager:
                     final_metrics = agent.session_metrics
                     input_tokens, output_tokens = final_metrics.input_tokens, final_metrics.output_tokens
                     if input_tokens > 0 or output_tokens > 0:
-                        # Ensure user_id is a string for the query
                         user_id_str = str(agent.user_id) if hasattr(agent, 'user_id') else user_id
                         supabase_client.from_('request_logs').insert({
                             'user_id': user_id_str, 'input_tokens': input_tokens, 'output_tokens': output_tokens
@@ -301,6 +334,7 @@ class ConnectionManager:
 
 connection_manager = ConnectionManager()
 
+# ... (The rest of your app.py file remains unchanged) ...
 @app.route('/login/<provider>')
 def login_provider(provider):
     token = request.args.get('token')
