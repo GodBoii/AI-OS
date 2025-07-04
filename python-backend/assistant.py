@@ -89,7 +89,7 @@ def get_llm_os(
         code_planner = Agent(
             name="Code_Planner",
             role="You are an expert software architect. Your job is to create clear, step-by-step plans and pseudocode for development tasks. You do not write the final code.",
-            model=Gemini(id="gemini-1.5-flash"),
+            model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
 
@@ -98,7 +98,7 @@ def get_llm_os(
             name="Code_Executor",
             role="You are a diligent coder. You take a plan and turn it into functional code using the provided sandbox tools. You do not deviate from the plan.",
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
-            model=Gemini(id="gemini-1.5-flash"),
+            model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
 
@@ -106,7 +106,7 @@ def get_llm_os(
         code_reviewer = Agent(
             name="Code_Reviewer",
             role="You are a meticulous code reviewer. Your job is to analyze code for errors, style, and adherence to the original plan. You provide feedback and suggest improvements.",
-            model=Gemini(id="gemini-1.5-flash"),
+            model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
 
@@ -114,7 +114,7 @@ def get_llm_os(
         dev_team = Team(
             name="dev_team",
             mode="coordinate",  # Ensures a sequential Plan -> Execute -> Review workflow
-            model=Gemini(id="gemini-1.5-pro"),  # A stronger model for coordination
+            model=Gemini(id="gemini-2.5-flash"),  # A stronger model for coordination
             members=[code_planner, code_executor, code_reviewer],
             instructions=[
                 "You are the lead of a software development team.",
@@ -133,7 +133,7 @@ def get_llm_os(
             name="Crawler",
             role="Extract and summarize web content from URLs.",
             tools=[Crawl4aiTools(max_length=None)],
-            model=Gemini(id="gemini-1.5-flash"),
+            model=Gemini(id="gemini-2.5-flash"),
             markdown=True,
             debug_mode=debug_mode,
         )
@@ -144,7 +144,7 @@ def get_llm_os(
             name="Investor",
             role="Generate professional investment reports.",
             tools=[YFinanceTools(stock_price=True, company_info=True, analyst_recommendations=True, company_news=True)],
-            model=Gemini(id="gemini-1.5-flash"),
+            model=Gemini(id="gemini-2.5-flash"),
             instructions=[
                 "Create professional investment reports with:",
                 "Overview, Core Metrics, Financial Performance, Growth Prospects, News, Summary, Recommendation"
@@ -168,7 +168,7 @@ def get_llm_os(
     # The main orchestrator is now a PatchedTeam instance
     llm_os_team = PatchedTeam(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-1.5-pro"),  # A powerful model for top-level coordination
+        model=Gemini(id="gemini-2.5-flash"),  # A powerful model for top-level coordination
         members=main_team_members,
         mode="coordinate",
         
