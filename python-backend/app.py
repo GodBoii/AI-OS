@@ -168,8 +168,9 @@ class IsolatedAssistant:
                         socketio.emit("agent_step", {
                             "type": "tool_start",
                             "name": chunk.tool.tool_name,
-                            "agent_name": chunk.tool.agent_name,
-                            "team_name": chunk.tool.team_name,
+                            # Get agent/team name from the parent chunk, not the tool object
+                            "agent_name": getattr(chunk, 'agent_name', None),
+                            "team_name": getattr(chunk, 'team_name', None),
                             "id": self.message_id
                         }, room=self.sid)
 
@@ -178,8 +179,9 @@ class IsolatedAssistant:
                         socketio.emit("agent_step", {
                             "type": "tool_end",
                             "name": chunk.tool.tool_name,
-                            "agent_name": chunk.tool.agent_name,
-                            "team_name": chunk.tool.team_name,
+                            # Get agent/team name from the parent chunk, not the tool object
+                            "agent_name": getattr(chunk, 'agent_name', None),
+                            "team_name": getattr(chunk, 'team_name', None),
                             "id": self.message_id
                         }, room=self.sid)
 
