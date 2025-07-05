@@ -12,7 +12,14 @@ COPY ./python-backend/requirements.txt .
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# --- MODIFICATION START ---
+# First, update the package lists. Then, install the OS-level dependencies
+# that Playwright's browsers need to run. This command is provided by Playwright.
+RUN apt-get update && apt-get install -y --no-install-recommends libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2 libatspi2.0-0
+
+# Now, install the browser binaries required by Playwright for the crawl tool.
 RUN playwright install chromium
+# --- MODIFICATION END ---
 
 # Copy the rest of the python-backend application code into the container at /app
 COPY ./python-backend/ .
