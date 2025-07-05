@@ -88,7 +88,12 @@ def get_llm_os(
         # The Planner Agent (Designs the solution)
         code_planner = Agent(
             name="Code_Planner",
-            role="You are an expert software architect. Your job is to create clear, step-by-step plans and pseudocode for development tasks. You do not write the final code.",
+            role="Software architect creating concise execution plans. Output: numbered steps (max 5), tech stack, file structure. Consider Code_Executor has sandbox tools for file operations, code execution, and testing.",
+            instructions=[
+                "Create brief, actionable plans for Code_Executor who has sandbox tools.",
+                "Format: 1) Goal 2) Steps (max 5) 3) Files needed 4) Expected outcome.",
+                "Keep response under 200 words."
+            ],
             model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
@@ -96,7 +101,13 @@ def get_llm_os(
         # The Executor Agent (Writes the code based on the plan)
         code_executor = Agent(
             name="Code_Executor",
-            role="You are a diligent coder. You take a plan and turn it into functional code using the provided sandbox tools. You do not deviate from the plan.",
+            role="Efficient coder implementing plans using sandbox tools. Write clean, functional code following the exact plan provided.",
+            instructions=[
+                "Follow the plan exactly. Write complete, working code.",
+                "Use sandbox tools for file operations and testing.",
+                "Output: brief summary + code files + test results.",
+                "Keep explanations under 100 words."
+            ],
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
             model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
@@ -105,7 +116,12 @@ def get_llm_os(
         # The Reviewer Agent (Checks the code for quality)
         code_reviewer = Agent(
             name="Code_Reviewer",
-            role="You are a meticulous code reviewer. Your job is to analyze code for errors, style, and adherence to the original plan. You provide feedback and suggest improvements.",
+            role="Quality assurance specialist providing concise feedback on code correctness, style, and plan adherence.",
+            instructions=[
+                "Review code for: 1) Correctness 2) Plan adherence 3) Style.",
+                "Output: Pass/Fail + 3 key points max.",
+                "Keep response under 150 words."
+            ],
             model=Gemini(id="gemini-2.5-flash"),
             debug_mode=debug_mode
         )
@@ -117,11 +133,11 @@ def get_llm_os(
             model=Gemini(id="gemini-2.5-flash"),  # A stronger model for coordination
             members=[code_planner, code_executor, code_reviewer],
             instructions=[
-                "You are the lead of a software development team.",
-                "First, delegate the task to the Code_Planner to get a solid plan.",
-                "Second, pass the plan to the Code_Executor to write the code.",
-                "Finally, pass the resulting code to the Code_Reviewer for quality assurance.",
-                "Synthesize all steps into a final report detailing the outcome."
+                "Development team coordinator: Plan → Execute → Review workflow.",
+                "1) Get plan from Code_Planner",
+                "2) Pass plan to Code_Executor for implementation", 
+                "3) Send code to Code_Reviewer for QA",
+                "4) Deliver final result with brief summary (max 200 words)."
             ],
             debug_mode=debug_mode
         )
@@ -131,7 +147,7 @@ def get_llm_os(
     if web_crawler:
         crawler_agent = Agent(
             name="Crawler",
-            role="Extract and summarize web content from URLs.",
+            role="Web content extractor providing structured summaries from URLs.",
             tools=[Crawl4aiTools(max_length=None)],
             model=Gemini(id="gemini-2.5-flash"),
             markdown=True,
@@ -156,13 +172,10 @@ def get_llm_os(
 
     # --- 4. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
-        "You are Aetheria AI, a master project coordinator for a team of specialists.",
-        "Your primary role is to analyze the user's request and delegate the high-level goal to the appropriate specialist team or agent.",
-        " - For any software development, coding, or scripting tasks, delegate the entire goal to the 'dev_team'.",
-        " - For web crawling and content extraction, delegate to the 'Crawler'.",
-        " - For financial analysis and investment reports, delegate to the 'Investor'.",
-        "If a task is simple and does not require a specialist, use your own tools (like Calculator or Internet Search) to answer directly.",
-        "After a specialist or team completes a task, synthesize their report into a clear and final answer for the user."
+        "You are Aetheria AI: Master coordinator analyzing requests and delegating to specialists.",
+        "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
+        "Synthesize specialist outputs into clear, actionable responses.",
+        "Keep final answers concise and user-focused."
     ]
 
     # The main orchestrator is now a PatchedTeam instance
