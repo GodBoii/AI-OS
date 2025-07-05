@@ -89,7 +89,7 @@ class IsolatedAssistant:
         self.final_assistant_response = ""
 
     # --- MODIFICATION START: This recursive function is the core of the fix ---
-    def _process_and_emit_response(self, response: Union[RunResponse, TeamRunResponse]):
+    def _process_and_emit_response(self, response: Union[RunResponse, TeamRunResponse], is_top_level: bool = True):
         """
         Recursively processes a response object and emits socket events.
         This handles the nested structure of team responses.
@@ -97,27 +97,28 @@ class IsolatedAssistant:
         if not response:
             return
 
-        # Determine the name of the sender (agent or team)
-        owner_name = None
-        if hasattr(response, 'agent_name') and response.agent_name:
-            owner_name = response.agent_name
-        elif hasattr(response, 'team_name') and response.team_name:
-            owner_name = response.team_name
+        owner_name = getattr(response, 'agent_name', None) or getattr(response, 'team_name', None)
 
-        # Emit the content from the current agent/team if it exists
+        # Aetheria_AI is the top-level coordinator. Only its direct output is the "final answer".
+        # All other content, including from sub-teams or nested agents, is a "log".
+        is_final_content = is_top_level and owner_name == "Aetheria_AI"
+
         if response.content:
             socketio.emit("response", {
                 "content": response.content,
                 "streaming": True,
                 "id": self.message_id,
-                "agent_name": owner_name, # Use a single key for the owner
-                "team_name": owner_name,  # Both for compatibility with chat.js
+                "agent_name": owner_name,
+                "team_name": owner_name,
+                # ADD THIS NEW FLAG: True for intermediate steps, False for the final answer.
+                "is_log": not is_final_content,
             }, room=self.sid)
 
         # If it's a team response, recursively process each member's response
         if hasattr(response, 'member_responses') and response.member_responses:
             for member_response in response.member_responses:
-                self._process_and_emit_response(member_response)
+                # For all nested calls, is_top_level is False.
+                self._process_and_emit_response(member_response, is_top_level=False)
     # --- MODIFICATION END ---
 
     def run_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
@@ -152,15 +153,19 @@ class IsolatedAssistant:
                     eventlet.sleep(0)
                     
                     # --- MODIFICATION START: Use the correct event and the recursive handler ---
-                    # This now correctly handles both simple and nested responses.
                     if (chunk.event == RunEvent.run_response_content.value or
                         chunk.event == TeamRunEvent.run_response_content.value):
-                        # The chunk itself is the response object to be processed
-                        self._process_and_emit_response(chunk)
-                        # Aggregate the final response for history
-                        if chunk.content and (not hasattr(chunk, 'member_responses') or not chunk.member_responses):
-                            self.final_assistant_response += chunk.content
+                        # The initial call is the top level
+                        self._process_and_emit_response(chunk, is_top_level=True)
+                        
+                        # Aggregate the final response for history.
+                        # The final response is the content from the top-level agent "Aetheria_AI"
+                        # that does not have further nested member responses.
+                        owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
+                        is_final_chunk = owner_name == "Aetheria_AI" and (not hasattr(chunk, 'member_responses') or not chunk.member_responses)
 
+                        if chunk.content and is_final_chunk:
+                            self.final_assistant_response += chunk.content
                     # --- MODIFICATION END ---
 
                     elif (chunk.event == RunEvent.tool_call_started.value or
@@ -241,9 +246,6 @@ class IsolatedAssistant:
 
     def terminate(self):
         pass
-
-# ... (The rest of your app.py file remains unchanged) ...
-# (ConnectionManager, routes, and socket handlers below this are correct)
 
 class ConnectionManager:
     def __init__(self):
@@ -348,20 +350,7 @@ def login_provider(provider):
     token = request.args.get('token')
     if not token:
         return "Authentication token is missing.", 400
-
-    # === THE FIX: PART 1 ===
-    # Use the token immediately to get the permanent user ID
-    try:
-        user_response = supabase_client.auth.get_user(jwt=token)
-        user = user_response.user
-        if not user:
-            raise AuthApiError("User not found for the provided token.", 401)
-        # Store the permanent, stable user ID in the session, NOT the temporary token.
-        session['user_id'] = str(user.id)
-    except AuthApiError as e:
-        logger.error(f"Invalid token provided to /login/{provider}: {e.message}")
-        return "Your session is invalid. Please log in again.", 401
-    # ========================
+    session['supabase_token'] = token
     
     redirect_uri = url_for('auth_callback', provider=provider, _external=True)
     
@@ -375,22 +364,23 @@ def login_provider(provider):
             prompt='consent'
         )
         
-    if provider == 'github':
-        return oauth.github.authorize_redirect(redirect_uri, prompt='consent')
-        
     return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
 @app.route('/auth/<provider>/callback')
 def auth_callback(provider):
     try:
-        # === THE FIX: PART 2 ===
-        # Retrieve the permanent user ID from the session.
-        user_id = session.get('user_id')
-        if not user_id:
-            # This is now the primary check.
+        supabase_token = session.get('supabase_token')
+        if not supabase_token:
             return "Your session has expired. Please try connecting again.", 400
-        # We no longer need to validate a stale token here. We trust the user_id.
-        # ========================
+        
+        try:
+            user_response = supabase_client.auth.get_user(jwt=supabase_token)
+            user = user_response.user
+            if not user:
+                raise AuthApiError("User not found for the provided token.", 401)
+        except AuthApiError as e:
+            logger.error(f"Invalid token during {provider} auth callback: {e.message}")
+            return "Your session is invalid. Please log in and try again.", 401
         
         client = oauth.create_client(provider)
         token = client.authorize_access_token()
@@ -398,7 +388,7 @@ def auth_callback(provider):
         logger.info(f"Received token data from {provider}: {token}")
         
         integration_data = {
-            'user_id': user_id, # Use the user_id from the session
+            'user_id': str(user.id),
             'service': provider,
             'access_token': token.get('access_token'),
             'refresh_token': token.get('refresh_token'),
@@ -409,16 +399,16 @@ def auth_callback(provider):
 
         supabase_client.from_('user_integrations').upsert(integration_data).execute()
         
-        logger.info(f"Successfully saved {provider} integration for user {user_id}")
+        logger.info(f"Successfully saved {provider} integration for user {user.id}")
 
         return f"""
             <h1>Authentication Successful!</h1>
             <p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>
-            <script>window.close();</script>
         """
     except Exception as e:
         logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
         return "An error occurred during authentication. Please try again.", 500
+
 
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization')
