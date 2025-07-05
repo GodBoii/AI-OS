@@ -7,7 +7,7 @@ class PythonBridge {
         this.mainWindow = mainWindow;
         this.socket = null;
         this.initialized = false;
-        this.reconnectAttempts = 10;
+        this.reconnectAttempts = 0; // Reset on successful connect
         this.maxReconnectAttempts = config.backend.maxReconnectAttempts;
         this.reconnectDelay = config.backend.reconnectDelay;
         this.ongoingStreams = {};
@@ -112,11 +112,10 @@ class PythonBridge {
             this.mainWindow.webContents.send('chat-response', data);
         });
 
-        // --- NEW: Handle intermediate agent steps ---
+        // Handle intermediate agent steps
         this.socket.on('agent_step', (data) => {
             this.mainWindow.webContents.send('agent-step', data);
         });
-        // --- END NEW ---
 
         // Handle critical errors
         this.socket.on('error', (error) => {

@@ -68,13 +68,14 @@ function setupIpcListeners() {
     ipcRenderer.on('chat-response', (data) => {
         try {
             if (!data) return;
-            const { streaming = false, done = false, id: messageId, content } = data;
+            const { streaming = false, done = false, id: messageId } = data;
 
             if (done && messageId && ongoingStreams[messageId]) {
                 const messageDiv = ongoingStreams[messageId];
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
+                    // --- MODIFICATION: Count all steps, including nested ones ---
                     const stepCount = messageDiv.querySelectorAll('.thinking-step').length;
                     if (stepCount > 0) {
                         thinkingIndicator.setAttribute('data-summary', `Assistant used ${stepCount} tool${stepCount > 1 ? 's' : ''}`);
@@ -86,24 +87,23 @@ function setupIpcListeners() {
                 delete ongoingStreams[messageId];
             }
 
-            if (streaming || content) {
-                populateBotMessage(data);
-            }
+            // --- MODIFICATION: Recursively process the response data ---
+            processResponseData(data);
 
-            if (done || (!streaming && content)) {
+            if (done || (!streaming && data.content)) {
                 document.getElementById('floating-input').disabled = false;
                 document.getElementById('send-message').disabled = false;
             }
         } catch (error) {
             console.error('Error handling response:', error);
-            populateBotMessage({ content: 'Error processing response' });
+            populateBotMessage({ content: 'Error processing response', id: data.id });
             document.getElementById('floating-input').disabled = false;
             document.getElementById('send-message').disabled = false;
         }
     });
 
     ipcRenderer.on('agent-step', (data) => {
-        const { id: messageId, type, name } = data;
+        const { id: messageId, type, name, agent_name, team_name } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
 
         const messageDiv = ongoingStreams[messageId];
@@ -111,7 +111,7 @@ function setupIpcListeners() {
         if (!stepsContainer) return;
 
         const toolName = name.replace(/_/g, ' ');
-        const stepId = `step-${messageId}-${name}`;
+        const stepId = `step-${messageId}-${agent_name || team_name}-${name}`;
         let stepDiv = document.getElementById(stepId);
 
         if (type === 'tool_start') {
@@ -119,21 +119,25 @@ function setupIpcListeners() {
                 stepDiv = document.createElement('div');
                 stepDiv.id = stepId;
                 stepDiv.className = 'thinking-step';
+                // --- MODIFICATION: Show which agent is using the tool ---
+                const ownerName = agent_name || team_name || 'Assistant';
                 stepDiv.innerHTML = `
                     <i class="fas fa-cog fa-spin step-icon"></i>
-                    <span class="step-text">Using ${toolName}...</span>
+                    <span class="step-text"><strong>${ownerName}:</strong> Using ${toolName}...</span>
                 `;
                 stepsContainer.appendChild(stepDiv);
             }
         } else if (type === 'tool_end') {
             if (stepDiv) {
+                const ownerName = agent_name || team_name || 'Assistant';
                 stepDiv.innerHTML = `
                     <i class="fas fa-check-circle step-icon-done"></i>
-                    <span class="step-text">${toolName}</span>
+                    <span class="step-text"><strong>${ownerName}:</strong> ${toolName}</span>
                 `;
             }
         }
     });
+
 
     ipcRenderer.on('sandbox-command-started', (data) => {
         if (window.artifactHandler) {
@@ -158,7 +162,7 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-error', (error) => {
         console.error('Socket error:', error);
         try {
-            populateBotMessage({ content: error.message || 'An error occurred' });
+            populateBotMessage({ content: error.message || 'An error occurred', id: Date.now().toString() });
             showNotification(error.message || 'An error occurred. Starting new session.');
             if (document.getElementById('floating-input')) document.getElementById('floating-input').disabled = false;
             if (document.getElementById('send-message')) document.getElementById('send-message').disabled = false;
@@ -174,6 +178,22 @@ function setupIpcListeners() {
 
     ipcRenderer.on('socket-status', (data) => console.log('Socket status:', data));
     ipcRenderer.send('check-socket-connection');
+}
+
+function processResponseData(data) {
+    const { content, id: messageId, streaming = false, agent_name, team_name } = data;
+
+    if (streaming || content) {
+        populateBotMessage({ content, id: messageId, streaming, agent_name, team_name });
+    }
+
+    // Recursively process member responses
+    if (data.member_responses && Array.isArray(data.member_responses)) {
+        data.member_responses.forEach(memberResponse => {
+            // Pass the top-level messageId down to keep everything in the same message bubble
+            processResponseData({ ...memberResponse, id: messageId });
+        });
+    }
 }
 /**
  * Displays a connection error message.
@@ -244,9 +264,11 @@ function createBotMessagePlaceholder(messageId) {
     thinkingIndicator.innerHTML = `<div class="thinking-steps-container"></div>`;
     messageDiv.appendChild(thinkingIndicator);
 
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    messageDiv.appendChild(contentDiv);
+    // --- MODIFICATION: Create a main content area for all responses ---
+    const mainContentDiv = document.createElement('div');
+    mainContentDiv.className = 'message-content';
+    mainContentDiv.id = `main-content-${messageId}`;
+    messageDiv.appendChild(mainContentDiv);
 
     chatMessages.appendChild(messageDiv);
     ongoingStreams[messageId] = messageDiv;
@@ -254,21 +276,46 @@ function createBotMessagePlaceholder(messageId) {
 }
 
 function populateBotMessage(data) {
-    const { content, id: messageId, streaming = false } = data;
+    const { content, id: messageId, streaming = false, agent_name, team_name } = data;
     const messageDiv = ongoingStreams[messageId];
     if (!messageDiv) {
         console.warn("Could not find message div for ID:", messageId);
         return;
     }
 
-    const contentDiv = messageDiv.querySelector('.message-content');
-    if (contentDiv) {
+    const ownerName = agent_name || team_name;
+    if (!ownerName || !content) return; // Don't render empty content blocks
+
+    const contentBlockId = `content-block-${messageId}-${ownerName}`;
+    let contentBlock = document.getElementById(contentBlockId);
+
+    if (!contentBlock) {
+        contentBlock = document.createElement('div');
+        contentBlock.id = contentBlockId;
+        contentBlock.className = 'content-block';
+        
+        const header = document.createElement('div');
+        header.className = 'content-block-header';
+        header.textContent = ownerName.replace(/_/g, ' ');
+        contentBlock.appendChild(header);
+
+        const innerContent = document.createElement('div');
+        innerContent.className = 'inner-content';
+        contentBlock.appendChild(innerContent);
+
+        const mainContentContainer = messageDiv.querySelector(`#main-content-${messageId}`);
+        mainContentContainer.appendChild(contentBlock);
+    }
+    
+    const innerContentDiv = contentBlock.querySelector('.inner-content');
+    if (innerContentDiv) {
+        const streamId = `${messageId}-${ownerName}`;
         const formattedContent = streaming 
-            ? messageFormatter.formatStreaming(content, messageId) 
+            ? messageFormatter.formatStreaming(content, streamId) 
             : messageFormatter.format(content);
-        contentDiv.innerHTML = formattedContent;
-        if (contentDiv.querySelector('.mermaid')) {
-            mermaid.init(undefined, contentDiv.querySelectorAll('.mermaid'));
+        innerContentDiv.innerHTML = formattedContent;
+        if (innerContentDiv.querySelector('.mermaid')) {
+            mermaid.init(undefined, innerContentDiv.querySelectorAll('.mermaid'));
         }
     }
 }
@@ -353,7 +400,7 @@ async function handleSendMessage() {
         ipcRenderer.send('send-message', messageData);
     } catch (error) {
         console.error('Error sending message:', error);
-        populateBotMessage({ content: 'Error sending message' });
+        populateBotMessage({ content: 'Error sending message', id: messageId });
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
     }
@@ -363,6 +410,7 @@ async function handleSendMessage() {
     fileAttachmentHandler.clearAttachedFiles();
     contextHandler.clearSelectedContext();
 }
+
 /**
  * Initializes the tools menu and its behavior.
  */
@@ -414,6 +462,7 @@ function initializeToolsMenu() {
     });
     window.updateToolsIndicator();
 }
+
 function handleMemoryToggle() {
     const memoryBtn = document.querySelector('[data-tool="memory"]');
     memoryBtn.addEventListener('click', () => {
@@ -421,6 +470,7 @@ function handleMemoryToggle() {
         memoryBtn.classList.toggle('active', chatConfig.memory);
     });
 }
+
 function handleTasksToggle() {
     const tasksBtn = document.querySelector('[data-tool="tasks"]');
     tasksBtn.addEventListener('click', () => {
@@ -428,6 +478,7 @@ function handleTasksToggle() {
         tasksBtn.classList.toggle('active', chatConfig.tasks);
     });
 }
+
 async function terminateSession() {
     sessionActive = false;
     ongoingStreams = {};
@@ -440,6 +491,7 @@ async function terminateSession() {
     }
     ipcRenderer.send('terminate-session', { accessToken: session.access_token });
 }
+
 function initializeAutoExpandingTextarea() {
     const textarea = document.getElementById('floating-input');
     textarea.addEventListener('input', function() {
@@ -447,6 +499,7 @@ function initializeAutoExpandingTextarea() {
         this.style.height = (this.scrollHeight) + 'px';
     });
 }
+
 function showNotification(message, type = 'error', duration = 10000) {
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
@@ -473,6 +526,7 @@ function showNotification(message, type = 'error', duration = 10000) {
         }, 300);
     }, duration);
 }
+
 class UnifiedPreviewHandler {
     constructor(contextHandler, fileAttachmentHandler) {
         this.contextHandler = contextHandler;
@@ -640,11 +694,15 @@ function init() {
         }
     });
 }
+
 const style = document.createElement('style');
 style.textContent = `
 .error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .dark-mode .error-message { background-color: rgba(239, 68, 68, 0.2); }
 .status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
+.content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
+.inner-content { padding: 8px; }
 `;
 document.head.appendChild(style);
 
