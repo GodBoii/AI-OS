@@ -348,7 +348,20 @@ def login_provider(provider):
     token = request.args.get('token')
     if not token:
         return "Authentication token is missing.", 400
-    session['supabase_token'] = token
+
+    # === THE FIX: PART 1 ===
+    # Use the token immediately to get the permanent user ID
+    try:
+        user_response = supabase_client.auth.get_user(jwt=token)
+        user = user_response.user
+        if not user:
+            raise AuthApiError("User not found for the provided token.", 401)
+        # Store the permanent, stable user ID in the session, NOT the temporary token.
+        session['user_id'] = str(user.id)
+    except AuthApiError as e:
+        logger.error(f"Invalid token provided to /login/{provider}: {e.message}")
+        return "Your session is invalid. Please log in again.", 401
+    # ========================
     
     redirect_uri = url_for('auth_callback', provider=provider, _external=True)
     
@@ -362,23 +375,22 @@ def login_provider(provider):
             prompt='consent'
         )
         
+    if provider == 'github':
+        return oauth.github.authorize_redirect(redirect_uri, prompt='consent')
+        
     return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
 @app.route('/auth/<provider>/callback')
 def auth_callback(provider):
     try:
-        supabase_token = session.get('supabase_token')
-        if not supabase_token:
+        # === THE FIX: PART 2 ===
+        # Retrieve the permanent user ID from the session.
+        user_id = session.get('user_id')
+        if not user_id:
+            # This is now the primary check.
             return "Your session has expired. Please try connecting again.", 400
-        
-        try:
-            user_response = supabase_client.auth.get_user(jwt=supabase_token)
-            user = user_response.user
-            if not user:
-                raise AuthApiError("User not found for the provided token.", 401)
-        except AuthApiError as e:
-            logger.error(f"Invalid token during {provider} auth callback: {e.message}")
-            return "Your session is invalid. Please log in and try again.", 401
+        # We no longer need to validate a stale token here. We trust the user_id.
+        # ========================
         
         client = oauth.create_client(provider)
         token = client.authorize_access_token()
@@ -386,7 +398,7 @@ def auth_callback(provider):
         logger.info(f"Received token data from {provider}: {token}")
         
         integration_data = {
-            'user_id': str(user.id),
+            'user_id': user_id, # Use the user_id from the session
             'service': provider,
             'access_token': token.get('access_token'),
             'refresh_token': token.get('refresh_token'),
@@ -397,16 +409,16 @@ def auth_callback(provider):
 
         supabase_client.from_('user_integrations').upsert(integration_data).execute()
         
-        logger.info(f"Successfully saved {provider} integration for user {user.id}")
+        logger.info(f"Successfully saved {provider} integration for user {user_id}")
 
         return f"""
             <h1>Authentication Successful!</h1>
             <p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>
+            <script>window.close();</script>
         """
     except Exception as e:
         logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
         return "An error occurred during authentication. Please try again.", 500
-
 
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization')
