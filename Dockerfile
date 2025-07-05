@@ -12,10 +12,11 @@ COPY ./python-backend/requirements.txt .
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+RUN playwright install chromium
+
 # Copy the rest of the python-backend application code into the container at /app
 COPY ./python-backend/ .
 
-RUN mkdir -p /app/uploads
 # Make port 8765 available to the world outside this container
 # This doesn't publish the port, just documents it.
 EXPOSE 8765
