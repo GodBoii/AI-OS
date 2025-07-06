@@ -168,36 +168,6 @@ def get_llm_os(
             debug_mode=debug_mode,
         )
 
-        news_agent = Agent(
-            name="News_Crawler",
-            role="News content extractor providing structured summaries from URLs.",
-            tools=[NewspaperTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use newspaper functions to extract news articles from URLs.",
-                "Focus on news-specific content: headlines, publication dates, article body.",
-                "Extract journalist information, publication source, and article metadata.",
-                "Provide clean, structured news content without ads or navigation elements."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
-        artical_agent = Agent(
-            name="Artical_Agent",
-            role="Artical content extractor providing structured summaries from URLs.",
-            tools=[Newspaper4kTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use Newspaper4k functions to extract and process articles from URLs.",
-                "Extract article content, author information, publication details, and images.",
-                "Handle various article formats including blogs, news, and long-form content.",
-                "Provide clean article text with metadata and content structure."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
         Arxiv_agent = Agent(
             name="Arxiv_Agent",
             role="authors publications and research papers information extractor",
@@ -247,10 +217,10 @@ def get_llm_os(
             name="Research Agent",
             mode="coordinate",
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            members=[wikipedia_agent, hacker_news_agent, artical_agent, Arxiv_agent, news_agent, deep_crawler_agent, crawler_agent],
+            members=[wikipedia_agent, hacker_news_agent, Arxiv_agent, deep_crawler_agent, crawler_agent],
             instructions=[
                 "Research coordinator: Route queries to appropriate specialist agents based on content type.",
-                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → News (current events) → Article agents (URLs) → Crawlers (general web).",
+                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → Crawlers (general web).",
                 "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
                 "Synthesize findings from multiple sources, note conflicts, verify information.",
                 "Provide comprehensive research summary with source attribution."
