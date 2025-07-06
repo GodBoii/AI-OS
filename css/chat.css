@@ -1324,10 +1324,6 @@
     animation: fadeIn 0.3s ease;
 }
 
-.thinking-indicator i {
-    animation: spin 1s linear infinite;
-}
-
 .thinking-indicator .timer {
     font-family: var(--font-mono);
     opacity: 0.8;
