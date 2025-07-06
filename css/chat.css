@@ -1774,106 +1774,202 @@ a:hover {
     border-color: var(--primary-700);
 }
 
+/* public/css/chat.css */
+
 /* ================================================================= */
-/* AGENT THINKING STEPS UI (Add to the end of chat.css)              */
+/* REFINED AGENT RESPONSE COMPONENT (Replace old thinking-indicator styles) */
 /* ================================================================= */
 
-/* Main container for the thinking steps, appears above the message content */
+.message-bot {
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* The header area for steps and the final summary */
 .thinking-indicator {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    position: relative;
     padding: 10px 16px;
     border-bottom: 1px solid var(--border-color);
     background: rgba(var(--accent-color-rgb), 0.05);
     border-radius: 16px 16px 0 0;
-    overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
 }
 
-/* The container that holds the list of individual steps */
+/* The container for LIVE thinking steps */
 .thinking-steps-container {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 150px; /* Limit height to prevent excessive growth */
-    transition: max-height 0.4s ease-in-out, opacity 0.3s ease, margin-bottom 0.4s ease;
-    opacity: 1;
 }
 
-/* Individual step item (e.g., "Using google_search...") */
+/* An individual LIVE step */
 .thinking-step {
     display: flex;
     align-items: center;
     gap: 10px;
     font-size: 0.85rem;
     color: var(--text-secondary);
-    animation: fadeIn 0.3s ease forwards;
+    animation: fadeIn 0.5s ease forwards;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Icon for a step that is in progress */
-.step-icon {
+/* --- FIX: Make the spin animation SPECIFIC to the step icon --- */
+.thinking-step .step-icon {
     font-size: 0.8rem;
     color: var(--accent-color);
-    animation: spin 1.2s linear infinite;
+    animation: spin 1.5s linear infinite;
 }
 
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-/* Icon for a completed step */
 .step-icon-done {
     font-size: 0.8rem;
     color: var(--success-500);
 }
 
-/* Text of the step */
-.step-text {
-    font-weight: 500;
+/* --- Collapsed/Expanded States --- */
+
+.thinking-indicator.steps-done {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-/* --- State change when the response is complete --- */
+.thinking-indicator.steps-done:hover {
+    background-color: rgba(var(--accent-color-rgb), 0.1);
+}
 
-/* Modifier class added to the indicator when the stream is done */
 .thinking-indicator.steps-done .thinking-steps-container {
+    display: none; /* Hide the live steps container when done */
+}
+
+.summary-text {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* The chevron icon should NOT spin. It should TRANSITION its rotation. */
+.summary-chevron {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-secondary);
+}
+
+.message-bot.expanded .summary-chevron {
+    transform: rotate(180deg);
+}
+
+/* The container for PERMANENT detailed logs */
+.detailed-logs {
     max-height: 0;
     opacity: 0;
-    margin-bottom: -10px; /* Helps with the collapse animation */
-    pointer-events: none;
+    overflow: hidden;
+    transition: max-height 0.4s ease-in-out, opacity 0.3s ease, margin-top 0.4s ease, padding-top 0.4s ease;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 1px solid transparent;
 }
 
-/* Add a summary title that appears after steps are done */
-.thinking-indicator.steps-done::after {
-    content: 'Assistant'; /* Default text */
-    position: absolute;
-    top: 10px;
-    left: 16px;
-    font-size: 0.85rem;
-    font-weight: 500;
+.message-bot.expanded .detailed-logs {
+    max-height: 1500px;
+    opacity: 1;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top-color: var(--border-color);
+}
+
+/* Styling for sub-agent log blocks */
+.log-block {
+    margin-left: 10px;
+    border-left: 2px solid var(--accent-muted);
+    padding-left: 15px;
+    margin-bottom: 15px;
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.dark-mode .log-block {
+    border-left-color: var(--neutral-700);
+}
+
+/* --- NEW: Styles for the permanent tool log entries in the dropdown --- */
+.tool-log-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    background-color: var(--hover-bg);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-color);
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.dark-mode .tool-log-entry {
+    background-color: var(--neutral-800);
+}
+
+.tool-log-icon {
+    color: var(--accent-color);
+    font-size: 1rem;
+}
+
+.tool-log-details {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.tool-log-owner {
+    font-size: 0.75rem;
     color: var(--text-secondary);
-    opacity: 0;
-    animation: fadeIn 0.5s ease 0.3s forwards;
+    font-weight: 500;
 }
 
-/* Adjust the top margin of the main message content based on the indicator */
-.message-bot .thinking-indicator + .message-content {
-    margin-top: 45px; /* Initial space for the indicator */
-    transition: margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+.tool-log-action {
+    font-size: 0.9rem;
+    color: var(--text-color);
 }
 
-.message-bot .thinking-indicator.steps-done + .message-content {
-    margin-top: 0; /* Collapse the margin when steps are done */
+.tool-log-status {
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 99px;
 }
 
-.message-bot .thinking-indicator.steps-done {
-    padding: 0;
-    border-bottom: none;
+.tool-log-status.in-progress {
+    color: var(--warning-700);
+    background-color: var(--warning-100);
+}
+
+.dark-mode .tool-log-status.in-progress {
+    color: var(--warning-100);
+    background-color: rgba(245, 158, 11, 0.2);
+}
+
+.tool-log-status.completed {
+    color: var(--success-700);
+    background-color: var(--success-100);
+}
+
+.dark-mode .tool-log-status.completed {
+    color: var(--success-100);
+    background-color: rgba(16, 185, 129, 0.2);
+}
+
+/* Final Answer Content Block */
+.message-content {
+    padding-top: 10px;
+}
+
+.detailed-logs:empty + .message-content {
+    padding-top: 0;
+}
+
+/* Keyframe Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }

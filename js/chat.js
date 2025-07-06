@@ -75,20 +75,34 @@ function setupIpcListeners() {
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
-                    // --- MODIFICATION: Count all steps, including nested ones ---
-                    const stepCount = messageDiv.querySelectorAll('.thinking-step').length;
-                    if (stepCount > 0) {
-                        thinkingIndicator.setAttribute('data-summary', `Assistant used ${stepCount} tool${stepCount > 1 ? 's' : ''}`);
-                    } else {
-                         thinkingIndicator.setAttribute('data-summary', `Assistant`);
+                    
+                    // --- NEW: More descriptive summary logic ---
+                    const logCount = messageDiv.querySelectorAll('.log-block').length;
+                    const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+                    
+                    let summaryText = "Aetheria AI's Reasoning"; // Better default title
+                    if (logCount > 0 || toolLogCount > 0) {
+                        const parts = [];
+                        if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
+                        if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
+                        summaryText = `Process involved ${parts.join(' and ')}`;
                     }
+            
+                    // Replace the live steps with the final summary header
+                    thinkingIndicator.innerHTML = `<span class="summary-text">${summaryText}</span><i class="fas fa-chevron-down summary-chevron"></i>`;
+            
+                    // Make the header clickable to toggle the logs
+                    thinkingIndicator.addEventListener('click', () => {
+                        messageDiv.classList.toggle('expanded');
+                    });
                 }
                 messageFormatter.finishStreaming(messageId);
                 delete ongoingStreams[messageId];
             }
 
-            // --- MODIFICATION: Recursively process the response data ---
-            processResponseData(data);
+            if (data.content) {
+                populateBotMessage(data);
+            }
 
             if (done || (!streaming && data.content)) {
                 document.getElementById('floating-input').disabled = false;
@@ -105,50 +119,76 @@ function setupIpcListeners() {
     ipcRenderer.on('agent-step', (data) => {
         const { id: messageId, type, name, agent_name, team_name } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
-
+    
         const messageDiv = ongoingStreams[messageId];
-        const stepsContainer = messageDiv.querySelector('.thinking-steps-container');
-        if (!stepsContainer) return;
-
         const toolName = name.replace(/_/g, ' ');
-        const stepId = `step-${messageId}-${agent_name || team_name}-${name}`;
-        let stepDiv = document.getElementById(stepId);
-
+        const ownerName = agent_name || team_name || 'Assistant';
+        const stepId = `step-${messageId}-${ownerName}-${name}`;
+    
+        // --- FIX: Create a permanent log entry in the hidden .detailed-logs container ---
+        const logsContainer = messageDiv.querySelector('.detailed-logs');
+        const logEntryId = `log-entry-${stepId}`;
+        let logEntry = logsContainer.querySelector(`#${logEntryId}`);
+    
         if (type === 'tool_start') {
-            if (!stepDiv) {
-                stepDiv = document.createElement('div');
-                stepDiv.id = stepId;
-                stepDiv.className = 'thinking-step';
-                // --- MODIFICATION: Show which agent is using the tool ---
-                const ownerName = agent_name || team_name || 'Assistant';
-                stepDiv.innerHTML = `
-                    <i class="fas fa-cog fa-spin step-icon"></i>
-                    <span class="step-text"><strong>${ownerName}:</strong> Using ${toolName}...</span>
+            if (!logEntry) {
+                logEntry = document.createElement('div');
+                logEntry.id = logEntryId;
+                logEntry.className = 'tool-log-entry';
+                logEntry.innerHTML = `
+                    <i class="fas fa-wrench tool-log-icon"></i>
+                    <div class="tool-log-details">
+                        <span class="tool-log-owner">${ownerName}</span>
+                        <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
+                    </div>
+                    <span class="tool-log-status in-progress">In progress...</span>
                 `;
-                stepsContainer.appendChild(stepDiv);
+                logsContainer.appendChild(logEntry);
             }
         } else if (type === 'tool_end') {
-            if (stepDiv) {
-                const ownerName = agent_name || team_name || 'Assistant';
-                stepDiv.innerHTML = `
-                    <i class="fas fa-check-circle step-icon-done"></i>
-                    <span class="step-text"><strong>${ownerName}:</strong> ${toolName}</span>
+            if (logEntry) {
+                // Update the status of the permanent log entry to "Completed"
+                const statusEl = logEntry.querySelector('.tool-log-status');
+                if (statusEl) {
+                    statusEl.textContent = 'Completed';
+                    statusEl.classList.remove('in-progress');
+                    statusEl.classList.add('completed');
+                }
+            }
+        }
+    
+        // --- Keep the live-updating steps for the user to see in real-time ---
+        const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
+        if (!liveStepsContainer) return;
+        let liveStepDiv = liveStepsContainer.querySelector(`#${stepId}`);
+    
+        if (type === 'tool_start') {
+            if (!liveStepDiv) {
+                liveStepDiv = document.createElement('div');
+                liveStepDiv.id = stepId;
+                liveStepDiv.className = 'thinking-step';
+                liveStepDiv.innerHTML = `
+                    <i class="fas fa-cog step-icon"></i>
+                    <span class="step-text"><strong>${ownerName}:</strong> Using ${toolName}...</span>
                 `;
+                liveStepsContainer.appendChild(liveStepDiv);
+            }
+        } else if (type === 'tool_end') {
+            if (liveStepDiv) {
+                // Remove the live step once it's done to keep the list clean
+                liveStepDiv.remove();
             }
         }
     });
 
-
     ipcRenderer.on('sandbox-command-started', (data) => {
         if (window.artifactHandler) {
-            // This now just opens a waiting terminal
             window.artifactHandler.showTerminal(data.artifactId);
         }
     });
     
     ipcRenderer.on('sandbox-command-update', (data) => {
         if (window.artifactHandler) {
-            // This updates the terminal with the command being run
             window.artifactHandler.updateCommand(data.artifactId, data.command);
         }
     });
@@ -178,22 +218,6 @@ function setupIpcListeners() {
 
     ipcRenderer.on('socket-status', (data) => console.log('Socket status:', data));
     ipcRenderer.send('check-socket-connection');
-}
-
-function processResponseData(data) {
-    const { content, id: messageId, streaming = false, agent_name, team_name } = data;
-
-    if (streaming || content) {
-        populateBotMessage({ content, id: messageId, streaming, agent_name, team_name });
-    }
-
-    // Recursively process member responses
-    if (data.member_responses && Array.isArray(data.member_responses)) {
-        data.member_responses.forEach(memberResponse => {
-            // Pass the top-level messageId down to keep everything in the same message bubble
-            processResponseData({ ...memberResponse, id: messageId });
-        });
-    }
 }
 /**
  * Displays a connection error message.
@@ -257,14 +281,23 @@ function addUserMessage(message, turnContextData = null) {
 function createBotMessagePlaceholder(messageId) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
+    // The .message-bot class will now serve as our main component wrapper
     messageDiv.className = 'message message-bot';
     
+    // This header will be for both live steps and the final summary
     const thinkingIndicator = document.createElement('div');
     thinkingIndicator.className = 'thinking-indicator';
+    // The container for live steps that will be hidden later
     thinkingIndicator.innerHTML = `<div class="thinking-steps-container"></div>`;
     messageDiv.appendChild(thinkingIndicator);
 
-    // --- MODIFICATION: Create a main content area for all responses ---
+    // Container for the collapsible logs
+    const detailedLogsDiv = document.createElement('div');
+    detailedLogsDiv.className = 'detailed-logs';
+    detailedLogsDiv.id = `logs-${messageId}`;
+    messageDiv.appendChild(detailedLogsDiv);
+
+    // Container for the final answer from Aetheria_AI
     const mainContentDiv = document.createElement('div');
     mainContentDiv.className = 'message-content';
     mainContentDiv.id = `main-content-${messageId}`;
@@ -276,7 +309,8 @@ function createBotMessagePlaceholder(messageId) {
 }
 
 function populateBotMessage(data) {
-    const { content, id: messageId, streaming = false, agent_name, team_name } = data;
+    // Destructure all needed properties, including the new is_log flag
+    const { content, id: messageId, streaming = false, agent_name, team_name, is_log } = data;
     const messageDiv = ongoingStreams[messageId];
     if (!messageDiv) {
         console.warn("Could not find message div for ID:", messageId);
@@ -286,13 +320,24 @@ function populateBotMessage(data) {
     const ownerName = agent_name || team_name;
     if (!ownerName || !content) return; // Don't render empty content blocks
 
+    // --- NEW: Decide where to render the content based on the is_log flag ---
+    const targetContainer = is_log 
+        ? messageDiv.querySelector(`#logs-${messageId}`)
+        : messageDiv.querySelector(`#main-content-${messageId}`);
+
+    if (!targetContainer) {
+        console.error("Target container not found for message:", messageId, "is_log:", is_log);
+        return;
+    }
+
     const contentBlockId = `content-block-${messageId}-${ownerName}`;
     let contentBlock = document.getElementById(contentBlockId);
 
     if (!contentBlock) {
         contentBlock = document.createElement('div');
         contentBlock.id = contentBlockId;
-        contentBlock.className = 'content-block';
+        // Add a class to distinguish log blocks for styling
+        contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         
         const header = document.createElement('div');
         header.className = 'content-block-header';
@@ -303,8 +348,8 @@ function populateBotMessage(data) {
         innerContent.className = 'inner-content';
         contentBlock.appendChild(innerContent);
 
-        const mainContentContainer = messageDiv.querySelector(`#main-content-${messageId}`);
-        mainContentContainer.appendChild(contentBlock);
+        // Append the new block to the correct container
+        targetContainer.appendChild(contentBlock);
     }
     
     const innerContentDiv = contentBlock.querySelector('.inner-content');
