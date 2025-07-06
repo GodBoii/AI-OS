@@ -15,8 +15,6 @@ from agno.tools import Toolkit
 from agno.tools.calculator import CalculatorTools
 from agno.tools.googlesearch import GoogleSearchTools
 from agno.tools.website import WebsiteTools
-from agno.tools.newspaper import NewspaperTools
-from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.hackernews import HackerNewsTools
 from agno.tools.wikipedia import WikipediaTools
 from agno.tools.arxiv import ArxivTools
