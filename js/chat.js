@@ -85,7 +85,7 @@ function setupIpcListeners() {
                         const parts = [];
                         if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
                         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
-                        summaryText = `Process involved ${parts.join(' and ')}`;
+                        summaryText = `Reasoning involved ${parts.join(' and ')}`;
                     }
             
                     // Replace the live steps with the final summary header
