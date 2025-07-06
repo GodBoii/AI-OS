@@ -14,6 +14,12 @@ from agno.models.google import Gemini
 from agno.tools import Toolkit
 from agno.tools.calculator import CalculatorTools
 from agno.tools.googlesearch import GoogleSearchTools
+from agno.tools.website import WebsiteTools
+from agno.tools.newspaper import NewspaperTools
+from agno.tools.newspaper4k import Newspaper4kTools
+from agno.tools.hackernews import HackerNewsTools
+from agno.tools.wikipedia import WikipediaTools
+from agno.tools.arxiv import ArxivTools
 from agno.tools.yfinance import YFinanceTools
 from agno.tools.crawl4ai import Crawl4aiTools
 from sandbox_tools import SandboxTools
@@ -94,7 +100,7 @@ def get_llm_os(
                 "Format: 1) Goal 2) Steps (max 5) 3) Files needed 4) Expected outcome.",
                 "Keep response under 200 words."
             ],
-            model=Gemini(id="gemini-2.5-flash"),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             debug_mode=debug_mode
         )
 
@@ -113,25 +119,12 @@ def get_llm_os(
             debug_mode=debug_mode
         )
 
-        # The Reviewer Agent (Checks the code for quality)
-        code_reviewer = Agent(
-            name="Code_Reviewer",
-            role="Quality assurance specialist providing concise feedback on code correctness, style, and plan adherence.",
-            instructions=[
-                "Review code for: 1) Correctness 2) Plan adherence 3) Style.",
-                "Output: Pass/Fail + 3 key points max.",
-                "Keep response under 150 words."
-            ],
-            model=Gemini(id="gemini-2.5-flash"),
-            debug_mode=debug_mode
-        )
-
         # The Development Team Coordinator
         dev_team = Team(
             name="dev_team",
             mode="coordinate",  # Ensures a sequential Plan -> Execute -> Review workflow
-            model=Gemini(id="gemini-2.5-flash"),  # A stronger model for coordination
-            members=[code_planner, code_executor, code_reviewer],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),  # A stronger model for coordination
+            members=[code_planner, code_executor],
             instructions=[
                 "Development team coordinator: Plan → Execute → Review workflow.",
                 "1) Get plan from Code_Planner",
@@ -149,18 +142,129 @@ def get_llm_os(
             name="Crawler",
             role="Web content extractor providing structured summaries from URLs.",
             tools=[Crawl4aiTools(max_length=None)],
-            model=Gemini(id="gemini-2.5-flash"),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use website scraping functions to extract detailed content from URLs.",
+                "Focus on comprehensive content extraction including text, links, and structure.",
+                "Handle complex websites with dynamic content and multiple pages.",
+                "Provide structured output with clear source attribution."
+            ],
             markdown=True,
             debug_mode=debug_mode,
         )
-        main_team_members.append(crawler_agent)
+
+        deep_crawler_agent = Agent(
+            name="Deep_Crawler",
+            role="Deep web content extractor providing structured summaries from URLs.",
+            tools=[WebsiteTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use website scraping functions to extract detailed content from URLs.",
+                "Focus on comprehensive content extraction including text, links, and structure.",
+                "Handle complex websites with dynamic content and multiple pages.",
+                "Provide structured output with clear source attribution."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        news_agent = Agent(
+            name="News_Crawler",
+            role="News content extractor providing structured summaries from URLs.",
+            tools=[NewspaperTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use newspaper functions to extract news articles from URLs.",
+                "Focus on news-specific content: headlines, publication dates, article body.",
+                "Extract journalist information, publication source, and article metadata.",
+                "Provide clean, structured news content without ads or navigation elements."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        artical_agent = Agent(
+            name="Artical_Agent",
+            role="Artical content extractor providing structured summaries from URLs.",
+            tools=[Newspaper4kTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use Newspaper4k functions to extract and process articles from URLs.",
+                "Extract article content, author information, publication details, and images.",
+                "Handle various article formats including blogs, news, and long-form content.",
+                "Provide clean article text with metadata and content structure."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        Arxiv_agent = Agent(
+            name="Arxiv_Agent",
+            role="authors publications and research papers information extractor",
+            tools=[ArxivTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use ArXiv functions to search and retrieve academic papers.",
+                "Extract paper metadata: title, authors, abstract, publication date, categories.",
+                "Focus on research papers, preprints, and scholarly publications.",
+                "Provide structured academic content with citation information."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        hacker_news_agent = Agent(
+            name="Hacker News Agent",
+            role="HackerNews enables an Agent to search Hacker News website.",
+            tools=[HackerNewsTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use get_top_hackernews_stories to fetch trending tech stories (default 10, specify num_stories).",
+                "Use get_user_details to retrieve HN user profiles by username.",
+                "Extract story titles, scores, comments, and user engagement metrics.",
+                "Focus on tech trends, startup news, and community discussions."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        wikipedia_agent = Agent(
+            name="Wikipedia Agent",
+            role="Wikipedia enables an Agent to search Wikipedia website.",
+            tools=[WikipediaTools()],
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            instructions=[
+                "Use Wikipedia functions to search and retrieve encyclopedic content.",
+                "Extract article content, summaries, and structured information.",
+                "Focus on factual, well-sourced information with citations.",
+                "Provide comprehensive background knowledge and definitions."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+
+        research_leader = Team(
+            name="Research Agent",
+            mode="coordinate",
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+            members=[wikipedia_agent, hacker_news_agent, artical_agent, Arxiv_agent, news_agent, deep_crawler_agent, crawler_agent],
+            instructions=[
+                "Research coordinator: Route queries to appropriate specialist agents based on content type.",
+                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → News (current events) → Article agents (URLs) → Crawlers (general web).",
+                "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
+                "Synthesize findings from multiple sources, note conflicts, verify information.",
+                "Provide comprehensive research summary with source attribution."
+            ],
+            debug_mode=debug_mode,
+        )
+        main_team_members.append(research_leader)
 
     if investment_assistant:
         investor_agent = Agent(
             name="Investor",
             role="Generate professional investment reports.",
             tools=[YFinanceTools(stock_price=True, company_info=True, analyst_recommendations=True, company_news=True)],
-            model=Gemini(id="gemini-2.5-flash"),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
                 "Create professional investment reports with:",
                 "Overview, Core Metrics, Financial Performance, Growth Prospects, News, Summary, Recommendation"
