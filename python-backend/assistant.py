@@ -94,9 +94,10 @@ def get_llm_os(
             name="Code_Planner",
             role="Software architect creating concise execution plans. Output: numbered steps (max 5), tech stack, file structure. Consider Code_Executor has sandbox tools for file operations, code execution, and testing.",
             instructions=[
+                "Access files from team_session_state['turn_context']['files'].",
                 "Create brief, actionable plans for Code_Executor who has sandbox tools.",
                 "Format: 1) Goal 2) Steps (max 5) 3) Files needed 4) Expected outcome.",
-                "Keep response under 200 words."
+                "Keep response under 500 words."
             ],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             debug_mode=debug_mode
@@ -107,6 +108,7 @@ def get_llm_os(
             name="Code_Executor",
             role="Efficient coder implementing plans using sandbox tools. Write clean, functional code following the exact plan provided.",
             instructions=[
+                "Use files from team_session_state['turn_context']['files'] for implementation.",
                 "Follow the plan exactly. Write complete, working code.",
                 "Use sandbox tools for file operations and testing.",
                 "Output: brief summary + code files + test results.",
@@ -124,10 +126,11 @@ def get_llm_os(
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),  # A stronger model for coordination
             members=[code_planner, code_executor],
             instructions=[
+                "Development coordinator: Access full context from team_session_state['turn_context'].",
+                "Ensure members use shared context files and media.",
                 "Development team coordinator: Plan → Execute → Review workflow.",
                 "1) Get plan from Code_Planner",
                 "2) Pass plan to Code_Executor for implementation", 
-                "3) Send code to Code_Reviewer for QA",
                 "4) Deliver final result with brief summary (max 200 words)."
             ],
             debug_mode=debug_mode
@@ -142,6 +145,7 @@ def get_llm_os(
             tools=[Crawl4aiTools(max_length=None)],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Check team_session_state['turn_context'] for URLs and context.",
                 "Use website scraping functions to extract detailed content from URLs.",
                 "Focus on comprehensive content extraction including text, links, and structure.",
                 "Handle complex websites with dynamic content and multiple pages.",
@@ -157,6 +161,7 @@ def get_llm_os(
             tools=[WebsiteTools()],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Check team_session_state['turn_context'] for URLs and context.",
                 "Use website scraping functions to extract detailed content from URLs.",
                 "Focus on comprehensive content extraction including text, links, and structure.",
                 "Handle complex websites with dynamic content and multiple pages.",
@@ -172,6 +177,7 @@ def get_llm_os(
             tools=[ArxivTools()],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Use team_session_state['turn_context'] for search context.",
                 "Use ArXiv functions to search and retrieve academic papers.",
                 "Extract paper metadata: title, authors, abstract, publication date, categories.",
                 "Focus on research papers, preprints, and scholarly publications.",
@@ -187,6 +193,7 @@ def get_llm_os(
             tools=[HackerNewsTools()],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Use team_session_state['turn_context'] for search context.",
                 "Use get_top_hackernews_stories to fetch trending tech stories (default 10, specify num_stories).",
                 "Use get_user_details to retrieve HN user profiles by username.",
                 "Extract story titles, scores, comments, and user engagement metrics.",
@@ -202,6 +209,7 @@ def get_llm_os(
             tools=[WikipediaTools()],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Use team_session_state['turn_context'] for search context.",
                 "Use Wikipedia functions to search and retrieve encyclopedic content.",
                 "Extract article content, summaries, and structured information.",
                 "Focus on factual, well-sourced information with citations.",
@@ -218,10 +226,12 @@ def get_llm_os(
             members=[wikipedia_agent, hacker_news_agent, Arxiv_agent, deep_crawler_agent, crawler_agent],
             instructions=[
                 "Research coordinator: Route queries to appropriate specialist agents based on content type.",
-                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → Crawlers (general web).",
+                "Access team_session_state['turn_context'] for full context.",
+                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → Deep Crawler (deep url scraping)→ Crawler (general url scraping).",
                 "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
                 "Synthesize findings from multiple sources, note conflicts, verify information.",
-                "Provide comprehensive research summary with source attribution."
+                "Ensure members use shared context. Synthesize with source attribution."
+                "use multiple agnets if you think it is necessary"
             ],
             debug_mode=debug_mode,
         )
@@ -234,6 +244,7 @@ def get_llm_os(
             tools=[YFinanceTools(stock_price=True, company_info=True, analyst_recommendations=True, company_news=True)],
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             instructions=[
+                "Use team_session_state['turn_context'] for stock symbols and context.",
                 "Create professional investment reports with:",
                 "Overview, Core Metrics, Financial Performance, Growth Prospects, News, Summary, Recommendation"
             ],
@@ -245,6 +256,9 @@ def get_llm_os(
     # --- 4. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
         "You are Aetheria AI: Master coordinator analyzing requests and delegating to specialists.",
+        "You have full context access via team_session_state['turn_context'].",
+        "Context contains: message, files, images, audio, video objects.",
+        "When delegating: Inform sub-teams to use shared context from team_session_state['turn_context'].",
         "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
         "Synthesize specialist outputs into clear, actionable responses.",
         "Keep final answers concise and user-focused."

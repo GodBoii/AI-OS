@@ -12,7 +12,7 @@ from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import eventlet
 import datetime
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, List, Tuple
 
 from authlib.integrations.flask_client import OAuth
 
@@ -20,7 +20,7 @@ from assistant import get_llm_os
 from deepsearch import get_deepsearch
 from supabase_client import supabase_client
 
-# --- MODIFICATION: Import all necessary event and response types ---
+# Import all necessary event and response types
 from agno.agent import Agent
 from agno.team import Team
 from agno.media import Image, Audio, Video, File
@@ -88,7 +88,6 @@ class IsolatedAssistant:
         self.message_id = None
         self.final_assistant_response = ""
 
-    # --- MODIFICATION START: This recursive function is the core of the fix ---
     def _process_and_emit_response(self, response: Union[RunResponse, TeamRunResponse], is_top_level: bool = True):
         """
         Recursively processes a response object and emits socket events.
@@ -98,9 +97,6 @@ class IsolatedAssistant:
             return
 
         owner_name = getattr(response, 'agent_name', None) or getattr(response, 'team_name', None)
-
-        # Aetheria_AI is the top-level coordinator. Only its direct output is the "final answer".
-        # All other content, including from sub-teams or nested agents, is a "log".
         is_final_content = is_top_level and owner_name == "Aetheria_AI"
 
         if response.content:
@@ -110,16 +106,12 @@ class IsolatedAssistant:
                 "id": self.message_id,
                 "agent_name": owner_name,
                 "team_name": owner_name,
-                # ADD THIS NEW FLAG: True for intermediate steps, False for the final answer.
                 "is_log": not is_final_content,
             }, room=self.sid)
 
-        # If it's a team response, recursively process each member's response
         if hasattr(response, 'member_responses') and response.member_responses:
             for member_response in response.member_responses:
-                # For all nested calls, is_top_level is False.
                 self._process_and_emit_response(member_response, is_top_level=False)
-    # --- MODIFICATION END ---
 
     def run_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
         def _run_agent(agent, message, user, context, images, audio, videos, files):
@@ -152,28 +144,21 @@ class IsolatedAssistant:
 
                     eventlet.sleep(0)
                     
-                    # --- MODIFICATION START: Use the correct event and the recursive handler ---
                     if (chunk.event == RunEvent.run_response_content.value or
                         chunk.event == TeamRunEvent.run_response_content.value):
-                        # The initial call is the top level
                         self._process_and_emit_response(chunk, is_top_level=True)
                         
-                        # Aggregate the final response for history.
-                        # The final response is the content from the top-level agent "Aetheria_AI"
-                        # that does not have further nested member responses.
                         owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
                         is_final_chunk = owner_name == "Aetheria_AI" and (not hasattr(chunk, 'member_responses') or not chunk.member_responses)
 
                         if chunk.content and is_final_chunk:
                             self.final_assistant_response += chunk.content
-                    # --- MODIFICATION END ---
 
                     elif (chunk.event == RunEvent.tool_call_started.value or
                           chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
                         socketio.emit("agent_step", {
                             "type": "tool_start",
                             "name": chunk.tool.tool_name,
-                            # Get agent/team name from the parent chunk, not the tool object
                             "agent_name": getattr(chunk, 'agent_name', None),
                             "team_name": getattr(chunk, 'team_name', None),
                             "id": self.message_id
@@ -184,7 +169,6 @@ class IsolatedAssistant:
                         socketio.emit("agent_step", {
                             "type": "tool_end",
                             "name": chunk.tool.tool_name,
-                            # Get agent/team name from the parent chunk, not the tool object
                             "agent_name": getattr(chunk, 'agent_name', None),
                             "team_name": getattr(chunk, 'team_name', None),
                             "id": self.message_id
@@ -512,38 +496,52 @@ def on_disconnect():
     logger.info(f"Client disconnected: {sid}")
     connection_manager.remove_session(sid)
 
-def process_files(files_data):
-    images, audio, videos, other_files, text_content = [], [], [], [], []
-    logger.info(f"Processing {len(files_data)} files")
+# --- MODIFICATION START: process_files function updated ---
+def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
+    """
+    Processes uploaded file data into agno media objects.
+    Text files are converted to agno.media.File objects.
+    Media files are downloaded from Supabase and converted to their respective agno objects.
+    """
+    images, audio, videos, other_files = [], [], [], []
+    logger.info(f"Processing {len(files_data)} files into agno objects")
 
     for file_data in files_data:
         file_name = file_data.get('name', 'unnamed_file')
         file_type = file_data.get('type', '')
         
+        # Handle media files uploaded to Supabase
         if 'path' in file_data:
             file_path_in_bucket = file_data['path']
             try:
                 file_bytes = supabase_client.storage.from_('media-uploads').download(file_path_in_bucket)
                 
                 if file_type.startswith('image/'):
-                    images.append(Image(content=file_bytes))
+                    images.append(Image(content=file_bytes, name=file_name))
                 elif file_type.startswith('audio/'):
-                    audio.append(Audio(content=file_bytes, format=file_type))
+                    audio.append(Audio(content=file_bytes, format=file_type.split('/')[-1], name=file_name))
                 elif file_type.startswith('video/'):
-                    videos.append(Video(content=file_bytes))
+                    videos.append(Video(content=file_bytes, name=file_name))
                 else:
-                    other_files.append(File(content=file_bytes, mime_type=file_type))
+                    # For other binary files like PDFs uploaded via path
+                    other_files.append(File(content=file_bytes, name=file_name, mime_type=file_type))
             except Exception as e:
                 logger.error(f"Error downloading file from Supabase Storage at path {file_path_in_bucket}: {str(e)}")
             continue
 
+        # Handle text-based files sent directly from the client
         if file_data.get('isText') and 'content' in file_data:
-            text_content.append(f"--- File: {file_name} ---\n{file_data['content']}")
+            try:
+                # agno.media.File expects content as bytes
+                content_bytes = file_data['content'].encode('utf-8')
+                file_obj = File(content=content_bytes, name=file_name, mime_type=file_type)
+                other_files.append(file_obj)
+            except Exception as e:
+                logger.error(f"Error creating File object for {file_name}: {e}")
             continue
 
-    combined_text = "\n\n".join(text_content) if text_content else None
-    
-    return combined_text, images, audio, videos, other_files
+    return images, audio, videos, other_files
+# --- MODIFICATION END ---
 
 @socketio.on("send_message")
 def on_send_message(data: str):
@@ -565,14 +563,17 @@ def on_send_message(data: str):
             logger.error(f"Invalid token for SID {sid}: {e.message}")
             emit("error", {"message": "Your session has expired. Please log in again.", "reset": True}, room=sid)
             return
+            
         message = data.get("message", "")
         context = data.get("context", "")
         files = data.get("files", [])
         is_deepsearch = data.get("is_deepsearch", False)
+
         if data.get("type") == "terminate_session":
             connection_manager.terminate_session(sid)
             emit("status", {"message": "Session terminated"}, room=sid)
             return
+            
         session_data = connection_manager.get_session(sid)
         if not session_data:
             config = data.get("config", {})
@@ -581,6 +582,7 @@ def on_send_message(data: str):
             )
         else:
             agent = session_data["agent"]
+            
         message_id = data.get("id") or str(uuid.uuid4())
         isolated_assistant = connection_manager.isolated_assistants.get(sid)
         if not isolated_assistant:
@@ -589,17 +591,37 @@ def on_send_message(data: str):
             return
         isolated_assistant.message_id = message_id
         
-        file_content, images, audio, videos, other_files = process_files(files)
+        # --- MODIFICATION START: Inject context into team_session_state ---
+        # 1. Process files into agno objects.
+        images, audio, videos, other_files = process_files(files)
         
-        combined_message = f"{message}\n\n{file_content}" if file_content else message
-        
+        # 2. Create the context payload for the current turn.
+        turn_context = {
+            "user_message": message,
+            "images": images,
+            "audio": audio,
+            "videos": videos,
+            "files": other_files,
+        }
+
+        # 3. Inject the context into the agent's shared state.
+        if agent.team_session_state is None:
+            agent.team_session_state = {}
+        agent.team_session_state['turn_context'] = turn_context
+        logger.info(f"Injected turn_context into team_session_state for SID {sid}")
+
+        # 4. Run the agent with the separated message and file objects.
+        # The `message` variable contains only the user's typed text.
+        # The `files` parameter now contains the list of agno.media.File objects.
         isolated_assistant.run_safely(
-            agent, combined_message, user=user, context=context,
+            agent, message, user=user, context=context,
             images=images or None, 
             audio=audio or None, 
             videos=videos or None,
             files=other_files or None
         )
+        # --- MODIFICATION END ---
+
     except Exception as e:
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
         emit("error", {"message": "AI service error. Starting new chat...", "reset": True}, room=sid)
