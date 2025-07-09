@@ -24,6 +24,7 @@ from sandbox_tools import SandboxTools
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
+from browser_tools import BrowserTools
 
 # Other Imports
 from supabase_client import supabase_client
@@ -68,7 +69,9 @@ def get_llm_os(
     else:
         memory = None
 
-    # --- 2. DIRECT TOOL INTEGRATIONS (Unchanged) ---
+    shared_browser_tools = BrowserTools()
+
+    # --- 2. DIRECT TOOL INTEGRATIONS ---
     # These tools will be used by the top-level coordinator.
     if enable_github and user_id:
         # ... (github integration logic remains the same)
@@ -83,6 +86,8 @@ def get_llm_os(
         direct_tools.append(CalculatorTools(add=True, subtract=True, multiply=True, divide=True, exponentiate=True, factorial=True, is_prime=True, square_root=True))
     if internet_search:
         direct_tools.append(GoogleSearchTools(fixed_max_results=15))
+
+    direct_tools.append(shared_browser_tools)
 
     # --- 3. SPECIALIST AGENT AND TEAM DEFINITIONS ---
     main_team_members: List[Union[Agent, Team]] = []
@@ -224,9 +229,12 @@ def get_llm_os(
             mode="coordinate",
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             members=[wikipedia_agent, hacker_news_agent, Arxiv_agent, deep_crawler_agent, crawler_agent],
+            tools=[shared_browser_tools],
             instructions=[
                 "Research coordinator: Route queries to appropriate specialist agents based on content type.",
                 "Access team_session_state['turn_context'] for full context.",
+                "Use the `interactive_browser` for tasks requiring dynamic interaction like logging in, filling forms, or complex navigation.",
+                "Before using the browser, call `interactive_browser.get_current_state` to understand the context.",
                 "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → Deep Crawler (deep url scraping)→ Crawler (general url scraping).",
                 "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
                 "Synthesize findings from multiple sources, note conflicts, verify information.",
@@ -257,9 +265,11 @@ def get_llm_os(
     aetheria_instructions = [
         "You are Aetheria AI: Master coordinator analyzing requests and delegating to specialists.",
         "You have full context access via team_session_state['turn_context'].",
+        "You have direct access to an interactive web browser via `interactive_browser` tools.",
         "Context contains: message, files, images, audio, video objects.",
         "When delegating: Inform sub-teams to use shared context from team_session_state['turn_context'].",
         "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
+        "Before using the browser, call `interactive_browser.get_current_state` to see the page.",  
         "Synthesize specialist outputs into clear, actionable responses.",
         "Keep final answers concise and user-focused."
     ]
