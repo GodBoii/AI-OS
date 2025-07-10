@@ -36,4 +36,4 @@ ENV PYTHONUNBUFFERED=1
 # Assumes your Flask app instance in app.py is named 'app'
 # Uses eventlet for SocketIO compatibility
 # Update the CMD line to add timeout parameter
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "app:app"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8765", "--timeout-keep-alive", "65"]
