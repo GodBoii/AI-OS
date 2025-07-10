@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 import eventlet
 import datetime
 from typing import Union, Dict, Any, List, Tuple
+# --- MODIFICATION START: Import asyncio ---
+import asyncio
+# --- MODIFICATION END ---
 
 from authlib.integrations.flask_client import OAuth
 
@@ -47,7 +50,7 @@ logger.addHandler(SocketIOHandler())
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 if not app.secret_key:
-    raise ValueError("FLASK_SECRET_KEY is not set. Please set it in your environment variables.")
+    raise ValueError("FLASK_SECRET_KEY is not set. Please set it in your environment.")
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
@@ -89,10 +92,6 @@ class IsolatedAssistant:
         self.final_assistant_response = ""
 
     def _process_and_emit_response(self, response: Union[RunResponse, TeamRunResponse], is_top_level: bool = True):
-        """
-        Recursively processes a response object and emits socket events.
-        This handles the nested structure of team responses.
-        """
         if not response:
             return
 
@@ -113,92 +112,118 @@ class IsolatedAssistant:
             for member_response in response.member_responses:
                 self._process_and_emit_response(member_response, is_top_level=False)
 
+    # --- MODIFICATION START: The entire run_safely method is updated ---
     def run_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
-        def _run_agent(agent, message, user, context, images, audio, videos, files):
+        """
+        This method now acts as a synchronous wrapper that spawns an eventlet green thread.
+        This green thread will, in turn, manage the asyncio event loop required for `arun`.
+        """
+        def sync_wrapper():
+            """A synchronous function that eventlet can handle."""
             try:
-                if context:
-                    complete_message = f"Previous conversation context:\n{context}\n\nCurrent message: {message}"
-                else:
-                    complete_message = message
-
-                import inspect
-                params = inspect.signature(agent.run).parameters
-                supported_params = {
-                    'message': complete_message,
-                    'stream': True,
-                    'stream_intermediate_steps': True,
-                    'user_id': str(user.id)
-                }
-                if 'images' in params and images: supported_params['images'] = images
-                if 'audio' in params and audio: supported_params['audio'] = audio
-                if 'videos' in params and videos: supported_params['videos'] = videos
-                if 'files' in params and files: supported_params['files'] = files
-
-                logger.info(f"Calling agent.run for user {user.id} with params: {list(supported_params.keys())}")
-                
-                self.final_assistant_response = ""
-                
-                for chunk in agent.run(**supported_params):
-                    if not chunk or not hasattr(chunk, 'event'):
-                        continue
-
-                    eventlet.sleep(0)
-                    
-                    if (chunk.event == RunEvent.run_response_content.value or
-                        chunk.event == TeamRunEvent.run_response_content.value):
-                        self._process_and_emit_response(chunk, is_top_level=True)
-                        
-                        owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
-                        is_final_chunk = owner_name == "Aetheria_AI" and (not hasattr(chunk, 'member_responses') or not chunk.member_responses)
-
-                        if chunk.content and is_final_chunk:
-                            self.final_assistant_response += chunk.content
-
-                    elif (chunk.event == RunEvent.tool_call_started.value or
-                          chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
-                        socketio.emit("agent_step", {
-                            "type": "tool_start",
-                            "name": chunk.tool.tool_name,
-                            "agent_name": getattr(chunk, 'agent_name', None),
-                            "team_name": getattr(chunk, 'team_name', None),
-                            "id": self.message_id
-                        }, room=self.sid)
-
-                    elif (chunk.event == RunEvent.tool_call_completed.value or
-                          chunk.event == TeamRunEvent.tool_call_completed.value) and hasattr(chunk, 'tool'):
-                        socketio.emit("agent_step", {
-                            "type": "tool_end",
-                            "name": chunk.tool.tool_name,
-                            "agent_name": getattr(chunk, 'agent_name', None),
-                            "team_name": getattr(chunk, 'team_name', None),
-                            "id": self.message_id
-                        }, room=self.sid)
-
-                socketio.emit("response", {
-                    "content": "",
-                    "done": True,
-                    "id": self.message_id,
-                }, room=self.sid)
-
-                if hasattr(agent, 'session_metrics') and agent.session_metrics:
-                    logger.info(
-                        f"Run complete. Cumulative session tokens for SID {self.sid}: "
-                        f"{agent.session_metrics.input_tokens} in, "
-                        f"{agent.session_metrics.output_tokens} out."
-                    )
-                
-                self._save_conversation_turn(complete_message)
-
+                # This is the bridge between eventlet and asyncio
+                asyncio.run(self._run_agent_async(agent, message, user, context, images, audio, videos, files))
             except Exception as e:
-                error_msg = f"Tool error: {str(e)}\n{traceback.format_exc()}"
+                error_msg = f"Error in async wrapper: {str(e)}\n{traceback.format_exc()}"
                 logger.error(error_msg)
                 socketio.emit("response", {
-                    "content": "An error occurred while processing your request. Starting a new session...",
+                    "content": "An error occurred while processing your request.",
                     "error": True, "done": True, "id": self.message_id,
                 }, room=self.sid)
-                socketio.emit("error", {"message": "Session reset required", "reset": True}, room=self.sid)
 
-        eventlet.spawn(_run_agent, agent, message, user, context, images, audio, videos, files)
+        eventlet.spawn(sync_wrapper)
+
+    async def _run_agent_async(self, agent: Union[Agent, Team], message: str, user, context, images, audio, videos, files):
+        """
+        This is the new asynchronous core logic for running the agent.
+        It uses `arun` and `async for` to correctly handle async tools.
+        """
+        try:
+            if context:
+                complete_message = f"Previous conversation context:\n{context}\n\nCurrent message: {message}"
+            else:
+                complete_message = message
+
+            import inspect
+            params = inspect.signature(agent.arun).parameters
+            supported_params = {
+                'message': complete_message,
+                'stream': True,
+                'stream_intermediate_steps': True,
+                'user_id': str(user.id)
+            }
+            if 'images' in params and images: supported_params['images'] = images
+            if 'audio' in params and audio: supported_params['audio'] = audio
+            if 'videos' in params and videos: supported_params['videos'] = videos
+            if 'files' in params and files: supported_params['files'] = files
+
+            logger.info(f"Calling agent.arun for user {user.id} with params: {list(supported_params.keys())}")
+            
+            self.final_assistant_response = ""
+            
+            # Use `arun` and `async for` for proper asynchronous iteration
+            async for chunk in agent.arun(**supported_params):
+                if not chunk or not hasattr(chunk, 'event'):
+                    continue
+
+                # eventlet.sleep(0) is still useful to yield control in a mixed environment
+                eventlet.sleep(0)
+                
+                if (chunk.event == RunEvent.run_response_content.value or
+                    chunk.event == TeamRunEvent.run_response_content.value):
+                    self._process_and_emit_response(chunk, is_top_level=True)
+                    
+                    owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
+                    is_final_chunk = owner_name == "Aetheria_AI" and (not hasattr(chunk, 'member_responses') or not chunk.member_responses)
+
+                    if chunk.content and is_final_chunk:
+                        self.final_assistant_response += chunk.content
+
+                elif (chunk.event == RunEvent.tool_call_started.value or
+                      chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
+                    socketio.emit("agent_step", {
+                        "type": "tool_start",
+                        "name": chunk.tool.tool_name,
+                        "agent_name": getattr(chunk, 'agent_name', None),
+                        "team_name": getattr(chunk, 'team_name', None),
+                        "id": self.message_id
+                    }, room=self.sid)
+
+                elif (chunk.event == RunEvent.tool_call_completed.value or
+                      chunk.event == TeamRunEvent.tool_call_completed.value) and hasattr(chunk, 'tool'):
+                    socketio.emit("agent_step", {
+                        "type": "tool_end",
+                        "name": chunk.tool.tool_name,
+                        "agent_name": getattr(chunk, 'agent_name', None),
+                        "team_name": getattr(chunk, 'team_name', None),
+                        # Pass the entire tool object in the event
+                        "tool": chunk.tool.to_dict() if hasattr(chunk.tool, 'to_dict') else vars(chunk.tool)
+                    }, room=self.sid)
+
+            socketio.emit("response", {
+                "content": "",
+                "done": True,
+                "id": self.message_id,
+            }, room=self.sid)
+
+            if hasattr(agent, 'session_metrics') and agent.session_metrics:
+                logger.info(
+                    f"Run complete. Cumulative session tokens for SID {self.sid}: "
+                    f"{agent.session_metrics.input_tokens} in, "
+                    f"{agent.session_metrics.output_tokens} out."
+                )
+            
+            self._save_conversation_turn(complete_message)
+
+        except Exception as e:
+            error_msg = f"Tool error: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            socketio.emit("response", {
+                "content": "An error occurred while processing your request. Starting a new session...",
+                "error": True, "done": True, "id": self.message_id,
+            }, room=self.sid)
+            socketio.emit("error", {"message": "Session reset required", "reset": True}, room=self.sid)
+    # --- MODIFICATION END ---
     
     def _save_conversation_turn(self, user_message):
         try:
@@ -496,13 +521,7 @@ def on_disconnect():
     logger.info(f"Client disconnected: {sid}")
     connection_manager.remove_session(sid)
 
-# --- MODIFICATION START: process_files function updated ---
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
-    """
-    Processes uploaded file data into agno media objects.
-    Text files are converted to agno.media.File objects.
-    Media files are downloaded from Supabase and converted to their respective agno objects.
-    """
     images, audio, videos, other_files = [], [], [], []
     logger.info(f"Processing {len(files_data)} files into agno objects")
 
@@ -510,7 +529,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
         file_name = file_data.get('name', 'unnamed_file')
         file_type = file_data.get('type', '')
         
-        # Handle media files uploaded to Supabase
         if 'path' in file_data:
             file_path_in_bucket = file_data['path']
             try:
@@ -523,16 +541,13 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
                 elif file_type.startswith('video/'):
                     videos.append(Video(content=file_bytes, name=file_name))
                 else:
-                    # For other binary files like PDFs uploaded via path
                     other_files.append(File(content=file_bytes, name=file_name, mime_type=file_type))
             except Exception as e:
                 logger.error(f"Error downloading file from Supabase Storage at path {file_path_in_bucket}: {str(e)}")
             continue
 
-        # Handle text-based files sent directly from the client
         if file_data.get('isText') and 'content' in file_data:
             try:
-                # agno.media.File expects content as bytes
                 content_bytes = file_data['content'].encode('utf-8')
                 file_obj = File(content=content_bytes, name=file_name, mime_type=file_type)
                 other_files.append(file_obj)
@@ -541,7 +556,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
             continue
 
     return images, audio, videos, other_files
-# --- MODIFICATION END ---
 
 @socketio.on("send_message")
 def on_send_message(data: str):
@@ -591,11 +605,8 @@ def on_send_message(data: str):
             return
         isolated_assistant.message_id = message_id
         
-        # --- MODIFICATION START: Inject context into team_session_state ---
-        # 1. Process files into agno objects.
         images, audio, videos, other_files = process_files(files)
         
-        # 2. Create the context payload for the current turn.
         turn_context = {
             "user_message": message,
             "images": images,
@@ -604,15 +615,11 @@ def on_send_message(data: str):
             "files": other_files,
         }
 
-        # 3. Inject the context into the agent's shared state.
         if agent.team_session_state is None:
             agent.team_session_state = {}
         agent.team_session_state['turn_context'] = turn_context
         logger.info(f"Injected turn_context into team_session_state for SID {sid}")
 
-        # 4. Run the agent with the separated message and file objects.
-        # The `message` variable contains only the user's typed text.
-        # The `files` parameter now contains the list of agno.media.File objects.
         isolated_assistant.run_safely(
             agent, message, user=user, context=context,
             images=images or None, 
@@ -620,7 +627,6 @@ def on_send_message(data: str):
             videos=videos or None,
             files=other_files or None
         )
-        # --- MODIFICATION END ---
 
     except Exception as e:
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
