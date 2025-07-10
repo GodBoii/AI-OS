@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 import datetime
 from typing import Union, Dict, Any, List, Tuple
 
-from authlib.integrations.quart_client import OAuth # Changed from flask_client to quart_client
+from authlib.integrations.starlette_client import OAuth # Changed from flask_client to quart_client
 
 from assistant import get_llm_os
 from deepsearch import get_deepsearch
