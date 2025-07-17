@@ -17,8 +17,6 @@ services:
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS # Your repository
     branch: master # The branch to deploy
-    healthCheck:
-      path: /healthz # Uses the health check endpoint we created
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # The start command is taken from the Dockerfile's CMD instruction.
