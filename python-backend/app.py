@@ -1,26 +1,28 @@
-# python-backend/app.py (Async Version)
+# python-backend/app.py
 
 import os
 import logging
 import json
 import uuid
 import traceback
-import asyncio
-import httpx  # Replaces the 'requests' library for async HTTP calls
+import requests
 from pathlib import Path
-from quart import Quart, request, jsonify, redirect, url_for, session, websocket
-from quart_cors import cors
+from flask import Flask, request, jsonify, redirect, url_for, session
+from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
+import eventlet
 import datetime
 from typing import Union, Dict, Any, List, Tuple
 
-from authlib.integrations.starlette_client import OAuth # Changed from flask_client to quart_client
+import redis
+from celery import Celery
+
+from authlib.integrations.flask_client import OAuth
 
 from assistant import get_llm_os
 from deepsearch import get_deepsearch
 from supabase_client import supabase_client
 
-# Import all necessary event and response types
 from agno.agent import Agent
 from agno.team import Team
 from agno.media import Image, Audio, Video, File
@@ -30,26 +32,136 @@ from gotrue.errors import AuthApiError
 
 load_dotenv()
 
+celery = Celery(
+    __name__,
+    broker=os.getenv("REDIS_URL"),
+    backend=os.getenv("REDIS_URL")
+)
+redis_client = redis.from_url(os.getenv("REDIS_URL"))
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# The SocketIOHandler is no longer needed as we are using native WebSockets.
-# We can implement a custom logging handler for WebSockets if needed, but for now,
-# standard logging will go to the console.
+@celery.task(name="run_agent_task")
+def run_agent_task(sid: str, conversation_id: str, message_id: str, turn_data: dict):
+    """
+    This Celery task now uses the conversation_id as the primary key for state.
+    The `sid` is only used for publishing results back to the correct client tab.
+    """
+    try:
+        logger.info(f"Celery worker picked up job for conversation: {conversation_id}")
+        redis_channel = f"results:{sid}" # The response channel is still tied to the connection SID
 
-app = Quart(__name__)
-app = cors(app, allow_origin="*") 
+        # 1. Fetch current session state from Redis using conversation_id
+        session_json = redis_client.get(f"session:{conversation_id}")
+        if not session_json:
+            raise Exception(f"Session data not found in Redis for conversation_id: {conversation_id}")
+        session_data = json.loads(session_json)
 
-app = Quart(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY") # Quart uses the same secret_key config
+        # --- Recreate components inside the worker ---
+        user_id = session_data['user_id']
+        is_deepsearch = turn_data['is_deepsearch']
+        message = turn_data['user_message']
+        
+        # --- NEW: Construct historical context from session data ---
+        # This builds the string of past messages for the agent's prompt
+        history_runs = session_data.get("history", [])
+        context_list = [f"{run['role']}: {run['content']}" for run in history_runs]
+        historical_context = "\n---\n".join(context_list)
+
+        # Recreate the agent, now hydrated with its history
+        if is_deepsearch:
+            agent = get_deepsearch(user_id=user_id, session_info=session_data, **session_data['config'])
+        else:
+            agent = get_llm_os(user_id=user_id, session_info=session_data, **session_data['config'])
+        
+        # Recreate media objects
+        images = [Image.from_dict(d) for d in turn_data.get('images', [])]
+        audio = [Audio.from_dict(d) for d in turn_data.get('audio', [])]
+        videos = [Video.from_dict(d) for d in turn_data.get('videos', [])]
+        other_files = [File.from_dict(d) for d in turn_data.get('files', [])]
+
+        # Inject turn-specific context
+        if agent.team_session_state is None:
+            agent.team_session_state = {}
+        agent.team_session_state['turn_context'] = turn_data
+        
+        # --- Run the agent and stream results ---
+        final_assistant_response = ""
+        complete_message_for_prompt = f"Previous conversation context:\n{historical_context}\n\nCurrent message: {message}" if historical_context else message
+
+        import inspect
+        params = inspect.signature(agent.run).parameters
+        supported_params = {
+            'message': complete_message_for_prompt,
+            'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id
+        }
+        if 'images' in params and images: supported_params['images'] = images
+        if 'audio' in params and audio: supported_params['audio'] = audio
+        if 'videos' in params and videos: supported_params['videos'] = videos
+        if 'files' in params and other_files: supported_params['files'] = other_files
+
+        for chunk in agent.run(**supported_params):
+            if not chunk or not hasattr(chunk, 'event'): continue
+            event_data = {
+                "event": chunk.event, "content": getattr(chunk, 'content', None),
+                "agent_name": getattr(chunk, 'agent_name', None), "team_name": getattr(chunk, 'team_name', None),
+                "tool_name": getattr(chunk.tool, 'tool_name', None) if hasattr(chunk, 'tool') else None,
+                "has_members": hasattr(chunk, 'member_responses') and bool(chunk.member_responses)
+            }
+            redis_client.publish(redis_channel, json.dumps(event_data))
+            owner_name = event_data['agent_name'] or event_data['team_name']
+            is_final_chunk = owner_name == "Aetheria_AI" and not event_data['has_members']
+            if event_data['content'] and is_final_chunk:
+                final_assistant_response += event_data['content']
+
+        # --- Finalization and State Update ---
+        redis_client.publish(redis_channel, json.dumps({"event": "run_done"}))
+
+        # --- STATE FIX: Update the session state in Redis using conversation_id ---
+        session_data["history"].append({"role": "user", "content": message})
+        session_data["history"].append({"role": "assistant", "content": final_assistant_response})
+        redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
+        logger.info(f"Worker finished and UPDATED session state in Redis for conversation: {conversation_id}")
+
+        # Persist metrics to Supabase
+        if hasattr(agent, 'session_metrics') and agent.session_metrics:
+            metrics = agent.session_metrics
+            if metrics.input_tokens > 0 or metrics.output_tokens > 0:
+                supabase_client.from_('request_logs').insert({
+                    'user_id': user_id, 'input_tokens': metrics.input_tokens, 'output_tokens': metrics.output_tokens
+                }).execute()
+
+    except Exception as e:
+        error_msg = f"Celery task failed for conversation {conversation_id}: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        redis_client.publish(f"results:{sid}", json.dumps({"event": "run_error", "message": "An error occurred in the AI worker."}))
+
+class SocketIOHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            if record.name != 'socketio' and record.name != 'engineio':
+                log_message = self.format(record)
+                socketio.emit('log', {'level': record.levelname.lower(), 'message': log_message})
+        except Exception:
+            pass
+
+logger.addHandler(SocketIOHandler())
+
+app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
 if not app.secret_key:
     raise ValueError("FLASK_SECRET_KEY is not set. Please set it in your environment variables.")
 
-# The SocketIO instance is removed. WebSocket logic is now handled by a route.
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",
+    message_queue=os.getenv("REDIS_URL")
+)
 
 oauth = OAuth(app)
-
-# The OAuth registration remains almost identical.
+# ... (OAuth registration remains unchanged) ...
 oauth.register(
     name='github',
     client_id=os.getenv("GITHUB_CLIENT_ID"),
@@ -79,302 +191,105 @@ oauth.register(
     }
 )
 
-class IsolatedAssistant:
-    """
-    This class is now fully asynchronous. It requires a reference to the active
-    websocket connection to send data back to the client.
-    """
-    def __init__(self, ws):
-        self.websocket = ws
-        self.message_id = None
-        self.final_assistant_response = ""
-
-    async def _process_and_emit_response(self, response: Union[RunResponse, TeamRunResponse], is_top_level: bool = True):
-        """
-        Recursively processes a response and sends socket events. Now async.
-        """
-        if not response:
-            return
-
-        owner_name = getattr(response, 'agent_name', None) or getattr(response, 'team_name', None)
-        is_final_content = is_top_level and owner_name == "Aetheria_AI"
-
-        if response.content:
-            await self.websocket.send_json({
-                "content": response.content,
-                "streaming": True,
-                "id": self.message_id,
-                "agent_name": owner_name,
-                "team_name": owner_name,
-                "is_log": not is_final_content,
-            })
-
-        if hasattr(response, 'member_responses') and response.member_responses:
-            for member_response in response.member_responses:
-                await self._process_and_emit_response(member_response, is_top_level=False)
-
-    async def arun_safely(self, agent: Union[Agent, Team], message: str, user, context=None, images=None, audio=None, videos=None, files=None):
-        """
-        This is the main async execution method, replacing the eventlet-spawned function.
-        """
-        try:
-            if context:
-                complete_message = f"Previous conversation context:\n{context}\n\nCurrent message: {message}"
-            else:
-                complete_message = message
-
-            import inspect
-            params = inspect.signature(agent.arun).parameters
-            supported_params = {
-                'message': complete_message,
-                'stream': True,
-                'stream_intermediate_steps': True,
-                'user_id': str(user.id)
-            }
-            if 'images' in params and images: supported_params['images'] = images
-            if 'audio' in params and audio: supported_params['audio'] = audio
-            if 'videos' in params and videos: supported_params['videos'] = videos
-            if 'files' in params and files: supported_params['files'] = files
-
-            logger.info(f"Calling agent.arun for user {user.id} with params: {list(supported_params.keys())}")
-            
-            self.final_assistant_response = ""
-            
-            # Use `async for` to iterate over the asynchronous generator from `agent.arun`
-            async for chunk in agent.arun(**supported_params):
-                if not chunk or not hasattr(chunk, 'event'):
-                    continue
-
-                await asyncio.sleep(0) # Yield control to the event loop
-                
-                if (chunk.event == RunEvent.run_response_content.value or
-                    chunk.event == TeamRunEvent.run_response_content.value):
-                    await self._process_and_emit_response(chunk, is_top_level=True)
-                    
-                    owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
-                    is_final_chunk = owner_name == "Aetheria_AI" and (not hasattr(chunk, 'member_responses') or not chunk.member_responses)
-
-                    if chunk.content and is_final_chunk:
-                        self.final_assistant_response += chunk.content
-
-                elif (chunk.event == RunEvent.tool_call_started.value or
-                      chunk.event == TeamRunEvent.tool_call_started.value) and hasattr(chunk, 'tool'):
-                    await self.websocket.send_json({
-                        "type": "tool_start",
-                        "name": chunk.tool.tool_name,
-                        "agent_name": getattr(chunk, 'agent_name', None),
-                        "team_name": getattr(chunk, 'team_name', None),
-                        "id": self.message_id
-                    })
-
-                elif (chunk.event == RunEvent.tool_call_completed.value or
-                      chunk.event == TeamRunEvent.tool_call_completed.value) and hasattr(chunk, 'tool'):
-                    # *** CRITICAL FIX IMPLEMENTED HERE ***
-                    # The full `tool` object is now included in the payload.
-                    await self.websocket.send_json({
-                        "type": "tool_end",
-                        "name": chunk.tool.tool_name,
-                        "agent_name": getattr(chunk, 'agent_name', None),
-                        "team_name": getattr(chunk, 'team_name', None),
-                        "id": self.message_id,
-                        "tool": chunk.tool.to_dict() # Serialize the tool object
-                    })
-
-            await self.websocket.send_json({
-                "content": "",
-                "done": True,
-                "id": self.message_id,
-            })
-
-            if hasattr(agent, 'session_metrics') and agent.session_metrics:
-                logger.info(
-                    f"Run complete. Cumulative session tokens for SID {self.websocket.sid}: "
-                    f"{agent.session_metrics.input_tokens} in, "
-                    f"{agent.session_metrics.output_tokens} out."
-                )
-            
-            # This method is now synchronous as it doesn't perform I/O
-            self._save_conversation_turn(complete_message)
-
-        except Exception as e:
-            error_msg = f"Tool error: {str(e)}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            await self.websocket.send_json({
-                "content": "An error occurred while processing your request. Starting a new session...",
-                "error": True, "done": True, "id": self.message_id,
-            })
-            await self.websocket.send_json({"message": "Session reset required", "reset": True})
-
-    def _save_conversation_turn(self, user_message):
-        # This method remains synchronous as it's just manipulating in-memory dictionaries.
-        try:
-            # We need a way to get the session info. Let's assume the websocket SID is used.
-            session_info = connection_manager.sessions.get(self.websocket.sid)
-            if not session_info:
-                logger.warning(f"Cannot save conversation turn: no session found for SID {self.websocket.sid}")
-                return
-                
-            turn_data = {
-                "role": "user",
-                "content": user_message,
-                "timestamp": datetime.datetime.now().isoformat()
-            }
-            
-            if 'history' not in session_info:
-                session_info['history'] = []
-            session_info['history'].append(turn_data)
-            
-            assistant_turn = {
-                "role": "assistant",
-                "content": self.final_assistant_response,
-                "timestamp": datetime.datetime.now().isoformat()
-            }
-            session_info['history'].append(assistant_turn)
-            
-            logger.info(f"Added conversation turn to history for SID {self.websocket.sid}. History length: {len(session_info['history'])}")
-        except Exception as e:
-            logger.error(f"Error saving conversation turn: {e}")
-
-    def terminate(self):
-        pass
-
 class ConnectionManager:
     def __init__(self):
-        self.sessions = {}
-        self.isolated_assistants = {}
+        pass
 
-    def create_session(self, sid: str, user_id: str, config: dict, ws, is_deepsearch: bool = False) -> Union[Agent, Team]:
-        if sid in self.sessions:
-            # This should be awaited now
-            asyncio.create_task(self.terminate_session(sid))
-
-        logger.info(f"Creating new session for user: {user_id}")
-        config['enable_github'] = True 
+    def create_session(self, conversation_id: str, user_id: str, config: dict) -> dict:
+        """
+        Creates the initial session "shell" in Redis.
+        The history list is now initialized here.
+        """
+        logger.info(f"Creating new session shell in Redis for conversation_id: {conversation_id}")
+        config['enable_github'] = True
         config['enable_google_email'] = True
         config['enable_google_drive'] = True
-
-        session_info = {
-            "agent": None,
-            "config": config,
-            "history": [],
-            "user_id": user_id,
-            "created_at": datetime.datetime.now().isoformat(),
-            "sandbox_ids": set(),
-            "active_sandbox_id": None
+        session_data = {
+            "user_id": user_id, "config": config, "created_at": datetime.datetime.now().isoformat(),
+            "sandbox_ids": [], "history": []  # Initialize history as an empty list
         }
-        
-        if is_deepsearch:
-            agent = get_deepsearch(user_id=user_id, session_info=session_info, **config)
-        else:
-            agent = get_llm_os(user_id=user_id, session_info=session_info, **config)
+        session_json = json.dumps(session_data)
+        redis_client.set(f"session:{conversation_id}", session_json, ex=86400)
+        logger.info(f"Created session shell {conversation_id} for user {user_id}")
+        return session_data
 
-        session_info["agent"] = agent
-        self.sessions[sid] = session_info
-        
-        # Pass the websocket object to the assistant
-        self.isolated_assistants[sid] = IsolatedAssistant(ws)
-        logger.info(f"Created session {sid} for user {user_id} with config {config}")
-        return agent
+    def terminate_session(self, conversation_id: str):
+        """
+        Terminates a session by saving the final state to Supabase and deleting from Redis.
+        """
+        session_json = redis_client.get(f"session:{conversation_id}")
+        if session_json:
+            session_data = json.loads(session_json)
+            user_id = session_data.get("user_id")
+            history = session_data.get("history", [])
 
-    async def terminate_session(self, sid):
-        if sid in self.sessions:
-            session_info = self.sessions.pop(sid)
-            if not session_info: return
-            
-            agent = session_info.get("agent")
-            history = session_info.get("history", [])
-            user_id = session_info.get("user_id")
-
-            sandbox_ids_to_clean = session_info.get("sandbox_ids", set())
-            if sandbox_ids_to_clean:
-                logger.info(f"Cleaning up {len(sandbox_ids_to_clean)} sandbox sessions for SID {sid}.")
-                sandbox_api_url = os.getenv("SANDBOX_API_URL")
-                # Use httpx for async requests
-                async with httpx.AsyncClient() as client:
-                    for sandbox_id in sandbox_ids_to_clean:
-                        try:
-                            await client.delete(f"{sandbox_api_url}/sessions/{sandbox_id}", timeout=10)
-                            logger.info(f"Successfully terminated sandbox {sandbox_id}.")
-                        except httpx.RequestError as e:
-                            logger.error(f"Failed to clean up sandbox {sandbox_id}: {e}")
-
-            if agent and hasattr(agent, 'session_metrics') and agent.session_metrics:
-                try:
-                    final_metrics = agent.session_metrics
-                    input_tokens, output_tokens = final_metrics.input_tokens, final_metrics.output_tokens
-                    if input_tokens > 0 or output_tokens > 0:
-                        user_id_str = str(agent.user_id) if hasattr(agent, 'user_id') else user_id
-                        # Supabase calls must be awaited
-                        await supabase_client.from_('request_logs').insert({
-                            'user_id': user_id_str, 'input_tokens': input_tokens, 'output_tokens': output_tokens
-                        }).execute()
-                except Exception as e:
-                    logger.error(f"Failed to log usage metrics for session {sid} on termination: {e}\n{traceback.format_exc()}")
-            
-            if history and len(history) > 0:
+            # Save final history to Supabase for long-term storage
+            if history and user_id:
                 try:
                     now = int(datetime.datetime.now().timestamp())
-                    payload = {
-                        "session_id": sid, "user_id": user_id, "agent_id": "AI_OS",
-                        "created_at": now, "updated_at": now, "memory": { "runs": history }, "session_data": {}
-                    }
-                    if agent and hasattr(agent, 'session_metrics') and agent.session_metrics:
-                        payload["session_data"]["metrics"] = {
-                            "input_tokens": agent.session_metrics.input_tokens,
-                            "output_tokens": agent.session_metrics.output_tokens,
-                            "total_tokens": agent.session_metrics.input_tokens + agent.session_metrics.output_tokens
-                        }
-                    # Supabase calls must be awaited
-                    await supabase_client.from_('ai_os_sessions').upsert(payload).execute()
+                    supabase_client.from_('ai_os_sessions').upsert({
+                        "session_id": conversation_id, "user_id": user_id, "agent_id": "AI_OS",
+                        "created_at": now, "updated_at": now, "memory": { "runs": history }
+                    }).execute()
+                    logger.info(f"Saved final session history for {conversation_id} to Supabase.")
                 except Exception as e:
-                    logger.error(f"Failed to save conversation history for SID {sid}: {e}\n{traceback.format_exc()}")
+                    logger.error(f"Failed to save session {conversation_id} to Supabase: {e}")
+
+            sandbox_ids_to_clean = session_data.get("sandbox_ids", [])
+            if sandbox_ids_to_clean:
+                sandbox_api_url = os.getenv("SANDBOX_API_URL")
+                for sandbox_id in sandbox_ids_to_clean:
+                    try:
+                        requests.delete(f"{sandbox_api_url}/sessions/{sandbox_id}", timeout=10)
+                    except requests.RequestException as e:
+                        logger.error(f"Failed to clean up sandbox {sandbox_id}: {e}")
             
-            if sid in self.isolated_assistants:
-                self.isolated_assistants[sid].terminate()
-                del self.isolated_assistants[sid]
-            logger.info(f"Terminated and cleaned up session {sid}")
+            logger.info(f"Terminating session {conversation_id}. Deleting from Redis.")
+            redis_client.delete(f"session:{conversation_id}")
+        else:
+            logger.info(f"Attempted to terminate non-existent conversation: {conversation_id}.")
 
-    def get_session(self, sid):
-        return self.sessions.get(sid)
+    def get_session(self, conversation_id: str) -> dict | None:
+        session_json = redis_client.get(f"session:{conversation_id}")
+        if session_json:
+            return json.loads(session_json)
+        return None
 
-    async def remove_session(self, sid):
-        await self.terminate_session(sid)
+    def remove_session(self, conversation_id: str):
+        self.terminate_session(conversation_id)
 
 connection_manager = ConnectionManager()
 
-# All routes must now be `async def`
 @app.route('/login/<provider>')
-async def login_provider(provider):
+def login_provider(provider):
     token = request.args.get('token')
     if not token:
         return "Authentication token is missing.", 400
     session['supabase_token'] = token
     
-    redirect_uri = await url_for('auth_callback', provider=provider, _external=True)
+    redirect_uri = url_for('auth_callback', provider=provider, _external=True)
     
     if provider not in oauth._clients:
         return "Invalid provider specified.", 404
     
-    # Authlib's authorize_redirect is now an async method
     if provider == 'google':
-        return await oauth.google.authorize_redirect(
+        return oauth.google.authorize_redirect(
             redirect_uri,
             access_type='offline',
             prompt='consent'
         )
         
-    return await oauth.create_client(provider).authorize_redirect(redirect_uri)
+    return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
 @app.route('/auth/<provider>/callback')
-async def auth_callback(provider):
+def auth_callback(provider):
     try:
         supabase_token = session.get('supabase_token')
         if not supabase_token:
             return "Your session has expired. Please try connecting again.", 400
         
         try:
-            # Supabase calls must be awaited
-            user_response = await supabase_client.auth.get_user(jwt=supabase_token)
+            user_response = supabase_client.auth.get_user(jwt=supabase_token)
             user = user_response.user
             if not user:
                 raise AuthApiError("User not found for the provided token.", 401)
@@ -383,8 +298,7 @@ async def auth_callback(provider):
             return "Your session is invalid. Please log in and try again.", 401
         
         client = oauth.create_client(provider)
-        # Authlib's authorize_access_token is now an async method
-        token = await client.authorize_access_token()
+        token = client.authorize_access_token()
 
         logger.info(f"Received token data from {provider}: {token}")
         
@@ -398,8 +312,7 @@ async def auth_callback(provider):
         
         integration_data = {k: v for k, v in integration_data.items() if v is not None}
 
-        # Supabase calls must be awaited
-        await supabase_client.from_('user_integrations').upsert(integration_data).execute()
+        supabase_client.from_('user_integrations').upsert(integration_data).execute()
         
         logger.info(f"Successfully saved {provider} integration for user {user.id}")
 
@@ -411,15 +324,14 @@ async def auth_callback(provider):
         logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
         return "An error occurred during authentication. Please try again.", 500
 
-async def get_user_from_token(request):
+def get_user_from_token(request):
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return None, ('Authorization header is missing or invalid', 401)
     
     jwt = auth_header.split(' ')[1]
     try:
-        # Supabase calls must be awaited
-        user_response = await supabase_client.auth.get_user(jwt=jwt)
+        user_response = supabase_client.auth.get_user(jwt=jwt)
         if not user_response.user:
             raise AuthApiError("User not found for token.", 401)
         return user_response.user, None
@@ -428,14 +340,13 @@ async def get_user_from_token(request):
         return None, ('Invalid or expired token', 401)
 
 @app.route('/api/integrations', methods=['GET'])
-async def get_integrations_status():
-    user, error = await get_user_from_token(request)
+def get_integrations_status():
+    user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
 
     try:
-        # Supabase calls must be awaited
-        response = await supabase_client.from_('user_integrations').select('service').eq('user_id', str(user.id)).execute()
+        response = supabase_client.from_('user_integrations').select('service').eq('user_id', str(user.id)).execute()
         connected_services = [item['service'] for item in response.data]
         return jsonify({"integrations": connected_services})
     except Exception as e:
@@ -443,19 +354,18 @@ async def get_integrations_status():
         return jsonify({"error": "Failed to retrieve integration status"}), 500
 
 @app.route('/api/integrations/disconnect', methods=['POST'])
-async def disconnect_integration():
-    user, error = await get_user_from_token(request)
+def disconnect_integration():
+    user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
 
-    data = await request.get_json()
+    data = request.get_json()
     service_to_disconnect = data.get('service')
     if not service_to_disconnect:
         return jsonify({"error": "Service name not provided"}), 400
 
     try:
-        # Supabase calls must be awaited
-        await supabase_client.from_('user_integrations').delete().eq('user_id', str(user.id)).eq('service', service_to_disconnect).execute()
+        supabase_client.from_('user_integrations').delete().eq('user_id', str(user.id)).eq('service', service_to_disconnect).execute()
         logger.info(f"User {user.id} disconnected from {service_to_disconnect}")
         return jsonify({"message": f"Successfully disconnected from {service_to_disconnect}"}), 200
     except Exception as e:
@@ -463,14 +373,13 @@ async def disconnect_integration():
         return jsonify({"error": "Failed to disconnect integration"}), 500
 
 @app.route('/api/sessions', methods=['GET'])
-async def get_user_sessions():
-    user, error = await get_user_from_token(request)
+def get_user_sessions():
+    user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
 
     try:
-        # Supabase calls must be awaited
-        response = await supabase_client.from_('ai_os_sessions') \
+        response = supabase_client.from_('ai_os_sessions') \
             .select('session_id, created_at, memory') \
             .eq('user_id', str(user.id)) \
             .order('created_at', desc=True) \
@@ -482,12 +391,12 @@ async def get_user_sessions():
         return jsonify({"error": "Failed to retrieve session history"}), 500
 
 @app.route('/api/generate-upload-url', methods=['POST'])
-async def generate_upload_url():
-    user, error = await get_user_from_token(request)
+def generate_upload_url():
+    user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
 
-    data = await request.get_json()
+    data = request.get_json()
     file_name = data.get('fileName')
     if not file_name:
         return jsonify({"error": "fileName is required"}), 400
@@ -495,8 +404,7 @@ async def generate_upload_url():
     file_path = f"{user.id}/{file_name}"
     
     try:
-        # Supabase calls must be awaited
-        upload_details = await supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
+        upload_details = supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
         response_data = {
             "signedURL": upload_details['signed_url'],
             "path": upload_details['path']
@@ -506,10 +414,20 @@ async def generate_upload_url():
         logger.error(f"Failed to create signed URL for user {user.id}: {e}\n{traceback.format_exc()}")
         return jsonify({"error": "Could not create signed URL"}), 500
 
-async def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
-    """
-    This function is now async because it downloads files from Supabase.
-    """
+@socketio.on("connect")
+def on_connect():
+    sid = request.sid
+    logger.info(f"Client connected: {sid}")
+    emit("status", {"message": "Connected to server"})
+
+@socketio.on("disconnect")
+def on_disconnect():
+    sid = request.sid
+    logger.info(f"Client disconnected: {sid}")
+    connection_manager.remove_session(sid)
+
+def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
+    # ... (This function remains unchanged) ...
     images, audio, videos, other_files = [], [], [], []
     logger.info(f"Processing {len(files_data)} files into agno objects")
 
@@ -520,8 +438,7 @@ async def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], 
         if 'path' in file_data:
             file_path_in_bucket = file_data['path']
             try:
-                # Supabase calls must be awaited
-                file_bytes = await supabase_client.storage.from_('media-uploads').download(file_path_in_bucket)
+                file_bytes = supabase_client.storage.from_('media-uploads').download(file_path_in_bucket)
                 
                 if file_type.startswith('image/'):
                     images.append(Image(content=file_bytes, name=file_name))
@@ -546,101 +463,111 @@ async def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], 
 
     return images, audio, videos, other_files
 
-# This new route replaces all the `@socketio.on` decorators.
-@app.websocket('/ws')
-async def ws():
-    sid = str(uuid.uuid4()) # Generate a unique ID for this connection
-    logger.info(f"Client connected with SID: {sid}")
-    await websocket.send_json({"message": "Connected to server"})
+# --- PHASE 2 MODIFICATION: Add the Redis Pub/Sub Listener ---
+def listen_for_results(sid: str, message_id: str):
+    """
+    Listens on a Redis Pub/Sub channel for results from a Celery worker
+    and emits them to the client via Socket.IO.
+    """
+    pubsub = redis_client.pubsub()
+    redis_channel = f"results:{sid}"
+    pubsub.subscribe(redis_channel)
+    
+    logger.info(f"Web server started listening on Redis channel: {redis_channel}")
 
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            data = json.loads(message['data'])
+            event_type = data.get("event")
+
+            if event_type == "run_done":
+                socketio.emit("response", {"content": "", "done": True, "id": message_id}, room=sid)
+                logger.info(f"Worker finished for SID {sid}. Closing listener.")
+                break 
+            
+            elif event_type == "run_error":
+                socketio.emit("response", {"content": data.get("message"), "error": True, "done": True, "id": message_id}, room=sid)
+                logger.error(f"Worker reported an error for SID {sid}. Closing listener.")
+                break
+
+            elif event_type in (RunEvent.run_response_content.value, TeamRunEvent.run_response_content.value):
+                owner_name = data.get('agent_name') or data.get('team_name')
+                is_final_content = owner_name == "Aetheria_AI" and not data.get('has_members')
+                socketio.emit("response", {
+                    "content": data.get("content"), "streaming": True, "id": message_id,
+                    "agent_name": owner_name, "team_name": owner_name, "is_log": not is_final_content,
+                }, room=sid)
+
+            elif event_type in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
+                socketio.emit("agent_step", {
+                    "type": "tool_start", "name": data.get("tool_name"),
+                    "agent_name": data.get('agent_name'), "team_name": data.get('team_name'), "id": message_id
+                }, room=sid)
+
+            elif event_type in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
+                socketio.emit("agent_step", {
+                    "type": "tool_end", "name": data.get("tool_name"),
+                    "agent_name": data.get('agent_name'), "team_name": data.get('team_name'), "id": message_id
+                }, room=sid)
+
+    pubsub.unsubscribe(redis_channel)
+# --- END MODIFICATION ---
+
+@socketio.on("send_message")
+def on_send_message(data: str):
+    sid = request.sid
     try:
-        # This loop runs as long as the client is connected.
-        async for data_str in websocket:
-            user = None
-            try:
-                data = json.loads(data_str)
-                access_token = data.get("accessToken")
-                if not access_token:
-                    await websocket.send_json({"message": "Authentication token is missing. Please log in again.", "reset": True})
-                    continue
-                try:
-                    user_response = await supabase_client.auth.get_user(jwt=access_token)
-                    user = user_response.user
-                    if not user:
-                        raise AuthApiError("User not found for the provided token.", 401)
-                    logger.info(f"Request authenticated for user: {user.id}")
-                except AuthApiError as e:
-                    logger.error(f"Invalid token for SID {sid}: {e.message}")
-                    await websocket.send_json({"message": "Your session has expired. Please log in again.", "reset": True})
-                    continue
-                    
-                message = data.get("message", "")
-                context = data.get("context", "")
-                files = data.get("files", [])
-                is_deepsearch = data.get("is_deepsearch", False)
+        data = json.loads(data)
+        access_token = data.get("accessToken")
+        conversation_id = data.get("conversationId")
+        if not conversation_id:
+            emit("error", {"message": "Critical error: conversationId is missing."}, room=sid)
+            return
+        if not access_token:
+            emit("error", {"message": "Authentication token is missing. Please log in again.", "reset": True}, room=sid)
+            return
+        
+        user = supabase_client.auth.get_user(jwt=access_token).user
+        if not user: raise AuthApiError("User not found for the provided token.", 401)
 
-                if data.get("type") == "terminate_session":
-                    await connection_manager.terminate_session(sid)
-                    await websocket.send_json({"message": "Session terminated"})
-                    continue
-                    
-                session_data = connection_manager.get_session(sid)
-                if not session_data:
-                    config = data.get("config", {})
-                    agent = connection_manager.create_session(
-                        sid, user_id=str(user.id), config=config, ws=websocket, is_deepsearch=is_deepsearch
-                    )
-                else:
-                    agent = session_data["agent"]
-                    
-                message_id = data.get("id") or str(uuid.uuid4())
-                isolated_assistant = connection_manager.isolated_assistants.get(sid)
-                if not isolated_assistant:
-                    await websocket.send_json({"message": "Session error. Starting new chat...", "reset": True})
-                    await connection_manager.terminate_session(sid)
-                    continue
-                isolated_assistant.message_id = message_id
-                
-                # Process files asynchronously
-                images, audio, videos, other_files = await process_files(files)
-                
-                turn_context = {
-                    "user_message": message,
-                    "images": images,
-                    "audio": audio,
-                    "videos": videos,
-                    "files": other_files,
-                }
+        if data.get("type") == "terminate_session":
+            conv_id_to_terminate = data.get("conversationId")
+            if conv_id_to_terminate:
+                connection_manager.terminate_session(conv_id_to_terminate)
+                emit("status", {"message": f"Session {conv_id_to_terminate} terminated"}, room=sid)
+            return
+            
+        if not connection_manager.get_session(conversation_id):
+            connection_manager.create_session(conversation_id, user_id=str(user.id), config=data.get("config", {}))
 
-                if agent.team_session_state is None:
-                    agent.team_session_state = {}
-                agent.team_session_state['turn_context'] = turn_context
-                logger.info(f"Injected turn_context into team_session_state for SID {sid}")
+        images, audio, videos, other_files = process_files(data.get("files", []))
+        turn_data = {
+            "user_message": data.get("message", ""),
+            "is_deepsearch": data.get("is_deepsearch", False),
+            "images": [img.to_dict() for img in images],
+            "audio": [aud.to_dict() for aud in audio],
+            "videos": [vid.to_dict() for vid in videos],
+            "files": [f.to_dict() for f in other_files],
+        }
 
-                # Launch the agent's execution as a background task so it doesn't block the websocket.
-                asyncio.create_task(isolated_assistant.arun_safely(
-                    agent, message, user=user, context=context,
-                    images=images or None, 
-                    audio=audio or None, 
-                    videos=videos or None,
-                    files=other_files or None
-                ))
+        message_id = data.get("id") or str(uuid.uuid4())
+        run_agent_task.delay(sid, conversation_id, message_id, turn_data)
+        logger.info(f"Dispatched job to Celery for conversation: {conversation_id}")
 
-            except Exception as e:
-                logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
-                await websocket.send_json({"message": "AI service error. Starting new chat...", "reset": True})
-                await connection_manager.terminate_session(sid)
-    finally:
-        # This block runs when the client disconnects.
-        logger.info(f"Client disconnected: {sid}")
-        await connection_manager.remove_session(sid)
+        eventlet.spawn(listen_for_results, sid, message_id)
 
+    except AuthApiError as e:
+        logger.error(f"Invalid token for SID {sid}: {e.message}")
+        emit("error", {"message": "Your session has expired. Please log in again.", "reset": True}, room=sid)
+    except Exception as e:
+        logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
+        emit("error", {"message": "AI service error. Please start a new chat.", "reset": True}, room=sid)
 
 @app.route('/healthz', methods=['GET'])
-async def health_check():
+def health_check():
     return "OK", 200
 
-# The `if __name__ == "__main__"` block is no longer the primary way to run the app.
-# You will now use an ASGI server like Uvicorn from the command line.
-# For example: `uvicorn app:app --host 0.0.0.0 --port 8765`
-# This is configured in your updated Dockerfile.
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8765))
+    app_debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
+    socketio.run(app, host="0.0.0.0", port=port, debug=app_debug_mode, use_reloader=app_debug_mode)
