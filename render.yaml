@@ -19,9 +19,8 @@ services:
     branch: master # The branch to deploy
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # The start command is taken from the Dockerfile's CMD instruction.
-    # We run 4 web workers.
-    startCommand: "gunicorn --worker-class eventlet -w 4 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
+    # Use 'dockerCommand' to override the Dockerfile's CMD for this specific service.
+    dockerCommand: "gunicorn --worker-class eventlet -w 4 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
@@ -40,8 +39,8 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # This command starts the Celery worker.
-    startCommand: "celery -A app.celery worker --loglevel=info --concurrency=4"
+    # Use 'dockerCommand' to override the Dockerfile's CMD for this specific service.
+    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=4"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
