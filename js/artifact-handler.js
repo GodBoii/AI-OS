@@ -1,8 +1,11 @@
-// artifact-handler.js
+// artifact-handler.js (Complete, Updated Version)
+
 class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
         this.currentId = 0;
+        // A special ID to track the state of the single browser view artifact
+        this.browserArtifactId = 'browser_view_artifact';
         this.init();
     }
 
@@ -14,7 +17,7 @@ class ArtifactHandler {
         container.innerHTML = `
             <div class="artifact-window">
                 <div class="artifact-header">
-                    <div class="artifact-title">Code/Diagram Viewer</div>
+                    <div class="artifact-title">Artifact Viewer</div>
                     <div class="artifact-controls">
                         <button class="copy-artifact-btn" title="Copy to Clipboard">
                             <i class="fas fa-copy"></i>
@@ -33,17 +36,14 @@ class ArtifactHandler {
         
         document.body.appendChild(container);
         
-        // Close button handler
         container.querySelector('.close-artifact-btn').addEventListener('click', () => {
             this.hideArtifact();
         });
 
-        // Copy button handler
         container.querySelector('.copy-artifact-btn').addEventListener('click', () => {
             this.copyArtifactContent();
         });
 
-        // Download button handler
         container.querySelector('.download-artifact-btn').addEventListener('click', () => {
             this.downloadArtifact();
         });
@@ -55,68 +55,122 @@ class ArtifactHandler {
         return id;
     }
 
-    showArtifact(content, type, artifactId = null) {
+    showArtifact(type, data, artifactId = null) {
         const container = document.getElementById('artifact-container');
         const contentDiv = container.querySelector('.artifact-content');
-        const chatContainer = document.querySelector('.chat-container');
-        const inputContainer = document.querySelector('.floating-input-container');
-        
-        // Clear previous content
+        const titleEl = container.querySelector('.artifact-title');
+        const copyBtn = container.querySelector('.copy-artifact-btn');
+        const downloadBtn = container.querySelector('.download-artifact-btn');
+
         contentDiv.innerHTML = '';
-        
-        // Add new content based on type
-        if (type === 'mermaid') {
-            const mermaidDiv = document.createElement('div');
-            mermaidDiv.className = 'mermaid';
-            mermaidDiv.textContent = content;
-            contentDiv.appendChild(mermaidDiv);
-            mermaid.init(undefined, [mermaidDiv]);
+        let newArtifactId = artifactId;
 
-            // Add zoom controls for Mermaid diagrams
-            const zoomControls = document.createElement('div');
-            zoomControls.className = 'mermaid-controls';
-            zoomControls.innerHTML = `
-                <button class="zoom-in-btn" title="Zoom In"><i class="fas fa-plus"></i></button>
-                <button class="zoom-out-btn" title="Zoom Out"><i class="fas fa-minus"></i></button>
-                <button class="zoom-reset-btn" title="Reset Zoom"><i class="fas fa-search"></i></button>
-            `;
-            contentDiv.appendChild(zoomControls);
+        switch (type) {
+            case 'browser_view':
+                titleEl.textContent = 'Interactive Browser';
+                copyBtn.style.display = 'none';
+                downloadBtn.style.display = 'none';
+                this.renderBrowserView(data);
+                newArtifactId = this.browserArtifactId;
+                this.artifacts.set(newArtifactId, { content: data, type });
+                break;
 
-            // Initialize zoom state
-            mermaidDiv.style.transform = 'scale(1)';
-            mermaidDiv.style.transformOrigin = 'center center';
+            case 'mermaid':
+                titleEl.textContent = 'Diagram Viewer';
+                copyBtn.style.display = 'inline-flex';
+                downloadBtn.style.display = 'inline-flex';
+                this.renderMermaid(data, contentDiv);
+                newArtifactId = artifactId || this.createArtifact(data, type);
+                break;
 
-            // Add zoom event handlers
-            let currentZoom = 1;
-            zoomControls.querySelector('.zoom-in-btn').addEventListener('click', () => {
-                currentZoom = Math.min(currentZoom + 0.1, 2);
-                mermaidDiv.style.transform = `scale(${currentZoom})`;
-            });
-            zoomControls.querySelector('.zoom-out-btn').addEventListener('click', () => {
-                currentZoom = Math.max(currentZoom - 0.1, 0.5);
-                mermaidDiv.style.transform = `scale(${currentZoom})`;
-            });
-            zoomControls.querySelector('.zoom-reset-btn').addEventListener('click', () => {
-                currentZoom = 1;
-                mermaidDiv.style.transform = 'scale(1)';
-            });
-        } else {
-            // For code blocks
-            const pre = document.createElement('pre');
-            const code = document.createElement('code');
-            code.className = `language-${type}`;
-            code.textContent = content;
-            pre.appendChild(code);
-            contentDiv.appendChild(pre);
-            hljs.highlightElement(code);
+            default: // Handles code blocks
+                titleEl.textContent = 'Code Viewer';
+                copyBtn.style.display = 'inline-flex';
+                downloadBtn.style.display = 'inline-flex';
+                this.renderCode(data, type, contentDiv);
+                newArtifactId = artifactId || this.createArtifact(data, type);
+                break;
         }
         
-        // Show artifact and adjust chat position
+        const chatContainer = document.querySelector('.chat-container');
+        const inputContainer = document.querySelector('.floating-input-container');
         container.classList.remove('hidden');
         chatContainer.classList.add('with-artifact');
         inputContainer.classList.add('with-artifact');
 
-        return artifactId || this.createArtifact(content, type);
+        return newArtifactId;
+    }
+
+    renderBrowserView(data) {
+        const contentDiv = document.querySelector('#artifact-container .artifact-content');
+        let browserViewContainer = document.getElementById('browser-view-content');
+
+        if (!browserViewContainer) {
+            browserViewContainer = document.createElement('div');
+            browserViewContainer.id = 'browser-view-content';
+            browserViewContainer.innerHTML = `
+                <div class="browser-view-header">
+                    <i class="fas fa-globe"></i>
+                    <span class="browser-view-url" title="Current URL"></span>
+                </div>
+                <div class="browser-view-screenshot">
+                    <img src="" alt="Browser Screenshot" />
+                </div>
+            `;
+            contentDiv.appendChild(browserViewContainer);
+        }
+
+        const urlSpan = browserViewContainer.querySelector('.browser-view-url');
+        const screenshotImg = browserViewContainer.querySelector('.browser-view-screenshot img');
+
+        urlSpan.textContent = data.url || 'Loading...';
+        if (data.screenshot_base64) {
+            screenshotImg.src = `data:image/png;base64,${data.screenshot_base64}`;
+        } else {
+            screenshotImg.src = '';
+            screenshotImg.alt = 'Screenshot not available.';
+        }
+    }
+
+    renderMermaid(content, container) {
+        const mermaidDiv = document.createElement('div');
+        mermaidDiv.className = 'mermaid';
+        mermaidDiv.textContent = content;
+        container.appendChild(mermaidDiv);
+        mermaid.init(undefined, [mermaidDiv]);
+
+        const zoomControls = document.createElement('div');
+        zoomControls.className = 'mermaid-controls';
+        zoomControls.innerHTML = `
+            <button class="zoom-in-btn" title="Zoom In"><i class="fas fa-plus"></i></button>
+            <button class="zoom-out-btn" title="Zoom Out"><i class="fas fa-minus"></i></button>
+            <button class="zoom-reset-btn" title="Reset Zoom"><i class="fas fa-search"></i></button>
+        `;
+        container.appendChild(zoomControls);
+
+        let currentZoom = 1;
+        zoomControls.querySelector('.zoom-in-btn').addEventListener('click', () => {
+            currentZoom = Math.min(currentZoom + 0.1, 2);
+            mermaidDiv.style.transform = `scale(${currentZoom})`;
+        });
+        zoomControls.querySelector('.zoom-out-btn').addEventListener('click', () => {
+            currentZoom = Math.max(currentZoom - 0.1, 0.5);
+            mermaidDiv.style.transform = `scale(${currentZoom})`;
+        });
+        zoomControls.querySelector('.zoom-reset-btn').addEventListener('click', () => {
+            currentZoom = 1;
+            mermaidDiv.style.transform = 'scale(1)';
+        });
+    }
+
+    renderCode(content, language, container) {
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.className = `language-${language}`;
+        code.textContent = content;
+        pre.appendChild(code);
+        container.appendChild(pre);
+        hljs.highlightElement(code);
     }
 
     hideArtifact() {
@@ -132,7 +186,7 @@ class ArtifactHandler {
     reopenArtifact(artifactId) {
         const artifact = this.artifacts.get(artifactId);
         if (artifact) {
-            this.showArtifact(artifact.content, artifact.type, artifactId);
+            this.showArtifact(artifact.type, artifact.content, artifactId);
         }
     }
 
@@ -161,7 +215,6 @@ class ArtifactHandler {
         let content = '';
         let suggestedName = 'artifact';
         let extension = '.txt';
-        let mimeType = 'text/plain';
 
         if (contentDiv.querySelector('.mermaid')) {
             content = contentDiv.querySelector('.mermaid').textContent;
@@ -172,33 +225,20 @@ class ArtifactHandler {
             content = code.textContent;
             const language = code.className.replace('language-', '');
             extension = this.getFileExtension(language);
-            suggestedName = `code${extension}`;
-            
-            // Set appropriate MIME type based on extension
-            if (extension === '.js') mimeType = 'application/javascript';
-            else if (extension === '.html') mimeType = 'text/html';
-            else if (extension === '.css') mimeType = 'text/css';
-            else if (extension === '.json') mimeType = 'application/json';
-            else if (extension === '.py') mimeType = 'text/x-python';
+            suggestedName = `code`;
         }
 
         if (!content) return;
 
         try {
-            // Use the exposed ipcRenderer from preload.js
-            // Request the main process to show a save dialog
             const result = await window.electron.ipcRenderer.invoke('show-save-dialog', {
                 title: 'Save File',
                 defaultPath: suggestedName + extension,
-                filters: [{
-                    name: 'All Files',
-                    extensions: [extension.substring(1)] // Remove the dot
-                }]
+                filters: [{ name: 'All Files', extensions: [extension.substring(1)] }]
             });
             
             if (result.canceled || !result.filePath) return;
             
-            // Save the file using the main process
             const success = await window.electron.ipcRenderer.invoke('save-file', {
                 filePath: result.filePath,
                 content: content
@@ -217,21 +257,9 @@ class ArtifactHandler {
 
     getFileExtension(language) {
         const extensions = {
-            javascript: '.js',
-            python: '.py',
-            html: '.html',
-            css: '.css',
-            json: '.json',
-            typescript: '.ts',
-            java: '.java',
-            cpp: '.cpp',
-            c: '.c',
-            ruby: '.rb',
-            php: '.php',
-            go: '.go',
-            rust: '.rs',
-            swift: '.swift',
-            kotlin: '.kt',
+            javascript: '.js', python: '.py', html: '.html', css: '.css', json: '.json',
+            typescript: '.ts', java: '.java', cpp: '.cpp', c: '.c', ruby: '.rb',
+            php: '.php', go: '.go', rust: '.rs', swift: '.swift', kotlin: '.kt',
             plaintext: '.txt'
         };
         return extensions[language] || '.txt';
@@ -254,12 +282,15 @@ class ArtifactHandler {
         }, 3000);
     }
 
+    // --- Sandbox methods are unchanged ---
     showTerminal(artifactId) {
         const container = document.getElementById('artifact-container');
         const contentDiv = container.querySelector('.artifact-content');
+        
         container.querySelector('.artifact-title').textContent = 'Sandbox Terminal';
+        container.querySelector('.copy-artifact-btn').style.display = 'none';
+        container.querySelector('.download-artifact-btn').style.display = 'none';
 
-        // Show a waiting state initially
         contentDiv.innerHTML = `
             <div class="terminal-output">
                 <pre><code><span class="log-line log-status">Waiting for command...</span></code></pre>
@@ -268,14 +299,19 @@ class ArtifactHandler {
 
         container.classList.remove('hidden');
         container.dataset.activeArtifactId = artifactId;
+
+        const chatContainer = document.querySelector('.chat-container');
+        const inputContainer = document.querySelector('.floating-input-container');
+        chatContainer.classList.add('with-artifact');
+        inputContainer.classList.add('with-artifact');
     }
 
     updateCommand(artifactId, command) {
         const container = document.getElementById('artifact-container');
         if (container.dataset.activeArtifactId !== artifactId) return;
+        
         const codeEl = container.querySelector('code');
         if (codeEl) {
-            // Replace "Waiting..." with the actual command and a spinner
             codeEl.innerHTML = `
                 <span class="log-line log-command">$ ${command}</span>
                 <span class="log-line log-status terminal-spinner">Running...</span>
@@ -286,8 +322,8 @@ class ArtifactHandler {
     updateTerminalOutput(artifactId, stdout, stderr, exitCode) {
         const container = document.getElementById('artifact-container');
         if (container.dataset.activeArtifactId !== artifactId) return;
+
         const codeEl = container.querySelector('code');
-        
         if (codeEl) {
             const spinner = codeEl.querySelector('.terminal-spinner');
             if (spinner) spinner.remove();
@@ -310,7 +346,6 @@ class ArtifactHandler {
             codeEl.appendChild(statusSpan);
         }
     }
-
 }
 
 export const artifactHandler = new ArtifactHandler();

@@ -13,7 +13,7 @@ class FileAttachmentHandler {
             'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'webm': 'video/webm',
             'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska'
         };
-        this.maxFileSize = maxFileSize || 10 * 1024 * 1024; // 10MB default
+        this.maxFileSize = maxFileSize || 50 * 1024 * 1024; // 10MB default
         this.attachedFiles = [];
         this.initialize();
     }

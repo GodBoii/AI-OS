@@ -1,4 +1,4 @@
-// chat.js (Final, Definitive Version)
+// chat.js (Complete, Updated Version)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
@@ -8,6 +8,8 @@ import FileAttachmentHandler from './add-files.js';
 const fs = window.electron?.fs?.promises;
 const path = window.electron?.path;
 const ipcRenderer = window.electron?.ipcRenderer;
+
+let currentConversationId = null;
 
 let chatConfig = {
     memory: false,
@@ -25,12 +27,11 @@ let chatConfig = {
     deepsearch: false
 };
 
-let ongoingStreams = {};   // Tracks ongoing message streams.
-let sessionActive = false;  // Flag to indicate if a chat session is active.
-let contextHandler = null;  // Instance of the ContextHandler.
-let fileAttachmentHandler = null; // Instance of the FileAttachmentHandler.
-let connectionStatus = false; // Track connection status
-const maxFileSize = 10 * 1024 * 1024; // 10MB limit
+let ongoingStreams = {};
+let contextHandler = null;
+let fileAttachmentHandler = null;
+let connectionStatus = false;
+const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
     'txt': 'text/plain',
     'js': 'text/javascript',
@@ -43,6 +44,40 @@ const supportedFileTypes = {
     'c': 'text/x-c'
 };
 
+function startNewConversation() {
+    if (currentConversationId) {
+        terminateSession(currentConversationId);
+    }
+    
+    currentConversationId = self.crypto.randomUUID();
+    console.log(`Starting new conversation with ID: ${currentConversationId}`);
+
+    document.getElementById('chat-messages').innerHTML = '';
+    document.getElementById('floating-input').disabled = false;
+    document.getElementById('send-message').disabled = false;
+    
+    ongoingStreams = {};
+    if (contextHandler) contextHandler.clearSelectedContext();
+    if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
+
+    chatConfig = {
+        memory: false, tasks: false,
+        tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
+        deepsearch: false
+    };
+    const aiOsCheckbox = document.getElementById('ai_os');
+    if (aiOsCheckbox) aiOsCheckbox.checked = true;
+    
+    const tasksBtn = document.querySelector('[data-tool="tasks"]');
+    if (tasksBtn) tasksBtn.classList.remove('active');
+
+    const deepSearchCheckbox = document.getElementById('deep_search');
+    if (deepSearchCheckbox) deepSearchCheckbox.checked = false;
+    
+    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+    if (window.updateToolsIndicator) window.updateToolsIndicator();
+}
+
 /**
  * Set up IPC listeners for communication with python-bridge.js
  */
@@ -51,7 +86,6 @@ function setupIpcListeners() {
         connectionStatus = data.connected;
         if (data.connected) {
             document.querySelectorAll('.connection-error').forEach(e => e.remove());
-            sessionActive = false;
         } else {
             let statusMessage = 'Connecting to server...';
             if (data.error) statusMessage = `Connection error: ${data.error}`;
@@ -76,11 +110,10 @@ function setupIpcListeners() {
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
                     
-                    // --- NEW: More descriptive summary logic ---
                     const logCount = messageDiv.querySelectorAll('.log-block').length;
                     const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
                     
-                    let summaryText = "Aetheria AI's Reasoning"; // Better default title
+                    let summaryText = "Aetheria AI's Reasoning";
                     if (logCount > 0 || toolLogCount > 0) {
                         const parts = [];
                         if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
@@ -88,10 +121,8 @@ function setupIpcListeners() {
                         summaryText = `Reasoning involved ${parts.join(' and ')}`;
                     }
             
-                    // Replace the live steps with the final summary header
                     thinkingIndicator.innerHTML = `<span class="summary-text">${summaryText}</span><i class="fas fa-chevron-down summary-chevron"></i>`;
             
-                    // Make the header clickable to toggle the logs
                     thinkingIndicator.addEventListener('click', () => {
                         messageDiv.classList.toggle('expanded');
                     });
@@ -117,7 +148,7 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('agent-step', (data) => {
-        const { id: messageId, type, name, agent_name, team_name } = data;
+        const { id: messageId, type, name, agent_name, team_name, tool } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
     
         const messageDiv = ongoingStreams[messageId];
@@ -125,7 +156,6 @@ function setupIpcListeners() {
         const ownerName = agent_name || team_name || 'Assistant';
         const stepId = `step-${messageId}-${ownerName}-${name}`;
     
-        // --- FIX: Create a permanent log entry in the hidden .detailed-logs container ---
         const logsContainer = messageDiv.querySelector('.detailed-logs');
         const logEntryId = `log-entry-${stepId}`;
         let logEntry = logsContainer.querySelector(`#${logEntryId}`);
@@ -147,7 +177,6 @@ function setupIpcListeners() {
             }
         } else if (type === 'tool_end') {
             if (logEntry) {
-                // Update the status of the permanent log entry to "Completed"
                 const statusEl = logEntry.querySelector('.tool-log-status');
                 if (statusEl) {
                     statusEl.textContent = 'Completed';
@@ -155,27 +184,36 @@ function setupIpcListeners() {
                     statusEl.classList.add('completed');
                 }
             }
+            
+            if (name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
+                if (window.artifactHandler) {
+                    console.log("Detected browser tool output. Showing artifact.");
+                    window.artifactHandler.showArtifact('browser_view', tool.tool_output);
+                }
+            }
         }
     
-        // --- Keep the live-updating steps for the user to see in real-time ---
         const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
         if (!liveStepsContainer) return;
         let liveStepDiv = liveStepsContainer.querySelector(`#${stepId}`);
     
         if (type === 'tool_start') {
+            if (name === 'execute_in_sandbox') {
+                return; 
+            }
+
             if (!liveStepDiv) {
                 liveStepDiv = document.createElement('div');
                 liveStepDiv.id = stepId;
                 liveStepDiv.className = 'thinking-step';
                 liveStepDiv.innerHTML = `
-                    <i class="fas fa-cog step-icon"></i>
+                    <i class="fas fa-cog fa-spin step-icon"></i>
                     <span class="step-text"><strong>${ownerName}:</strong> Using ${toolName}...</span>
                 `;
                 liveStepsContainer.appendChild(liveStepDiv);
             }
         } else if (type === 'tool_end') {
             if (liveStepDiv) {
-                // Remove the live step once it's done to keep the list clean
                 liveStepDiv.remove();
             }
         }
@@ -184,11 +222,6 @@ function setupIpcListeners() {
     ipcRenderer.on('sandbox-command-started', (data) => {
         if (window.artifactHandler) {
             window.artifactHandler.showTerminal(data.artifactId);
-        }
-    });
-    
-    ipcRenderer.on('sandbox-command-update', (data) => {
-        if (window.artifactHandler) {
             window.artifactHandler.updateCommand(data.artifactId, data.command);
         }
     });
@@ -203,13 +236,11 @@ function setupIpcListeners() {
         console.error('Socket error:', error);
         try {
             populateBotMessage({ content: error.message || 'An error occurred', id: Date.now().toString() });
-            showNotification(error.message || 'An error occurred. Starting new session.');
+            showNotification(error.message || 'An error occurred. Please start a new chat.');
             if (document.getElementById('floating-input')) document.getElementById('floating-input').disabled = false;
             if (document.getElementById('send-message')) document.getElementById('send-message').disabled = false;
             if (error.reset) {
-                sessionActive = false;
-                const addBtn = document.querySelector('.add-btn');
-                if (addBtn) addBtn.click();
+                startNewConversation();
             }
         } catch (e) {
             console.error('Error handling socket error:', e);
@@ -219,9 +250,7 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-status', (data) => console.log('Socket status:', data));
     ipcRenderer.send('check-socket-connection');
 }
-/**
- * Displays a connection error message.
- */
+
 function showConnectionError(message = 'Connecting to server...') {
     let errorDiv = document.querySelector('.connection-error');
     if (!errorDiv) {
@@ -242,9 +271,6 @@ function showConnectionError(message = 'Connecting to server...') {
     });
 }
 
-/**
- * Adds a message to the chat interface.
- */
 function addUserMessage(message, turnContextData = null) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
@@ -281,23 +307,18 @@ function addUserMessage(message, turnContextData = null) {
 function createBotMessagePlaceholder(messageId) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
-    // The .message-bot class will now serve as our main component wrapper
     messageDiv.className = 'message message-bot';
     
-    // This header will be for both live steps and the final summary
     const thinkingIndicator = document.createElement('div');
     thinkingIndicator.className = 'thinking-indicator';
-    // The container for live steps that will be hidden later
     thinkingIndicator.innerHTML = `<div class="thinking-steps-container"></div>`;
     messageDiv.appendChild(thinkingIndicator);
 
-    // Container for the collapsible logs
     const detailedLogsDiv = document.createElement('div');
     detailedLogsDiv.className = 'detailed-logs';
     detailedLogsDiv.id = `logs-${messageId}`;
     messageDiv.appendChild(detailedLogsDiv);
 
-    // Container for the final answer from Aetheria_AI
     const mainContentDiv = document.createElement('div');
     mainContentDiv.className = 'message-content';
     mainContentDiv.id = `main-content-${messageId}`;
@@ -309,7 +330,6 @@ function createBotMessagePlaceholder(messageId) {
 }
 
 function populateBotMessage(data) {
-    // Destructure all needed properties, including the new is_log flag
     const { content, id: messageId, streaming = false, agent_name, team_name, is_log } = data;
     const messageDiv = ongoingStreams[messageId];
     if (!messageDiv) {
@@ -318,9 +338,8 @@ function populateBotMessage(data) {
     }
 
     const ownerName = agent_name || team_name;
-    if (!ownerName || !content) return; // Don't render empty content blocks
+    if (!ownerName || !content) return;
 
-    // --- NEW: Decide where to render the content based on the is_log flag ---
     const targetContainer = is_log 
         ? messageDiv.querySelector(`#logs-${messageId}`)
         : messageDiv.querySelector(`#main-content-${messageId}`);
@@ -336,7 +355,6 @@ function populateBotMessage(data) {
     if (!contentBlock) {
         contentBlock = document.createElement('div');
         contentBlock.id = contentBlockId;
-        // Add a class to distinguish log blocks for styling
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         
         const header = document.createElement('div');
@@ -348,7 +366,6 @@ function populateBotMessage(data) {
         innerContent.className = 'inner-content';
         contentBlock.appendChild(innerContent);
 
-        // Append the new block to the correct container
         targetContainer.appendChild(contentBlock);
     }
     
@@ -428,18 +445,15 @@ async function handleSendMessage() {
     }
 
     const messageData = {
+        conversationId: currentConversationId,
         message: message,
         id: messageId,
         files: attachedFiles,
         is_deepsearch: chatConfig.deepsearch,
         accessToken: session.access_token,
         context: combinedContextForBackend || undefined,
+        config: { use_memory: chatConfig.memory, ...chatConfig.tools }
     };
-
-    if (!sessionActive) {
-        messageData.config = { use_memory: chatConfig.memory, ...chatConfig.tools };
-        sessionActive = true;
-    }
 
     try {
         ipcRenderer.send('send-message', messageData);
@@ -456,9 +470,6 @@ async function handleSendMessage() {
     contextHandler.clearSelectedContext();
 }
 
-/**
- * Initializes the tools menu and its behavior.
- */
 function initializeToolsMenu() {
     const toolsBtn = document.querySelector('[data-tool="tools"]');
     const toolsMenu = toolsBtn.querySelector('.tools-menu');
@@ -524,17 +535,20 @@ function handleTasksToggle() {
     });
 }
 
-async function terminateSession() {
-    sessionActive = false;
-    ongoingStreams = {};
-    chatConfig.deepsearch = false;
-    if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
+async function terminateSession(conversationIdToTerminate) {
+    if (!conversationIdToTerminate) return;
+
+    console.log(`Requesting termination of conversation: ${conversationIdToTerminate}`);
     const session = await window.electron.auth.getSession();
     if (!session || !session.access_token) {
-        console.log("User is not logged in, terminating session locally.");
+        console.log("User not logged in, cannot send termination request.");
         return;
     }
-    ipcRenderer.send('terminate-session', { accessToken: session.access_token });
+    ipcRenderer.send('send-message', {
+        type: 'terminate_session',
+        accessToken: session.access_token,
+        conversationId: conversationIdToTerminate
+    });
 }
 
 function initializeAutoExpandingTextarea() {
@@ -704,24 +718,9 @@ function init() {
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
-    elements.newChatBtn.addEventListener('click', () => {
-        terminateSession();
-        document.getElementById('chat-messages').innerHTML = '';
-        document.getElementById('floating-input').disabled = false;
-        document.getElementById('send-message').disabled = false;
-        sessionActive = false;
-        ongoingStreams = {};
-        contextHandler.clearSelectedContext();
-        chatConfig = {
-            memory: false, tasks: false,
-            tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
-            deepsearch: false
-        };
-        document.getElementById('ai_os').checked = true;
-        document.querySelector('[data-tool="tasks"]').classList.remove('active');
-        document.getElementById('deep_search').checked = false;
-        document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-    });
+    
+    elements.newChatBtn.addEventListener('click', startNewConversation);
+
     elements.messages.addEventListener('click', (e) => {
         const contextBtn = e.target.closest('.view-turn-context-btn');
         if (contextBtn) {
@@ -738,6 +737,8 @@ function init() {
             }
         }
     });
+
+    startNewConversation();
 }
 
 const style = document.createElement('style');

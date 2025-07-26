@@ -347,4 +347,41 @@
     }
 } 
 
+.browser-view-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-sans);
+    color: var(--text-secondary);
+}
 
+.browser-view-header i {
+    color: var(--accent-color);
+}
+
+.browser-view-url {
+    font-weight: var(--font-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.browser-view-screenshot {
+    padding: 8px;
+    background-color: var(--background-secondary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden; /* Ensures the image doesn't overflow its container */
+}
+
+.browser-view-screenshot img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+}

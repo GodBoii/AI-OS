@@ -1,6 +1,9 @@
-# docker-compose.yml (Corrected Build Context)
+# docker-compose.yml (Complete version with all services)
+
+version: '3.8'
 
 services:
+  # Redis for Celery message brokering and backend caching
   redis:
     image: "redis:7.2-alpine"
     container_name: aios-redis
@@ -9,6 +12,7 @@ services:
     volumes:
       - redis_data:/data
 
+  # The main web server (Flask/SocketIO)
   web:
     build:
       context: .
@@ -22,7 +26,9 @@ services:
       - ./python-backend:/app
     depends_on:
       - redis
+      - sandbox-manager # Ensures sandbox-manager starts before the web server
 
+  # The Celery worker for background AI tasks
   worker:
     build:
       context: .
@@ -37,6 +43,7 @@ services:
       - redis
       - web
 
+  # Flower for monitoring Celery workers
   flower:
     build:
       context: .
@@ -48,6 +55,21 @@ services:
     depends_on:
       - redis
       - worker
+
+  # --- NEW: The Sandbox Manager Service ---
+  # This service manages creating, executing, and terminating sandbox containers.
+  sandbox-manager:
+    build:
+      context: .
+      dockerfile: sandbox_manager/Dockerfile
+    container_name: aios-sandbox-manager
+    ports:
+      - "8000:8000"
+    volumes:
+      # CRITICAL: Mount the host's Docker socket into the container.
+      # This allows the sandbox-manager to control the Docker daemon
+      # to start and stop the actual sandbox containers.
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   redis_data:

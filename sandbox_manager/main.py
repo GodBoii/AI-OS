@@ -59,11 +59,9 @@ def execute_in_session(sandbox_id: str, request: CommandRequest):
     try:
         container = docker_client.containers.get(container_name)
         
-        # --- Step 2: More Robust Command Execution ---
-        # The `demux=True` flag correctly separates stdout and stderr.
-        # Passing the command directly is cleaner than wrapping it in /bin/bash.
+        shell_command = ["/bin/bash", "-c", request.command]
         exit_code, (stdout, stderr) = container.exec_run(
-            cmd=request.command,
+            cmd=shell_command,
             demux=True 
         )
         

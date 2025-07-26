@@ -30,11 +30,11 @@ class MessageFormatter {
             }
         });
 
-        // Set up custom renderer
         const renderer = {
             code: (code, language) => {
                 if (language === 'mermaid') {
-                    const artifactId = artifactHandler.showArtifact(code, 'mermaid');
+                    // --- FIX: Swapped the arguments to match showArtifact(type, data) ---
+                    const artifactId = artifactHandler.showArtifact('mermaid', code);
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <i class="fas fa-diagram-project"></i>
                         Click to view Mermaid diagram
@@ -42,7 +42,8 @@ class MessageFormatter {
                 }
 
                 const validLanguage = hljs.getLanguage(language) ? language : 'plaintext';
-                const artifactId = artifactHandler.showArtifact(code, validLanguage);
+                // --- FIX: Swapped the arguments to match showArtifact(type, data) ---
+                const artifactId = artifactHandler.showArtifact(validLanguage, code);
                 return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                     <i class="fas fa-code"></i>
                     Click to view ${validLanguage} code
@@ -62,6 +63,7 @@ class MessageFormatter {
             }
         });
     }
+
 
     setupMermaidThemeObserver() {
         // Create MutationObserver to handle theme changes
