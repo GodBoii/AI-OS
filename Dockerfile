@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends libnss3 libnspr
 
 RUN playwright install chromium
 
+RUN pip install browser-use
+
 COPY python-backend/ . 
 
 EXPOSE 8765

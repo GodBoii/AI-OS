@@ -1,209 +1,583 @@
-# AI-OS: Docker Backend Configuration
+# AI-OS: Complete Docker Backend Configuration
 
-This document explains how to run the AI-OS Python backend in a Docker container and connect the Electron frontend to it.
+This document provides a comprehensive guide to the Docker-based architecture for AI-OS, including multi-service orchestration, sandbox management, and complete deployment instructions.
+
+## Architecture Overview
+
+The AI-OS system consists of multiple Docker services working together:
+
+1. **Main Web Server** - Flask/SocketIO application with Gunicorn
+2. **Redis** - Message broker and caching layer
+3. **Celery Worker** - Background task processing
+4. **Flower** - Celery monitoring interface
+5. **Sandbox Manager** - Secure code execution environment manager
 
 ## Prerequisites
 
 - [Docker](https://www.docker.com/products/docker-desktop/) installed and running
-- Node.js and npm for the Electron app
+- [Docker Compose](https://docs.docker.com/compose/install/) installed
+- Node.js and npm for the Electron frontend
+- At least 4GB RAM available for containers
+- 10GB+ free disk space
 
-## Building the Docker Image
+## Project Structure
 
-1. Navigate to the project root directory
-2. Build the Docker image:
+```
+project-root/
+├── Dockerfile                    # Main web server image
+├── docker-compose.yml           # Multi-service orchestration
+├── Dockerfile.sandbox           # Sandbox execution environment
+├── sandbox_manager/
+│   ├── Dockerfile               # Sandbox manager service
+│   ├── requirements.txt
+│   └── main.py
+├── python-backend/
+│   ├── .env                     # Environment variables
+│   ├── requirements.txt
+│   ├── app.py
+│   └── ...
+└── tmp/                         # Shared temporary files
+```
+
+## Docker Files
+
+### 1. Main Application Dockerfile
+
+```dockerfile
+# Dockerfile 
+
+FROM python:3.11
+
+WORKDIR /app
+
+COPY python-backend/requirements.txt . 
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install mcp
+
+RUN apt-get update && apt-get install -y --no-install-recommends libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2 libatspi2.0-0
+
+RUN playwright install chromium
+
+COPY python-backend/ . 
+
+EXPOSE 8765
+
+ENV PORT=8765
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "4", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "app:app"]
+```
+
+**Key Features:**
+- Python 3.11 base image with all backend dependencies
+- Playwright for browser automation capabilities
+- Gunicorn with eventlet workers for WebSocket support
+- Browser dependencies for headless Chrome operations
+
+### 2. Docker Compose Configuration
+
+```yaml
+# docker-compose.yml (Complete version with all services)
+
+version: '3.8'
+
+services:
+  # Redis for Celery message brokering and backend caching
+  redis:
+    image: "redis:7.2-alpine"
+    container_name: aios-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # The main web server (Flask/SocketIO)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aios-web
+    ports:
+      - "8765:8765"
+    env_file:
+      - ./python-backend/.env
+    volumes:
+      - ./python-backend:/app
+    depends_on:
+      - redis
+      - sandbox-manager # Ensures sandbox-manager starts before the web server
+
+  # The Celery worker for background AI tasks
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aios-worker
+    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info", "--concurrency=4"]
+    env_file:
+      - ./python-backend/.env
+    volumes:
+      - ./python-backend:/app
+    depends_on:
+      - redis
+      - web
+
+  # Flower for monitoring Celery workers
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aios-flower
+    command: ["celery", "-A", "app.celery", "flower", "--broker=redis://redis:6379/0"]
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - worker
+
+  # --- NEW: The Sandbox Manager Service ---
+  # This service manages creating, executing, and terminating sandbox containers.
+  sandbox-manager:
+    build:
+      context: .
+      dockerfile: sandbox_manager/Dockerfile
+    container_name: aios-sandbox-manager
+    ports:
+      - "8000:8000"
+    volumes:
+      # CRITICAL: Mount the host's Docker socket into the container.
+      # This allows the sandbox-manager to control the Docker daemon
+      # to start and stop the actual sandbox containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  redis_data:
+```
+
+### 3. Sandbox Environment Dockerfile
+
+```dockerfile
+# Dockerfile.sandbox
+# This defines the environment where user code will run.
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install common tools needed by the agent
+# git is needed for 'git clone', curl for downloading files, etc.
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3-pip \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security.
+# Running code as root inside a container is a major security risk.
+RUN useradd -m -s /bin/bash sandboxuser
+
+# Switch to the non-root user
+USER sandboxuser
+WORKDIR /home/sandboxuser
+
+# Final check
+CMD ["/bin/bash"]
+```
+
+### 4. Sandbox Manager Dockerfile
+
+```dockerfile
+# Dockerfile.manager
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY ./sandbox_manager/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ./sandbox_manager/ .
+
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+## Environment Configuration
+
+### Required Environment Variables (.env file)
+
+Create a `.env` file in the `python-backend/` directory:
+
+```env
+# AI API Keys
+OPENAI_API_KEY=sk-your-openai-key-here
+GROQ_API_KEY=your-groq-key-here
+ANTHROPIC_API_KEY=your-anthropic-key-here
+MISTRAL_API_KEY=your-mistral-key-here
+
+# Redis Configuration
+REDIS_URL=redis://redis:6379/0
+
+# Celery Configuration
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+# Sandbox Manager
+SANDBOX_MANAGER_URL=http://sandbox-manager:8000
+
+# Security
+SECRET_KEY=your-secret-key-here
+
+# Debug Settings
+DEBUG=false
+LOG_LEVEL=INFO
+```
+
+## Deployment Instructions
+
+### 1. Complete System Startup
+
+Start all services using Docker Compose:
 
 ```bash
+# Build and start all services
+docker-compose up --build -d
+
+# View logs from all services
+docker-compose logs -f
+
+# View logs from specific service
+docker-compose logs -f web
+```
+
+### 2. Individual Service Management
+
+```bash
+# Start specific services
+docker-compose up redis web -d
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (WARNING: This deletes data)
+docker-compose down -v
+
+# Restart a specific service
+docker-compose restart web
+```
+
+### 3. Building Individual Images
+
+```bash
+# Build main application image
 docker build -t aios-backend -f Dockerfile .
+
+# Build sandbox environment
+docker build -t aios-sandbox -f Dockerfile.sandbox .
+
+# Build sandbox manager
+docker build -t aios-sandbox-manager -f sandbox_manager/Dockerfile .
 ```
 
-## Running the Docker Container
+## Service Details and Ports
 
-Start the container with the following command:
+| Service | Port | Purpose | Health Check |
+|---------|------|---------|--------------|
+| Web Server | 8765 | Main Flask/SocketIO API | `http://localhost:8765/health` |
+| Redis | 6379 | Message broker & cache | `redis-cli ping` |
+| Flower | 5555 | Celery monitoring | `http://localhost:5555` |
+| Sandbox Manager | 8000 | Code execution manager | `http://localhost:8000/health` |
+
+## File Mounting for Multimodal Support
+
+### Critical Configuration for File Access
+
+The system needs access to user files for multimodal processing (images, audio, video, PDFs):
+
+#### Windows Example:
+```bash
+# Mount user directories
+docker-compose up -d
+# Or for manual run:
+docker run -d -p 8765:8765 \
+  -v C:/Users/youruser/Downloads:/host_downloads \
+  -v C:/Users/youruser/Documents:/host_documents \
+  aios-backend
+```
+
+#### macOS/Linux Example:
+```bash
+# Mount user directories
+docker run -d -p 8765:8765 \
+  -v $HOME/Downloads:/host_downloads \
+  -v $HOME/Documents:/host_documents \
+  aios-backend
+```
+
+### Updated Docker Compose with File Mounts
+
+```yaml
+# Add to the web service in docker-compose.yml
+web:
+  build:
+    context: .
+    dockerfile: Dockerfile
+  container_name: aios-web
+  ports:
+    - "8765:8765"
+  env_file:
+    - ./python-backend/.env
+  volumes:
+    - ./python-backend:/app
+    # File access for multimodal support
+    - ${HOME}/Downloads:/host_downloads
+    - ${HOME}/Documents:/host_documents
+    - ./tmp:/app/tmp
+  depends_on:
+    - redis
+    - sandbox-manager
+```
+
+## Security Considerations
+
+### Sandbox Security
+
+1. **Non-root User**: Sandbox containers run as `sandboxuser` (non-root)
+2. **Isolated Network**: Sandboxes run in isolated Docker networks
+3. **Resource Limits**: CPU and memory limits applied to sandbox containers
+4. **Temporary Execution**: Sandbox containers are destroyed after use
+
+### Docker Socket Access
+
+The sandbox manager needs Docker socket access to manage containers:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
+**Security Note**: This gives the sandbox manager full Docker daemon access. In production, consider using Docker-in-Docker or rootless Docker.
+
+### Environment Security
+
+- Keep `.env` files out of version control
+- Use Docker secrets for production deployments
+- Regularly update base images for security patches
+- Implement proper network segmentation
+
+## Monitoring and Logging
+
+### Service Health Checks
 
 ```bash
-docker run -d -p 8765:8765 --name my-aios-container aios-backend
+# Check all services status
+docker-compose ps
+
+# View real-time logs
+docker-compose logs -f
+
+# Check individual service health
+curl http://localhost:8765/health  # Web server
+curl http://localhost:8000/health  # Sandbox manager
+redis-cli ping                     # Redis
 ```
 
-This will:
-- Run the container in detached mode (`-d`)
-- Map the container's port 8765 to the host's port 8765 (`-p 8765:8765`)
-- Name the container "my-aios-container" for easy reference
+### Flower Monitoring Interface
 
-## Verifying the Container is Running
+Access Celery monitoring at `http://localhost:5555`:
+- View active tasks
+- Monitor worker performance
+- Task execution history
+- Worker statistics
 
-Check if the container is running:
+### Log Management
 
 ```bash
-docker ps
-```
+# View logs with timestamps
+docker-compose logs -f -t
 
-You should see your container in the list. If not, check the logs:
+# View logs for specific timeframe
+docker-compose logs --since 2024-01-01T00:00:00
 
-```bash
-docker logs my-aios-container
-```
-
-You should see output similar to:
-```
-[2025-05-29 21:52:06 +0000] [1] [INFO] Starting gunicorn 23.0.0
-[2025-05-29 21:52:06 +0000] [1] [INFO] Listening at: http://0.0.0.0:8765 (1)
-[2025-05-29 21:52:06 +0000] [1] [INFO] Using worker: eventlet
-[2025-05-29 21:52:06 +0000] [7] [INFO] Booting worker with pid: 7
-```
-
-## Running the Electron Application
-
-With the Docker container running, start the Electron application:
-
-```bash
-npm start
-```
-
-The Electron app has been modified to connect to the Docker container automatically.
-
-## Managing the Docker Container
-
-### Stopping the Container
-
-```bash
-docker stop my-aios-container
-```
-
-### Starting an Existing Container
-
-```bash
-docker start my-aios-container
-```
-
-### Removing the Container
-
-```bash
-docker stop my-aios-container
-docker rm my-aios-container
-```
-
-### Rebuilding After Code Changes
-
-If you make changes to the Python backend code, you need to rebuild the Docker image and restart the container:
-
-```bash
-docker stop my-aios-container
-docker rm my-aios-container
-docker build -t aios-backend -f Dockerfile .
-docker run -d -p 8765:8765 --name my-aios-container aios-backend
-```
-
-## Persisting Data (Optional)
-
-To persist data between container restarts, you can mount volumes. For example, to persist the tmp directory:
-
-```bash
-docker run -d -p 8765:8765 -v $(pwd)/tmp:/app/tmp --name my-aios-container aios-backend
+# Export logs to file
+docker-compose logs > aios-logs.txt
 ```
 
 ## Troubleshooting
 
-1. **Connection Issues**: If the Electron app can't connect to the Docker container, make sure port 8765 is accessible and not blocked by a firewall.
+### Common Issues
 
-2. **Python Import Errors**: If you see import errors in the Docker logs, you may need to update requirements.txt or install additional dependencies in the Dockerfile.
+#### 1. Connection Issues
+```bash
+# Check if services are running
+docker-compose ps
 
-3. **Context Synchronization**: The context_manager.py script still runs locally in the Electron app, not in the Docker container. This is by design to handle local file access. 
-
----
-
-## 1. Dockerfile and Image Build
-
-- The backend is run in a Docker container using a `Dockerfile` in the project root.
-- The Docker image installs all Python dependencies from `requirements.txt`.
-- The container exposes the backend on port 8765 by default.
-
-**Example Dockerfile excerpt:**
-```dockerfile
-FROM python:3.10-slim
-WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8765
-CMD ["python", "python-backend/app.py"]
+# Test network connectivity
+docker-compose exec web ping redis
+docker-compose exec web ping sandbox-manager
 ```
 
----
+#### 2. File Access Problems
+```bash
+# Check mounted volumes
+docker-compose exec web ls -la /host_downloads
 
-## 2. Environment Variables
-
-- Set API keys and other secrets in a `.env` file in the project root.
-- Example:
-  ```env
-  OPENAI_API_KEY=sk-...
-  GROQ_API_KEY=...
-  # Add any other required keys
-  ```
-- The backend loads these automatically using `python-dotenv`.
-
----
-
-## 3. File Mounting for Multimodal Inputs
-
-**Critical for multimodal support:**
-- The Electron frontend passes file paths (e.g., for images, audio, video, PDFs) to the backend.
-- The backend container must have access to the same file paths as the host system.
-- **Mount the host's user files directory into the container** using Docker's `-v` flag.
-
-**Example (Windows):**
-```sh
-docker run -it --rm -p 8765:8765 -v C:/Users/youruser/Downloads:/host_downloads ai-os-image
+# Verify file permissions
+docker-compose exec web ls -la /app/tmp
 ```
-- In the app, ensure file paths are referenced as `/host_downloads/filename.ext` inside the container.
-- You may need to adjust the frontend to rewrite Windows paths to the mounted path inside the container.
 
----
+#### 3. Memory Issues
+```bash
+# Check container resource usage
+docker stats
 
-## 4. Troubleshooting Multimodal File Access
+# View system resources
+docker system df
+```
 
-- If the LLM says it cannot find a file, check:
-  - The file path sent from the frontend matches the mounted path in the container.
-  - The file exists inside the container at the expected location (`docker exec -it <container> ls /host_downloads`).
-  - The backend logs for path normalization and file existence checks.
-- For Windows, always use forward slashes in Docker volume mounts and inside the container.
-- If you see errors like `File does not exist at path: ...`, check the path mapping and normalization logic in `app.py`.
+#### 4. Build Issues
+```bash
+# Clean build (removes cache)
+docker-compose build --no-cache
 
----
+# Remove all unused Docker resources
+docker system prune -a
+```
 
-## 5. Best Practices
+### Debugging Commands
 
-- Always mount user-accessible directories (Downloads, Documents, etc.) into the container if you want to process files from those locations.
-- Use absolute paths in the frontend and rewrite them as needed for the container's mount points.
-- Keep your `.env` file out of version control (`.gitignore`) and use Docker secrets for production.
-- For debugging, use `docker exec -it <container> bash` to inspect files and logs inside the running container.
+```bash
+# Enter running container
+docker-compose exec web bash
+docker-compose exec sandbox-manager bash
 
----
+# View container logs
+docker-compose logs web --tail 100
 
-## 6. Example Docker Compose (Optional)
+# Check environment variables
+docker-compose exec web env
 
-If you want to use Docker Compose for easier management:
+# Test API endpoints
+curl -X GET http://localhost:8765/health
+curl -X GET http://localhost:8000/health
+```
+
+## Production Deployment
+
+### Performance Optimization
 
 ```yaml
+# Production docker-compose.yml adjustments
+services:
+  web:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+    
+  worker:
+    command: ["celery", "-A", "app.celery", "worker", "--loglevel=warning", "--concurrency=8"]
+    deploy:
+      replicas: 2
+```
+
+### Production Environment Variables
+
+```env
+# Production settings
+DEBUG=false
+LOG_LEVEL=WARNING
+GUNICORN_WORKERS=8
+GUNICORN_TIMEOUT=600
+REDIS_MAXMEMORY=1gb
+REDIS_MAXMEMORY_POLICY=allkeys-lru
+```
+
+### Backup and Recovery
+
+```bash
+# Backup Redis data
+docker-compose exec redis redis-cli BGSAVE
+
+# Backup volumes
+docker run --rm -v aios_redis_data:/data -v $(pwd):/backup ubuntu tar czf /backup/redis-backup.tar.gz /data
+
+# Restore from backup
+docker run --rm -v aios_redis_data:/data -v $(pwd):/backup ubuntu tar xzf /backup/redis-backup.tar.gz -C /
+```
+
+## Development Workflow
+
+### Hot Reload Development
+
+For development with hot reload:
+
+```yaml
+# Development docker-compose.override.yml
 version: '3.8'
 services:
-  ai-os-backend:
-    build: .
-    ports:
-      - "8765:8765"
-    env_file:
-      - .env
+  web:
+    command: ["python", "app.py"]  # Direct Python instead of Gunicorn
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
     volumes:
-      - C:/Users/youruser/Downloads:/host_downloads
+      - ./python-backend:/app:delegated  # Better performance on macOS
+```
+
+### Testing
+
+```bash
+# Run tests in container
+docker-compose exec web python -m pytest tests/
+
+# Run with coverage
+docker-compose exec web python -m pytest --cov=app tests/
+```
+
+## Maintenance
+
+### Regular Maintenance Tasks
+
+```bash
+# Update images
+docker-compose pull
+docker-compose up -d
+
+# Clean up unused resources
+docker system prune -f
+
+# Update dependencies
+docker-compose build --no-cache
+```
+
+### Monitoring Resource Usage
+
+```bash
+# Monitor container resources
+docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
+
+# Check disk usage
+docker system df
 ```
 
 ---
 
-## 7. Additional Notes
+## Quick Start Summary
 
-- If you update the backend code, rebuild the Docker image: `docker build -t ai-os-image .`
-- If you change the requirements, rebuild the image as well.
-- For persistent storage (e.g., session logs), mount a host directory to `/app/tmp` or similar.
+1. **Setup**: Ensure Docker and Docker Compose are installed
+2. **Configure**: Create `.env` file with your API keys
+3. **Deploy**: Run `docker-compose up --build -d`
+4. **Verify**: Check `http://localhost:8765/health` and `http://localhost:5555`
+5. **Connect**: Start your Electron frontend with `npm start`
 
----
-
-**For more details, see the main README and comments in the Dockerfile.** 
+For additional support, check the logs with `docker-compose logs -f` and refer to the troubleshooting section above.

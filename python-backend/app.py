@@ -30,6 +30,8 @@ from agno.run.response import RunEvent, RunResponse
 from agno.run.team import TeamRunEvent, TeamRunResponse
 from gotrue.errors import AuthApiError
 
+from browser_tools import browser_ready_events
+
 load_dotenv()
 
 celery = Celery(
@@ -47,46 +49,46 @@ def run_agent_task(sid: str, conversation_id: str, message_id: str, turn_data: d
     """
     This Celery task now uses the conversation_id as the primary key for state.
     The `sid` is only used for publishing results back to the correct client tab.
+    Browser control is NOT supported in this path.
     """
     try:
         logger.info(f"Celery worker picked up job for conversation: {conversation_id}")
-        redis_channel = f"results:{sid}" # The response channel is still tied to the connection SID
+        redis_channel = f"results:{sid}"
 
-        # 1. Fetch current session state from Redis using conversation_id
         session_json = redis_client.get(f"session:{conversation_id}")
         if not session_json:
             raise Exception(f"Session data not found in Redis for conversation_id: {conversation_id}")
         session_data = json.loads(session_json)
 
-        # --- Recreate components inside the worker ---
         user_id = session_data['user_id']
         is_deepsearch = turn_data['is_deepsearch']
         message = turn_data['user_message']
         
-        # --- NEW: Construct historical context from session data ---
-        # This builds the string of past messages for the agent's prompt
         history_runs = session_data.get("history", [])
         context_list = [f"{run['role']}: {run['content']}" for run in history_runs]
         historical_context = "\n---\n".join(context_list)
 
-        # Recreate the agent, now hydrated with its history
+        # Recreate the agent, ensuring browser_control is False
         if is_deepsearch:
             agent = get_deepsearch(user_id=user_id, session_info=session_data, **session_data['config'])
         else:
-            agent = get_llm_os(user_id=user_id, session_info=session_data, **session_data['config'])
+            # Explicitly pass browser_control=False as Celery cannot handle it.
+            agent = get_llm_os(
+                user_id=user_id,
+                session_info=session_data,
+                browser_control=False, # <-- IMPORTANT
+                **session_data['config']
+            )
         
-        # Recreate media objects
         images = [Image.from_dict(d) for d in turn_data.get('images', [])]
         audio = [Audio.from_dict(d) for d in turn_data.get('audio', [])]
         videos = [Video.from_dict(d) for d in turn_data.get('videos', [])]
         other_files = [File.from_dict(d) for d in turn_data.get('files', [])]
 
-        # Inject turn-specific context
         if agent.team_session_state is None:
             agent.team_session_state = {}
         agent.team_session_state['turn_context'] = turn_data
         
-        # --- Run the agent and stream results ---
         final_assistant_response = ""
         complete_message_for_prompt = f"Previous conversation context:\n{historical_context}\n\nCurrent message: {message}" if historical_context else message
 
@@ -103,6 +105,8 @@ def run_agent_task(sid: str, conversation_id: str, message_id: str, turn_data: d
 
         for chunk in agent.run(**supported_params):
             if not chunk or not hasattr(chunk, 'event'): continue
+            
+            # This logic for publishing to Redis remains the same
             event_data = {
                 "event": chunk.event, "content": getattr(chunk, 'content', None),
                 "agent_name": getattr(chunk, 'agent_name', None), "team_name": getattr(chunk, 'team_name', None),
@@ -112,19 +116,16 @@ def run_agent_task(sid: str, conversation_id: str, message_id: str, turn_data: d
             redis_client.publish(redis_channel, json.dumps(event_data))
             owner_name = event_data['agent_name'] or event_data['team_name']
             is_final_chunk = owner_name == "Aetheria_AI" and not event_data['has_members']
-            if event_data['content'] and is_final_chunk:
+            if event_data['content'] and is_final_chunk and isinstance(event_data['content'], str):
                 final_assistant_response += event_data['content']
 
-        # --- Finalization and State Update ---
         redis_client.publish(redis_channel, json.dumps({"event": "run_done"}))
 
-        # --- STATE FIX: Update the session state in Redis using conversation_id ---
         session_data["history"].append({"role": "user", "content": message})
         session_data["history"].append({"role": "assistant", "content": final_assistant_response})
         redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
         logger.info(f"Worker finished and UPDATED session state in Redis for conversation: {conversation_id}")
 
-        # Persist metrics to Supabase
         if hasattr(agent, 'session_metrics') and agent.session_metrics:
             metrics = agent.session_metrics
             if metrics.input_tokens > 0 or metrics.output_tokens > 0:
@@ -259,6 +260,22 @@ class ConnectionManager:
         self.terminate_session(conversation_id)
 
 connection_manager = ConnectionManager()
+
+# --- NEW: Socket.IO handler for browser status updates from the client ---
+@socketio.on("browser-status-update")
+def on_browser_status_update(data: dict):
+    """
+    Receives confirmation from the client that the browser is ready or that the user denied the request.
+    """
+    conversation_id = data.get("conversationId")
+    is_ready = data.get("ready", False)
+    logger.info(f"Received browser status for conversation {conversation_id}: {'Ready' if is_ready else 'Denied/Failed'}")
+    
+    if conversation_id in browser_ready_events:
+        # Get the eventlet Event for this conversation
+        ready_event = browser_ready_events[conversation_id]
+        # Send the status (True/False) to the waiting green thread
+        ready_event.send(is_ready)
 
 @app.route('/login/<provider>')
 def login_provider(provider):
@@ -513,6 +530,7 @@ def listen_for_results(sid: str, message_id: str):
     pubsub.unsubscribe(redis_channel)
 # --- END MODIFICATION ---
 
+# --- MODIFIED: The main message handler now routes tasks based on browser_control ---
 @socketio.on("send_message")
 def on_send_message(data: str):
     sid = request.sid
@@ -537,24 +555,37 @@ def on_send_message(data: str):
                 emit("status", {"message": f"Session {conv_id_to_terminate} terminated"}, room=sid)
             return
             
-        if not connection_manager.get_session(conversation_id):
-            connection_manager.create_session(conversation_id, user_id=str(user.id), config=data.get("config", {}))
+        session_data = connection_manager.get_session(conversation_id)
+        if not session_data:
+            session_data = connection_manager.create_session(conversation_id, user_id=str(user.id), config=data.get("config", {}))
+        
+        # Add conversation_id to session_info for the tools to use
+        session_data["conversation_id"] = conversation_id
 
-        images, audio, videos, other_files = process_files(data.get("files", []))
-        turn_data = {
-            "user_message": data.get("message", ""),
-            "is_deepsearch": data.get("is_deepsearch", False),
-            "images": [img.to_dict() for img in images],
-            "audio": [aud.to_dict() for aud in audio],
-            "videos": [vid.to_dict() for vid in videos],
-            "files": [f.to_dict() for f in other_files],
-        }
+        # --- START: NEW ROUTING LOGIC ---
+        config = data.get("config", {})
+        browser_control_enabled = config.get("browser_control", False)
 
-        message_id = data.get("id") or str(uuid.uuid4())
-        run_agent_task.delay(sid, conversation_id, message_id, turn_data)
-        logger.info(f"Dispatched job to Celery for conversation: {conversation_id}")
-
-        eventlet.spawn(listen_for_results, sid, message_id)
+        if browser_control_enabled:
+            # If browser control is on, run the agent in the main thread using eventlet.
+            logger.info(f"Running agent with browser control for conversation: {conversation_id}")
+            eventlet.spawn(run_agent_directly, sid, conversation_id, data, session_data)
+        else:
+            # Otherwise, use the existing Celery path for background processing.
+            logger.info(f"Dispatching agent task to Celery for conversation: {conversation_id}")
+            images, audio, videos, other_files = process_files(data.get("files", []))
+            turn_data = {
+                "user_message": data.get("message", ""),
+                "is_deepsearch": data.get("is_deepsearch", False),
+                "images": [img.to_dict() for img in images],
+                "audio": [aud.to_dict() for aud in audio],
+                "videos": [vid.to_dict() for vid in videos],
+                "files": [f.to_dict() for f in other_files],
+            }
+            message_id = data.get("id") or str(uuid.uuid4())
+            run_agent_task.delay(sid, conversation_id, message_id, turn_data)
+            eventlet.spawn(listen_for_results, sid, message_id)
+        # --- END: NEW ROUTING LOGIC ---
 
     except AuthApiError as e:
         logger.error(f"Invalid token for SID {sid}: {e.message}")
@@ -562,6 +593,89 @@ def on_send_message(data: str):
     except Exception as e:
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
         emit("error", {"message": "AI service error. Please start a new chat.", "reset": True}, room=sid)
+
+# --- NEW: Function to run agent directly for interactive tasks ---
+def run_agent_directly(sid: str, conversation_id: str, data: dict, session_data: dict):
+    """
+    Runs the agent in a non-blocking eventlet green thread for interactive sessions
+    like browser control.
+    """
+    message_id = data.get("id") or str(uuid.uuid4())
+    try:
+        user_id = session_data['user_id']
+        message = data.get("message", "")
+        config = data.get("config", {})
+
+        # Get the agent instance, passing socketio and sid for communication
+        agent = get_llm_os(
+            user_id=user_id,
+            session_info=session_data,
+            socketio=socketio,
+            sid=sid,
+            **config
+        )
+
+        images, audio, videos, other_files = process_files(data.get("files", []))
+        
+        # This logic is similar to the Celery task but runs here
+        history_runs = session_data.get("history", [])
+        context_list = [f"{run['role']}: {run['content']}" for run in history_runs]
+        historical_context = "\n---\n".join(context_list)
+        complete_message_for_prompt = f"Previous conversation context:\n{historical_context}\n\nCurrent message: {message}" if historical_context else message
+
+        final_assistant_response = ""
+
+        import inspect
+        params = inspect.signature(agent.run).parameters
+        supported_params = {
+            'message': complete_message_for_prompt,
+            'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id
+        }
+        if 'images' in params and images: supported_params['images'] = images
+        if 'audio' in params and audio: supported_params['audio'] = audio
+        if 'videos' in params and videos: supported_params['videos'] = videos
+        if 'files' in params and other_files: supported_params['files'] = other_files
+
+        # Stream results directly back to the client
+        for chunk in agent.run(**supported_params):
+            if not chunk or not hasattr(chunk, 'event'): continue
+
+            # This logic is similar to the Redis listener but emits directly
+            owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
+            is_final_content = owner_name == "Aetheria_AI" and not (hasattr(chunk, 'member_responses') and chunk.member_responses)
+            
+            if chunk.event in (RunEvent.run_response_content.value, TeamRunEvent.run_response_content.value):
+                socketio.emit("response", {
+                    "content": chunk.content, "streaming": True, "id": message_id,
+                    "agent_name": owner_name, "team_name": owner_name, "is_log": not is_final_content,
+                }, room=sid)
+                if chunk.content and is_final_content and isinstance(chunk.content, str):
+                    final_assistant_response += chunk.content
+            
+            elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
+                socketio.emit("agent_step", {
+                    "type": "tool_start", "name": getattr(chunk.tool, 'tool_name', 'N/A'),
+                    "agent_name": owner_name, "team_name": owner_name, "id": message_id
+                }, room=sid)
+
+            elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
+                socketio.emit("agent_step", {
+                    "type": "tool_end", "name": getattr(chunk.tool, 'tool_name', 'N/A'),
+                    "agent_name": owner_name, "team_name": owner_name, "id": message_id
+                }, room=sid)
+
+        socketio.emit("response", {"content": "", "done": True, "id": message_id}, room=sid)
+
+        # Update session state in Redis
+        session_data["history"].append({"role": "user", "content": message})
+        session_data["history"].append({"role": "assistant", "content": final_assistant_response})
+        redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
+        logger.info(f"Direct run finished and updated session state for conversation: {conversation_id}")
+
+    except Exception as e:
+        logger.error(f"Direct agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
+        socketio.emit("error", {"message": "An error occurred during the interactive agent task.", "reset": True}, room=sid)
+
 
 @app.route('/healthz', methods=['GET'])
 def health_check():

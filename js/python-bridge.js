@@ -28,6 +28,16 @@ class PythonBridge {
             this.sendMessage(data);
         });
 
+        // --- NEW: Listen for browser status updates from the renderer and relay to Python ---
+        ipcMain.on('browser-status-update', (event, data) => {
+            if (this.socket && this.socket.connected) {
+                console.log('Relaying browser status update to Python server:', data);
+                this.socket.emit('browser-status-update', data);
+            } else {
+                console.error('Cannot relay browser status: Socket not connected.');
+            }
+        });
+
         // Handle session termination requests, now with authentication data
         ipcMain.on('terminate-session', (event, data) => {
             this.sendMessage({
@@ -60,7 +70,6 @@ class PythonBridge {
 
     async connectWebSocket() {
         return new Promise((resolve, reject) => {
-            // Only log first connection attempt
             if (this.reconnectAttempts <= 1) {
                 console.log(`Connecting to Socket.IO server at ${this.serverUrl}...`);
             }
@@ -91,7 +100,6 @@ class PythonBridge {
 
             this.socket.on('connect_error', (error) => {
                 clearTimeout(connectionTimeout);
-                // Only log detailed error on first attempt
                 if (this.reconnectAttempts <= 1) {
                     console.error('Socket.IO connect error:', error.message);
                 }
@@ -107,6 +115,23 @@ class PythonBridge {
     }
 
     setupSocketHandlers() {
+        // --- START: NEW SOCKET HANDLERS TO PROXY EVENTS TO RENDERER ---
+
+        // Listen for the server's request to start the browser
+        this.socket.on('request-start-browser', (data) => {
+            console.log('Received "request-start-browser" from server. Forwarding to renderer.');
+            this.mainWindow.webContents.send('request-start-browser', data);
+        });
+
+        // Listen for the server's request to stop the browser
+        this.socket.on('request-stop-browser', (data) => {
+            console.log('Received "request-stop-browser" from server. Forwarding to renderer.');
+            this.mainWindow.webContents.send('request-stop-browser', data);
+        });
+
+        // --- END: NEW SOCKET HANDLERS ---
+
+
         // Handle final response messages from Python backend
         this.socket.on('response', (data) => {
             this.mainWindow.webContents.send('chat-response', data);

@@ -1,13 +1,160 @@
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, BrowserView } = electron;
+const { app, BrowserWindow, ipcMain, BrowserView, dialog } = electron; // Added 'dialog'
 const path = require('path');
+const fs = require('fs'); // Added 'fs' for path checking
 const PythonBridge = require('./python-bridge');
 const { spawn } = require('child_process');
-const http = require('http');  
+const http = require('http');
+
+// --- START: NEW BROWSER MANAGEMENT SECTION ---
+
+// This global variable will hold the single, managed browser process.
+// It acts as the source of truth for whether the controlled browser is running.
+let managedBrowserProcess = null;
+
+/**
+ * Finds the executable and user data paths for common Chromium browsers.
+ * This is OS-aware.
+ * @returns {object|null} An object with { exePath, userDataDir } or null if not found.
+ */
+function getBrowserPaths() {
+    const homeDir = app.getPath('home');
+    let paths = {};
+
+    switch (process.platform) {
+        case 'win32': // Windows
+            const localAppData = process.env.LOCALAPPDATA;
+            paths = {
+                Chrome: {
+                    exePath: path.join(process.env.ProgramFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+                    userDataDir: path.join(localAppData, 'Google', 'Chrome', 'User Data')
+                },
+                Edge: {
+                    exePath: path.join(process.env['ProgramFiles(x86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+                    userDataDir: path.join(localAppData, 'Microsoft', 'Edge', 'User Data')
+                }
+            };
+            break;
+
+        case 'darwin': // macOS
+            paths = {
+                Chrome: {
+                    exePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+                    userDataDir: path.join(homeDir, 'Library', 'Application Support', 'Google', 'Chrome')
+                },
+                Edge: {
+                    exePath: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+                    userDataDir: path.join(homeDir, 'Library', 'Application Support', 'Microsoft Edge')
+                }
+            };
+            break;
+
+        case 'linux': // Linux
+            paths = {
+                Chrome: {
+                    exePath: '/usr/bin/google-chrome',
+                    userDataDir: path.join(homeDir, '.config', 'google-chrome')
+                },
+                Edge: {
+                    exePath: '/usr/bin/microsoft-edge',
+                    userDataDir: path.join(homeDir, '.config', 'microsoft-edge')
+                }
+            };
+            break;
+    }
+
+    // Find the first installed browser from our list and return its paths
+    for (const browser in paths) {
+        if (fs.existsSync(paths[browser].exePath)) {
+            return paths[browser];
+        }
+    }
+
+    return null; // No supported browser found
+}
+
+/**
+ * Launches the user's default browser in a managed, controllable state.
+ * Asks for user permission before proceeding.
+ * @returns {Promise<boolean>} True if the browser was launched successfully, false otherwise.
+ */
+async function launchManagedBrowser() {
+    if (managedBrowserProcess) {
+        console.log('Managed browser is already running.');
+        return true;
+    }
+
+    const browserPaths = getBrowserPaths();
+    if (!browserPaths) {
+        console.error('No supported browser (Chrome, Edge) found on this system.');
+        dialog.showErrorBox('Browser Not Found', 'Could not find a compatible browser (Chrome or Edge) to control.');
+        return false;
+    }
+
+    // Ask user for permission to relaunch their browser
+    const userResponse = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Relaunch Browser', 'Cancel'],
+        defaultId: 0,
+        title: 'Browser Control Request',
+        message: 'Aetheria AI needs to control your browser.',
+        detail: 'To securely interact with websites on your behalf without asking for passwords, the application needs to relaunch your default browser in a special automation mode. Your existing tabs can be restored. Is this okay?'
+    });
+
+    if (userResponse.response !== 0) { // User clicked "Cancel"
+        console.log('User denied browser control permission.');
+        return false;
+    }
+
+    console.log(`Launching browser from: ${browserPaths.exePath}`);
+    try {
+        managedBrowserProcess = spawn(browserPaths.exePath, [
+            '--remote-debugging-port=9222',
+            '--remote-debugging-address=0.0.0.0',
+            `--user-data-dir=${browserPaths.userDataDir}`
+        ]);
+
+        managedBrowserProcess.on('exit', (code) => {
+            console.log(`Managed browser process exited with code ${code}.`);
+            managedBrowserProcess = null; // Reset the state
+            // Optionally notify the renderer that the connection is lost
+            mainWindow.webContents.send('browser-connection-lost');
+        });
+
+        managedBrowserProcess.on('error', (err) => {
+            console.error('Failed to start managed browser process:', err);
+            managedBrowserProcess = null;
+        });
+
+        // Give the browser a moment to start up before confirming readiness
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        console.log('Managed browser launched successfully.');
+        return true;
+
+    } catch (error) {
+        console.error('Error spawning managed browser:', error);
+        dialog.showErrorBox('Launch Error', 'Failed to launch the browser. Please ensure it is not running and try again.');
+        return false;
+    }
+}
+
+/**
+ * Terminates the managed browser process if it is running.
+ */
+function killManagedBrowser() {
+    if (managedBrowserProcess) {
+        console.log('Terminating managed browser process.');
+        managedBrowserProcess.kill();
+        managedBrowserProcess = null;
+    }
+}
+
+// --- END: NEW BROWSER MANAGEMENT SECTION ---
+
 
 // Enable Chrome DevTools Protocol for all browser instances at startup
 // This must be called before app.whenReady()
-app.commandLine.appendSwitch('remote-debugging-port', '9222');
 app.commandLine.appendSwitch('enable-features', 'NetworkService,NetworkServiceInProcess');
 
 // Register custom protocol for deep linking
@@ -49,12 +196,12 @@ function createWindow() {
         console.error('Python bridge error:', error.message);
         // Notify the renderer process about the error
         mainWindow.webContents.on('did-finish-load', () => {
-            mainWindow.webContents.send('socket-connection-status', { 
+            mainWindow.webContents.send('socket-connection-status', {
                 connected: false,
                 error: 'Failed to connect to Python backend: ' + error.message
             });
         });
-        
+
         // Try reconnecting after a delay
         setTimeout(() => {
             console.log('Attempting to reconnect to Python backend...');
@@ -67,6 +214,22 @@ function createWindow() {
             });
         }, 10000);
     });
+
+    // --- START: NEW IPC HANDLERS FOR BROWSER CONTROL ---
+    ipcMain.on('start-browser', async (event) => {
+        const success = await launchManagedBrowser();
+        if (success) {
+            event.sender.send('browser-ready');
+        } else {
+            event.sender.send('browser-start-denied');
+        }
+    });
+
+    ipcMain.on('stop-browser', () => {
+        killManagedBrowser();
+    });
+    // --- END: NEW IPC HANDLERS ---
+
 
     ipcMain.on('minimize-window', () => {
         mainWindow.minimize();
@@ -101,17 +264,18 @@ function createWindow() {
         pythonBridge = new PythonBridge(mainWindow);
         pythonBridge.start().catch(error => {
             console.error('Failed to restart Python bridge:', error);
-            mainWindow.webContents.send('socket-connection-status', { 
+            mainWindow.webContents.send('socket-connection-status', {
                 connected: false,
                 error: 'Failed to connect to Python backend: ' + error.message
             });
         });
     });
 
+    // This 'open-webview' functionality is for the small, embedded view and is separate
+    // from the main browser control. It remains unchanged.
     ipcMain.on('open-webview', (event, url) => {
         console.log('Received open-webview request for URL:', url);
 
-        // Close existing linkWebView if there is one
         if (linkWebView) {
             try {
                 mainWindow.removeBrowserView(linkWebView);
@@ -123,7 +287,6 @@ function createWindow() {
         }
 
         try {
-            // Create new linkWebView
             linkWebView = new BrowserView({
                 webPreferences: {
                     nodeIntegration: false,
@@ -133,28 +296,20 @@ function createWindow() {
             });
 
             mainWindow.addBrowserView(linkWebView);
-
-            // Get the content bounds for proper sizing
             const contentBounds = mainWindow.getContentBounds();
-
-            // Create a smaller window positioned in the top-right
             const bounds = {
-                x: Math.round(contentBounds.width * 0.65), // Position more to the right
-                y: 100, // A bit from the top
-                width: Math.round(contentBounds.width * 0.30), // 30% of window width
-                height: Math.round(contentBounds.height * 0.5) // 50% of window height
+                x: Math.round(contentBounds.width * 0.65),
+                y: 100,
+                width: Math.round(contentBounds.width * 0.30),
+                height: Math.round(contentBounds.height * 0.5)
             };
-
-            // Set bounds with offset for header and borders
-            // Make the actual linkWebView much smaller to avoid overlapping controls
             linkWebView.setBounds({
-                x: bounds.x + 10, // Add padding for left border
-                y: bounds.y + 60, // Add significant padding for header 
-                width: bounds.width - 20, // Remove width for left and right borders
-                height: bounds.height - 70 // Remove height for header and borders
+                x: bounds.x + 10,
+                y: bounds.y + 60,
+                width: bounds.width - 20,
+                height: bounds.height - 70
             });
 
-            // Set up navigation event handlers
             linkWebView.webContents.on('did-start-loading', () => {
                 mainWindow.webContents.send('webview-navigation-updated', {
                     url: linkWebView.webContents.getURL(),
@@ -170,7 +325,6 @@ function createWindow() {
                     canGoBack: linkWebView.webContents.canGoBack(),
                     canGoForward: linkWebView.webContents.canGoForward()
                 });
-
                 mainWindow.webContents.send('webview-page-loaded');
             });
 
@@ -181,7 +335,6 @@ function createWindow() {
                 });
             });
 
-            // Finally load the URL
             linkWebView.webContents.loadURL(url).then(() => {
                 console.log('URL loaded successfully:', url);
                 mainWindow.webContents.send('webview-created', bounds);
@@ -201,12 +354,11 @@ function createWindow() {
 
     ipcMain.on('resize-webview', (event, bounds) => {
         if (linkWebView) {
-            // Use a more aggressive padding to ensure the content doesn't overlap controls
             linkWebView.setBounds({
-                x: bounds.x + 10, // Add padding for left border
-                y: bounds.y + 60, // Add significant padding for header
-                width: bounds.width - 20, // Remove width for left and right borders
-                height: bounds.height - 70 // Remove height for header and bottom
+                x: bounds.x + 10,
+                y: bounds.y + 60,
+                width: bounds.width - 20,
+                height: bounds.height - 70
             });
         }
     });
@@ -215,8 +367,8 @@ function createWindow() {
         if (linkWebView) {
             const currentBounds = linkWebView.getBounds();
             linkWebView.setBounds({
-                x: x + 10, // Add padding for left border
-                y: y + 60, // Add significant padding for header
+                x: x + 10,
+                y: y + 60,
                 width: currentBounds.width,
                 height: currentBounds.height
             });
@@ -244,14 +396,10 @@ function handleDeepLink(url) {
     if (!url || !url.startsWith('aios://')) return;
     
     try {
-        // Parse the URL
         const urlObj = new URL(url);
-        
-        // Check if it's an auth callback
         if (urlObj.hostname === 'auth-callback') {
             const token = urlObj.searchParams.get('token');
             const refreshToken = urlObj.searchParams.get('refresh_token');
-            
             if (token && mainWindow) {
                 mainWindow.webContents.send('auth-state-changed', { token, refreshToken });
             }
@@ -262,18 +410,16 @@ function handleDeepLink(url) {
 }
 
 // File handling IPC handlers for artifact download
-const fs = require('fs').promises;
+const fsPromises = require('fs').promises;
 
-// Handler for showing save dialog
 ipcMain.handle('show-save-dialog', async (event, options) => {
   const { dialog } = require('electron');
   return await dialog.showSaveDialog(mainWindow, options);
 });
 
-// Handler for saving file content
 ipcMain.handle('save-file', async (event, { filePath, content }) => {
   try {
-    await fs.writeFile(filePath, content, 'utf8');
+    await fsPromises.writeFile(filePath, content, 'utf8');
     return true;
   } catch (error) {
     console.error('Error saving file:', error);
@@ -303,27 +449,21 @@ app.whenReady().then(createWindow);
 
 // Handle deep linking on Windows
 if (process.platform === 'win32') {
-    // For Windows: handle the protocol when app is already running
     app.on('second-instance', (event, commandLine, workingDirectory) => {
-        // Someone tried to run a second instance, we should focus our window.
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
         }
-        
-        // Check for deep link in command line arguments
         const deepLinkUrl = commandLine.find(arg => arg.startsWith('aios://'));
         if (deepLinkUrl) {
             handleDeepLink(deepLinkUrl);
         }
     });
     
-    // For Windows: handle the protocol when app starts
     const gotTheLock = app.requestSingleInstanceLock();
     if (!gotTheLock) {
         app.quit();
     } else {
-        // Check for deep link in process.argv
         const deepLinkArg = process.argv.find(arg => arg.startsWith('aios://'));
         if (deepLinkArg) {
             handleDeepLink(deepLinkArg);
@@ -332,7 +472,6 @@ if (process.platform === 'win32') {
 }
 
 app.on('window-all-closed', () => {
-    // Clean up Python bridge
     if (pythonBridge) {
         try {
             pythonBridge.stop();
@@ -348,7 +487,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
-    // Clean up resources before quitting
+    // --- MODIFIED: Add cleanup for the managed browser ---
+    console.log('App is quitting. Cleaning up resources...');
+    killManagedBrowser(); // Ensure the browser we launched is closed.
+    
     if (linkWebView) {
         try {
             mainWindow.removeBrowserView(linkWebView);
@@ -359,7 +501,6 @@ app.on('before-quit', (event) => {
         }
     }
     
-    // Make sure Python bridge is properly cleaned up
     if (pythonBridge) {
         try {
             pythonBridge.stop();

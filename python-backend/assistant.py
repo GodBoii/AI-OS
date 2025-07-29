@@ -24,6 +24,7 @@ from sandbox_tools import SandboxTools
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
+from browser_tools import BrowserTools
 
 # Other Imports
 from supabase_client import supabase_client
@@ -40,6 +41,8 @@ class PatchedTeam(Team):
 def get_llm_os(
     user_id: Optional[str] = None,
     session_info: Optional[Dict[str, Any]] = None,
+    socketio: Optional[Any] = None,
+    sid: Optional[str] = None,
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
@@ -50,6 +53,7 @@ def get_llm_os(
     enable_github: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
+    browser_control: bool = False,
 ) -> Team:  # The factory now returns a Team instance
     """
     Constructs the hierarchical Aetheria AI multi-agent system.
@@ -68,6 +72,11 @@ def get_llm_os(
     else:
         memory = None
 
+    if browser_control:
+        if session_info and socketio and sid:
+            direct_tools.append(BrowserTools(session_info=session_info, socketio=socketio, sid=sid))
+        else:
+            logger.warning("Browser control enabled, but session_info, socketio, or sid not provided. Tool will not be available.")
     # --- 2. DIRECT TOOL INTEGRATIONS (Unchanged) ---
     # These tools will be used by the top-level coordinator.
     if enable_github and user_id:
@@ -260,6 +269,8 @@ def get_llm_os(
         "Context contains: message, files, images, audio, video objects.",
         "When delegating: Inform sub-teams to use shared context from team_session_state['turn_context'].",
         "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
+        "Interactive Web Browsing -> Use browser tools to view, navigate, and interact with websites on the user's desktop.",
+        "**Very important**:- Use 'browser_view from browser_tools' tool first before using any other browser related tools."
         "Synthesize specialist outputs into clear, actionable responses.",
         "Keep final answers concise and user-focused."
     ]

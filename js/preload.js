@@ -1,3 +1,5 @@
+// preload.js (Complete, Updated with Browser Control Channels)
+
 const { contextBridge, ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +21,9 @@ const validSendChannels = [
     'restart-python-bridge',
     'terminate-session',
     'deepsearch-request',
-    // Browse AI related channels
+    'start-browser',    
+    'stop-browser',     
+    'browser-status-update',
     'open-browse-ai-webview',
     'close-browse-ai-webview',
     'browse-ai-webview-navigate',
@@ -35,7 +39,7 @@ const validReceiveChannels = [
     'socket-error',
     'socket-status',
     'socket-connection-status',
-    'agent-step', 
+    'agent-step',
     'webview-created',
     'webview-closed',
     'webview-navigation-updated',
@@ -43,10 +47,13 @@ const validReceiveChannels = [
     'webview-content-captured',
     'window-state-changed',
     'sandbox-command-started',
-    'sandbox-command-update',  // <-- ADD THIS
+    'sandbox-command-update',
     'sandbox-command-finished',
-
-    // Browse AI related channels
+    'browser-ready',           // Main to Renderer
+    'browser-start-denied',    // Main to Renderer
+    'browser-connection-lost', // Main to Renderer
+    'request-start-browser',   // Main to Renderer (proxied from Python)
+    'request-stop-browser', 
     'browse-ai-webview-created',
     'browse-ai-webview-closed',
     'browse-ai-webview-navigation-updated',
