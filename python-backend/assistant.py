@@ -1,10 +1,17 @@
 import os
 import logging
-from typing import Optional, List, Dict, Any, Set, Union
+from typing import Optional, List, Dict, Any, Set, Union, Iterator
 
 # Agno Core Imports
 from agno.agent import Agent
 from agno.team import Team  # Import the Team class
+from agno.media import Image
+
+from agno.run.team import TeamRunResponseEvent
+from agno.models.response import ModelResponseEvent
+from agno.run.messages import RunMessages
+
+
 from agno.memory.v2.memory import Memory as AgnoMemoryV2
 from agno.storage.postgres import PostgresStorage
 from agno.memory.v2.db.postgres import PostgresMemoryDb
@@ -24,25 +31,22 @@ from sandbox_tools import SandboxTools
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
-from browser_tools import BrowserTools
+from browser_tools import BrowserTools 
 
 # Other Imports
 from supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
 
-# To preserve the custom behavior of not writing to storage on every turn,
-# we create a patched Team class, just as you did for the Agent.
 class PatchedTeam(Team):
     def write_to_storage(self, session_id: str, user_id: Optional[str] = None) -> Optional[Any]:
         logging.debug(f"Turn-by-turn write_to_storage for team session {session_id} is disabled by patch.")
         pass
 
+
 def get_llm_os(
     user_id: Optional[str] = None,
     session_info: Optional[Dict[str, Any]] = None,
-    socketio: Optional[Any] = None,
-    sid: Optional[str] = None,
     calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
@@ -53,7 +57,8 @@ def get_llm_os(
     enable_github: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
-    browser_control: bool = False,
+    enable_browser: bool = False,  # <-- NEW: Flag to enable browser tools
+    browser_tools_config: Optional[Dict[str, Any]] = None,
 ) -> Team:  # The factory now returns a Team instance
     """
     Constructs the hierarchical Aetheria AI multi-agent system.
@@ -72,11 +77,6 @@ def get_llm_os(
     else:
         memory = None
 
-    if browser_control:
-        if session_info and socketio and sid:
-            direct_tools.append(BrowserTools(session_info=session_info, socketio=socketio, sid=sid))
-        else:
-            logger.warning("Browser control enabled, but session_info, socketio, or sid not provided. Tool will not be available.")
     # --- 2. DIRECT TOOL INTEGRATIONS (Unchanged) ---
     # These tools will be used by the top-level coordinator.
     if enable_github and user_id:
@@ -92,6 +92,10 @@ def get_llm_os(
         direct_tools.append(CalculatorTools(add=True, subtract=True, multiply=True, divide=True, exponentiate=True, factorial=True, is_prime=True, square_root=True))
     if internet_search:
         direct_tools.append(GoogleSearchTools(fixed_max_results=15))
+    if enable_browser and browser_tools_config:
+        logger.info("Browser tools are enabled and configured. Initializing BrowserTools.")
+        direct_tools.append(BrowserTools(**browser_tools_config))
+
 
     # --- 3. SPECIALIST AGENT AND TEAM DEFINITIONS ---
     main_team_members: List[Union[Agent, Team]] = []
@@ -269,8 +273,9 @@ def get_llm_os(
         "Context contains: message, files, images, audio, video objects.",
         "When delegating: Inform sub-teams to use shared context from team_session_state['turn_context'].",
         "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
-        "Interactive Web Browsing -> Use browser tools to view, navigate, and interact with websites on the user's desktop.",
-        "**Very important**:- Use 'browser_view from browser_tools' tool first before using any other browser related tools."
+        "You have access to a web browser on the user's machine via browser_tools.",
+        "Start by using browser_tools.get_status() to ensure connection.",
+        "Use browser_tools.get_current_view() to see the page and get element IDs for clicks/typing.",
         "Synthesize specialist outputs into clear, actionable responses.",
         "Keep final answers concise and user-focused."
     ]

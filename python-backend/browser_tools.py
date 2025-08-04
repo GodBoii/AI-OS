@@ -1,240 +1,399 @@
 # python-backend/browser_tools.py
 
-import os
 import logging
-import asyncio
-import json
-from typing import Dict, Any, List, Optional
+import uuid
+import base64
+from typing import Dict, Any, Literal, Optional, List
 
-# Use eventlet for cooperative multitasking, compatible with Flask-SocketIO
 import eventlet
+from agno.agent import Agent
 from agno.tools import Toolkit
-from browser_use.llm import ChatGoogle
+from agno.models.google import Gemini
+from agno.media import Image
+from supabase_client import supabase_client
 
-# Import browser-use components
-from browser_use import Agent as BrowserUseAgent, BrowserSession, AgentHistoryList
+BROWSER_COMMAND_TIMEOUT_SECONDS = 120
 
 logger = logging.getLogger(__name__)
 
-# This global dictionary will store eventlet Events to signal when a browser is ready
-browser_ready_events: Dict[str, eventlet.event.Event] = {}
-
 class BrowserTools(Toolkit):
     """
-    A state-aware toolkit for controlling a user's local browser.
-    It orchestrates the browser's lifecycle via the Electron client and uses
-    the browser-use library to perform web automation tasks.
+    A toolkit that acts as a server-side proxy for controlling a browser on the client's machine.
+    It intelligently uses a vision model to describe screenshots, providing a token-efficient
+    summary of the webpage's visual content to the main agent.
     """
 
-    def __init__(self, session_info: Dict[str, Any], socketio, sid: str):
+    def __init__(self, sid: str, socketio, waiting_events: Dict[str, eventlet.event.Event]):
         """
         Initializes the BrowserTools toolkit.
 
         Args:
-            session_info (Dict[str, Any]): The state dictionary for the current user session.
-            socketio: The Flask-SocketIO server instance for client communication.
-            sid (str): The client's unique session ID for targeted communication.
+            sid (str): The unique Socket.IO session ID for the connected client.
+            socketio: The main Flask-SocketIO server instance.
+            waiting_events (Dict): A shared dictionary to store eventlet events.
         """
+        self.sid = sid
+        self.socketio = socketio
+        self.waiting_events = waiting_events
+        
+        # --- MODIFICATION START (Phase 1) ---
+        # Initialize conversation_history as None. It will be injected Just-In-Time.
+        self.conversation_history: Optional[List[Dict[str, Any]]] = None
+        # --- MODIFICATION END ---
+
+        from agno.agent import Agent
+        self.vision_agent = Agent(
+            name="Vision_Agent",
+            model=Gemini(id="gemini-2.5-flash-lite"),
+        )
+
         super().__init__(
             name="browser_tools",
             tools=[
-                self.browser_view,
-                self.browser_navigate,
-                self.browser_click,
-                self.browser_input,
-                self.browser_scroll,
-                self.close_browser,
-            ]
-        )
-        self.session_info = session_info
-        self.socketio = socketio
-        self.sid = sid
-        self.cdp_url = "http://host.docker.internal:9222"
-        # Use a capable but cost-effective model for browser-use's internal planning
-        self.browser_llm = ChatGoogle(model='gemini-2.0-flash')
-
-    def _process_browser_history(self, history: AgentHistoryList) -> str:
-        """
-        Processes the result from a browser-use run into a concise,
-        LLM-friendly string format.
-        """
-        if not history or len(history) == 0:
-            return "No action was taken or the page is empty."
-
-        final_step = history[-1]
-        
-        # Extract key information from the final observation
-        url = final_step.observation.get("url", "N/A")
-        page_title = final_step.observation.get("page_title", "N/A")
-        markdown = final_step.observation.get("markdown", "No content extracted.")
-        interactive_elements = final_step.observation.get("interactive_elements", [])
-
-        # Format the interactive elements list
-        elements_summary = "\n".join(
-            [f"- Element {el['index']}: {el['element']} (Type: {el['type']})" for el in interactive_elements]
+                # Existing Tools
+                self.get_status,
+                self.navigate,
+                self.get_current_view,
+                self.click,
+                self.type_text,
+                self.scroll,
+                self.go_back,
+                self.go_forward,
+                # New Tools
+                self.list_tabs,
+                self.open_new_tab,
+                self.switch_to_tab,
+                self.close_tab,
+                self.hover_over_element,
+                self.select_dropdown_option,
+                self.handle_alert,
+                self.press_key,
+                self.extract_text_from_element,
+                self.get_element_attributes,
+                self.extract_table_data,
+                self.refresh_page,
+                self.wait_for_element,
+                self.manage_cookies,
+            ],
         )
 
-        # Assemble the final report string
-        report = (
-            f"Current URL: {url}\n"
-            f"Page Title: {page_title}\n\n"
-            f"--- Visible Interactive Elements ---\n"
-            f"{elements_summary}\n\n"
-            f"--- Page Content (Markdown) ---\n"
-            f"{markdown}"
-        )
-        return report
-
-    def _ensure_browser_is_ready(self) -> bool:
+    def _get_image_description(self, image_bytes: bytes) -> str:
         """
-        Ensures the managed browser is running. If not, it requests the client
-        to launch it and waits for confirmation.
-        """
-        conversation_id = self.session_info.get("conversation_id")
-        if not conversation_id:
-            logger.error("Cannot ensure browser readiness without a conversation_id.")
-            return False
-
-        if self.session_info.get('browser_active', False):
-            logger.info("Browser is already active for this session.")
-            return True
-
-        # Create a new event for this specific request
-        ready_event = eventlet.event.Event()
-        browser_ready_events[conversation_id] = ready_event
-
-        try:
-            logger.info(f"Requesting client to start browser for conversation: {conversation_id}")
-            self.socketio.emit('request-start-browser', {'conversationId': conversation_id}, room=self.sid)
-
-            # Wait for the client to confirm, with a timeout
-            with eventlet.Timeout(30, TimeoutError("Client did not respond to browser start request.")):
-                browser_is_ready = ready_event.wait()
-
-            if browser_is_ready:
-                logger.info("Client confirmed browser is ready.")
-                self.session_info['browser_active'] = True
-                return True
-            else:
-                logger.warning("Client reported that browser start was denied or failed.")
-                self.session_info['browser_active'] = False
-                return False
-
-        except TimeoutError as e:
-            logger.error(f"Timeout waiting for browser to become ready: {e}")
-            return False
-        finally:
-            # Clean up the event from the global dictionary
-            if conversation_id in browser_ready_events:
-                del browser_ready_events[conversation_id]
-
-    async def _run_browser_task_async(self, task: str) -> str:
-        """
-        The core async function that executes a task using the browser-use library.
+        Uses a dedicated vision agent to generate a text description of a screenshot,
+        using the conversation history for context.
         """
         try:
-            browser_session = BrowserSession(cdp_url=self.cdp_url)
-            browser_agent = BrowserUseAgent(
-                task=task,
-                llm=self.browser_llm,
-                browser_session=browser_session
-            )
-            history = await browser_agent.run(max_steps=5) # Limit steps to prevent runaway actions
-            return self._process_browser_history(history)
-        except Exception as e:
-            logger.error(f"An error occurred during browser-use execution: {e}", exc_info=True)
-            # Check for common connection error to provide a better message
-            if "ECONNREFUSED" in str(e):
-                self.session_info['browser_active'] = False # Reset state
-                return "Error: Could not connect to the browser. It might have been closed. Please try the action again to relaunch it."
-            return f"An unexpected error occurred while controlling the browser: {str(e)}"
-
-    # --- Public Tools for the AI Agent ---
-
-    def browser_view(self) -> str:
-        """
-        Captures the current state of the browser, providing a list of interactive elements and a markdown representation of the visible content.
-        This should be the first tool you use to understand what's on the page.
-        """
-        if not self._ensure_browser_is_ready():
-            return "Browser could not be started. The user may have denied the request."
-        
-        return asyncio.run(self._run_browser_task_async("Get the current page state and list all interactive elements."))
-
-    def browser_navigate(self, url: str) -> str:
-        """
-        Navigates the browser to a specific URL.
-
-        Args:
-            url (str): The full URL to navigate to (e.g., 'https://www.google.com').
-        """
-        if not self._ensure_browser_is_ready():
-            return "Browser could not be started. The user may have denied the request."
-        
-        return asyncio.run(self._run_browser_task_async(f"Navigate to the URL: {url}"))
-
-    def browser_click(self, element_index: int, description: Optional[str] = None) -> str:
-        """
-        Clicks on an interactive element on the page, identified by its index from the last `browser_view`.
-
-        Args:
-            element_index (int): The numerical index of the element to click.
-            description (str, optional): A brief description of the element for confirmation (e.g., 'the login button').
-        """
-        if not self._ensure_browser_is_ready():
-            return "Browser could not be started. The user may have denied the request."
-        
-        task = f"Click on the element with index {element_index}"
-        if description:
-            task += f", which is described as '{description}'."
-        
-        return asyncio.run(self._run_browser_task_async(task))
-
-    def browser_input(self, element_index: int, text: str, description: Optional[str] = None) -> str:
-        """
-        Types text into an input field on the page, identified by its index.
-
-        Args:
-            element_index (int): The numerical index of the input field.
-            text (str): The text to type into the field.
-            description (str, optional): A brief description of the input field (e.g., 'the username field').
-        """
-        if not self._ensure_browser_is_ready():
-            return "Browser could not be started. The user may have denied the request."
-        
-        task = f"Type the text '{text}' into the element with index {element_index}"
-        if description:
-            task += f", which is described as '{description}'."
+            logger.info("Getting image description from vision model...")
             
-        return asyncio.run(self._run_browser_task_async(task))
+            # Format the conversation history for the prompt
+            formatted_history = "No conversation history available for this turn."
+            if self.conversation_history:
+                history_lines = []
+                for turn in self.conversation_history:
+                    role = "User" if turn.get("role") == "user" else "Assistant"
+                    content = turn.get("content", "").strip()
+                    if content:
+                        # Truncate long assistant responses to keep the prompt focused
+                        if role == "Assistant" and len(content) > 500:
+                            content = content[:500] + "..."
+                        history_lines.append(f"{role}: {content}")
+                if history_lines:
+                    formatted_history = "\n".join(history_lines)
 
-    def browser_scroll(self, direction: str) -> str:
+            # Construct the new, context-aware prompt
+            prompt = (
+                f"""You are a specialized vision assistant that analyzes browser screenshots to help a main AI agent interact with websites accurately. Your role is to provide extremely detailed descriptions that enable precise web automation.
+
+CONVERSATION CONTEXT:
+<conversation_history>
+{formatted_history}
+</conversation_history>
+
+INSTRUCTIONS:
+1. **Context-Aware Analysis**: First, analyze if the user's current request (from conversation history) can be fulfilled by information visible in this screenshot. If so, prioritize describing those specific elements in detail.
+
+2. **Comprehensive Description**: Always provide a complete, detailed description of the screenshot including:
+
+**PAGE STRUCTURE & LAYOUT:**
+- Page title and URL (if visible)
+- Overall layout structure (header, main content, sidebar, footer)
+- Navigation elements and menu structures
+- Content organization and hierarchy
+
+**VISUAL ELEMENTS:**
+- All text content (headings, paragraphs, labels, buttons, links)
+- Images, icons, and graphics with their positions
+- Colors, styling, and visual design elements
+- Spacing, alignment, and visual hierarchy
+
+**INTERACTIVE ELEMENTS:**
+- All clickable elements (buttons, links, form controls)
+- Form fields (input boxes, dropdowns, checkboxes, radio buttons)
+- Element positions and their relationships to each other
+- Any hover states or visual indicators
+
+**SPECIFIC DETAILS:**
+- Element positioning (left, right, center, top, bottom)
+- Colors of text, backgrounds, and UI elements
+- Sizes and proportions of elements
+- Any error messages, notifications, or status indicators
+- Loading states or dynamic content
+
+**CONTENT ANALYSIS:**
+- Main content topics and subjects
+- Any people, objects, or scenes in images
+- Specific details about visual content that might be relevant to user queries
+- Data in tables, lists, or structured formats
+
+3. **Request Fulfillment**: If the user's request involves specific visual information (like "what color shirt is the person wearing" or "find the login button"), describe these elements with extra detail and clarity.
+
+4. **Technical Information**: Include any technical details visible like:
+- Form validation states
+- Element accessibility features
+- Dynamic content or animations
+- Browser UI elements if relevant
+
+Provide your analysis in a clear, structured format that gives the main agent all necessary information to understand and interact with the webpage effectively."""
+            )
+            
+            image = Image(content=image_bytes)
+            response = self.vision_agent.run(prompt, images=[image])
+            
+            description = response.content if response.content else "Could not generate a description for the image."
+            logger.info(f"Vision model description: {description[:1000000]}...")
+            return description
+        except Exception as e:
+            logger.error(f"Error getting image description from vision model: {e}", exc_info=True)
+            return "Error: Failed to analyze the screenshot with the vision model."
+
+    def _process_view_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        if result.get("status") == "success" and "screenshot_path" in result:
+            screenshot_path = result.pop("screenshot_path")
+            try:
+                logger.info(f"Downloading screenshot from Supabase path: {screenshot_path}")
+                image_bytes = supabase_client.storage.from_('media-uploads').download(screenshot_path)
+                description = self._get_image_description(image_bytes)
+                result["screenshot_description"] = description
+            except Exception as e:
+                logger.error(f"Failed to download or process screenshot from {screenshot_path}: {e}")
+                result["screenshot_description"] = f"Error: Could not retrieve screenshot from path {screenshot_path}."
+        return result
+
+    def _send_command_and_wait(self, command_payload: Dict[str, Any]) -> Dict[str, Any]:
+        request_id = str(uuid.uuid4())
+        command_payload['request_id'] = request_id
+        
+        response_event = eventlet.event.Event()
+        self.waiting_events[request_id] = response_event
+
+        try:
+            self.socketio.emit('browser-command', command_payload, room=self.sid)
+            logger.info(f"Sent command '{command_payload['action']}' to client {self.sid} with request_id {request_id}")
+
+            result = response_event.wait(timeout=BROWSER_COMMAND_TIMEOUT_SECONDS)
+            
+            if "screenshot_path" in result:
+                return self._process_view_result(result)
+            return result
+        except eventlet.timeout.Timeout:
+            logger.error(f"Timeout: Did not receive a response from the client for request_id {request_id}")
+            return {"status": "error", "error": "The browser on the client machine did not respond in time."}
+        finally:
+            self.waiting_events.pop(request_id, None)
+
+    # --- Public Tool Methods (Unchanged) ---
+    def get_status(self) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'status'})
+
+    def navigate(self, url: str) -> Dict[str, Any]:
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+        return self._send_command_and_wait({'action': 'navigate', 'url': url})
+
+    def get_current_view(self) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'get_view'})
+
+    def click(self, element_id: int, description: str) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'click', 'element_id': element_id})
+
+    def type_text(self, element_id: int, text: str, description: str) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'type', 'element_id': element_id, 'text': text})
+
+    def scroll(self, direction: Literal['up', 'down']) -> Dict[str, Any]:
+        if direction not in ['up', 'down']:
+            return {"status": "error", "error": "Invalid scroll direction. Must be 'up' or 'down'."}
+        return self._send_command_and_wait({'action': 'scroll', 'direction': direction})
+
+    def go_back(self) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'go_back'})
+
+    def go_forward(self) -> Dict[str, Any]:
+        return self._send_command_and_wait({'action': 'go_forward'})
+
+        # Add these new methods inside the BrowserTools class
+
+    # --- 1. Tab Management Tools ---
+    def list_tabs(self) -> Dict[str, Any]:
         """
-        Scrolls the browser page up or down.
+        Returns a list of all currently open browser tabs. Each tab is represented
+        by a dictionary containing its 'index', 'title', and 'url'.
+        """
+        return self._send_command_and_wait({'action': 'list_tabs'})
+
+    def open_new_tab(self, url: str) -> Dict[str, Any]:
+        """
+        Opens a new browser tab and navigates to the specified URL, making it the active tab.
 
         Args:
-            direction (str): The direction to scroll. Must be either 'up' or 'down'.
-        """
-        if direction not in ['up', 'down']:
-            return "Error: Invalid scroll direction. Please use 'up' or 'down'."
+            url (str): The URL to open in the new tab.
         
-        if not self._ensure_browser_is_ready():
-            return "Browser could not be started. The user may have denied the request."
+        Returns: A view of the new page after navigation.
+        """
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+        return self._send_command_and_wait({'action': 'open_new_tab', 'url': url})
+
+    def switch_to_tab(self, tab_index: int) -> Dict[str, Any]:
+        """
+        Switches the browser's focus to the tab at the specified index.
+        The index for each tab can be found by calling the 'list_tabs' tool.
+
+        Args:
+            tab_index (int): The index of the tab to switch to.
         
-        return asyncio.run(self._run_browser_task_async(f"Scroll the page {direction}."))
-
-    def close_browser(self) -> str:
+        Returns: A view of the page in the newly active tab.
         """
-        Closes the managed browser session on the user's desktop.
+        return self._send_command_and_wait({'action': 'switch_to_tab', 'tab_index': tab_index})
+
+    def close_tab(self, tab_index: int) -> Dict[str, Any]:
         """
-        conversation_id = self.session_info.get("conversation_id")
-        if not conversation_id:
-            return "Error: Cannot close browser without a conversation_id."
+        Closes the browser tab at the specified index.
 
-        if not self.session_info.get('browser_active', False):
-            return "Browser is not currently active."
+        Args:
+            tab_index (int): The index of the tab to close, obtained from 'list_tabs'.
+        
+        Returns: A status message indicating success or failure.
+        """
+        return self._send_command_and_wait({'action': 'close_tab', 'tab_index': tab_index})
 
-        logger.info(f"Requesting client to stop browser for conversation: {conversation_id}")
-        self.socketio.emit('request-stop-browser', {'conversationId': conversation_id}, room=self.sid)
-        self.session_info['browser_active'] = False
-        return "Browser has been closed."
+    # --- 2. Advanced Interaction Tools ---
+    def hover_over_element(self, element_id: int) -> Dict[str, Any]:
+        """
+        Simulates hovering the mouse cursor over a specific element.
+        Useful for revealing hidden menus or tooltips that appear on hover.
+
+        Args:
+            element_id (int): The ID of the element to hover over.
+        
+        Returns: A view of the page after the hover action.
+        """
+        return self._send_command_and_wait({'action': 'hover', 'element_id': element_id})
+
+    def select_dropdown_option(self, element_id: int, value: str) -> Dict[str, Any]:
+        """
+        Selects an option from a <select> dropdown menu.
+
+        Args:
+            element_id (int): The ID of the <select> element.
+            value (str): The 'value' attribute of the <option> to be selected.
+        
+        Returns: A view of the page after the selection.
+        """
+        return self._send_command_and_wait({'action': 'select_option', 'element_id': element_id, 'value': value})
+
+    def handle_alert(self, action: Literal['accept', 'dismiss']) -> Dict[str, Any]:
+        """
+        Handles a native browser pop-up alert by either accepting ('OK') or dismissing ('Cancel') it.
+
+        Args:
+            action (str): The action to perform. Must be either 'accept' or 'dismiss'.
+        
+        Returns: A status message.
+        """
+        if action not in ['accept', 'dismiss']:
+            return {"status": "error", "error": "Invalid alert action. Must be 'accept' or 'dismiss'."}
+        return self._send_command_and_wait({'action': 'handle_alert', 'alert_action': action})
+
+    def press_key(self, key: str) -> Dict[str, Any]:
+        """
+        Simulates a single keyboard press on the current page. Useful for submitting forms ('Enter'),
+        closing modals ('Escape'), or navigating menus ('ArrowDown', 'ArrowUp', 'Tab').
+
+        Args:
+            key (str): The key to press. Allowed keys are: 'Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp'.
+        
+        Returns: A view of the page after the key press.
+        """
+        allowed_keys = {'Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp'}
+        if key not in allowed_keys:
+            return {"status": "error", "error": f"Invalid key. Allowed keys are: {', '.join(allowed_keys)}"}
+        return self._send_command_and_wait({'action': 'press_key', 'key': key})
+
+    # --- 3. Data Extraction Tools ---
+    def extract_text_from_element(self, element_id: int) -> str:
+        """
+        Extracts all the text content from a single element, such as a paragraph or an article body.
+
+        Args:
+            element_id (int): The ID of the element from which to extract text.
+        
+        Returns: The text content of the element as a string.
+        """
+        return self._send_command_and_wait({'action': 'extract_text', 'element_id': element_id})
+
+    def get_element_attributes(self, element_id: int) -> Dict[str, Any]:
+        """
+        Gets all attributes of a specific element, such as 'href' for a link or 'src' for an image.
+
+        Args:
+            element_id (int): The ID of the element.
+        
+        Returns: A dictionary of the element's attributes.
+        """
+        return self._send_command_and_wait({'action': 'get_attributes', 'element_id': element_id})
+
+    def extract_table_data(self, element_id: int) -> str:
+        """
+        Extracts data from a <table> element and returns it in a structured Markdown format.
+
+        Args:
+            element_id (int): The ID of the <table> element.
+        
+        Returns: A Markdown formatted string of the table data.
+        """
+        return self._send_command_and_wait({'action': 'extract_table', 'element_id': element_id})
+
+    # --- 4. Browser State & Environment Tools ---
+    def refresh_page(self) -> Dict[str, Any]:
+        """
+        Reloads the current browser page.
+        
+        Returns: A view of the page after it has been refreshed.
+        """
+        return self._send_command_and_wait({'action': 'refresh'})
+
+    def wait_for_element(self, selector: str, timeout: int = 10) -> Dict[str, Any]:
+        """
+        Pauses execution until an element matching the CSS selector appears on the page.
+
+        Args:
+            selector (str): The CSS selector to wait for (e.g., '#my-id', '.my-class', 'div > p').
+            timeout (int): The maximum time to wait in seconds. Defaults to 10.
+        
+        Returns: A status message indicating if the element was found.
+        """
+        return self._send_command_and_wait({'action': 'wait_for_element', 'selector': selector, 'timeout': timeout})
+
+    def manage_cookies(self, action: Literal['accept_all', 'clear_all']) -> Dict[str, Any]:
+        """
+        Performs common cookie operations. 'accept_all' attempts to click a common cookie consent button.
+        'clear_all' removes all cookies for the current site.
+
+        Args:
+            action (str): The cookie action to perform. Must be 'accept_all' or 'clear_all'.
+        
+        Returns: A status message and a view of the page after the action.
+        """
+        if action not in ['accept_all', 'clear_all']:
+            return {"status": "error", "error": "Invalid cookie action. Must be 'accept_all' or 'clear_all'."}
+        return self._send_command_and_wait({'action': 'manage_cookies', 'cookie_action': action})

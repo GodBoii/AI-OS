@@ -1,4 +1,4 @@
-// chat.js (Complete, Updated Version with Corrected IPC Flow)
+// chat.js (Complete, Updated Version)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
@@ -22,8 +22,7 @@ let chatConfig = {
         web_crawler: true,
         enable_github: true,
         enable_google_email: true,
-        enable_google_drive: true,
-        browser_control: false
+        enable_google_drive: true
     },
     deepsearch: false
 };
@@ -63,15 +62,9 @@ function startNewConversation() {
 
     chatConfig = {
         memory: false, tasks: false,
-        tools: {
-            calculator: true, internet_search: true, coding_assistant: true,
-            investment_assistant: true, web_crawler: true, enable_github: true,
-            enable_google_email: true, enable_google_drive: true,
-            browser_control: false
-        },
+        tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
         deepsearch: false
     };
-    
     const aiOsCheckbox = document.getElementById('ai_os');
     if (aiOsCheckbox) aiOsCheckbox.checked = true;
     
@@ -80,56 +73,15 @@ function startNewConversation() {
 
     const deepSearchCheckbox = document.getElementById('deep_search');
     if (deepSearchCheckbox) deepSearchCheckbox.checked = false;
-
-    const browserControlCheckbox = document.getElementById('browser_control');
-    if (browserControlCheckbox) browserControlCheckbox.checked = false;
     
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
     if (window.updateToolsIndicator) window.updateToolsIndicator();
 }
 
 /**
- * Set up IPC listeners for communication with python-bridge.js and main.js
+ * Set up IPC listeners for communication with python-bridge.js
  */
 function setupIpcListeners() {
-    // --- START: CORRECTED BROWSER CONTROL LISTENERS ---
-
-    // Listen for proxied requests from the main process (originating from Python)
-    ipcRenderer.on('request-start-browser', (data) => {
-        console.log('Received proxied request to start browser for conversation:', data.conversationId);
-        // Forward the request to the main process to handle UI dialogs and process spawning
-        ipcRenderer.send('start-browser', { conversationId: data.conversationId });
-    });
-
-    ipcRenderer.on('request-stop-browser', (data) => {
-        console.log('Received proxied request to stop browser for conversation:', data.conversationId);
-        ipcRenderer.send('stop-browser', { conversationId: data.conversationId });
-    });
-
-    // Listen for status updates from the main process and relay them back to the main process
-    // which will then forward them to the Python backend.
-    ipcRenderer.on('browser-ready', () => {
-        console.log('Browser is ready. Notifying main process to relay to server.');
-        ipcRenderer.send('browser-status-update', { ready: true, conversationId: currentConversationId });
-    });
-
-    ipcRenderer.on('browser-start-denied', () => {
-        console.log('User denied browser start. Notifying main process to relay to server.');
-        ipcRenderer.send('browser-status-update', { ready: false, conversationId: currentConversationId });
-        showNotification('Browser control was cancelled by the user.', 'info');
-    });
-
-    ipcRenderer.on('browser-connection-lost', () => {
-        showNotification('The controlled browser was closed. Browser tools are now disabled.', 'error');
-        chatConfig.tools.browser_control = false;
-        const browserControlCheckbox = document.getElementById('browser_control');
-        if (browserControlCheckbox) browserControlCheckbox.checked = false;
-        if (window.updateToolsIndicator) window.updateToolsIndicator();
-    });
-
-    // --- END: CORRECTED BROWSER CONTROL LISTENERS ---
-
-
     ipcRenderer.on('socket-connection-status', (data) => {
         connectionStatus = data.connected;
         if (data.connected) {
@@ -200,7 +152,7 @@ function setupIpcListeners() {
         if (!messageId || !ongoingStreams[messageId]) return;
     
         const messageDiv = ongoingStreams[messageId];
-        const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
+        const toolName = name.replace(/_/g, ' ');
         const ownerName = agent_name || team_name || 'Assistant';
         const stepId = `step-${messageId}-${ownerName}-${name}`;
     
@@ -233,7 +185,7 @@ function setupIpcListeners() {
                 }
             }
             
-            if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
+            if (name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
                 if (window.artifactHandler) {
                     console.log("Detected browser tool output. Showing artifact.");
                     window.artifactHandler.showArtifact('browser_view', tool.tool_output);
@@ -299,7 +251,6 @@ function setupIpcListeners() {
     ipcRenderer.send('check-socket-connection');
 }
 
-// This function remains unchanged
 function showConnectionError(message = 'Connecting to server...') {
     let errorDiv = document.querySelector('.connection-error');
     if (!errorDiv) {
@@ -320,7 +271,6 @@ function showConnectionError(message = 'Connecting to server...') {
     });
 }
 
-// This function remains unchanged
 function addUserMessage(message, turnContextData = null) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
@@ -354,7 +304,6 @@ function addUserMessage(message, turnContextData = null) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// This function remains unchanged
 function createBotMessagePlaceholder(messageId) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
@@ -380,7 +329,6 @@ function createBotMessagePlaceholder(messageId) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// This function remains unchanged
 function populateBotMessage(data) {
     const { content, id: messageId, streaming = false, agent_name, team_name, is_log } = data;
     const messageDiv = ongoingStreams[messageId];
@@ -434,7 +382,6 @@ function populateBotMessage(data) {
     }
 }
 
-// This function remains unchanged
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');
     const message = floatingInput.value.trim();
@@ -523,53 +470,30 @@ async function handleSendMessage() {
     contextHandler.clearSelectedContext();
 }
 
-// --- MODIFIED: Added Browser Control toggle ---
 function initializeToolsMenu() {
     const toolsBtn = document.querySelector('[data-tool="tools"]');
     const toolsMenu = toolsBtn.querySelector('.tools-menu');
     const aiOsCheckbox = document.getElementById('ai_os');
-
-    // Add DeepSearch toggle dynamically
     const deepSearchDiv = document.createElement('div');
     deepSearchDiv.className = 'tool-item';
     deepSearchDiv.innerHTML = `<input type="checkbox" id="deep_search" /><label for="deep_search"><i class="fa-solid fa-magnifying-glass"></i>DeepSearch</label>`;
     toolsMenu.appendChild(deepSearchDiv);
-
-    // --- NEW: Add Browser Control toggle dynamically ---
-    const browserControlDiv = document.createElement('div');
-    browserControlDiv.className = 'tool-item';
-    browserControlDiv.innerHTML = `<input type="checkbox" id="browser_control" /><label for="browser_control"><i class="fa-solid fa-window-maximize"></i>Browser Control</label>`;
-    toolsMenu.appendChild(browserControlDiv);
-
     const deepSearchCheckbox = document.getElementById('deep_search');
-    const browserControlCheckbox = document.getElementById('browser_control'); // Get the new checkbox
-
-    // Set initial states
     const allToolsEnabledInitially = Object.values(chatConfig.tools).every(val => val === true);
     aiOsCheckbox.checked = allToolsEnabledInitially;
     deepSearchCheckbox.checked = chatConfig.deepsearch;
-    browserControlCheckbox.checked = chatConfig.tools.browser_control; // Set its initial state
-
     window.updateToolsIndicator = function() {
-        // Update indicator based on any active tool
-        const anyActive = aiOsCheckbox.checked || deepSearchCheckbox.checked || browserControlCheckbox.checked;
+        const anyActive = aiOsCheckbox.checked || deepSearchCheckbox.checked;
         toolsBtn.classList.toggle('has-active', anyActive);
     };
-
     toolsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         toolsBtn.classList.toggle('active');
         toolsMenu.classList.toggle('visible');
     });
-
     aiOsCheckbox.addEventListener('change', (e) => {
         const enableAll = e.target.checked;
-        for (const key in chatConfig.tools) {
-            // Don't automatically enable browser control with the main toggle
-            if (key !== 'browser_control') {
-                chatConfig.tools[key] = enableAll;
-            }
-        }
+        for (const key in chatConfig.tools) chatConfig.tools[key] = enableAll;
         if (enableAll) {
             deepSearchCheckbox.checked = false;
             chatConfig.deepsearch = false;
@@ -577,7 +501,6 @@ function initializeToolsMenu() {
         window.updateToolsIndicator();
         e.stopPropagation();
     });
-
     deepSearchCheckbox.addEventListener('change', (e) => {
         chatConfig.deepsearch = e.target.checked;
         if (e.target.checked) {
@@ -587,26 +510,15 @@ function initializeToolsMenu() {
         window.updateToolsIndicator();
         e.stopPropagation();
     });
-
-    // --- NEW: Event listener for the browser control toggle ---
-    browserControlCheckbox.addEventListener('change', (e) => {
-        chatConfig.tools.browser_control = e.target.checked;
-        // Browser control is independent of other tools
-        window.updateToolsIndicator();
-        e.stopPropagation();
-    });
-
     document.addEventListener('click', (e) => {
         if (!toolsBtn.contains(e.target)) {
             toolsBtn.classList.remove('active');
             toolsMenu.classList.remove('visible');
         }
     });
-
     window.updateToolsIndicator();
 }
 
-// This function remains unchanged
 function handleMemoryToggle() {
     const memoryBtn = document.querySelector('[data-tool="memory"]');
     memoryBtn.addEventListener('click', () => {
@@ -615,7 +527,6 @@ function handleMemoryToggle() {
     });
 }
 
-// This function remains unchanged
 function handleTasksToggle() {
     const tasksBtn = document.querySelector('[data-tool="tasks"]');
     tasksBtn.addEventListener('click', () => {
@@ -624,7 +535,6 @@ function handleTasksToggle() {
     });
 }
 
-// This function remains unchanged
 async function terminateSession(conversationIdToTerminate) {
     if (!conversationIdToTerminate) return;
 
@@ -641,7 +551,6 @@ async function terminateSession(conversationIdToTerminate) {
     });
 }
 
-// This function remains unchanged
 function initializeAutoExpandingTextarea() {
     const textarea = document.getElementById('floating-input');
     textarea.addEventListener('input', function() {
@@ -650,7 +559,6 @@ function initializeAutoExpandingTextarea() {
     });
 }
 
-// This function remains unchanged
 function showNotification(message, type = 'error', duration = 10000) {
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
@@ -678,7 +586,6 @@ function showNotification(message, type = 'error', duration = 10000) {
     }, duration);
 }
 
-// This class remains unchanged
 class UnifiedPreviewHandler {
     constructor(contextHandler, fileAttachmentHandler) {
         this.contextHandler = contextHandler;

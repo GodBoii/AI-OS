@@ -64,6 +64,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.10",
     "audio-decode": "^2.2.2",
+    "axios": "^1.11.0",
     "dompurify": "^3.2.4",
     "dotenv": "^16.4.7",
     "highlight.js": "^11.11.1",
@@ -75,6 +76,7 @@
     "node-wav": "^0.0.2",
     "pdf-parse": "^1.1.1",
     "prismjs": "^1.29.0",
+    "puppeteer-core": "^24.15.0",
     "socket.io-client": "^4.8.1",
     "tesseract.js": "^6.0.0",
     "turndown": "^7.2.0",

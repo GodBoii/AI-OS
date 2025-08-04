@@ -3,61 +3,53 @@ const io = require('socket.io-client');
 const config = require('./config');
 
 class PythonBridge {
-    constructor(mainWindow) {
+    constructor(mainWindow, eventEmitter) {
         this.mainWindow = mainWindow;
+        this.eventEmitter = eventEmitter;
+        this.browserController = null; // <-- FIX: To hold a reference to the browser controller
         this.socket = null;
         this.initialized = false;
-        this.reconnectAttempts = 0; // Reset on successful connect
+        this.reconnectAttempts = 0;
         this.maxReconnectAttempts = config.backend.maxReconnectAttempts;
         this.reconnectDelay = config.backend.reconnectDelay;
         this.ongoingStreams = {};
-
-        // Get configuration for the Docker container from config.js
         this.serverUrl = config.backend.url;
     }
 
+    /**
+     * FIX: Adds the missing function to allow main.js to link the modules.
+     * @param {BrowserController} controller - The instance of the browser controller.
+     */
+    setBrowserController(controller) {
+        this.browserController = controller;
+    }
+
     async start() {
-        console.log(`Connecting to Docker container at ${this.serverUrl}...`);
+        console.log(`Connecting to backend server at ${this.serverUrl}...`);
         this.setupIpcHandlers();
         await this.connectWebSocket();
     }
 
     setupIpcHandlers() {
-        // Handle messages from chat.js to send to Python backend
+        // This method is unchanged and correctly handles communication from the renderer.
         ipcMain.on('send-message', (event, data) => {
             this.sendMessage(data);
         });
 
-        // --- NEW: Listen for browser status updates from the renderer and relay to Python ---
-        ipcMain.on('browser-status-update', (event, data) => {
-            if (this.socket && this.socket.connected) {
-                console.log('Relaying browser status update to Python server:', data);
-                this.socket.emit('browser-status-update', data);
-            } else {
-                console.error('Cannot relay browser status: Socket not connected.');
-            }
-        });
-
-        // Handle session termination requests, now with authentication data
         ipcMain.on('terminate-session', (event, data) => {
             this.sendMessage({
                 type: 'terminate_session',
                 message: 'terminate',
-                // Pass the accessToken from the data object received from chat.js
-                accessToken: data ? data.accessToken : null
+                accessToken: data ? data.accessToken : null,
+                conversationId: data.conversationId
             });
-        });
-
-        // Legacy handler for backward compatibility
-        ipcMain.on('python-message', (event, message) => {
-            this.sendMessage(message);
         });
 
         ipcMain.on('check-connection-status', () => {
             if (this.socket && this.socket.connected) {
-                this.mainWindow.webContents.send('socket-connect');
+                this.mainWindow.webContents.send('socket-connection-status', { connected: true });
             } else {
-                this.mainWindow.webContents.send('socket-disconnect');
+                this.mainWindow.webContents.send('socket-connection-status', { connected: false });
             }
         });
 
@@ -66,14 +58,20 @@ class PythonBridge {
             this.stop();
             setTimeout(() => this.start(), 1000);
         });
+
+        // Listen for browser command results from the BrowserHandler
+        this.eventEmitter.on('browser-command-result', (resultPayload) => {
+            console.log('PythonBridge: Received browser-command-result from BrowserHandler:', resultPayload.request_id);
+            this.sendBrowserResult(resultPayload);
+        });
     }
 
     async connectWebSocket() {
+        // This method is unchanged.
         return new Promise((resolve, reject) => {
             if (this.reconnectAttempts <= 1) {
                 console.log(`Connecting to Socket.IO server at ${this.serverUrl}...`);
             }
-
             this.socket = io(this.serverUrl, {
                 transports: ['websocket'],
                 reconnection: true,
@@ -82,13 +80,11 @@ class PythonBridge {
                 reconnectionDelayMax: 5000,
                 timeout: config.backend.connectionTimeout
             });
-
             const connectionTimeout = setTimeout(() => {
                 console.error('Socket.IO connection timeout');
                 this.socket.disconnect();
                 reject(new Error('Socket.IO connection timeout'));
             }, config.backend.connectionTimeout);
-
             this.socket.on('connect', () => {
                 clearTimeout(connectionTimeout);
                 console.log(`Connected to Socket.IO server at ${this.serverUrl}`);
@@ -97,7 +93,6 @@ class PythonBridge {
                 this.mainWindow.webContents.send('socket-connection-status', { connected: true });
                 resolve();
             });
-
             this.socket.on('connect_error', (error) => {
                 clearTimeout(connectionTimeout);
                 if (this.reconnectAttempts <= 1) {
@@ -109,55 +104,25 @@ class PythonBridge {
                 });
                 reject(error);
             });
-
             this.setupSocketHandlers();
         });
     }
 
     setupSocketHandlers() {
-        // --- START: NEW SOCKET HANDLERS TO PROXY EVENTS TO RENDERER ---
-
-        // Listen for the server's request to start the browser
-        this.socket.on('request-start-browser', (data) => {
-            console.log('Received "request-start-browser" from server. Forwarding to renderer.');
-            this.mainWindow.webContents.send('request-start-browser', data);
-        });
-
-        // Listen for the server's request to stop the browser
-        this.socket.on('request-stop-browser', (data) => {
-            console.log('Received "request-stop-browser" from server. Forwarding to renderer.');
-            this.mainWindow.webContents.send('request-stop-browser', data);
-        });
-
-        // --- END: NEW SOCKET HANDLERS ---
-
-
-        // Handle final response messages from Python backend
+        // This method is mostly unchanged, but the 'browser-command' handler is now functional.
         this.socket.on('response', (data) => {
             this.mainWindow.webContents.send('chat-response', data);
         });
-
-        // Handle intermediate agent steps
         this.socket.on('agent_step', (data) => {
             this.mainWindow.webContents.send('agent-step', data);
         });
-
-        // Handle critical errors
         this.socket.on('error', (error) => {
-            if (typeof error === 'object') {
-                console.error('Socket.IO error:', error.message || 'Unknown error');
-            } else {
-                console.error('Socket.IO error:', error);
-            }
+            console.error('Socket.IO error:', error.message || error);
             this.mainWindow.webContents.send('socket-error', error);
         });
-
-        // Handle status messages
         this.socket.on('status', (data) => {
             this.mainWindow.webContents.send('socket-status', data);
         });
-
-        // Handle disconnection
         this.socket.on('disconnect', () => {
             if (this.initialized) {
                 console.log('Socket.IO disconnected');
@@ -166,9 +131,35 @@ class PythonBridge {
             this.mainWindow.webContents.send('socket-connection-status', { connected: false });
             this.handleReconnection();
         });
+
+        // FIX: This handler now correctly forwards the command to the browserController instance.
+        this.socket.on('browser-command', (commandPayload) => {
+            console.log('PythonBridge: Received browser-command from server:', commandPayload.action);
+            if (this.browserController) {
+                // Use the event emitter pattern for better decoupling
+                console.log('PythonBridge: Emitting execute-browser-command to BrowserHandler');
+                this.eventEmitter.emit('execute-browser-command', commandPayload);
+            } else {
+                console.error('PythonBridge: BrowserController is not linked. Cannot handle browser command.');
+            }
+        });
+    }
+
+    /**
+     * FIX: This new method is called by the BrowserController to send results back to the server.
+     * @param {object} resultPayload - The payload containing the request_id and result.
+     */
+    sendBrowserResult(resultPayload) {
+        if (this.socket && this.socket.connected) {
+            console.log('PythonBridge: Relaying browser command result to server:', resultPayload.request_id);
+            this.socket.emit('browser-command-result', resultPayload);
+        } else {
+            console.error('PythonBridge: Cannot send browser result, socket not connected.');
+        }
     }
 
     async handleReconnection() {
+        // This method is unchanged.
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
             this.mainWindow.webContents.send('socket-connection-status', {
@@ -179,18 +170,15 @@ class PythonBridge {
             return;
         }
         this.reconnectAttempts++;
-
         if (this.reconnectAttempts % 5 === 1 || this.reconnectAttempts === this.maxReconnectAttempts) {
             console.log(`Reconnecting: attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
         }
-
         this.mainWindow.webContents.send('socket-connection-status', {
             connected: false,
             reconnecting: true,
             attempt: this.reconnectAttempts,
             maxAttempts: this.maxReconnectAttempts
         });
-
         try {
             await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
             await this.connectWebSocket();
@@ -203,6 +191,7 @@ class PythonBridge {
     }
 
     sendMessage(message) {
+        // This method is unchanged.
         if (!this.socket || !this.socket.connected) {
             console.error('Socket not connected');
             this.mainWindow.webContents.send('socket-error', {
@@ -221,6 +210,7 @@ class PythonBridge {
     }
 
     cleanup() {
+        // This method is unchanged.
         if (this.socket) {
             this.socket.close();
             this.socket = null;
@@ -230,6 +220,7 @@ class PythonBridge {
     }
 
     stop() {
+        // This method is unchanged.
         this.cleanup();
     }
 }
