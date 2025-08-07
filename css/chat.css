@@ -50,42 +50,17 @@
     --link-hover: #93c5fd;
     --file-name-color: #e2e8f0;
 }
-/* Taskbar Positioning */
-.taskbar {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--taskbar-bg);
-    padding: 8px 16px;
-    border-radius: 12px;
-    box-shadow: 0 8px 24px var(--shadow-color);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
-    border: 1px solid var(--border-color);
-}
 
-/* Taskbar position when chat is open */
-.taskbar.chat-open {
-    left: 20px;
-    bottom: 50%;
-    transform: translateY(50%);
-    padding: 16px 8px;
-    flex-direction: column;
-}
-
-.taskbar.chat-open .taskbar-icons {
-    flex-direction: column;
-    gap: 16px;
-}
+/* MODIFICATION: Removed obsolete .taskbar and .taskbar.chat-open rules */
 
 /* Chat Container */
 .chat-container {
     position: fixed;
     top: 5px;
-    left: 50%;
+    /* MODIFICATION: Adjusted left and width for the new layout */
+    left: 52.5%;
+    width: 55%;
     transform: translateX(-50%);
-    width: 50%;
     height: calc(100% - 100px);
     padding: 10px;
     z-index: 999;
@@ -249,9 +224,10 @@
 .floating-input-container {
     position: fixed;
     bottom: 20px;
-    left: 50%;
+    /* MODIFICATION: Adjusted left and width for the new layout */
+    left: 52.5%;
+    width: 55%;
     transform: translateX(-50%);
-    width: 50%;
     background-color: var(--window-bg);
     border-radius: 16px;
     box-shadow: 0 8px 32px var(--shadow-color);
@@ -427,6 +403,7 @@
     .chat-container,
     .floating-input-container {
         width: 90%;
+        left: 50%; /* Re-center on mobile if sidebar is hidden */
     }
 }
 /* formatting */
@@ -1287,15 +1264,16 @@ body:not(.dark-mode) .formatted-table tbody tr:nth-of-type(odd) {
     background: var(--code-bg);
 }
 
+/* MODIFICATION: Adjust "with-artifact" view for the new layout */
 .chat-container.with-artifact {
-    width: 45%;
-    left: 20px;
+    width: 46%;
+    left: 7%;
     transform: none;
 }
 
 .floating-input-container.with-artifact {
-    width: 45%;
-    left: 20px;
+    width: 46%;
+    left: 7%;
     transform: none;
 }
 

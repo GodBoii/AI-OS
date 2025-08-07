@@ -4,7 +4,8 @@
 .to-do-list-container {
     position: fixed;
     top: 5%;
-    left: 50%;
+    /* MODIFICATION: Adjusted left position to account for the new sidebar */
+    left: 52.5%;
     transform: translateX(-50%);
     width: 700px;
     max-width: 90%;

@@ -1,7 +1,8 @@
 .floating-window {
     position: fixed;
     top: 50%;
-    left: 50%;
+    /* MODIFICATION: Adjusted left position to account for the new sidebar */
+    left: 52.5%;
     transform: translate(-50%, -50%);
     width: 800px;
     max-width: 90%;
@@ -194,6 +195,7 @@ button.danger:hover {
 .action-btn,
 .auth-btn {
     padding: 8px 16px;
+    color: var(--text-color);
     border: none;
     border-radius: 6px;
     font-size: 14px;
