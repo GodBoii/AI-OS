@@ -57,14 +57,55 @@
 .chat-container {
     position: fixed;
     top: 5px;
-    /* MODIFICATION: Adjusted left and width for the new layout */
     left: 52.5%;
     width: 55%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scale(1); /* Default visible state */
     height: calc(100% - 100px);
     padding: 10px;
     z-index: 999;
-    animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Define the animation */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    opacity: 1;
+    visibility: visible;
+}
+
+.chat-container.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) scale(0.95);
+    /* Delay hiding visibility until after fade-out */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
+}
+
+.floating-input-container {
+    position: fixed;
+    bottom: 20px;
+    left: 52.5%;
+    width: 55%;
+    transform: translateX(-50%) scale(1); /* Default visible state */
+    background-color: var(--window-bg);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px var(--shadow-color);
+    border: 1px solid var(--border-color);
+    padding: 12px 16px;
+    z-index: 999;
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    /* Define the animation */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    opacity: 1;
+    visibility: visible;
+}
+
+.floating-input-container.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) scale(0.95);
+    /* Delay hiding visibility until after fade-out */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
 }
 
 @keyframes slideIn {

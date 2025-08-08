@@ -3,7 +3,7 @@
     top: 50%;
     /* MODIFICATION: Adjusted left position to account for the new sidebar */
     left: 52.5%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(1); /* Default visible state */
     width: 800px;
     max-width: 90%;
     height: 600px;
@@ -15,7 +15,19 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: all 0.3s ease;
+    /* MODIFICATION: Smooth animation for open/close */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    opacity: 1;
+    visibility: visible;
+}
+
+/* MODIFICATION: Hidden state with fade/scale animation */
+.floating-window.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -50%) scale(0.95);
+    /* Delay hiding visibility until after fade-out */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
 }
 
 .window-header {
@@ -307,11 +319,6 @@ button.danger:hover {
 .notification.error {
     background-color: #f44336;
     color: white;
-}
-
-/* Hidden State */
-.hidden {
-    display: none;
 }
 
 /* Auth specific styles */
