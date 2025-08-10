@@ -29,7 +29,7 @@ body {
     backdrop-filter: blur(12px);
     border-radius: 0.50rem;
     -webkit-backdrop-filter: blur(12px);
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all var(--anim-normal) var(--easing-standard);
 }
 
 .sidebar-icons {
@@ -54,7 +54,7 @@ body {
     color: var(--icon-color);
     font-size: 1.1rem; 
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--anim-fast) var(--easing-spring), color var(--anim-fast) var(--easing-standard), background-color var(--anim-fast) var(--easing-standard);
     background: transparent;
     border: none;
 }
@@ -90,7 +90,7 @@ body {
     box-shadow: var(--shadow-md);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    transition: all 0.3s ease-in-out;
+    transition: transform var(--anim-normal) var(--easing-standard), background-color var(--anim-normal) var(--easing-standard), box-shadow var(--anim-normal) var(--easing-standard);
     overflow: hidden;
     cursor: pointer;
 }
@@ -105,7 +105,7 @@ body {
 }
 
 .window-controls-chevron i {
-    transition: transform 0.3s ease;
+    transition: transform var(--anim-normal) var(--easing-standard);
 }
 
 .window-controls-area .window-control-btn {
@@ -118,7 +118,7 @@ body {
     color: var(--icon-color);
     font-size: 1rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: opacity var(--anim-fast) var(--easing-standard), max-width var(--anim-fast) var(--easing-standard);
     background: transparent;
     border: none;
     opacity: 0;
@@ -136,6 +136,7 @@ body {
 .window-controls-area:hover .window-control-btn {
     opacity: 1;
     max-width: 2rem;
+    transition: opacity var(--anim-normal) var(--easing-standard), max-width var(--anim-normal) var(--easing-standard);
 }
 
 .window-controls-area:hover .window-controls-chevron i {
@@ -177,7 +178,7 @@ body {
     border: 2px solid var(--accent-color);
     box-shadow: var(--shadow-lg);
     background-color: var(--elevated-bg);
-    transition: all 0.3s ease;
+    transition: box-shadow var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), border-color var(--anim-slow) var(--easing-standard);
     top: 80px;
     right: 80px;
     pointer-events: all;
@@ -282,7 +283,7 @@ body {
     border-radius: 50%;
     z-index: 1005;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--anim-fast) var(--easing-standard);
     pointer-events: all !important;
 }
 

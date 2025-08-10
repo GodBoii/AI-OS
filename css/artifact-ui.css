@@ -12,7 +12,7 @@
     display: flex;
     flex-direction: column;
     z-index: 100;
-    transition: transform 0.3s ease, opacity 0.2s ease;
+    transition: transform var(--anim-normal) var(--easing-standard), opacity var(--anim-fast) var(--easing-standard);
     overflow: hidden;
     border: 1px solid var(--border-color);
 }
@@ -43,6 +43,7 @@
     font-weight: var(--font-semibold);
     font-size: var(--text-base);
     color: var(--text-color);
+    font-family: 'Orbitron', var(--font-sans);
 }
 
 .artifact-controls {
@@ -63,7 +64,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    transition: all 0.2s ease;
+    transition: background-color var(--anim-fast) var(--easing-standard), color var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-spring);
 }
 
 .copy-artifact-btn:hover,
@@ -127,7 +128,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 16px;
-    font-family: var(--font-mono);
+    font-family: 'Orbitron', var(--font-sans);
     line-height: 1.5;
     position: relative;
     padding-bottom: 64px; /* Space for zoom controls */

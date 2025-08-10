@@ -16,7 +16,7 @@
     flex-direction: column;
     overflow: hidden;
     /* MODIFICATION: Smooth animation for open/close */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
     opacity: 1;
     visibility: visible;
 }
@@ -27,7 +27,7 @@
     visibility: hidden;
     transform: translate(-50%, -50%) scale(0.95);
     /* Delay hiding visibility until after fade-out */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
+    transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s var(--anim-slow);
 }
 
 .window-header {

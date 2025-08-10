@@ -64,7 +64,7 @@
     padding: 10px;
     z-index: 999;
     /* Define the animation */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    transition: opacity var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-standard), visibility 0s 0s;
     opacity: 1;
     visibility: visible;
 }
@@ -74,7 +74,7 @@
     visibility: hidden;
     transform: translateX(-50%) scale(0.95);
     /* Delay hiding visibility until after fade-out */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
+    transition: opacity var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-standard), visibility 0s var(--anim-fast);
 }
 
 .floating-input-container {
@@ -95,7 +95,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     /* Define the animation */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0s;
+    transition: opacity var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-standard), visibility 0s 0s;
     opacity: 1;
     visibility: visible;
 }
@@ -105,7 +105,7 @@
     visibility: hidden;
     transform: translateX(-50%) scale(0.95);
     /* Delay hiding visibility until after fade-out */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0s 0.2s;
+    transition: opacity var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-standard), visibility 0s var(--anim-fast);
 }
 
 @keyframes slideIn {
@@ -144,7 +144,7 @@
     max-width: 85%;
     line-height: 1.6;
     font-size: 0.95rem;
-    animation: messageIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: messageIn var(--anim-normal) var(--easing-standard);
 }
 
 @keyframes messageIn {
@@ -235,7 +235,7 @@
 }
 
 .message-bot .message-content {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 14px; /* Reduced from a likely 16px default for a cleaner look */
     line-height: 1.6; /* Improves readability */
     color: var(--text-color);
@@ -354,6 +354,7 @@
     background-color: var(--hover-bg);
     transform: translateY(-2px);
     border-color: var(--accent-color);
+    transition: transform var(--anim-fast) var(--easing-spring), background-color var(--anim-fast) var(--easing-standard), border-color var(--anim-fast) var(--easing-standard);
 }
 
 .tool-btn.active {
@@ -374,7 +375,7 @@
     min-width: 220px;
     z-index: 1000;
     transform: translateY(10px) scale(0.95);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
     opacity: 0;
     visibility: hidden;
     backdrop-filter: blur(12px);
@@ -1372,7 +1373,7 @@ body:not(.dark-mode) .formatted-table tbody tr:nth-of-type(odd) {
     display: flex;
     align-items: center;
     gap: 8px;
-    animation: fadeIn 0.3s ease;
+    animation: fadeIn var(--anim-normal) var(--easing-standard);
 }
 
 .thinking-indicator .timer {
@@ -1928,7 +1929,7 @@ a:hover {
     border-left: 2px solid var(--accent-muted);
     padding-left: 15px;
     margin-bottom: 15px;
-    animation: fadeIn 0.5s ease forwards;
+    animation: fadeIn var(--anim-slow) var(--easing-standard) forwards;
 }
 
 .dark-mode .log-block {
@@ -1945,7 +1946,7 @@ a:hover {
     border-radius: 8px;
     margin-bottom: 8px;
     border: 1px solid var(--border-color);
-    animation: fadeIn 0.5s ease forwards;
+    animation: fadeIn var(--anim-normal) var(--easing-standard) forwards;
 }
 
 .dark-mode .tool-log-entry {
