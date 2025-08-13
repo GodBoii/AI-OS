@@ -406,7 +406,7 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         
         import inspect
         params = inspect.signature(agent.run).parameters
-        supported_params = {'message': message, 'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id}
+        supported_params = {'message': complete_history, 'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id}
         if 'images' in params and images: supported_params['images'] = images
         if 'audio' in params and audio: supported_params['audio'] = audio
         if 'videos' in params and videos: supported_params['videos'] = videos
