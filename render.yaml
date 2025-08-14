@@ -1,0 +1,51 @@
+# render.yaml
+# This file defines all the services needed for the AI-OS backend.
+# Render will automatically detect this file and set up the services.
+
+services:
+  # 1. The Redis Service
+  # This creates a managed Redis instance for our application.
+  - type: redis
+    name: aios-redis
+    plan: free # Use the free tier for development/testing. Upgrade for production.
+    ipAllowList: [] # Allows all services in your Render account to connect
+
+  # 2. The Web Service (Gunicorn + Flask/Socket.IO)
+  # This service handles incoming user connections and dispatches jobs.
+  - type: web
+    name: aios-web
+    runtime: docker
+    repo: https://github.com/GodBoii/AI-OS # Your repository
+    branch: master # The branch to deploy
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Use 'dockerCommand' to override the Dockerfile's CMD for this specific service.
+    dockerCommand: "gunicorn --worker-class eventlet -w 4 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aios-redis
+          property: connectionString # Automatically gets the Redis URL
+
+  # 3. The AI Worker Service (Celery)
+  # This service runs in the background and processes the AI tasks.
+  - type: worker
+    name: aios-worker
+    runtime: docker
+    repo: https://github.com/GodBoii/AI-OS # Your repository
+    branch: master
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Use 'dockerCommand' to override the Dockerfile's CMD for this specific service.
+    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=4"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aios-redis
+          property: connectionString # Also needs to connect to Redis

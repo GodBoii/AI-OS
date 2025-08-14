@@ -1,0 +1,428 @@
+/* Import our design system */
+@import url('design-system.css');
+
+/* Main Application Layout Styles */
+body {
+    display: grid;
+    place-items: center;
+    background: var(--bg-color);
+    background-image: 
+        radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 75% 75%, rgba(99, 102, 241, 0.05) 0%, transparent 40%);
+    background-attachment: fixed;
+}
+
+.sidebar {
+    position: fixed;
+    top: 0.5%;
+    left: 0;
+    bottom: 0.5%;
+    width: 2.5%; 
+    min-width: 45px; 
+    background-color: var(--taskbar-bg);
+    border-right: 1px solid var(--border-color);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start; 
+    justify-content: center; 
+    padding: 0.5rem 0; 
+    backdrop-filter: blur(12px);
+    border-radius: 0.50rem;
+    -webkit-backdrop-filter: blur(12px);
+    transition: all var(--anim-normal) var(--easing-standard);
+}
+
+.sidebar-icons {
+    display: flex;
+    flex-direction: column; 
+    gap: 0.5rem; 
+    align-items: center;
+    background-color: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.sidebar-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem; 
+    height: 2.25rem; 
+    border-radius: 0.5rem; 
+    color: var(--icon-color);
+    font-size: 1.1rem; 
+    cursor: pointer;
+    transition: transform var(--anim-fast) var(--easing-spring), color var(--anim-fast) var(--easing-standard), background-color var(--anim-fast) var(--easing-standard);
+    background: transparent;
+    border: none;
+}
+
+.sidebar-icon:hover {
+    color: var(--accent-color);
+    background-color: var(--accent-muted);
+    transform: scale(1.1);
+}
+
+.sidebar-icon:active {
+    transform: scale(1);
+}
+
+.sidebar-icon.active {
+    color: white;
+    background-color: var(--accent-color);
+}
+
+/* --- MODIFICATION: Hover-to-expand top control bar --- */
+.window-controls-area {
+    position: fixed;
+    top: 0; /* Stick to very top */
+    right: 0;
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    background-color: var(--taskbar-bg);
+    border-bottom: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
+    border-radius: 0 0 0 0.5rem;
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: transform var(--anim-normal) var(--easing-standard), background-color var(--anim-normal) var(--easing-standard), box-shadow var(--anim-normal) var(--easing-standard);
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.window-controls-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    color: var(--icon-color);
+}
+
+.window-controls-chevron i {
+    transition: transform var(--anim-normal) var(--easing-standard);
+}
+
+.window-controls-area .window-control-btn {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-color);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity var(--anim-fast) var(--easing-standard), max-width var(--anim-fast) var(--easing-standard);
+    background: transparent;
+    border: none;
+    opacity: 0;
+    max-width: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* Expanded state on hover */
+.window-controls-area:hover {
+    gap: 0.5rem;
+}
+
+.window-controls-area:hover .window-control-btn {
+    opacity: 1;
+    max-width: 2rem;
+    transition: opacity var(--anim-normal) var(--easing-standard), max-width var(--anim-normal) var(--easing-standard);
+}
+
+.window-controls-area:hover .window-controls-chevron i {
+    transform: rotate(180deg);
+}
+
+.window-control-btn:hover {
+    color: var(--accent-color);
+    background-color: var(--accent-muted);
+}
+
+.window-control-btn:active {
+    transform: translateY(0);
+}
+
+.theme-toggle i {
+    transition: all 0.3s ease;
+}
+
+.theme-toggle:hover i {
+    transform: rotate(180deg);
+}
+
+#close-window:hover {
+    background-color: var(--error-500);
+    color: white;
+}
+
+/* WebView Container */
+.webview-container {
+    position: fixed;
+    z-index: 1000;
+    border-radius: 1rem;
+    overflow: visible;
+    min-width: 320px;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    border: 2px solid var(--accent-color);
+    box-shadow: var(--shadow-lg);
+    background-color: var(--elevated-bg);
+    transition: box-shadow var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), border-color var(--anim-slow) var(--easing-standard);
+    top: 80px;
+    right: 80px;
+    pointer-events: all;
+}
+
+.webview-container .BrowserView {
+    position: absolute !important;
+    top: 60px !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: calc(100% - 20px) !important;
+    height: calc(100% - 70px) !important;
+    z-index: 1 !important;
+    pointer-events: none !important;
+}
+
+.webview-container.loading::after {
+    content: 'Loading...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-color);
+    font-size: var(--text-lg);
+    z-index: 1002;
+}
+
+.webview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--elevated-bg);
+    border-bottom: 2px solid var(--accent-color);
+    user-select: none;
+    height: 50px;
+    z-index: 1004;
+    position: relative;
+    border-top-left-radius: 0.9rem;
+    border-top-right-radius: 0.9rem;
+    background-image: linear-gradient(to right, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.2));
+    pointer-events: all;
+}
+
+.drag-handle {
+    flex: 1;
+    cursor: move;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    pointer-events: all;
+    z-index: 1005;
+}
+
+.webview-title {
+    font-weight: var(--font-medium);
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--text-sm);
+    pointer-events: all;
+}
+
+.webview-controls {
+    display: flex;
+    gap: 0.5rem;
+    z-index: 1005;
+    pointer-events: all;
+}
+
+.close-webview {
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    color: var(--icon-color);
+    font-size: 1rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    pointer-events: all;
+    z-index: 1006;
+}
+
+.close-webview:hover {
+    background-color: var(--error-500);
+    color: white;
+}
+
+/* Resize handles */
+.resizer {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background-color: var(--accent-color);
+    border-radius: 50%;
+    z-index: 1005;
+    opacity: 0;
+    transition: opacity var(--anim-fast) var(--easing-standard);
+    pointer-events: all !important;
+}
+
+.webview-container:hover .resizer {
+    opacity: 0.8;
+}
+
+.resizer:hover {
+    opacity: 1;
+    transform: scale(1.3);
+}
+
+.resizer.top-left {
+    top: -6px;
+    left: -6px;
+    cursor: nw-resize;
+}
+
+.resizer.top-right {
+    top: -6px;
+    right: -6px;
+    cursor: ne-resize;
+}
+
+.resizer.bottom-left {
+    bottom: -6px;
+    left: -6px;
+    cursor: sw-resize;
+}
+
+.resizer.bottom-right {
+    bottom: -6px;
+    right: -6px;
+    cursor: se-resize;
+}
+
+/* Drag handle styling */
+.drag-handle::before {
+    content: '⋮⋮';
+    color: var(--icon-color);
+    font-size: 1rem;
+    margin-right: 0.5rem;
+}
+
+/* Connection Status */
+.connection-error {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    background-color: var(--error-500);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: var(--text-sm);
+    z-index: 1000;
+    box-shadow: var(--shadow-md);
+    animation: fadeIn 0.3s ease;
+}
+
+/* Animated Notifications */
+.notification-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.notification {
+    background-color: var(--elevated-bg);
+    border-left: 4px solid var(--accent-color);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-lg);
+    pointer-events: all;
+    animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    max-width: 24rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.notification.error {
+    border-left-color: var(--error-500);
+}
+
+.notification.success {
+    border-left-color: var(--success-500);
+}
+
+.notification.warning {
+    border-left-color: var(--warning-500);
+}
+
+/* Media queries */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 5%;
+    }
+
+    .sidebar-icon {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+
+    .window-controls-area {
+        padding: 0.5rem;
+    }
+
+    .window-control-btn {
+        width: 2rem;
+        height: 2rem;
+    }
+}
+
+/* Utils */
+.hidden {
+    display: none !important;
+}
+
+.flex {
+    display: flex;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.gap-2 {
+    gap: 0.5rem;
+}
+
+.gap-4 {
+    gap: 1rem;
+}
