@@ -15,7 +15,6 @@ let chatConfig = {
     memory: false,
     tasks: false,
     tools: {
-        calculator: true,
         internet_search: true,
         coding_assistant: true,
         investment_assistant: true,
@@ -62,7 +61,7 @@ function startNewConversation() {
 
     chatConfig = {
         memory: false, tasks: false,
-        tools: { calculator: true, internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
+        tools: { internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
         deepsearch: false
     };
     const aiOsCheckbox = document.getElementById('ai_os');

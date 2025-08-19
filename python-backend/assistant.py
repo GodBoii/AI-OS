@@ -47,7 +47,6 @@ class PatchedTeam(Team):
 def get_llm_os(
     user_id: Optional[str] = None,
     session_info: Optional[Dict[str, Any]] = None,
-    calculator: bool = False,
     web_crawler: bool = False,
     internet_search: bool = False,
     coding_assistant: bool = False,
@@ -88,8 +87,6 @@ def get_llm_os(
             direct_tools.append(GoogleEmailTools(user_id=user_id))
         if enable_google_drive:
             direct_tools.append(GoogleDriveTools(user_id=user_id))
-    if calculator:
-        direct_tools.append(CalculatorTools(add=True, subtract=True, multiply=True, divide=True, exponentiate=True, factorial=True, is_prime=True, square_root=True))
     if internet_search:
         direct_tools.append(GoogleSearchTools(fixed_max_results=15))
     if enable_browser and browser_tools_config:
@@ -100,51 +97,21 @@ def get_llm_os(
     # --- 3. SPECIALIST AGENT AND TEAM DEFINITIONS ---
     main_team_members: List[Union[Agent, Team]] = []
 
-    # --- 3.1. The Development Sub-Team (dev_team) ---
+    # --- 3.1. The Development Team (unified planner + executor) ---
     if coding_assistant:
-        # The Planner Agent (Designs the solution)
-        code_planner = Agent(
-            name="Code_Planner",
-            role="Software architect creating concise execution plans. Output: numbered steps (max 5), tech stack, file structure. Consider Code_Executor has sandbox tools for file operations, code execution, and testing.",
-            instructions=[
-                "Access files from team_session_state['turn_context']['files'].",
-                "Create brief, actionable plans for Code_Executor who has sandbox tools.",
-                "Format: 1) Goal 2) Steps (max 5) 3) Files needed 4) Expected outcome.",
-                "Keep response under 500 words."
-            ],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            debug_mode=debug_mode
-        )
-
-        # The Executor Agent (Writes the code based on the plan)
-        code_executor = Agent(
-            name="Code_Executor",
-            role="Efficient coder implementing plans using sandbox tools. Write clean, functional code following the exact plan provided.",
-            instructions=[
-                "Use files from team_session_state['turn_context']['files'] for implementation.",
-                "Follow the plan exactly. Write complete, working code.",
-                "Use sandbox tools for file operations and testing.",
-                "Output: brief summary + code files + test results.",
-                "Keep explanations under 100 words."
-            ],
-            tools=[SandboxTools(session_info=session_info)] if session_info else [],
-            model=Gemini(id="gemini-2.5-flash"),
-            debug_mode=debug_mode
-        )
-
-        # The Development Team Coordinator
         dev_team = Team(
             name="dev_team",
-            mode="coordinate",  # Ensures a sequential Plan -> Execute -> Review workflow
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),  # A stronger model for coordination
-            members=[code_planner, code_executor],
+            mode="coordinate",
+            model=Gemini(id="gemini-2.5-flash"),
+            members=[],
+            tools=[SandboxTools(session_info=session_info)] if session_info else [],
             instructions=[
-                "Development coordinator: Access full context from team_session_state['turn_context'].",
-                "Ensure members use shared context files and media.",
-                "Development team coordinator: Plan → Execute → Review workflow.",
-                "1) Get plan from Code_Planner",
-                "2) Pass plan to Code_Executor for implementation", 
-                "4) Deliver final result with brief summary (max 200 words)."
+                "Development team: Plan and execute code solutions using sandbox tools.",
+                "Access files from team_session_state['turn_context']['files'].",
+                "Workflow: 1) Analyze requirements 2) Plan solution 3) Implement code 4) Test & verify.",
+                "Use sandbox tools for file operations, code execution, terminal commands, testing.",
+                "Output: Brief summary + working code + test results.",
+                "Keep responses focused and under 300 words unless complex implementation needed."
             ],
             debug_mode=debug_mode
         )
@@ -232,8 +199,8 @@ def get_llm_os(
             debug_mode=debug_mode,
         )
 
-        research_leader = Team(
-            name="Research Agent",
+        research_team = Team(
+            name="Research_Team",
             mode="coordinate",
             model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             members=[wikipedia_agent, hacker_news_agent, Arxiv_agent, deep_crawler_agent, crawler_agent],
@@ -244,11 +211,11 @@ def get_llm_os(
                 "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
                 "Synthesize findings from multiple sources, note conflicts, verify information.",
                 "Ensure members use shared context. Synthesize with source attribution."
-                "use multiple agnets if you think it is necessary"
+                "use multiple agents if you think it is necessary"
             ],
             debug_mode=debug_mode,
         )
-        main_team_members.append(research_leader)
+        main_team_members.append(research_team)
 
     if investment_assistant:
         investor_agent = Agent(
@@ -268,16 +235,36 @@ def get_llm_os(
 
     # --- 4. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
-        "You are Aetheria AI: Master coordinator analyzing requests and delegating to specialists.",
-        "You have full context access via team_session_state['turn_context'].",
-        "Context contains: message, files, images, audio, video objects.",
-        "When delegating: Inform sub-teams to use shared context from team_session_state['turn_context'].",
-        "Routing: Development → dev_team | Web content → Crawler | Finance → Investor | Simple tasks → direct tools.",
-        "You have access to a web browser on the user's machine via browser_tools.",
-        "Start by using browser_tools.get_status() to ensure connection.",
-        "Use browser_tools.get_current_view() to see the page and get element IDs for clicks/typing.",
-        "Synthesize specialist outputs into clear, actionable responses.",
-        "Keep final answers concise and user-focused."
+        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via team_session_state['turn_context'].",
+        "",
+        "THINKING PROCESS - First determine:",
+        "• Can I answer using available direct tools?",
+        "• Do I need to search knowledge base/memory?", 
+        "• Do I need to search internet?",
+        "• Do I need to delegate to specialists?",
+        "• Do I need clarification from user?",
+        "",
+        "ROUTING GUIDE:",
+        "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
+        "• Web research/Data extraction → Research_Team (Wikipedia, ArXiv, HackerNews, web crawling)",
+        "• Stock/Finance analysis → Investor (YFinance tools)",
+        "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
+        "• Simple searches → GoogleSearch (direct tool)",
+        "",
+        "DECISION LOGIC:",
+        "- Need to SEE and INTERACT with webpage → use browser_tools",
+        "- Need to EXTRACT data from webpage → delegate to Research_Team", 
+        "- Need to CODE/RUN commands → delegate to dev_team",
+        "- Need FINANCIAL data → delegate to Investor",
+        "",
+        "RESPONSE STYLE:",
+        "• Use personalized responses when user data is available",
+        "• Provide direct, clear answers without explaining internal processes",
+        "• Don't use phrases like 'based on my knowledge', 'depending on information', 'I will now', etc.",
+        "• Focus on user value, not system operations",
+        "• Keep responses natural and conversational",
+        "",
+        "Always inform teams to use shared context. Deliver final results as if you personally completed the task."
     ]
 
     # The main orchestrator is now a PatchedTeam instance
