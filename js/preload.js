@@ -45,6 +45,7 @@ const validReceiveChannels = [
     'sandbox-command-started',
     'sandbox-command-update',  // <-- ADD THIS
     'sandbox-command-finished',
+    'image_generated',
 
     // Browse AI related channels
     'browse-ai-webview-created',

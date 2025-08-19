@@ -22,11 +22,7 @@ from authlib.integrations.flask_client import OAuth
 from assistant import get_llm_os
 from deepsearch import get_deepsearch
 from supabase_client import supabase_client
-
-# --- MODIFICATION START (Phase 3) ---
-# Import BrowserTools to perform the isinstance check for context injection.
 from browser_tools import BrowserTools
-# --- MODIFICATION END ---
 
 from agno.agent import Agent
 from agno.team import Team
@@ -366,7 +362,10 @@ def handle_browser_command_result(data: Dict[str, Any]):
         logger.warning(f"Received a browser result for an unknown or expired request_id: {request_id}")
 
 
-def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict):
+# --- MODIFICATION START ---
+# The function signature is updated to accept the new `custom_tool_config` dictionary.
+def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict):
+# --- MODIFICATION END ---
     try:
         session_data = connection_manager.get_session(conversation_id)
         if not session_data:
@@ -375,27 +374,26 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         user_id = session_data['user_id']
         message = turn_data['user_message']
         
+        # --- MODIFICATION START ---
+        # Pass the new `custom_tool_config` to the agent factory.
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
             browser_tools_config=browser_tools_config,
+            custom_tool_config=custom_tool_config,
             **session_data['config']
         )
+        # --- MODIFICATION END ---
         
-        # --- MODIFICATION START (Phase 3) ---
-        # 1. Construct the complete, up-to-the-moment conversation history.
-        # This includes all previous turns plus the user's current message.
         previous_history = session_data.get("history", [])
         current_turn_message = {"role": "user", "content": message}
         complete_history = previous_history + [current_turn_message]
 
-        # 2. Find the BrowserTools instance within the agent's tools and inject the complete history.
         for tool in agent.tools:
             if isinstance(tool, BrowserTools):
                 logger.info("Injecting complete conversation history into BrowserTools instance.")
                 tool.conversation_history = complete_history
-                break # Stop after finding the tool
-        # --- MODIFICATION END ---
+                break
         
         images, audio, videos, other_files = process_files(turn_data.get('files', []))
 
@@ -406,13 +404,19 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         
         import inspect
         params = inspect.signature(agent.run).parameters
-        supported_params = {'message': complete_history, 'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id}
+        
+        supported_params = {
+            'stream': True,
+            'stream_intermediate_steps': True,
+            'user_id': user_id
+        }
+
         if 'images' in params and images: supported_params['images'] = images
         if 'audio' in params and audio: supported_params['audio'] = audio
         if 'videos' in params and videos: supported_params['videos'] = videos
         if 'files' in params and other_files: supported_params['files'] = other_files
 
-        for chunk in agent.run(**supported_params):
+        for chunk in agent.run(complete_history, **supported_params):
             if not chunk or not hasattr(chunk, 'event'): continue
             
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
@@ -489,20 +493,33 @@ def on_send_message(data: str):
         }
         message_id = data.get("id") or str(uuid.uuid4())
 
+        # --- MODIFICATION START ---
+        # Create a clean dictionary specifically for BrowserTools.
         browser_tools_config = {
             'sid': sid,
             'socketio': socketio,
             'waiting_events': browser_waiting_events
         }
         
+        # Create a separate dictionary for our custom tools. This prevents polluting
+        # the config for BrowserTools and resolves the TypeError.
+        custom_tool_config = {
+            'sid': sid,
+            'socketio': socketio,
+            'message_id': message_id
+        }
+        
+        # Pass both dictionaries to the background task.
         eventlet.spawn(
             run_agent_and_stream,
             sid,
             conversation_id,
             message_id,
             turn_data,
-            browser_tools_config
+            browser_tools_config,
+            custom_tool_config
         )
+        # --- MODIFICATION END ---
         logger.info(f"Spawned agent run in main process for conversation: {conversation_id}")
 
     except AuthApiError as e:

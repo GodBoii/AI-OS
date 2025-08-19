@@ -1,11 +1,16 @@
 import os
+import base64
+import traceback
 import logging
+import uuid
 from typing import Optional, List, Dict, Any, Set, Union, Iterator
 
 # Agno Core Imports
 from agno.agent import Agent
 from agno.team import Team  # Import the Team class
 from agno.media import Image
+from PIL import Image
+from agno.tools import tool
 
 from agno.run.team import TeamRunResponseEvent
 from agno.models.response import ModelResponseEvent
@@ -19,7 +24,6 @@ from agno.models.google import Gemini
 
 # Tool Imports
 from agno.tools import Toolkit
-from agno.tools.calculator import CalculatorTools
 from agno.tools.googlesearch import GoogleSearchTools
 from agno.tools.website import WebsiteTools
 from agno.tools.hackernews import HackerNewsTools
@@ -56,8 +60,9 @@ def get_llm_os(
     enable_github: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
-    enable_browser: bool = False,  # <-- NEW: Flag to enable browser tools
+    enable_browser: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
+    custom_tool_config: Optional[Dict[str, Any]] = None,
 ) -> Team:  # The factory now returns a Team instance
     """
     Constructs the hierarchical Aetheria AI multi-agent system.
@@ -92,6 +97,71 @@ def get_llm_os(
     if enable_browser and browser_tools_config:
         logger.info("Browser tools are enabled and configured. Initializing BrowserTools.")
         direct_tools.append(BrowserTools(**browser_tools_config))
+
+    @tool(show_result=False)
+    def generate_image(prompt: str) -> str:
+        """
+        Generates an image based on a textual prompt. This tool emits the image data directly
+        to the frontend and returns a markdown block with a unique ID for the frontend to render a button.
+        Args:
+            prompt (str): A detailed description of the image to be generated.
+        """
+        logger.info(f"Initiating synchronous image generation with prompt: '{prompt}'")
+        try:
+            socketio = custom_tool_config.get('socketio') if custom_tool_config else None
+            sid = custom_tool_config.get('sid') if custom_tool_config else None
+            message_id = custom_tool_config.get('message_id') if custom_tool_config else None
+
+            if not all([socketio, sid, message_id]):
+                error_msg = "Cannot emit image: socketio, sid, or message_id missing from config."
+                logger.error(error_msg)
+                return f"Error: {error_msg}"
+
+            artist_agent = Agent(
+                name="artist_agent",
+                model=Gemini(
+                    id="gemini-2.0-flash-exp-image-generation",
+                    response_modalities=["Text", "Image"],
+                ),
+                debug_mode=debug_mode,
+            )
+
+            artist_agent.run(prompt, stream=False)
+            images = artist_agent.get_images()
+
+            if not images:
+                logger.warning("Artist agent ran but returned no images.")
+                return "An image could not be generated for that prompt."
+
+            image_response = images[0]
+            if not image_response.content:
+                logger.warning("Image response was found, but it has no content.")
+                return "An image could not be generated for that prompt."
+
+            # 1. Generate a unique ID for this artifact.
+            artifact_id = f"image-artifact-{uuid.uuid4()}"
+            
+            # 2. Encode the image data for transport.
+            image_bytes = image_response.content
+            base64_image = base64.b64encode(image_bytes).decode('utf-8')
+
+            # 3. Emit the large data payload directly to the frontend with the unique ID.
+            socketio.emit("image_generated", {
+                "id": message_id,
+                "artifactId": artifact_id,
+                "image_base64": base64_image,
+                "agent_name": "artist_agent",
+            }, room=sid)
+            logger.info(f"Emitted 'image_generated' event for artifact {artifact_id}.")
+            
+            # 4. Return a small, clean Markdown block containing ONLY the ID.
+            return f"I have generated an image for you.\n\n```image\n{artifact_id}\n```"
+
+        except Exception as e:
+            logger.error(f"Error in generate_image tool: {e}\n{traceback.format_exc()}")
+            return "An unexpected error occurred while trying to generate the image."
+    
+    direct_tools.append(generate_image)
 
 
     # --- 3. SPECIALIST AGENT AND TEAM DEFINITIONS ---
@@ -247,6 +317,7 @@ def get_llm_os(
         "ROUTING GUIDE:",
         "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
         "• Web research/Data extraction → Research_Team (Wikipedia, ArXiv, HackerNews, web crawling)",
+        "• Image generation/drawing/creating a picture → generate_image (direct tool)",
         "• Stock/Finance analysis → Investor (YFinance tools)",
         "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
         "• Simple searches → GoogleSearch (direct tool)",
@@ -256,6 +327,7 @@ def get_llm_os(
         "- Need to EXTRACT data from webpage → delegate to Research_Team", 
         "- Need to CODE/RUN commands → delegate to dev_team",
         "- Need FINANCIAL data → delegate to Investor",
+        "- Need to CREATE an IMAGE → use the `generate_image` tool with a detailed prompt.",
         "",
         "RESPONSE STYLE:",
         "• Use personalized responses when user data is available",

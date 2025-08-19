@@ -132,6 +132,10 @@ class PythonBridge {
             this.handleReconnection();
         });
 
+        this.socket.on('image_generated', (data) => {
+            this.mainWindow.webContents.send('image_generated', data);
+        });
+
         // FIX: This handler now correctly forwards the command to the browserController instance.
         this.socket.on('browser-command', (commandPayload) => {
             console.log('PythonBridge: Received browser-command from server:', commandPayload.action);

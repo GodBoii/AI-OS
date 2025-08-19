@@ -1,10 +1,10 @@
-// artifact-handler.js (Complete, Updated Version)
+// artifact-handler.js (Complete, Corrected with Fall-Through Fix)
 
 class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
+        this.pendingImages = new Map();
         this.currentId = 0;
-        // A special ID to track the state of the single browser view artifact
         this.browserArtifactId = 'browser_view_artifact';
         this.init();
     }
@@ -49,8 +49,37 @@ class ArtifactHandler {
         });
     }
 
-    createArtifact(content, type) {
-        const id = `artifact-${this.currentId++}`;
+    cachePendingImage(artifactId, base64Data) {
+        this.pendingImages.set(artifactId, base64Data);
+        console.log(`ArtifactHandler: Cached pending image with ID: ${artifactId}`);
+    }
+
+    createArtifact(content, type, artifactId = null) {
+        // --- START OF THE CRITICAL FIX ---
+        // Handle the special case for images first.
+        if (type === 'image') {
+            const imageId = content; // For images, 'content' is the ID from the formatter.
+            if (this.artifacts.has(imageId)) {
+                // If we've already finalized this artifact due to streaming, do nothing.
+                return imageId;
+            }
+            if (this.pendingImages.has(imageId)) {
+                const imageContent = this.pendingImages.get(imageId);
+                this.artifacts.set(imageId, { content: imageContent, type: 'image' });
+                this.pendingImages.delete(imageId); // Clean up the cache
+                console.log(`ArtifactHandler: Finalized image artifact from cache: ${imageId}`);
+                // **THE FIX**: Return immediately to prevent fall-through.
+                return imageId;
+            } else {
+                // This will still log during streaming, but it won't corrupt state.
+                console.warn(`ArtifactHandler: Tried to create image artifact for ID ${imageId}, but no pending data was found.`);
+                return imageId;
+            }
+        }
+        // --- END OF THE CRITICAL FIX ---
+
+        // For all other artifact types (code, mermaid), the logic is simple.
+        const id = artifactId || `artifact-${this.currentId++}`;
         this.artifacts.set(id, { content, type });
         return id;
     }
@@ -63,7 +92,7 @@ class ArtifactHandler {
         const downloadBtn = container.querySelector('.download-artifact-btn');
 
         contentDiv.innerHTML = '';
-        let newArtifactId = artifactId;
+        let currentArtifactId = artifactId;
 
         switch (type) {
             case 'browser_view':
@@ -71,8 +100,15 @@ class ArtifactHandler {
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'none';
                 this.renderBrowserView(data);
-                newArtifactId = this.browserArtifactId;
-                this.artifacts.set(newArtifactId, { content: data, type });
+                currentArtifactId = this.browserArtifactId;
+                this.artifacts.set(currentArtifactId, { content: data, type });
+                break;
+
+            case 'image':
+                titleEl.textContent = 'Image Viewer';
+                copyBtn.style.display = 'none';
+                downloadBtn.style.display = 'inline-flex';
+                this.renderImage(data, contentDiv);
                 break;
 
             case 'mermaid':
@@ -80,7 +116,9 @@ class ArtifactHandler {
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
                 this.renderMermaid(data, contentDiv);
-                newArtifactId = artifactId || this.createArtifact(data, type);
+                if (!currentArtifactId) {
+                    currentArtifactId = this.createArtifact(data, type);
+                }
                 break;
 
             default: // Handles code blocks
@@ -88,7 +126,9 @@ class ArtifactHandler {
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
                 this.renderCode(data, type, contentDiv);
-                newArtifactId = artifactId || this.createArtifact(data, type);
+                if (!currentArtifactId) {
+                    currentArtifactId = this.createArtifact(data, type);
+                }
                 break;
         }
         
@@ -98,7 +138,7 @@ class ArtifactHandler {
         chatContainer.classList.add('with-artifact');
         inputContainer.classList.add('with-artifact');
 
-        return newArtifactId;
+        return currentArtifactId;
     }
 
     renderBrowserView(data) {
@@ -130,6 +170,14 @@ class ArtifactHandler {
             screenshotImg.src = '';
             screenshotImg.alt = 'Screenshot not available.';
         }
+    }
+
+    renderImage(base64Data, container) {
+        const img = document.createElement('img');
+        img.className = 'generated-image-artifact';
+        img.src = `data:image/png;base64,${base64Data}`;
+        img.alt = 'Generated Image';
+        container.appendChild(img);
     }
 
     renderMermaid(content, container) {
@@ -185,8 +233,12 @@ class ArtifactHandler {
 
     reopenArtifact(artifactId) {
         const artifact = this.artifacts.get(artifactId);
-        if (artifact) {
+        if (artifact && typeof artifact === 'object') {
+            console.log(`ArtifactHandler: Reopening artifact with ID: ${artifactId}`);
             this.showArtifact(artifact.type, artifact.content, artifactId);
+        } else {
+            console.error(`ArtifactHandler: FAILED to find valid artifact object for ID: ${artifactId}.`);
+            console.log('Current Artifacts Map:', this.artifacts);
         }
     }
 
@@ -215,8 +267,17 @@ class ArtifactHandler {
         let content = '';
         let suggestedName = 'artifact';
         let extension = '.txt';
+        let encoding = 'utf8';
 
-        if (contentDiv.querySelector('.mermaid')) {
+        const imageEl = contentDiv.querySelector('.generated-image-artifact');
+
+        if (imageEl) {
+            const dataUri = imageEl.src;
+            content = dataUri.split(',')[1];
+            suggestedName = 'generated-image';
+            extension = '.png';
+            encoding = 'base64';
+        } else if (contentDiv.querySelector('.mermaid')) {
             content = contentDiv.querySelector('.mermaid').textContent;
             extension = '.mmd';
             suggestedName = 'diagram';
@@ -234,14 +295,15 @@ class ArtifactHandler {
             const result = await window.electron.ipcRenderer.invoke('show-save-dialog', {
                 title: 'Save File',
                 defaultPath: suggestedName + extension,
-                filters: [{ name: 'All Files', extensions: [extension.substring(1)] }]
+                filters: [{ name: 'Image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]
             });
             
             if (result.canceled || !result.filePath) return;
             
             const success = await window.electron.ipcRenderer.invoke('save-file', {
                 filePath: result.filePath,
-                content: content
+                content: content,
+                encoding: encoding 
             });
             
             if (success) {

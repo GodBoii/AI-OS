@@ -386,3 +386,13 @@
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
 }
+
+.generated-image-artifact {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain; /* This is key: it scales the image down to fit, preserving aspect ratio */
+    margin: auto; /* Centers the image within the container */
+}

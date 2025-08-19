@@ -1,8 +1,10 @@
-// chat.js (Complete, Updated Version)
+// chat.js (Complete, Final, with Single-Parse Strategy)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
+// Directly import the artifactHandler singleton to make the dependency explicit and eliminate race conditions.
+import { artifactHandler } from './artifact-handler.js';
 
 // Use the exposed electron APIs instead of direct requires
 const fs = window.electron?.fs?.promises;
@@ -103,15 +105,16 @@ function setupIpcListeners() {
             if (!data) return;
             const { streaming = false, done = false, id: messageId } = data;
 
+            // --- MODIFICATION START (Single-Parse Strategy) ---
             if (done && messageId && ongoingStreams[messageId]) {
                 const messageDiv = ongoingStreams[messageId];
+                
+                // Finalize the reasoning/thinking indicator
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
-                    
                     const logCount = messageDiv.querySelectorAll('.log-block').length;
                     const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
-                    
                     let summaryText = "Aetheria AI's Reasoning";
                     if (logCount > 0 || toolLogCount > 0) {
                         const parts = [];
@@ -119,16 +122,28 @@ function setupIpcListeners() {
                         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
                         summaryText = `Reasoning involved ${parts.join(' and ')}`;
                     }
-            
                     thinkingIndicator.innerHTML = `<span class="summary-text">${summaryText}</span><i class="fas fa-chevron-down summary-chevron"></i>`;
-            
-                    thinkingIndicator.addEventListener('click', () => {
-                        messageDiv.classList.toggle('expanded');
-                    });
+                    thinkingIndicator.addEventListener('click', () => messageDiv.classList.toggle('expanded'));
                 }
-                messageFormatter.finishStreaming(messageId);
+
+                // Get all content blocks and re-render them with the final, complete content.
+                // This performs the Markdown parsing exactly ONCE.
+                const contentBlocks = messageDiv.querySelectorAll('.content-block');
+                contentBlocks.forEach(block => {
+                    const ownerName = block.dataset.owner;
+                    const streamId = `${messageId}-${ownerName}`;
+                    const finalContent = messageFormatter.getFinalContent(streamId);
+                    const innerContentDiv = block.querySelector('.inner-content');
+                    if (finalContent && innerContentDiv) {
+                        innerContentDiv.innerHTML = messageFormatter.format(finalContent);
+                    }
+                });
+                
+                // Clean up the stream from the formatter's memory
+                messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
             }
+            // --- MODIFICATION END ---
 
             if (data.content) {
                 populateBotMessage(data);
@@ -146,12 +161,41 @@ function setupIpcListeners() {
         }
     });
 
+    ipcRenderer.on('image_generated', (data) => {
+        console.log('Received image_generated event with artifact ID:', data.artifactId);
+        const { id: messageId, image_base64, agent_name, artifactId } = data;
+
+        if (artifactHandler && image_base64 && artifactId) {
+            artifactHandler.cachePendingImage(artifactId, image_base64);
+            artifactHandler.showArtifact('image', image_base64, artifactId);
+        }
+
+        if (messageId && ongoingStreams[messageId]) {
+            const messageDiv = ongoingStreams[messageId];
+            const logsContainer = messageDiv.querySelector('.detailed-logs');
+            if (logsContainer) {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'tool-log-entry';
+                logEntry.innerHTML = `
+                    <i class="fas fa-palette tool-log-icon"></i>
+                    <div class="tool-log-details">
+                        <span class="tool-log-owner">${agent_name.replace(/_/g, ' ') || 'Artist Agent'}</span>
+                        <span class="tool-log-action"><strong>Generated an image</strong></span>
+                    </div>
+                    <span class="tool-log-status completed">Completed</span>
+                `;
+                logsContainer.appendChild(logEntry);
+            }
+        }
+    });
+    
+    // ... (rest of IPC listeners are unchanged) ...
     ipcRenderer.on('agent-step', (data) => {
         const { id: messageId, type, name, agent_name, team_name, tool } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
     
         const messageDiv = ongoingStreams[messageId];
-        const toolName = name.replace(/_/g, ' ');
+        const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
         const ownerName = agent_name || team_name || 'Assistant';
         const stepId = `step-${messageId}-${ownerName}-${name}`;
     
@@ -184,10 +228,10 @@ function setupIpcListeners() {
                 }
             }
             
-            if (name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
-                if (window.artifactHandler) {
+            if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
+                if (artifactHandler) {
                     console.log("Detected browser tool output. Showing artifact.");
-                    window.artifactHandler.showArtifact('browser_view', tool.tool_output);
+                    artifactHandler.showArtifact('browser_view', tool.tool_output);
                 }
             }
         }
@@ -219,15 +263,15 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('sandbox-command-started', (data) => {
-        if (window.artifactHandler) {
-            window.artifactHandler.showTerminal(data.artifactId);
-            window.artifactHandler.updateCommand(data.artifactId, data.command);
+        if (artifactHandler) {
+            artifactHandler.showTerminal(data.artifactId);
+            artifactHandler.updateCommand(data.artifactId, data.command);
         }
     });
     
     ipcRenderer.on('sandbox-command-finished', (data) => {
-        if (window.artifactHandler) {
-            window.artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
+        if (artifactHandler) {
+            artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
         }
     });
 
@@ -355,6 +399,7 @@ function populateBotMessage(data) {
         contentBlock = document.createElement('div');
         contentBlock.id = contentBlockId;
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
+        contentBlock.dataset.owner = ownerName; // Store the owner for final rendering
         
         const header = document.createElement('div');
         header.className = 'content-block-header';
@@ -371,13 +416,10 @@ function populateBotMessage(data) {
     const innerContentDiv = contentBlock.querySelector('.inner-content');
     if (innerContentDiv) {
         const streamId = `${messageId}-${ownerName}`;
-        const formattedContent = streaming 
-            ? messageFormatter.formatStreaming(content, streamId) 
-            : messageFormatter.format(content);
+        // --- MODIFICATION (Single-Parse Strategy) ---
+        // During streaming, we now call formatStreaming which does NOT parse markdown.
+        const formattedContent = messageFormatter.formatStreaming(content, streamId);
         innerContentDiv.innerHTML = formattedContent;
-        if (innerContentDiv.querySelector('.mermaid')) {
-            mermaid.init(undefined, innerContentDiv.querySelectorAll('.mermaid'));
-        }
     }
 }
 
@@ -468,6 +510,8 @@ async function handleSendMessage() {
     fileAttachmentHandler.clearAttachedFiles();
     contextHandler.clearSelectedContext();
 }
+
+// ... (rest of the file is unchanged) ...
 
 function initializeToolsMenu() {
     const toolsBtn = document.querySelector('[data-tool="tools"]');
@@ -742,9 +786,9 @@ function init() {
 
 const style = document.createElement('style');
 style.textContent = `
-.error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items-center; gap: 8px; }
 .dark-mode .error-message { background-color: rgba(239, 68, 68, 0.2); }
-.status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
+.status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items-center; gap: 8px; }
 .content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
 .inner-content { padding: 8px; }

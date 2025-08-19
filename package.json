@@ -85,7 +85,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^29.4.6",
+    "electron": "^37.2.6",
     "electron-builder": "^26.0.12"
   }
 }

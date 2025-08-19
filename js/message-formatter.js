@@ -1,9 +1,16 @@
+// js/message-formatter.js (Complete, Final, with Single-Parse Strategy)
+
 import { artifactHandler } from './artifact-handler.js';
+
+/**
+ * Handles formatting of chat messages from Markdown to HTML,
+ * including special handling for code blocks, mermaid diagrams, and custom artifacts.
+ * It also manages the global click handling for reopening artifacts.
+ */
 class MessageFormatter {
     constructor() {
         this.pendingContent = new Map();
         
-        // Initialize Mermaid with default configuration
         mermaid.initialize({
             startOnLoad: true,
             theme: document.body.classList.contains('dark-mode') ? 'dark' : 'default',
@@ -11,10 +18,8 @@ class MessageFormatter {
             fontFamily: 'inherit'
         });
 
-        // Set up theme observer for Mermaid
         this.setupMermaidThemeObserver();
 
-        // Configure marked options
         marked.setOptions({
             breaks: true,
             gfm: true,
@@ -32,21 +37,29 @@ class MessageFormatter {
 
         const renderer = {
             code: (code, language) => {
+                if (language === 'image') {
+                    const artifactId = code.trim();
+                    artifactHandler.createArtifact(artifactId, 'image');
+                    return `<button class="artifact-reference" data-artifact-id="${artifactId}">
+                        <i class="fas fa-image"></i>
+                        View Generated Image
+                    </button>`;
+                }
+
                 if (language === 'mermaid') {
-                    // --- FIX: Swapped the arguments to match showArtifact(type, data) ---
-                    const artifactId = artifactHandler.showArtifact('mermaid', code);
+                    const artifactId = artifactHandler.createArtifact(code, 'mermaid');
+                    artifactHandler.showArtifact('mermaid', code, artifactId);
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <i class="fas fa-diagram-project"></i>
-                        Click to view Mermaid diagram
+                        View Mermaid Diagram
                     </button>`;
                 }
 
                 const validLanguage = hljs.getLanguage(language) ? language : 'plaintext';
-                // --- FIX: Swapped the arguments to match showArtifact(type, data) ---
-                const artifactId = artifactHandler.showArtifact(validLanguage, code);
+                const artifactId = artifactHandler.createArtifact(code, validLanguage);
                 return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                     <i class="fas fa-code"></i>
-                    Click to view ${validLanguage} code
+                    View ${validLanguage} Code Block
                 </button>`;
             }, 
             table: (header, body) => {
@@ -55,77 +68,103 @@ class MessageFormatter {
         };
 
         marked.use({ renderer });
+
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.artifact-reference');
-            if (btn) {
-                const artifactId = btn.dataset.artifactId;
-                artifactHandler.reopenArtifact(artifactId);
+            if (btn && btn.dataset.artifactId) {
+                e.preventDefault();
+                artifactHandler.reopenArtifact(btn.dataset.artifactId);
             }
         });
     }
-
-
+    
     setupMermaidThemeObserver() {
-        // Create MutationObserver to handle theme changes
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                    // Update Mermaid theme based on dark mode
-                    const isDarkMode = mutation.target.classList.contains('dark-mode');
+                    const isDarkMode = document.body.classList.contains('dark-mode');
                     mermaid.initialize({ 
                         theme: isDarkMode ? 'dark' : 'default'
                     });
-
-                    // Re-render existing Mermaid diagrams
-                    if (mutation.target.querySelectorAll('.mermaid').length > 0) {
-                        mermaid.init(undefined, mutation.target.querySelectorAll('.mermaid'));
-                    }
+                    document.querySelectorAll('.mermaid:not([data-processed="true"])').forEach(el => {
+                       mermaid.init(undefined, el);
+                    });
                 }
             });
         });
 
-        // Start observing the body element for class changes
         observer.observe(document.body, {
             attributes: true,
-            attributeFilter: ['class'],
-            subtree: true
+            attributeFilter: ['class']
         });
     }
 
-    formatStreaming(content, messageId) {
-        if (!this.pendingContent.has(messageId)) {
-            this.pendingContent.set(messageId, '');
+    // --- MODIFICATION START (Single-Parse Strategy) ---
+    /**
+     * Appends new content to a pending stream.
+     * This version does NOT parse Markdown. It only sanitizes the raw text for safe display
+     * during the stream. The full Markdown parsing happens only once at the end.
+     * @param {string} content - The new chunk of content to add.
+     * @param {string} streamId - The unique ID for the message stream (e.g., "messageId-agentName").
+     * @returns {string} The sanitized, HTML-escaped text of the entire stream so far.
+     */
+    formatStreaming(content, streamId) {
+        if (!this.pendingContent.has(streamId)) {
+            this.pendingContent.set(streamId, '');
         }
 
-        this.pendingContent.set(messageId, this.pendingContent.get(messageId) + content);
+        const newTotalContent = this.pendingContent.get(streamId) + content;
+        this.pendingContent.set(streamId, newTotalContent);
 
-        const formattedContent = this.format(this.pendingContent.get(messageId));
-
-        // Initialize any new Mermaid diagrams after formatting
-        setTimeout(() => {
-            const mermaidDiagrams = document.querySelectorAll('.mermaid:not([data-processed="true"])');
-            if (mermaidDiagrams.length > 0) {
-                mermaid.init(undefined, mermaidDiagrams);
-            }
-        }, 0);
-
-        return formattedContent;
+        // Sanitize and escape HTML to prevent rendering issues during the stream.
+        // This shows the raw markdown characters as they arrive.
+        const sanitized = DOMPurify.sanitize(newTotalContent, { USE_PROFILES: { html: false } });
+        // Replace newlines with <br> for proper line breaks in the pre-like display.
+        return sanitized.replace(/\n/g, '<br>');
     }
+    // --- MODIFICATION END ---
 
+    /**
+     * Formats a complete string of Markdown content into safe, fully rendered HTML.
+     * This should only be called ONCE when the message stream is complete.
+     * @param {string} content - The final, complete Markdown content to format.
+     * @returns {string} Sanitized, fully rendered HTML string.
+     */
     format(content) {
         if (!content) return '';
 
-        const cleanContent = DOMPurify.sanitize(content, {
-            ADD_TAGS: ['div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-            ADD_ATTR: ['class', 'id']
+        const rawHtml = marked.parse(content);
+
+        const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
+            ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+            ADD_ATTR: ['class', 'id', 'data-artifact-id']
         });
 
-        return marked.parse(cleanContent);
+        return sanitizedHtml;
     }
 
-    finishStreaming(messageId) {
-        this.pendingContent.delete(messageId);
+    // --- NEW HELPER METHODS for Single-Parse Strategy ---
+    /**
+     * Retrieves the final, complete content for a given stream ID.
+     * @param {string} streamId - The unique ID of the stream.
+     * @returns {string|undefined} The complete content string.
+     */
+    getFinalContent(streamId) {
+        return this.pendingContent.get(streamId);
+    }
+
+    /**
+     * Clears all pending content streams associated with a main message ID.
+     * @param {string} messageId - The unique ID of the overall message.
+     */
+    finishStreamingForAllOwners(messageId) {
+        for (const key of this.pendingContent.keys()) {
+            if (key.startsWith(messageId)) {
+                this.pendingContent.delete(key);
+            }
+        }
     }
 }
 
+// Export a singleton instance to be used throughout the application
 export const messageFormatter = new MessageFormatter();
