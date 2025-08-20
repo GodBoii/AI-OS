@@ -159,7 +159,6 @@ class ConnectionManager:
 
 connection_manager = ConnectionManager()
 
-# ... (All Flask routes remain unchanged) ...
 @app.route('/login/<provider>')
 def login_provider(provider):
     token = request.args.get('token')
@@ -361,11 +360,7 @@ def handle_browser_command_result(data: Dict[str, Any]):
     else:
         logger.warning(f"Received a browser result for an unknown or expired request_id: {request_id}")
 
-
-# --- MODIFICATION START ---
-# The function signature is updated to accept the new `custom_tool_config` dictionary.
 def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict):
-# --- MODIFICATION END ---
     try:
         session_data = connection_manager.get_session(conversation_id)
         if not session_data:
@@ -374,8 +369,6 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         user_id = session_data['user_id']
         message = turn_data['user_message']
         
-        # --- MODIFICATION START ---
-        # Pass the new `custom_tool_config` to the agent factory.
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
@@ -383,7 +376,6 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
             custom_tool_config=custom_tool_config,
             **session_data['config']
         )
-        # --- MODIFICATION END ---
         
         previous_history = session_data.get("history", [])
         current_turn_message = {"role": "user", "content": message}
@@ -444,10 +436,34 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
 
         socketio.emit("response", {"content": "", "done": True, "id": message_id}, room=sid)
 
+        # --- MODIFICATION START: Save full event stream to history ---
+        # Save the user's message as before
         session_data["history"].append({"role": "user", "content": message})
-        session_data["history"].append({"role": "assistant", "content": final_assistant_response})
+
+        # Create a new, structured dictionary for the assistant's turn
+        assistant_turn = {
+            "role": "assistant",
+            "content": final_assistant_response,  # Keep final text for previews/backward compatibility
+            "events": []  # Initialize with an empty list for events
+        }
+
+        # Safely access and serialize the events from the agent's run response.
+        # This is possible because we set `store_events=True` in assistant.py.
+        if hasattr(agent, 'run_response') and agent.run_response and agent.run_response.events:
+            try:
+                # Serialize each event object in the list into a dictionary
+                assistant_turn["events"] = [event.to_dict() for event in agent.run_response.events]
+                logger.info(f"Captured {len(assistant_turn['events'])} events for conversation {conversation_id}.")
+            except Exception as e:
+                logger.error(f"Failed to serialize agent run events for {conversation_id}: {e}")
+
+        # Append the complete, structured turn to the history
+        session_data["history"].append(assistant_turn)
+
+        # Save the updated session data back to Redis
         redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
-        logger.info(f"Run finished and updated session state in Redis for conversation: {conversation_id}")
+        logger.info(f"Run finished and updated session state (with events) in Redis for conversation: {conversation_id}")
+        # --- MODIFICATION END ---
 
         if hasattr(agent, 'session_metrics') and agent.session_metrics:
             metrics = agent.session_metrics
@@ -493,23 +509,18 @@ def on_send_message(data: str):
         }
         message_id = data.get("id") or str(uuid.uuid4())
 
-        # --- MODIFICATION START ---
-        # Create a clean dictionary specifically for BrowserTools.
         browser_tools_config = {
             'sid': sid,
             'socketio': socketio,
             'waiting_events': browser_waiting_events
         }
         
-        # Create a separate dictionary for our custom tools. This prevents polluting
-        # the config for BrowserTools and resolves the TypeError.
         custom_tool_config = {
             'sid': sid,
             'socketio': socketio,
             'message_id': message_id
         }
         
-        # Pass both dictionaries to the background task.
         eventlet.spawn(
             run_agent_and_stream,
             sid,
@@ -519,7 +530,6 @@ def on_send_message(data: str):
             browser_tools_config,
             custom_tool_config
         )
-        # --- MODIFICATION END ---
         logger.info(f"Spawned agent run in main process for conversation: {conversation_id}")
 
     except AuthApiError as e:

@@ -1,4 +1,4 @@
-// chat.js (Complete, Final, with Single-Parse Strategy)
+// chat.js (Complete, Final, with High-Fidelity History Rendering)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
@@ -105,11 +105,9 @@ function setupIpcListeners() {
             if (!data) return;
             const { streaming = false, done = false, id: messageId } = data;
 
-            // --- MODIFICATION START (Single-Parse Strategy) ---
             if (done && messageId && ongoingStreams[messageId]) {
                 const messageDiv = ongoingStreams[messageId];
                 
-                // Finalize the reasoning/thinking indicator
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
@@ -126,8 +124,6 @@ function setupIpcListeners() {
                     thinkingIndicator.addEventListener('click', () => messageDiv.classList.toggle('expanded'));
                 }
 
-                // Get all content blocks and re-render them with the final, complete content.
-                // This performs the Markdown parsing exactly ONCE.
                 const contentBlocks = messageDiv.querySelectorAll('.content-block');
                 contentBlocks.forEach(block => {
                     const ownerName = block.dataset.owner;
@@ -139,11 +135,9 @@ function setupIpcListeners() {
                     }
                 });
                 
-                // Clean up the stream from the formatter's memory
                 messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
             }
-            // --- MODIFICATION END ---
 
             if (data.content) {
                 populateBotMessage(data);
@@ -163,11 +157,11 @@ function setupIpcListeners() {
 
     ipcRenderer.on('image_generated', (data) => {
         console.log('Received image_generated event with artifact ID:', data.artifactId);
-        const { id: messageId, image_base64, agent_name, artifactId } = data;
+        const { id: messageId, image_base_64, agent_name, artifactId } = data;
 
-        if (artifactHandler && image_base64 && artifactId) {
-            artifactHandler.cachePendingImage(artifactId, image_base64);
-            artifactHandler.showArtifact('image', image_base64, artifactId);
+        if (artifactHandler && image_base_64 && artifactId) {
+            artifactHandler.cachePendingImage(artifactId, image_base_64);
+            artifactHandler.showArtifact('image', image_base_64, artifactId);
         }
 
         if (messageId && ongoingStreams[messageId]) {
@@ -189,7 +183,6 @@ function setupIpcListeners() {
         }
     });
     
-    // ... (rest of IPC listeners are unchanged) ...
     ipcRenderer.on('agent-step', (data) => {
         const { id: messageId, type, name, agent_name, team_name, tool } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
@@ -399,7 +392,7 @@ function populateBotMessage(data) {
         contentBlock = document.createElement('div');
         contentBlock.id = contentBlockId;
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
-        contentBlock.dataset.owner = ownerName; // Store the owner for final rendering
+        contentBlock.dataset.owner = ownerName;
         
         const header = document.createElement('div');
         header.className = 'content-block-header';
@@ -416,11 +409,115 @@ function populateBotMessage(data) {
     const innerContentDiv = contentBlock.querySelector('.inner-content');
     if (innerContentDiv) {
         const streamId = `${messageId}-${ownerName}`;
-        // --- MODIFICATION (Single-Parse Strategy) ---
-        // During streaming, we now call formatStreaming which does NOT parse markdown.
         const formattedContent = messageFormatter.formatStreaming(content, streamId);
         innerContentDiv.innerHTML = formattedContent;
     }
+}
+
+/**
+ * Renders a complete assistant turn from a static array of saved event objects.
+ * This is used for displaying historical sessions with full fidelity.
+ * @param {HTMLElement} targetContainer - The DOM element to render the turn into.
+ * @param {Array<Object>} events - The array of event objects from the saved session.
+ */
+function renderTurnFromEvents(targetContainer, events) {
+    if (!targetContainer || !events || events.length === 0) {
+        // Fallback for safety
+        targetContainer.innerHTML = '<div class="message-text">(Could not render detailed events)</div>';
+        return;
+    }
+
+    // Data aggregation step
+    const agentData = {};
+    let toolLogsHtml = '';
+    let finalContentEvent = null;
+
+    events.forEach(event => {
+        const owner = event.agent_name || event.team_name;
+        if (!owner) return;
+
+        // Initialize agent data if not present
+        if (!agentData[owner]) {
+            agentData[owner] = { content: '', isLog: false };
+        }
+
+        // Handle tool calls by generating HTML directly
+        if (event.event.includes('ToolCallStarted')) {
+            const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
+            toolLogsHtml += `
+                <div class="tool-log-entry">
+                    <i class="fas fa-wrench tool-log-icon"></i>
+                    <div class="tool-log-details">
+                        <span class="tool-log-owner">${owner}</span>
+                        <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
+                    </div>
+                    <span class="tool-log-status completed">Completed</span>
+                </div>`;
+        }
+
+        // Aggregate content from response events
+        if (event.event.includes('ResponseContent')) {
+            const isFinalContent = owner === "Aetheria_AI" && !(event.member_responses && event.member_responses.length > 0);
+            agentData[owner].isLog = !isFinalContent;
+            if (event.content) {
+                 agentData[owner].content += event.content;
+            }
+        }
+        
+        // Capture the final, complete content event from the main agent
+        if (event.event === 'TeamRunCompleted' && owner === 'Aetheria_AI') {
+            finalContentEvent = event;
+        }
+    });
+    
+    // If a final complete event exists, use its content for the main agent to avoid duplication
+    if (finalContentEvent && agentData['Aetheria_AI']) {
+        agentData['Aetheria_AI'].content = finalContentEvent.content;
+    }
+
+    // Build the final HTML structure
+    let mainContentHtml = '';
+    let logContentHtml = '';
+
+    for (const owner in agentData) {
+        if (!agentData[owner].content) continue;
+        
+        const formattedContent = messageFormatter.format(agentData[owner].content);
+        const blockHtml = `
+            <div class="content-block ${agentData[owner].isLog ? 'log-block' : ''}">
+                <div class="content-block-header">${owner.replace(/_/g, ' ')}</div>
+                <div class="inner-content">${formattedContent}</div>
+            </div>`;
+        
+        if (agentData[owner].isLog) {
+            logContentHtml += blockHtml;
+        } else {
+            mainContentHtml += blockHtml;
+        }
+    }
+
+    const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
+    const agentLogCount = (logContentHtml.match(/log-block/g) || []).length;
+    let summaryText = "Aetheria AI's Reasoning";
+    if (toolLogCount > 0 || agentLogCount > 0) {
+        const parts = [];
+        if (agentLogCount > 0) parts.push(`${agentLogCount} agent${agentLogCount > 1 ? 's' : ''}`);
+        if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
+        summaryText = `Reasoning involved ${parts.join(' and ')}`;
+    }
+
+    const finalHtml = `
+        <div class="message message-bot expanded">
+            <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="summary-text">${summaryText}</span>
+                <i class="fas fa-chevron-down summary-chevron"></i>
+            </div>
+            <div class="detailed-logs">${toolLogsHtml}${logContentHtml}</div>
+            <div class="message-content">${mainContentHtml}</div>
+        </div>
+    `;
+
+    targetContainer.innerHTML = finalHtml;
 }
 
 async function handleSendMessage() {
@@ -510,8 +607,6 @@ async function handleSendMessage() {
     fileAttachmentHandler.clearAttachedFiles();
     contextHandler.clearSelectedContext();
 }
-
-// ... (rest of the file is unchanged) ...
 
 function initializeToolsMenu() {
     const toolsBtn = document.querySelector('[data-tool="tools"]');
@@ -780,6 +875,9 @@ function init() {
             }
         }
     });
+
+    // Expose the renderer function globally so context-handler.js can use it
+    window.renderTurnFromEvents = renderTurnFromEvents;
 
     startNewConversation();
 }

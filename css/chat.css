@@ -2021,3 +2021,86 @@ a:hover {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* ================================================================= */
+/* UNIFIED HISTORICAL LOG VIEW (Add to the end of chat.css)        */
+/* ================================================================= */
+
+/* 1. Style the main container for the entire conversation log */
+.session-details-view .conversation-messages {
+    background-color: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px 24px; /* Add some internal padding */
+    box-shadow: var(--shadow-inner, inset 0 2px 4px 0 rgba(0,0,0,0.05));
+}
+
+/* 2. Style each turn within the log */
+.conversation-turn {
+    padding: 24px 0;
+    border-bottom: 1px solid var(--border-color); /* Separator line */
+}
+
+/* Remove the separator from the very last turn for a clean finish */
+.conversation-turn:last-child {
+    border-bottom: none;
+    padding-bottom: 8px; /* Reduce bottom padding on the last item */
+}
+
+.conversation-turn:first-child {
+    padding-top: 8px; /* Reduce top padding on the first item */
+}
+
+/* 3. Style the user's prompt within the turn */
+.turn-user-message .message-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.turn-user-message .message-text {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* 4. Style the assistant's response area */
+.turn-assistant-response {
+    margin-top: 20px;
+}
+
+/*
+ * 5. CRITICAL OVERRIDE: Strip the "box-in-a-box" styling from the
+ *    assistant's response when it's inside our new unified log.
+*/
+.turn-assistant-response .message-bot {
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    box-shadow: none;
+    margin-top: 0;
+    border-radius: 0;
+}
+
+/* Ensure the reasoning dropdown header still has a background */
+.turn-assistant-response .message-bot .thinking-indicator {
+    border-radius: 8px 8px 0 0; /* Slightly round the corners */
+}
+
+/* Ensure the detailed logs have a subtle distinction */
+.turn-assistant-response .message-bot.expanded .detailed-logs {
+    background-color: transparent;
+    padding: 12px;
+    margin: 0 -16px; /* Make it span the full width of the response area */
+    border-top-color: var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dark-mode .turn-assistant-response .message-bot.expanded .detailed-logs {
+    background-color: transparent;
+}

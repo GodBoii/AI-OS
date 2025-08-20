@@ -367,6 +367,7 @@ def get_llm_os(
         read_team_history=True, # Use read_team_history for teams
         add_history_to_messages=True,
         num_history_runs=40,
+        store_events=True,
         markdown=True,
         add_datetime_to_instructions=True,
         debug_mode=debug_mode,

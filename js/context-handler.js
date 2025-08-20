@@ -1,4 +1,4 @@
-// context-handler.js (Final Version with UI structure update)
+// context-handler.js (Final Version with Turn-Based History Rendering)
 
 class ContextHandler {
     constructor() {
@@ -45,8 +45,6 @@ class ContextHandler {
             this.loadSessions();
         });
 
-        // --- MODIFICATION: ADDED EVENT DELEGATION ---
-        // This single listener handles clicks on any checkbox within the container.
         this.elements.sessionsContainer?.addEventListener('change', (e) => {
             if (e.target.matches('.session-checkbox')) {
                 const checkbox = e.target;
@@ -134,9 +132,6 @@ class ContextHandler {
         
         const contentArea = sessionItem.querySelector('.session-content');
         
-        // --- MODIFICATION: REMOVED THE UNRELIABLE EVENT LISTENER ---
-        // The 'change' event is now handled by the delegated listener in bindEvents().
-
         contentArea.onclick = (e) => {
             if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'label') {
                 this.showSessionDetails(session.session_id);
@@ -145,8 +140,6 @@ class ContextHandler {
         
         return sessionItem;
     }
-
-    // --- (The rest of the file remains unchanged) ---
     
     getSessionItemHTML(session, sessionName, formattedDate, messageCount) {
         const checkboxId = `session-check-${session.session_id}`;
@@ -213,6 +206,10 @@ class ContextHandler {
             }));
     }
 
+    /**
+     * Displays the detailed conversation view for a selected session using a turn-based layout.
+     * @param {string} sessionId - The ID of the session to display.
+     */
     showSessionDetails(sessionId) {
         const session = this.loadedSessions.find(s => s.session_id === sessionId);
         if (!session) {
@@ -237,16 +234,56 @@ class ContextHandler {
         const messagesContainer = view.querySelector('.conversation-messages');
         messagesContainer.innerHTML = '';
 
+        // --- MODIFICATION START: Refactored to a turn-based rendering loop ---
         if (session.memory?.runs?.length > 0) {
-            session.memory.runs.forEach(run => {
-                const messageEntry = document.createElement('div');
-                messageEntry.className = `message-entry role-${run.role}`;
-                messageEntry.innerHTML = `<div class="message-content"><span class="message-label">${run.role.charAt(0).toUpperCase() + run.role.slice(1)}:</span><div class="message-text">${run.content}</div></div>`;
-                messagesContainer.appendChild(messageEntry);
-            });
+            const runs = session.memory.runs;
+            // Iterate through the runs array in pairs (turns)
+            for (let i = 0; i < runs.length; i += 2) {
+                const userRun = runs[i];
+                const assistantRun = (i + 1 < runs.length) ? runs[i + 1] : null;
+
+                // Create a single container for the entire turn
+                const turnContainer = document.createElement('div');
+                turnContainer.className = 'conversation-turn';
+
+                // 1. Render the user part of the turn
+                if (userRun && userRun.role === 'user') {
+                    const userMessageDiv = document.createElement('div');
+                    userMessageDiv.className = 'turn-user-message';
+                    userMessageDiv.innerHTML = `
+                        <div class="message-label">User</div>
+                        <div class="message-text">${userRun.content}</div>
+                    `;
+                    turnContainer.appendChild(userMessageDiv);
+                }
+
+                // 2. Render the assistant part of the turn
+                if (assistantRun && assistantRun.role === 'assistant') {
+                    const assistantResponseDiv = document.createElement('div');
+                    assistantResponseDiv.className = 'turn-assistant-response';
+                    
+                    // Check for rich event data
+                    if (assistantRun.events && Array.isArray(assistantRun.events) && assistantRun.events.length > 0) {
+                        if (window.renderTurnFromEvents) {
+                            // Delegate the complex rendering to our existing function
+                            window.renderTurnFromEvents(assistantResponseDiv, assistantRun.events);
+                        } else {
+                            // Fallback if the function is missing
+                            assistantResponseDiv.innerHTML = `<div class="message-text">${assistantRun.content || '(Could not render detailed view)'}</div>`;
+                        }
+                    } else {
+                        // Fallback for old, simple assistant messages
+                        assistantResponseDiv.innerHTML = `<div class="message-text">${assistantRun.content}</div>`;
+                    }
+                    turnContainer.appendChild(assistantResponseDiv);
+                }
+                
+                messagesContainer.appendChild(turnContainer);
+            }
         } else {
             messagesContainer.innerHTML = '<div class="message-entry">No messages in this session.</div>';
         }
+        // --- MODIFICATION END ---
 
         view.querySelector('.back-button').addEventListener('click', () => {
             this.showSessionList(this.loadedSessions);
@@ -264,15 +301,9 @@ class ContextHandler {
         this.updateContextIndicator();
     }
 
-    // --- NEW METHOD ---
-    /**
-     * Removes a single session from the selected context by its index.
-     * @param {number} index - The index of the session to remove.
-     */
     removeSelectedSession(index) {
         if (index > -1 && index < this.selectedContextSessions.length) {
             this.selectedContextSessions.splice(index, 1);
-            // After removing, update the main context indicator badge.
             this.updateContextIndicator();
         }
     }
