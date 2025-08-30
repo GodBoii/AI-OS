@@ -19,10 +19,10 @@ let chatConfig = {
     tools: {
         internet_search: true,
         coding_assistant: true,
-        investment_assistant: true,
-        web_crawler: true,
+        World_Agent: true,
         enable_github: true,
         enable_google_email: true,
+        Planner_Agent: true,
         enable_google_drive: true
     },
     deepsearch: false
@@ -63,7 +63,7 @@ function startNewConversation() {
 
     chatConfig = {
         memory: false, tasks: false,
-        tools: { internet_search: true, coding_assistant: true, investment_assistant: true, web_crawler: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
+        tools: { internet_search: true, Planner_Agent: true, coding_assistant: true, World_Agent: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
         deepsearch: false
     };
     const aiOsCheckbox = document.getElementById('ai_os');
@@ -157,11 +157,11 @@ function setupIpcListeners() {
 
     ipcRenderer.on('image_generated', (data) => {
         console.log('Received image_generated event with artifact ID:', data.artifactId);
-        const { id: messageId, image_base_64, agent_name, artifactId } = data;
+        const { id: messageId, image_base64, agent_name, artifactId } = data;
 
-        if (artifactHandler && image_base_64 && artifactId) {
-            artifactHandler.cachePendingImage(artifactId, image_base_64);
-            artifactHandler.showArtifact('image', image_base_64, artifactId);
+        if (artifactHandler && image_base64 && artifactId) {
+            artifactHandler.cachePendingImage(artifactId, image_base64);
+            artifactHandler.showArtifact('image', image_base64, artifactId);
         }
 
         if (messageId && ongoingStreams[messageId]) {

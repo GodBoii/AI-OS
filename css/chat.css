@@ -615,8 +615,8 @@ body:not(.dark-mode) .formatted-table tbody tr:nth-of-type(odd) {
     left: 50%;
     transform: translate(-50%, -50%);
     width: 90%;
-    max-width: 1000px;
-    height: 85vh;
+    max-width: 1100px;
+    height: 90vh;
     background: var(--window-bg);
     border-radius: 12px;
     border: 1px solid var(--border-color);

@@ -16,11 +16,11 @@ from agno.run.team import TeamRunResponseEvent
 from agno.models.response import ModelResponseEvent
 from agno.run.messages import RunMessages
 
-
 from agno.memory.v2.memory import Memory as AgnoMemoryV2
 from agno.storage.postgres import PostgresStorage
 from agno.memory.v2.db.postgres import PostgresMemoryDb
 from agno.models.google import Gemini
+from agno.models.groq import Groq
 
 # Tool Imports
 from agno.tools import Toolkit
@@ -51,10 +51,10 @@ class PatchedTeam(Team):
 def get_llm_os(
     user_id: Optional[str] = None,
     session_info: Optional[Dict[str, Any]] = None,
-    web_crawler: bool = False,
     internet_search: bool = False,
     coding_assistant: bool = False,
-    investment_assistant: bool = False,
+    World_Agent: bool = False,
+    Planner_Agent: bool = True,  # Enable planner by default
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = False,
@@ -65,7 +65,7 @@ def get_llm_os(
     custom_tool_config: Optional[Dict[str, Any]] = None,
 ) -> Team:  # The factory now returns a Team instance
     """
-    Constructs the hierarchical Aetheria AI multi-agent system.
+    Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
     """
     # --- 1. CORE INFRASTRUCTURE SETUP (Unchanged) ---
     direct_tools: List[Toolkit] = []
@@ -82,12 +82,9 @@ def get_llm_os(
         memory = None
 
     # --- 2. DIRECT TOOL INTEGRATIONS (Unchanged) ---
-    # These tools will be used by the top-level coordinator.
     if enable_github and user_id:
-        # ... (github integration logic remains the same)
         direct_tools.append(GitHubTools(user_id=user_id))
     if (enable_google_email or enable_google_drive) and user_id:
-        # ... (google integration logic remains the same)
         if enable_google_email:
             direct_tools.append(GoogleEmailTools(user_id=user_id))
         if enable_google_drive:
@@ -138,14 +135,10 @@ def get_llm_os(
                 logger.warning("Image response was found, but it has no content.")
                 return "An image could not be generated for that prompt."
 
-            # 1. Generate a unique ID for this artifact.
             artifact_id = f"image-artifact-{uuid.uuid4()}"
-            
-            # 2. Encode the image data for transport.
             image_bytes = image_response.content
             base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-            # 3. Emit the large data payload directly to the frontend with the unique ID.
             socketio.emit("image_generated", {
                 "id": message_id,
                 "artifactId": artifact_id,
@@ -154,7 +147,6 @@ def get_llm_os(
             }, room=sid)
             logger.info(f"Emitted 'image_generated' event for artifact {artifact_id}.")
             
-            # 4. Return a small, clean Markdown block containing ONLY the ID.
             return f"I have generated an image for you.\n\n```image\n{artifact_id}\n```"
 
         except Exception as e:
@@ -163,16 +155,100 @@ def get_llm_os(
     
     direct_tools.append(generate_image)
 
+    # --- 3. BUILD AVAILABLE RESOURCES INVENTORY ---
+    # This will be used by the planner to understand what's available
+    available_resources = {
+        "direct_tools": [],
+        "specialist_agents": [],
+        "capabilities": []
+    }
 
-    # --- 3. SPECIALIST AGENT AND TEAM DEFINITIONS ---
+    # Document direct tools
+    if enable_github:
+        available_resources["direct_tools"].append("GitHubTools - GitHub repository operations")
+    if enable_google_email:
+        available_resources["direct_tools"].append("GoogleEmailTools - Email operations")
+    if enable_google_drive:
+        available_resources["direct_tools"].append("GoogleDriveTools - Google Drive file operations")
+    if internet_search:
+        available_resources["direct_tools"].append("GoogleSearchTools - Web search capabilities")
+    if enable_browser:
+        available_resources["direct_tools"].append("BrowserTools - Browser automation and interaction")
+    available_resources["direct_tools"].append("generate_image - AI image generation")
+
+    # Document specialist agents that will be available
+    if coding_assistant:
+        available_resources["specialist_agents"].append("dev_team - Code development, testing, file operations, terminal commands")
+        available_resources["capabilities"].append("Code execution via sandbox")
+    if World_Agent:
+        available_resources["specialist_agents"].append("World_Agent - Wikipedia, ArXiv, HackerNews, YFinance, web crawling")
+        available_resources["capabilities"].append("Research and data extraction")
+
+    # --- 4. SPECIALIST AGENT AND TEAM DEFINITIONS ---
     main_team_members: List[Union[Agent, Team]] = []
 
-    # --- 3.1. The Development Team (unified planner + executor) ---
+    # --- 4.1. The Planner Agent ---
+    if Planner_Agent:
+        resources_summary = "\n".join([
+            "AVAILABLE DIRECT TOOLS:",
+            *[f"• {tool}" for tool in available_resources["direct_tools"]],
+            "",
+            "AVAILABLE SPECIALIST AGENTS:",
+            *[f"• {agent}" for agent in available_resources["specialist_agents"]],
+            "",
+            "SYSTEM CAPABILITIES:",
+            *[f"• {cap}" for cap in available_resources["capabilities"]]
+        ])
+
+        planner = Agent(
+            name="planner",
+            role="Strategic planning agent that creates execution plans for complex multi-step tasks",
+            model=Groq(id="deepseek-r1-distill-llama-70b"),
+            instructions=[
+                "You are the Strategic Planner for Aetheria AI. Your role is to analyze complex queries and create clear, actionable execution plans.",
+                "",
+                "ACCESS: You receive queries from team_session_state['turn_context']",
+                "",
+                resources_summary,
+                "",
+                "PLANNING APPROACH:",
+                "1. Analyze the user's request to identify all requirements",
+                "2. Break down complex tasks into atomic, sequential steps",
+                "3. Identify which tools/agents are needed for each step",
+                "4. Consider dependencies between steps",
+                "5. Optimize for efficiency and accuracy",
+                "",
+                "PLAN FORMAT:",
+                "• Keep plans concise: 3-7 steps maximum",
+                "• One line per step, clear and actionable",
+                "• Each step should specify: ACTION → TOOL/AGENT → EXPECTED OUTPUT",
+                "• Example format:",
+                "  Step 1: Search for latest research papers → World_Agent (ArXiv) → Get 5 recent papers",
+                "  Step 2: Analyze findings → Direct analysis → Synthesize key insights",
+                "  Step 3: Generate visualization → generate_image → Create infographic",
+                "",
+                "WHEN TO CREATE PLANS:",
+                "• Multi-step workflows requiring different tools",
+                "• Tasks needing coordination between agents",
+                "• Complex analysis requiring sequential processing",
+                "• Projects with clear phases (research → analyze → create)",
+                "",
+                "OUTPUT:",
+                "Return ONLY the execution plan in the specified format.",
+                "Do not execute tasks yourself - only plan.",
+                "Be specific about which agent/tool handles each step."
+            ],
+            markdown=True,
+            debug_mode=debug_mode,
+        )
+        main_team_members.append(planner)
+
+    # --- 4.2. The Development Team ---
     if coding_assistant:
         dev_team = Team(
             name="dev_team",
             mode="coordinate",
-            model=Gemini(id="gemini-2.5-flash"),
+            model=Gemini(id="gemini-2.5-pro"),
             members=[],
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
             instructions=[
@@ -187,170 +263,86 @@ def get_llm_os(
         )
         main_team_members.append(dev_team)
 
-    # --- 3.2. Other Specialist Agents ---
-    if web_crawler:
-        crawler_agent = Agent(
-            name="Crawler",
-            role="Web content extractor providing structured summaries from URLs.",
-            tools=[Crawl4aiTools(max_length=None)],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
+    # --- 4.3. The World Agent ---
+    if World_Agent:
+        world_ai = Agent(
+            name="World_Agent",
+            role="Universal knowledge and research agent with access to world information.",
+            model=Gemini(id="gemini-2.5-flash"),
+            tools=[YFinanceTools(),WikipediaTools(),HackerNewsTools(),ArxivTools(),WebsiteTools(),Crawl4aiTools(max_length=None)],
             instructions=[
-                "Check team_session_state['turn_context'] for URLs and context.",
-                "Use website scraping functions to extract detailed content from URLs.",
-                "Focus on comprehensive content extraction including text, links, and structure.",
-                "Handle complex websites with dynamic content and multiple pages.",
-                "Provide structured output with clear source attribution."
+                "You are the World Agent with comprehensive access to global information sources.",
+                "Access context from team_session_state['turn_context'] for queries.",
+                "",
+                "AVAILABLE TOOLS:",
+                "• WikipediaTools - Encyclopedic knowledge and factual information",
+                "• ArxivTools - Academic papers and research publications",
+                "• HackerNewsTools - Tech news, startup discussions",
+                "• Crawl4aiTools - Advanced web scraping for dynamic content",
+                "• WebsiteTools - Deep website content extraction",
+                "• YFinanceTools - Stock prices, company info, analyst recommendations",
+                "",
+                "TOOL SELECTION LOGIC:",
+                "• General knowledge queries → Wikipedia",
+                "• Academic/research papers → ArXiv",
+                "• Tech news/trends → HackerNews",
+                "• URL content extraction → Crawl4ai or WebsiteTools",
+                "• Financial/stock data → YFinance",
+                "",
+                "OUTPUT:",
+                "• Deliver clear, comprehensive responses",
+                "• Structure information logically",
+                "• Include relevant data points and insights",
+                "• Keep responses concise yet thorough"
             ],
             markdown=True,
             debug_mode=debug_mode,
         )
+        main_team_members.append(world_ai)
 
-        deep_crawler_agent = Agent(
-            name="Deep_Crawler",
-            role="Deep web content extractor providing structured summaries from URLs.",
-            tools=[WebsiteTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Check team_session_state['turn_context'] for URLs and context.",
-                "Use website scraping functions to extract detailed content from URLs.",
-                "Focus on comprehensive content extraction including text, links, and structure.",
-                "Handle complex websites with dynamic content and multiple pages.",
-                "Provide structured output with clear source attribution."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
-        Arxiv_agent = Agent(
-            name="Arxiv_Agent",
-            role="authors publications and research papers information extractor",
-            tools=[ArxivTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use team_session_state['turn_context'] for search context.",
-                "Use ArXiv functions to search and retrieve academic papers.",
-                "Extract paper metadata: title, authors, abstract, publication date, categories.",
-                "Focus on research papers, preprints, and scholarly publications.",
-                "Provide structured academic content with citation information."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
-        hacker_news_agent = Agent(
-            name="Hacker News Agent",
-            role="HackerNews enables an Agent to search Hacker News website.",
-            tools=[HackerNewsTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use team_session_state['turn_context'] for search context.",
-                "Use get_top_hackernews_stories to fetch trending tech stories (default 10, specify num_stories).",
-                "Use get_user_details to retrieve HN user profiles by username.",
-                "Extract story titles, scores, comments, and user engagement metrics.",
-                "Focus on tech trends, startup news, and community discussions."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
-        wikipedia_agent = Agent(
-            name="Wikipedia Agent",
-            role="Wikipedia enables an Agent to search Wikipedia website.",
-            tools=[WikipediaTools()],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use team_session_state['turn_context'] for search context.",
-                "Use Wikipedia functions to search and retrieve encyclopedic content.",
-                "Extract article content, summaries, and structured information.",
-                "Focus on factual, well-sourced information with citations.",
-                "Provide comprehensive background knowledge and definitions."
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-
-        research_team = Team(
-            name="Research_Team",
-            mode="coordinate",
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            members=[wikipedia_agent, hacker_news_agent, Arxiv_agent, deep_crawler_agent, crawler_agent],
-            instructions=[
-                "Research coordinator: Route queries to appropriate specialist agents based on content type.",
-                "Access team_session_state['turn_context'] for full context.",
-                "Routing strategy: Wikipedia (encyclopedic) → ArXiv (academic) → HackerNews (tech stories) → Deep Crawler (deep url scraping)→ Crawler (general url scraping).",
-                "HackerNews agent: Use get_top_hackernews_stories for trending tech, get_user_details for profiles.",
-                "Synthesize findings from multiple sources, note conflicts, verify information.",
-                "Ensure members use shared context. Synthesize with source attribution."
-                "use multiple agents if you think it is necessary"
-            ],
-            debug_mode=debug_mode,
-        )
-        main_team_members.append(research_team)
-
-    if investment_assistant:
-        investor_agent = Agent(
-            name="Investor",
-            role="Generate professional investment reports.",
-            tools=[YFinanceTools(stock_price=True, company_info=True, analyst_recommendations=True, company_news=True)],
-            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
-            instructions=[
-                "Use team_session_state['turn_context'] for stock symbols and context.",
-                "Create professional investment reports with:",
-                "Overview, Core Metrics, Financial Performance, Growth Prospects, News, Summary, Recommendation"
-            ],
-            markdown=True,
-            debug_mode=debug_mode,
-        )
-        main_team_members.append(investor_agent)
-
-    # --- 4. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
+    # --- 5. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
-        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via team_session_state['turn_context'].",
+        "Aetheria AI: Most Advanced AI system providing personalized, direct responses.",
         "",
-        "THINKING PROCESS - First determine:",
-        "• Can I answer using available direct tools?",
-        "• Do I need to search knowledge base/memory?", 
-        "• Do I need to search internet?",
-        "• Do I need to delegate to specialists?",
-        "• Do I need clarification from user?",
+        "COMPLEXITY ASSESSMENT - First determine:",
+        "• Is this a simple, single-step query? → Handle directly",
+        "• Is this a complex, multi-step task? → Delegate to planner first",
+        "• Does it require multiple tools/agents? → Delegate to planner first",
         "",
-        "ROUTING GUIDE:",
-        "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
-        "• Web research/Data extraction → Research_Team (Wikipedia, ArXiv, HackerNews, web crawling)",
-        "• Image generation/drawing/creating a picture → generate_image (direct tool)",
-        "• Stock/Finance analysis → Investor (YFinance tools)",
-        "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
-        "• Simple searches → GoogleSearch (direct tool)",
+        "WORKFLOW FOR COMPLEX TASKS:",
+        "1. If query is complex or multi-step → Send to 'planner' agent",
+        "2. Receive execution plan from planner",
+        "3. Execute plan step-by-step using specified agents/tools",
+        "4. Compile results and deliver final response",
         "",
-        "DECISION LOGIC:",
-        "- Need to SEE and INTERACT with webpage → use browser_tools",
-        "- Need to EXTRACT data from webpage → delegate to Research_Team", 
-        "- Need to CODE/RUN commands → delegate to dev_team",
-        "- Need FINANCIAL data → delegate to Investor",
-        "- Need to CREATE an IMAGE → use the `generate_image` tool with a detailed prompt.",
+        "ROUTING GUIDE FOR SIMPLE TASKS:",
+        "• Coding/Terminal/Files/Testing → dev_team",
+        "• Web research/Data extraction → World_Agent",
+        "• Image generation → generate_image",
+        "• Browser interaction → browser_tools",
+        "• Simple searches → GoogleSearchTools",
+        "",
+        "EXECUTION PRINCIPLES:",
+        "• Follow planner's steps precisely when executing complex tasks",
+        "• Maintain context between steps",
+        "• If a step fails, adapt and continue or request new plan",
+        "• Compile intermediate results for final synthesis",
         "",
         "RESPONSE STYLE:",
-        "• Use personalized responses when user data is available",
-        "• Provide direct, clear answers without explaining internal processes",
-        "• Don't use phrases like 'based on my knowledge', 'depending on information', 'I will now', etc.",
+        "• Deliver results as if you personally completed the task",
         "• Focus on user value, not system operations",
         "• Keep responses natural and conversational",
-        "",
-        "Always inform teams to use shared context. Deliver final results as if you personally completed the task."
+        "• Don't expose internal planning unless specifically asked"
     ]
 
     # The main orchestrator is now a PatchedTeam instance
     llm_os_team = PatchedTeam(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-2.5-flash"),  # A powerful model for top-level coordination
+        model=Gemini(id="gemini-2.5-flash"),
         members=main_team_members,
         mode="coordinate",
-        
-        # The coordinator has its own set of general-purpose tools
         tools=direct_tools,
         instructions=aetheria_instructions,
-        
-        # Pass all the original framework parameters
         user_id=user_id,
         storage=PostgresStorage(
             table_name="ai_os_sessions",
@@ -364,7 +356,7 @@ def get_llm_os(
         stream_intermediate_steps=True,
         show_tool_calls=False,
         search_knowledge=use_memory,
-        read_team_history=True, # Use read_team_history for teams
+        read_team_history=True,
         add_history_to_messages=True,
         num_history_runs=40,
         store_events=True,
