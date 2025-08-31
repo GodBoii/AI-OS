@@ -248,7 +248,7 @@ def get_llm_os(
         dev_team = Team(
             name="dev_team",
             mode="coordinate",
-            model=Gemini(id="gemini-2.5-pro"),
+            model=Gemini(id="gemini-2.5-flash"),
             members=[],
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
             instructions=[
@@ -268,7 +268,7 @@ def get_llm_os(
         world_ai = Agent(
             name="World_Agent",
             role="Universal knowledge and research agent with access to world information.",
-            model=Gemini(id="gemini-2.5-flash"),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             tools=[YFinanceTools(),WikipediaTools(),HackerNewsTools(),ArxivTools(),WebsiteTools(),Crawl4aiTools(max_length=None)],
             instructions=[
                 "You are the World Agent with comprehensive access to global information sources.",
@@ -302,7 +302,7 @@ def get_llm_os(
 
     # --- 5. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
-        "Aetheria AI: Most Advanced AI system providing personalized, direct responses.",
+        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via team_session_state['turn_context'].",
         "",
         "COMPLEXITY ASSESSMENT - First determine:",
         "• Is this a simple, single-step query? → Handle directly",
@@ -316,11 +316,15 @@ def get_llm_os(
         "4. Compile results and deliver final response",
         "",
         "ROUTING GUIDE FOR SIMPLE TASKS:",
-        "• Coding/Terminal/Files/Testing → dev_team",
+        "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
         "• Web research/Data extraction → World_Agent",
         "• Image generation → generate_image",
-        "• Browser interaction → browser_tools",
+        "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
         "• Simple searches → GoogleSearchTools",
+        "",
+        "DECISION LOGIC:",
+        "- Need to SEE and INTERACT with webpage → use browser_tools", 
+        "- Need to CODE/RUN commands → delegate to dev_team",
         "",
         "EXECUTION PRINCIPLES:",
         "• Follow planner's steps precisely when executing complex tasks",
@@ -330,9 +334,11 @@ def get_llm_os(
         "",
         "RESPONSE STYLE:",
         "• Deliver results as if you personally completed the task",
+        "• Use personalized responses when user data is available",
+        "• Provide direct, clear answers without explaining internal processes",
+        "• Don't use phrases like 'based on my knowledge', 'depending on information', 'I will now', etc.",
         "• Focus on user value, not system operations",
         "• Keep responses natural and conversational",
-        "• Don't expose internal planning unless specifically asked"
     ]
 
     # The main orchestrator is now a PatchedTeam instance
