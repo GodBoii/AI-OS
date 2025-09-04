@@ -1,4 +1,4 @@
-# render.yaml (Final Version with Free Tier Worker Workaround)
+# render.yaml (Final Version with All Fixes)
 services:
   - type: redis
     name: aios-redis
@@ -17,16 +17,19 @@ services:
     envVars:
       - fromGroup: aios-secrets
 
-  # --- MODIFICATION IS HERE ---
-  - type: web # <-- CRITICAL FIX: Changed from 'worker' to 'web'
+  - type: web # Must be 'web' for the free tier
     name: aios-worker
-    plan: free 
+    plan: free
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1"
+    # ===================================================================
+    # CRITICAL FIX: Explicitly tell Celery to use the Redis URL
+    # from the environment variable provided by Render.
+    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1 --broker=$REDIS_URL"
+    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
 
