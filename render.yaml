@@ -1,4 +1,4 @@
-# render.yaml (Final Version - Linking REDIS_URL on each service)
+# render.yaml (Final Version with Celery Worker Command Fix)
 services:
   - type: redis
     name: aios-redis
@@ -16,7 +16,6 @@ services:
     dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
     envVars:
       - fromGroup: aios-secrets
-      # Add the Redis URL directly to this service
       - key: REDIS_URL
         fromService:
           type: redis
@@ -31,10 +30,12 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1 --broker=$REDIS_URL"
+    # ===================================================================
+    # CRITICAL FIX: Changed '--broker' to the correct '-b' flag.
+    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1 -b $REDIS_URL"
+    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
-      # Add the Redis URL directly to this service
       - key: REDIS_URL
         fromService:
           type: redis
@@ -52,7 +53,6 @@ services:
     dockerCommand: "celery -A app.celery flower --broker=$REDIS_URL"
     envVars:
       - fromGroup: aios-secrets
-      # Add the Redis URL directly to this service
       - key: REDIS_URL
         fromService:
           type: redis
