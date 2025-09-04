@@ -1,4 +1,4 @@
-# render.yaml (Final Version with All Fixes)
+# render.yaml (Final Version - Linking REDIS_URL on each service)
 services:
   - type: redis
     name: aios-redis
@@ -16,8 +16,14 @@ services:
     dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
     envVars:
       - fromGroup: aios-secrets
+      # Add the Redis URL directly to this service
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aios-redis
+          property: connectionString
 
-  - type: web # Must be 'web' for the free tier
+  - type: web 
     name: aios-worker
     plan: free
     runtime: docker
@@ -25,13 +31,15 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # ===================================================================
-    # CRITICAL FIX: Explicitly tell Celery to use the Redis URL
-    # from the environment variable provided by Render.
     dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1 --broker=$REDIS_URL"
-    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
+      # Add the Redis URL directly to this service
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aios-redis
+          property: connectionString
 
   - type: web
     name: aios-flower
@@ -44,3 +52,9 @@ services:
     dockerCommand: "celery -A app.celery flower --broker=$REDIS_URL"
     envVars:
       - fromGroup: aios-secrets
+      # Add the Redis URL directly to this service
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: aios-redis
+          property: connectionString
