@@ -34,7 +34,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: aios-worker
-    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info", "--concurrency=4"]
+    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info", "--concurrency=1"]
     env_file:
       - ./python-backend/.env
     volumes:
