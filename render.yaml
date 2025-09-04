@@ -1,4 +1,4 @@
-# render.yaml (Final Corrected Version)
+# render.yaml (Final Version with Free Tier Worker Workaround)
 services:
   - type: redis
     name: aios-redis
@@ -7,23 +7,20 @@ services:
 
   - type: web
     name: aios-web
-    plan: free # Target the 512MB free plan
+    plan: free
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # ===================================================================
-    # CRITICAL FIX HERE: This line was missing. It forces Gunicorn
-    # to use only ONE worker, overriding the Dockerfile's default of 4.
     dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
-    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
 
-  - type: worker
+  # --- MODIFICATION IS HERE ---
+  - type: web # <-- CRITICAL FIX: Changed from 'worker' to 'web'
     name: aios-worker
-    plan: free # Target the 512MB free plan
+    plan: free 
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS
     branch: master
