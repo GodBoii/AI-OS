@@ -1,13 +1,10 @@
-# render.yaml (Optimized for Render's Free Tier)
-
+# render.yaml (Final Corrected Version)
 services:
-  # 1. The Redis Service
   - type: redis
     name: aios-redis
-    plan: free # Use the free Redis plan
-    ipAllowList: [] 
+    plan: free
+    ipAllowList: []
 
-  # 2. The Web Service (Gunicorn + Flask/Socket.IO)
   - type: web
     name: aios-web
     plan: free # Target the 512MB free plan
@@ -16,12 +13,14 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # CRITICAL FIX: Override the Dockerfile's CMD to force only 1 worker
+    # ===================================================================
+    # CRITICAL FIX HERE: This line was missing. It forces Gunicorn
+    # to use only ONE worker, overriding the Dockerfile's default of 4.
     dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
+    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
 
-  # 3. The AI Worker Service (Celery)
   - type: worker
     name: aios-worker
     plan: free # Target the 512MB free plan
@@ -30,12 +29,10 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # Concurrency is already correctly set to 1
     dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1"
     envVars:
       - fromGroup: aios-secrets
 
-  # 4. Flower Monitoring Service (Optional)
   - type: web
     name: aios-flower
     plan: free
