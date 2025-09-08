@@ -1,10 +1,12 @@
-# render.yaml (Final Version with Celery Worker Command Fix)
+# render.yaml (Final Version - Simplified for Eventlet Architecture)
 services:
+  # 1. The Redis Service (Required for Socket.IO and session management)
   - type: redis
     name: aios-redis
     plan: free
     ipAllowList: []
 
+  # 2. The Web Service (Handles all app logic and agent runs via Eventlet)
   - type: web
     name: aios-web
     plan: free
@@ -13,35 +15,19 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # Use one Gunicorn worker. Eventlet will handle concurrency within this process.
     dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
     envVars:
       - fromGroup: aios-secrets
+      # Link the Redis URL directly to this service
       - key: REDIS_URL
         fromService:
           type: redis
           name: aios-redis
           property: connectionString
 
-  - type: web 
-    name: aios-worker
-    plan: free
-    runtime: docker
-    repo: https://github.com/GodBoii/AI-OS
-    branch: master
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    # ===================================================================
-    # CRITICAL FIX: Changed '--broker' to the correct '-b' flag.
-    dockerCommand: "celery -A app.celery worker --loglevel=info --concurrency=1 -b $REDIS_URL"
-    # ===================================================================
-    envVars:
-      - fromGroup: aios-secrets
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: aios-redis
-          property: connectionString
-
+  # 3. The Flower Monitoring Service (Optional)
+  # Note: This will show 0 active workers, which is now the correct and expected behavior.
   - type: web
     name: aios-flower
     plan: free
