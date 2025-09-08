@@ -36,6 +36,7 @@ from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
 from browser_tools import BrowserTools 
+from vercel_tools import VercelTools 
 
 # Other Imports
 from supabase_client import supabase_client
@@ -58,6 +59,7 @@ def get_llm_os(
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = False,
+    enable_vercel: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
     enable_browser: bool = False,
@@ -94,6 +96,8 @@ def get_llm_os(
     if enable_browser and browser_tools_config:
         logger.info("Browser tools are enabled and configured. Initializing BrowserTools.")
         direct_tools.append(BrowserTools(**browser_tools_config))
+    if enable_vercel and user_id:
+        direct_tools.append(VercelTools(user_id=user_id))
 
     @tool(show_result=False)
     def generate_image(prompt: str) -> str:
@@ -174,6 +178,9 @@ def get_llm_os(
         available_resources["direct_tools"].append("GoogleSearchTools - Web search capabilities")
     if enable_browser:
         available_resources["direct_tools"].append("BrowserTools - Browser automation and interaction")
+    available_resources["direct_tools"].append("generate_image - AI image generation")
+    if enable_vercel:
+        available_resources["direct_tools"].append("VercelTools - Vercel project and deployment operations")
     available_resources["direct_tools"].append("generate_image - AI image generation")
 
     # Document specialist agents that will be available
@@ -320,6 +327,7 @@ def get_llm_os(
         "• Web research/Data extraction → World_Agent",
         "• Image generation → generate_image",
         "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
+        "• Vercel project management (listing projects, deployments) → VercelTools",
         "• Simple searches → GoogleSearchTools",
         "",
         "DECISION LOGIC:",
