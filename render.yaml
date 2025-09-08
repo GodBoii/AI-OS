@@ -1,12 +1,10 @@
 # render.yaml (Final Version - Simplified for Eventlet Architecture)
 services:
-  # 1. The Redis Service (Required for Socket.IO and session management)
   - type: redis
     name: aios-redis
     plan: free
     ipAllowList: []
 
-  # 2. The Web Service (Handles all app logic and agent runs via Eventlet)
   - type: web
     name: aios-web
     plan: free
@@ -15,19 +13,15 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # Use one Gunicorn worker. Eventlet will handle concurrency within this process.
-    dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app"
+        dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT 'app:create_app()'"
     envVars:
       - fromGroup: aios-secrets
-      # Link the Redis URL directly to this service
       - key: REDIS_URL
         fromService:
           type: redis
           name: aios-redis
           property: connectionString
 
-  # 3. The Flower Monitoring Service (Optional)
-  # Note: This will show 0 active workers, which is now the correct and expected behavior.
   - type: web
     name: aios-flower
     plan: free
@@ -43,4 +37,4 @@ services:
         fromService:
           type: redis
           name: aios-redis
-          property: connectionString
+          property: connectionString  

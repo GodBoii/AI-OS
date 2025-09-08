@@ -328,9 +328,11 @@ def create_app():
     
     return app, socketio, celery
 
-app, socketio, celery = create_app()
-
+# --- Main Execution Block (for local development) ---
+# This block is NOT run by Gunicorn. It's only for when you run "python app.py" directly.
 if __name__ == "__main__":
+    # Call the factory *inside* this block for local execution
+    app, socketio, celery = create_app()
     port = int(os.environ.get("PORT", 8765))
     app_debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
     socketio.run(app, host="0.0.0.0", port=port, debug=app_debug_mode, use_reloader=app_debug_mode)
