@@ -1,4 +1,4 @@
-# python-backend/app.py (Final, Corrected, and Production-Ready with Application Factory)
+# python-backend/app.py
 
 import os
 import logging
@@ -36,7 +36,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- Global Placeholders ---
-# These will be initialized inside the create_app factory to ensure safe startup
 celery = None
 socketio = None
 redis_client = None
@@ -44,16 +43,15 @@ connection_manager = None
 oauth = None
 browser_waiting_events: Dict[str, eventlet.event.Event] = {}
 
-# --- Logic and Helper Classes (Defined Globally) ---
-# These can be defined here because they use the global client instances, which will be
-# populated by the factory before any requests are handled.
+# --- Logic and Helper Classes ---
 
 class ConnectionManager:
     def create_session(self, conversation_id: str, user_id: str, config: dict) -> dict:
         logger.info(f"Creating new session shell in Redis for conversation_id: {conversation_id}")
+        # --- FIX: Removed 'enable_supabase' to prevent errors while testing Vercel ---
         config.update({
             'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
-            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True
+            'enable_browser': True, 'enable_vercel': True
         })
         session_data = {
             "user_id": user_id, "config": config, "created_at": datetime.datetime.now().isoformat(),
@@ -180,7 +178,6 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-    # --- Initialize clients INSIDE the factory ---
     redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
     
     celery = Celery(__name__, broker=redis_url, backend=redis_url)
@@ -189,7 +186,6 @@ def create_app():
     connection_manager = ConnectionManager()
     oauth = OAuth(app)
 
-    # --- Register OAuth providers ---
     oauth.register(
         name='github', client_id=os.getenv("GITHUB_CLIENT_ID"), client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
         access_token_url='https://github.com/login/oauth/access_token', authorize_url='https://github.com/login/oauth/authorize',
@@ -207,7 +203,6 @@ def create_app():
         api_base_url='https://api.vercel.com/', client_kwargs={'scope': 'users:read teams:read projects:read deployments:read'}
     )
 
-    # --- Register Routes and Event Handlers ---
     with app.app_context():
         @app.route('/healthz')
         def health_check(): return "OK", 200
@@ -333,11 +328,8 @@ def create_app():
     
     return app, socketio, celery
 
-# --- Create the App Instance for Gunicorn ---
-# This line executes the factory and creates the app object that Gunicorn will serve.
 app, socketio, celery = create_app()
 
-# --- Main Execution Block (for local development) ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8765))
     app_debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
