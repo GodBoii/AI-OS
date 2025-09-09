@@ -1,4 +1,4 @@
-# render.yaml (Final Version with Corrected YAML Syntax)
+# render.yaml (Final Version - Corrected for Application Factory)
 services:
   - type: redis
     name: aios-redis
@@ -14,9 +14,9 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # ===================================================================
-    # CRITICAL FIX: The entire command is now in one set of double quotes
-    # with no nested quotes around the app factory call.
-    dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:create_app()"
+    # CRITICAL FIX: Tell Gunicorn to find the 'app' module and call the
+    # 'create_app' function to get the application object.
+    dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT 'app:create_app()'"
     # ===================================================================
     envVars:
       - fromGroup: aios-secrets
@@ -34,7 +34,10 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: "celery -A app.celery flower --broker=$REDIS_URL"
+    # ===================================================================
+    # CRITICAL FIX: Place the global Celery options BEFORE the 'flower' subcommand.
+    dockerCommand: "celery -A app.celery --broker=$REDIS_URL flower"
+    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
       - key: REDIS_URL
