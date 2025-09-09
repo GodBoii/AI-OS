@@ -1,4 +1,4 @@
-# render.yaml (Final Version - Simplified for Eventlet Architecture)
+# render.yaml (Final Version with Corrected YAML Syntax)
 services:
   - type: redis
     name: aios-redis
@@ -13,7 +13,11 @@ services:
     branch: master
     dockerfilePath: ./Dockerfile
     dockerContext: .
-        dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT 'app:create_app()'"
+    # ===================================================================
+    # CRITICAL FIX: The entire command is now in one set of double quotes
+    # with no nested quotes around the app factory call.
+    dockerCommand: "gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:create_app()"
+    # ===================================================================
     envVars:
       - fromGroup: aios-secrets
       - key: REDIS_URL
@@ -37,4 +41,4 @@ services:
         fromService:
           type: redis
           name: aios-redis
-          property: connectionString  
+          property: connectionString
