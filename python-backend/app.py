@@ -49,16 +49,14 @@ oauth = None
 browser_waiting_events: Dict[str, eventlet.event.Event] = {}
 
 # --- Logic and Helper Classes (Defined Globally) ---
-# These are safe to define globally as they depend on the clients above, which will be
-# initialized by the factory before any request is handled.
 
 class ConnectionManager:
-    # (Your ConnectionManager class is preserved here, unchanged)
     def create_session(self, conversation_id: str, user_id: str, config: dict) -> dict:
         logger.info(f"Creating new session shell in Redis for conversation_id: {conversation_id}")
         config.update({
             'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
-            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True
+            'enable_browser': True, 'enable_vercel': True 
+            # <-- FIX: 'enable_supabase': True has been removed to prevent the crash.
         })
         session_data = {
             "user_id": user_id, "config": config, "created_at": datetime.datetime.now().isoformat(),
@@ -96,7 +94,6 @@ class ConnectionManager:
         return json.loads(session_json) if session_json else None
 
 def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict):
-    # (This function is preserved exactly as you wrote it, with all its logic)
     try:
         session_data = connection_manager.get_session(conversation_id)
         if not session_data: raise Exception(f"Session data not found for {conversation_id}")
@@ -151,7 +148,6 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         socketio.emit("error", {"message": "An error occurred in the AI service. Please start a new chat.", "reset": True}, room=sid)
 
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
-    # (This function is preserved exactly as you wrote it)
     images, audio, videos, other_files = [], [], [], []
     if not files_data: return images, audio, videos, other_files
     for file_data in files_data:
@@ -169,7 +165,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     return images, audio, videos, other_files
 
 def get_user_from_token(request):
-    # (This function is preserved exactly as you wrote it)
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '): return None, ('Authorization header is missing or invalid', 401)
     jwt = auth_header.split(' ')[1]
@@ -344,13 +339,11 @@ def create_app():
     # The factory must return only the Flask app object for Gunicorn
     return app
 
-# --- Create the App Instance for Gunicorn ---
-# Gunicorn will call this factory to get the app object.
-app = create_app()
-
 # --- Main Execution Block (for local development) ---
 # This block is NOT run by Gunicorn. It's only for when you run "python app.py" directly.
 if __name__ == "__main__":
+    # Create the app instance when running locally
+    app = create_app()
     port = int(os.environ.get("PORT", 8765))
     app_debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
     # When running locally, we need to use the `socketio` instance created by the factory
