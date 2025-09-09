@@ -1,4 +1,4 @@
-# Dockerfile 
+# Dockerfile (Final, Production-Ready Version)
 
 FROM python:3.11-slim-bookworm
 
@@ -16,4 +16,6 @@ ENV PORT=8765
 
 ENV PYTHONUNBUFFERED=1
 
+# CRITICAL FIX: Use the JSON array "exec" form for CMD.
+# This bypasses the shell and prevents any misinterpretation of quotes.
 CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "app:create_app()"]
