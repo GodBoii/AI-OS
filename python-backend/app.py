@@ -181,7 +181,7 @@ def create_app():
 
     vercel_id = os.getenv("VERCEL_CLIENT_ID")
     print(f"--- DEBUG: VERCEL_CLIENT_ID loaded in app: {vercel_id} ---")
-    
+
     global celery, socketio, redis_client, connection_manager, oauth
 
     app = Flask(__name__)
@@ -234,23 +234,50 @@ def create_app():
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                supabase_token = session.get('supabase_token')
-                if not supabase_token: return "Your session has expired. Please try connecting again.", 400
+                # ===================================================================
+                # CRITICAL FIX: Handle the two different ways we receive the user's token.
+                # Vercel's modern flow sends it in the 'state' query parameter.
+                # Our legacy flow for GitHub/Google stores it in the Flask session.
+                # ===================================================================
+                if provider == 'vercel':
+                    # For Vercel, the user's Supabase token was passed through the 'state' parameter.
+                    supabase_token = request.args.get('state')
+                else:
+                    # For GitHub and Google, we stored the token in the server-side session.
+                    supabase_token = session.get('supabase_token')
+                # ===================================================================
+
+                if not supabase_token:
+                    # This error now covers both missing session and missing state.
+                    return "Your session has expired or the state token is missing. Please try connecting again.", 400
+                
+                # The rest of the flow is the same for all providers once we have the token.
                 user_response = supabase_client.auth.get_user(jwt=supabase_token)
                 user = user_response.user
                 if not user: raise AuthApiError("User not found for the provided token.", 401)
                 
                 client = oauth.create_client(provider)
+                # This line works for all providers. It finds the 'code' parameter from the
+                # URL and exchanges it for a real access token.
                 token = client.authorize_access_token()
                 
                 integration_data = {
-                    'user_id': str(user.id), 'service': provider, 'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'), 'scopes': token.get('scope', '').split(' '),
+                    'user_id': str(user.id),
+                    'service': provider,
+                    'access_token': token.get('access_token'),
+                    'refresh_token': token.get('refresh_token'),
+                    'scopes': token.get('scope', '').split(' '),
                 }
                 integration_data = {k: v for k, v in integration_data.items() if v is not None}
                 supabase_client.from_('user_integrations').upsert(integration_data).execute()
+                
                 logger.info(f"Successfully saved {provider} integration for user {user.id}")
-                return f"<h1>Authentication Successful!</h1><p>You can now close this window.</p>"
+                
+                # This success message is shown in the popup window.
+                return f"""
+                    <h1>Authentication Successful!</h1>
+                    <p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>
+                """
             except AuthApiError as e:
                 logger.error(f"Invalid token during {provider} auth callback: {e.message}")
                 return "Your session is invalid. Please log in and try again.", 401

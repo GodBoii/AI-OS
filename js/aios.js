@@ -79,9 +79,11 @@ class AIOS {
             confirmPassword: document.getElementById('confirmPassword'),
             loginError: document.getElementById('login-error'),
             signupError: document.getElementById('signup-error'),
-            // --- NEW: Cache the GitHub connect button ---
             connectGithubBtn: document.getElementById('connect-github-btn'),
             connectGoogleBtn: document.getElementById('connect-google-btn'),
+            // --- MODIFICATION START ---
+            connectVercelBtn: document.getElementById('connect-vercel-btn'),
+            // --- MODIFICATION END ---
         };
     }
 
@@ -139,6 +141,9 @@ class AIOS {
         
         addClickHandler(this.elements.connectGithubBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectGoogleBtn, integrationButtonHandler);
+        // --- MODIFICATION START ---
+        addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
+        // --- MODIFICATION END ---
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
@@ -172,8 +177,28 @@ class AIOS {
             this.showNotification('You must be logged in to connect an integration.', 'error');
             return;
         }
-        const backendUrl = 'https://ai-os-yjbb.onrender.com';
-        const authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
+
+        let authUrl;
+
+        // ===================================================================
+        // CRITICAL FIX: Handle Vercel with the modern installation flow.
+        // This logic separates the new Vercel flow from the legacy flow used
+        // by GitHub and Google.
+        // ===================================================================
+        if (provider === 'vercel') {
+            // For Vercel, we must go directly to their installation page.
+            // We pass the user's Supabase token in the 'state' parameter. Vercel will
+            // return this token to our backend callback, allowing us to identify the user.
+            const stateToken = session.access_token;
+            authUrl = `https://vercel.com/integrations/aetheria-ai/new?state=${stateToken}`;
+        } else {
+            // For other providers like GitHub and Google, we use our backend-driven
+            // legacy flow, passing the token in a custom query parameter.
+            const backendUrl = 'https://aios-web.onrender.com';
+            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
+        }
+        // ===================================================================
+
         console.log(`Opening auth URL for ${provider}: ${authUrl}`);
         window.electron.ipcRenderer.send('open-webview', authUrl);
     }
@@ -188,7 +213,7 @@ class AIOS {
             return;
         }
         try {
-            const response = await fetch('https://ai-os-yjbb.onrender.com/api/integrations/disconnect', {
+            const response = await fetch('https://aios-web.onrender.com/api/integrations/disconnect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -208,17 +233,19 @@ class AIOS {
         }
     }
 
-    // --- NEW: Method to check integration status and update UI ---
     async checkIntegrationStatus() {
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
             // Not logged in, so can't have integrations. Ensure default state.
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
+            // --- MODIFICATION START ---
+            this.updateIntegrationButton('vercel', false);
+            // --- MODIFICATION END ---
             return;
         }
         try {
-            const response = await fetch('https://ai-os-yjbb.onrender.com/api/integrations', {
+            const response = await fetch('https://aios-web.onrender.com/api/integrations', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch integration status');
@@ -226,19 +253,27 @@ class AIOS {
             const data = await response.json();
             const isGithubConnected = data.integrations.includes('github');
             const isGoogleConnected = data.integrations.includes('google');
+            // --- MODIFICATION START ---
+            const isVercelConnected = data.integrations.includes('vercel');
+            // --- MODIFICATION END ---
 
             this.updateIntegrationButton('github', isGithubConnected);
             this.updateIntegrationButton('google', isGoogleConnected);
+            // --- MODIFICATION START ---
+            this.updateIntegrationButton('vercel', isVercelConnected);
+            // --- MODIFICATION END ---
 
         } catch (error) {
             console.error('Error checking integration status:', error);
             // Don't show a notification, just default the UI
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
+            // --- MODIFICATION START ---
+            this.updateIntegrationButton('vercel', false);
+            // --- MODIFICATION END ---
         }
     }
 
-    // --- NEW: Helper to update a specific integration button's UI ---
     updateIntegrationButton(provider, isConnected) {
         // Dynamically find the button based on the provider name
         const button = this.elements[`connect${provider.charAt(0).toUpperCase() + provider.slice(1)}Btn`];
@@ -562,12 +597,13 @@ class AIOS {
             if (this.elements.userEmail) this.elements.userEmail.textContent = user.email;
             if (this.elements.userName) this.elements.userName.textContent = user.user_metadata?.name || user.name || 'User';
             
-            // --- NEW: Check integration status when user is logged in ---
             this.checkIntegrationStatus();
         } else {
-            // --- NEW: Ensure button is in default state when logged out ---
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
+            // --- MODIFICATION START ---
+            this.updateIntegrationButton('vercel', false);
+            // --- MODIFICATION END ---
         }
     }
 
