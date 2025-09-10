@@ -178,6 +178,10 @@ def get_user_from_token(request):
 
 # --- Application Factory ---
 def create_app():
+
+    vercel_id = os.getenv("VERCEL_CLIENT_ID")
+    print(f"--- DEBUG: VERCEL_CLIENT_ID loaded in app: {vercel_id} ---")
+    
     global celery, socketio, redis_client, connection_manager, oauth
 
     app = Flask(__name__)
