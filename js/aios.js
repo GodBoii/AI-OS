@@ -182,7 +182,7 @@ class AIOS {
     
         if (provider === 'vercel') {
             // CORRECT MODERN FLOW: Go directly to the Vercel installation page.
-            // Vercel will then redirect back to our backend's callback URL.
+            // We will identify the user on the backend via their Vercel account email.
             authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
         } else {
             // LEGACY FLOW: Use our backend to initiate for other providers.

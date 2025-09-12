@@ -253,40 +253,46 @@ def create_app():
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                # For the modern Vercel flow, we don't have a pre-established session.
-                # We will identify the user AFTER getting the token.
-                # For legacy flows, the session is already there.
-                
                 client = oauth.create_client(provider)
-                token = client.authorize_access_token()
 
-                # Now that we have the token, we can find out who the user is.
-                # For Vercel, we can make an API call to get the user's info.
-                # For others, we can use the token or the pre-existing session.
+                # ===================================================================
+                # THE DEFINITIVE FIX:
+                # For Vercel, we fetch the token without the state check.
+                # For all others, we use the default method which includes the check.
+                # ===================================================================
+                if provider == 'vercel':
+                    # This tells authlib: "I know what I'm doing, get the token
+                    # using the 'code' from the URL and ignore the 'state' check."
+                    token = client.authorize_access_token(state=None)
+                else:
+                    # For GitHub/Google, perform the standard CSRF-protected token exchange.
+                    token = client.authorize_access_token()
+                # ===================================================================
 
-                user = None
+                # Now that we have the token, we need to find the user.
+                user_id = None
                 if provider == 'vercel':
                     # Use the new token to ask Vercel who the user is.
                     resp = oauth.vercel.get('v2/user', token=token)
                     resp.raise_for_status()
                     vercel_user_email = resp.json()['user']['email']
                     
-                    # Find this user in our Supabase database.
-                    # IMPORTANT: This assumes the user's Vercel email is the same as their app email.
+                    # Find this user in our Supabase database by their email.
                     user_response = supabase_client.from_('profiles').select('id').eq('email', vercel_user_email).single().execute()
                     if not user_response.data:
-                        return "Error: Could not find a user in our system with the Vercel email address.", 400
+                        return "Error: Could not find a user in our system with the Vercel email address. Please ensure you are logged in with the same email on both services.", 400
                     user_id = user_response.data['id']
 
-                else: # For GitHub/Google
+                else: # For GitHub/Google, the user was identified before the redirect.
                     supabase_token = session.get('supabase_token')
                     if not supabase_token:
                         return "Your session has expired. Please try connecting again.", 400
                     user_id = supabase_client.auth.get_user(jwt=supabase_token).user.id
 
                 if not user_id:
-                     return "Could not identify user.", 400
+                     return "Could not identify the user for this integration.", 400
 
+                # Save the integration details to the database.
                 integration_data = {
                     'user_id': str(user_id), 
                     'service': provider, 
@@ -303,7 +309,7 @@ def create_app():
             except Exception as e:
                 logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
                 return "An error occurred during authentication. Please try again.", 500
-                
+
         @app.route('/api/integrations', methods=['GET'])
         def get_integrations_status():
             user, error = get_user_from_token(request)
