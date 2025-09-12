@@ -178,26 +178,9 @@ class AIOS {
             return;
         }
 
-        let authUrl;
-
-        // ===================================================================
-        // CRITICAL FIX: Handle Vercel with the modern installation flow.
-        // This logic separates the new Vercel flow from the legacy flow used
-        // by GitHub and Google.
-        // ===================================================================
-        if (provider === 'vercel') {
-            // For Vercel, we must go directly to their installation page.
-            // We pass the user's Supabase token in the 'state' parameter. Vercel will
-            // return this token to our backend callback, allowing us to identify the user.
-            const stateToken = session.access_token;
-            authUrl = `https://vercel.com/integrations/aetheria-ai/new?state=${stateToken}`;
-        } else {
-            // For other providers like GitHub and Google, we use our backend-driven
-            // legacy flow, passing the token in a custom query parameter.
-            const backendUrl = 'https://aios-web.onrender.com';
-            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
-        }
-        // ===================================================================
+        // Revert to the original, simple logic for all providers.
+        const backendUrl = 'https://aios-web.onrender.com';
+        const authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
 
         console.log(`Opening auth URL for ${provider}: ${authUrl}`);
         window.electron.ipcRenderer.send('open-webview', authUrl);

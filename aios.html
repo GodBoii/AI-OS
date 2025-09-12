@@ -114,7 +114,7 @@
                         <!-- Integrations Section -->
                         <div class="integrations-section">
                             <h4 class="section-subheading">Integrations</h4>
-                            <!-- GitHub Integration Item (Existing) -->
+                            <!-- GitHub Integration Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <i class="fab fa-github"></i>
@@ -126,7 +126,7 @@
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
-                            <!-- NEW: Google Integration Item -->
+                            <!-- Google Integration Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <i class="fab fa-google"></i>
@@ -138,6 +138,33 @@
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
+                            <!-- START: Vercel Integration Item -->
+                            <div class="integration-item">
+                                <div class="integration-info">
+                                    <svg class="provider-icon" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M24 22.525H0l12-21.05 12 21.05z"/></svg>
+                                    <span>Vercel</span>
+                                </div>
+                                <button class="connect-btn" id="connect-vercel-btn" data-provider="vercel" data-action="connect">
+                                    <i class="fas fa-link icon-connect"></i>
+                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <span class="btn-text">Connect</span>
+                                </button>
+                            </div>
+                            <!-- END: Vercel Integration Item -->
+                            
+                            <!-- START: Supabase Integration Item -->
+                            <div class="integration-item">
+                                <div class="integration-info">
+                                    <svg class="provider-icon" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.604 3.755c-3.424-3.423-8.97-3.423-12.393 0-3.423 3.423-3.423 8.97 0 12.393l.382.382 5.815-5.815-2.853-2.853a.75.75 0 0 1 1.06-1.06l2.854 2.853 5.815-5.815a8.74 8.74 0 0 0-.28-.385Zm-11.202 1.19a7.25 7.25 0 0 1 10.252 0l-5.126 5.126-5.126-5.126Zm.382 11.202L2.07 10.434a7.25 7.25 0 0 1 0-10.252l5.714 5.714-5.714 5.714Zm11.202.382L12.17 10.434l5.714-5.714a7.25 7.25 0 0 1 0 10.252l-5.714-5.714Z"/></svg>
+                                    <span>Supabase</span>
+                                </div>
+                                <button class="connect-btn" id="connect-supabase-btn" data-provider="supabase" data-action="connect">
+                                    <i class="fas fa-link icon-connect"></i>
+                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <span class="btn-text">Connect</span>
+                                </button>
+                            </div>
+                            <!-- END: Supabase Integration Item -->
                         </div>
                         <!-- END: Integrations Section -->
 
@@ -198,3 +225,14 @@
         </div>
     </div>
 </div>
+
+<!-- Style for the new SVG icons to ensure they match the Font Awesome icons -->
+<style>
+    .integration-info .provider-icon {
+        width: 1.1em;
+        height: 1.1em;
+        fill: currentColor;
+        vertical-align: middle;
+        margin-right: -2px; /* Minor adjustment to align with Font Awesome's bounding box */
+    }
+</style>

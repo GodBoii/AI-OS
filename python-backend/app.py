@@ -224,67 +224,78 @@ def create_app():
         @app.route('/login/<provider>')
         def login_provider(provider):
             token = request.args.get('token')
-            if not token: return "Authentication token is missing.", 400
+            if not token: 
+                return "Authentication token is missing.", 400
+            
+            # For the legacy flow, we store the token in the session.
             session['supabase_token'] = token
+            
             redirect_uri = url_for('auth_callback', provider=provider, _external=True)
-            if provider not in oauth._clients: return "Invalid provider specified.", 404
-            if provider == 'google': return oauth.google.authorize_redirect(redirect_uri, access_type='offline', prompt='consent')
+            
+            if provider not in oauth._clients: 
+                return "Invalid provider specified.", 404
+            
+            # ===================================================================
+            # CRITICAL FIX: For Vercel, we must pass our token as the 'state'.
+            # This tells authlib to use our token for the state parameter instead
+            # of generating its own random one. This is the key to disabling
+            # the automatic CSRF check for this specific flow.
+            # ===================================================================
+            if provider == 'vercel':
+                return oauth.vercel.authorize_redirect(redirect_uri, state=token)
+            # ===================================================================
+
+            if provider == 'google': 
+                return oauth.google.authorize_redirect(redirect_uri, access_type='offline', prompt='consent')
+            
             return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                # ===================================================================
-                # CRITICAL FIX: Handle the two different ways we receive the user's token.
-                # Vercel's modern flow sends it in the 'state' query parameter.
-                # Our legacy flow for GitHub/Google stores it in the Flask session.
-                # ===================================================================
-                if provider == 'vercel':
-                    # For Vercel, the user's Supabase token was passed through the 'state' parameter.
-                    supabase_token = request.args.get('state')
-                else:
-                    # For GitHub and Google, we stored the token in the server-side session.
-                    supabase_token = session.get('supabase_token')
-                # ===================================================================
+                # For all providers, the state is now managed by authlib,
+                # so we can reliably get our token from the session.
+                supabase_token = session.get('supabase_token')
 
                 if not supabase_token:
-                    # This error now covers both missing session and missing state.
-                    return "Your session has expired or the state token is missing. Please try connecting again.", 400
+                    return "Your session has expired. Please try connecting again.", 400
                 
-                # The rest of the flow is the same for all providers once we have the token.
                 user_response = supabase_client.auth.get_user(jwt=supabase_token)
                 user = user_response.user
                 if not user: raise AuthApiError("User not found for the provided token.", 401)
                 
                 client = oauth.create_client(provider)
-                # This line works for all providers. It finds the 'code' parameter from the
-                # URL and exchanges it for a real access token.
-                token = client.authorize_access_token()
+
+                # ===================================================================
+                # CRITICAL FIX: When fetching the token, we must provide the same
+                # state that was used to initiate the request. Authlib will then
+                # use this to validate the response from Vercel.
+                # ===================================================================
+                if provider == 'vercel':
+                    # We tell authlib what 'state' to expect. Since we passed our token
+                    # as the state, we must pass it here again for the check.
+                    token = client.authorize_access_token(state=supabase_token)
+                else:
+                    # For other providers, authlib manages the state automatically.
+                    token = client.authorize_access_token()
+                # ===================================================================
                 
                 integration_data = {
-                    'user_id': str(user.id),
-                    'service': provider,
-                    'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'),
-                    'scopes': token.get('scope', '').split(' '),
+                    'user_id': str(user.id), 'service': provider, 'access_token': token.get('access_token'),
+                    'refresh_token': token.get('refresh_token'), 'scopes': token.get('scope', '').split(' '),
                 }
                 integration_data = {k: v for k, v in integration_data.items() if v is not None}
                 supabase_client.from_('user_integrations').upsert(integration_data).execute()
                 
                 logger.info(f"Successfully saved {provider} integration for user {user.id}")
                 
-                # This success message is shown in the popup window.
-                return f"""
-                    <h1>Authentication Successful!</h1>
-                    <p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>
-                """
+                return f"<h1>Authentication Successful!</h1><p>You can now close this window.</p>"
             except AuthApiError as e:
                 logger.error(f"Invalid token during {provider} auth callback: {e.message}")
                 return "Your session is invalid. Please log in and try again.", 401
             except Exception as e:
                 logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
                 return "An error occurred during authentication. Please try again.", 500
-
         @app.route('/api/integrations', methods=['GET'])
         def get_integrations_status():
             user, error = get_user_from_token(request)
