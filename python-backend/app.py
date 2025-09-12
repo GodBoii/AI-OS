@@ -253,49 +253,57 @@ def create_app():
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                # For all providers, the state is now managed by authlib,
-                # so we can reliably get our token from the session.
-                supabase_token = session.get('supabase_token')
-
-                if not supabase_token:
-                    return "Your session has expired. Please try connecting again.", 400
-                
-                user_response = supabase_client.auth.get_user(jwt=supabase_token)
-                user = user_response.user
-                if not user: raise AuthApiError("User not found for the provided token.", 401)
+                # For the modern Vercel flow, we don't have a pre-established session.
+                # We will identify the user AFTER getting the token.
+                # For legacy flows, the session is already there.
                 
                 client = oauth.create_client(provider)
+                token = client.authorize_access_token()
 
-                # ===================================================================
-                # CRITICAL FIX: When fetching the token, we must provide the same
-                # state that was used to initiate the request. Authlib will then
-                # use this to validate the response from Vercel.
-                # ===================================================================
+                # Now that we have the token, we can find out who the user is.
+                # For Vercel, we can make an API call to get the user's info.
+                # For others, we can use the token or the pre-existing session.
+
+                user = None
                 if provider == 'vercel':
-                    # We tell authlib what 'state' to expect. Since we passed our token
-                    # as the state, we must pass it here again for the check.
-                    token = client.authorize_access_token(state=supabase_token)
-                else:
-                    # For other providers, authlib manages the state automatically.
-                    token = client.authorize_access_token()
-                # ===================================================================
-                
+                    # Use the new token to ask Vercel who the user is.
+                    resp = oauth.vercel.get('v2/user', token=token)
+                    resp.raise_for_status()
+                    vercel_user_email = resp.json()['user']['email']
+                    
+                    # Find this user in our Supabase database.
+                    # IMPORTANT: This assumes the user's Vercel email is the same as their app email.
+                    user_response = supabase_client.from_('profiles').select('id').eq('email', vercel_user_email).single().execute()
+                    if not user_response.data:
+                        return "Error: Could not find a user in our system with the Vercel email address.", 400
+                    user_id = user_response.data['id']
+
+                else: # For GitHub/Google
+                    supabase_token = session.get('supabase_token')
+                    if not supabase_token:
+                        return "Your session has expired. Please try connecting again.", 400
+                    user_id = supabase_client.auth.get_user(jwt=supabase_token).user.id
+
+                if not user_id:
+                     return "Could not identify user.", 400
+
                 integration_data = {
-                    'user_id': str(user.id), 'service': provider, 'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'), 'scopes': token.get('scope', '').split(' '),
+                    'user_id': str(user_id), 
+                    'service': provider, 
+                    'access_token': token.get('access_token'),
+                    'refresh_token': token.get('refresh_token'), 
+                    'scopes': token.get('scope', '').split(' '),
                 }
                 integration_data = {k: v for k, v in integration_data.items() if v is not None}
                 supabase_client.from_('user_integrations').upsert(integration_data).execute()
                 
-                logger.info(f"Successfully saved {provider} integration for user {user.id}")
+                logger.info(f"Successfully saved {provider} integration for user {user_id}")
                 
-                return f"<h1>Authentication Successful!</h1><p>You can now close this window.</p>"
-            except AuthApiError as e:
-                logger.error(f"Invalid token during {provider} auth callback: {e.message}")
-                return "Your session is invalid. Please log in and try again.", 401
+                return f"<h1>Authentication Successful!</h1><p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>"
             except Exception as e:
                 logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
                 return "An error occurred during authentication. Please try again.", 500
+                
         @app.route('/api/integrations', methods=['GET'])
         def get_integrations_status():
             user, error = get_user_from_token(request)

@@ -177,11 +177,19 @@ class AIOS {
             this.showNotification('You must be logged in to connect an integration.', 'error');
             return;
         }
-
-        // Revert to the original, simple logic for all providers.
-        const backendUrl = 'https://aios-web.onrender.com';
-        const authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
-
+    
+        let authUrl;
+    
+        if (provider === 'vercel') {
+            // CORRECT MODERN FLOW: Go directly to the Vercel installation page.
+            // Vercel will then redirect back to our backend's callback URL.
+            authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
+        } else {
+            // LEGACY FLOW: Use our backend to initiate for other providers.
+            const backendUrl = 'https://aios-web.onrender.com';
+            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
+        }
+    
         console.log(`Opening auth URL for ${provider}: ${authUrl}`);
         window.electron.ipcRenderer.send('open-webview', authUrl);
     }
