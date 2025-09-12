@@ -253,46 +253,58 @@ def create_app():
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                client = oauth.create_client(provider)
-
                 # ===================================================================
-                # THE DEFINITIVE FIX:
-                # For Vercel, we fetch the token without the state check.
-                # For all others, we use the default method which includes the check.
+                # FINAL FIX: Manually handle the token exchange for Vercel
+                # to bypass the incompatible authlib CSRF check.
                 # ===================================================================
                 if provider == 'vercel':
-                    # This tells authlib: "I know what I'm doing, get the token
-                    # using the 'code' from the URL and ignore the 'state' check."
-                    token = client.authorize_access_token(state=None)
-                else:
-                    # For GitHub/Google, perform the standard CSRF-protected token exchange.
-                    token = client.authorize_access_token()
-                # ===================================================================
+                    code = request.args.get('code')
+                    if not code:
+                        return "Vercel authorization code is missing.", 400
 
-                # Now that we have the token, we need to find the user.
-                user_id = None
-                if provider == 'vercel':
-                    # Use the new token to ask Vercel who the user is.
-                    resp = oauth.vercel.get('v2/user', token=token)
-                    resp.raise_for_status()
-                    vercel_user_email = resp.json()['user']['email']
+                    # Manually make the POST request to get the access token
+                    token_response = requests.post(
+                        'https://api.vercel.com/v2/oauth/access_token',
+                        data={
+                            'client_id': os.getenv("VERCEL_CLIENT_ID"),
+                            'client_secret': os.getenv("VERCEL_CLIENT_SECRET"),
+                            'code': code,
+                            'redirect_uri': url_for('auth_callback', provider='vercel', _external=True)
+                        }
+                    )
+                    token_response.raise_for_status()
+                    token = token_response.json()
+
+                    # Use the new token to get the Vercel user's email
+                    user_info_response = requests.get(
+                        'https://api.vercel.com/v2/user',
+                        headers={'Authorization': f"Bearer {token['access_token']}"}
+                    )
+                    user_info_response.raise_for_status()
+                    vercel_user_email = user_info_response.json()['user']['email']
                     
-                    # Find this user in our Supabase database by their email.
-                    user_response = supabase_client.from_('profiles').select('id').eq('email', vercel_user_email).single().execute()
-                    if not user_response.data:
-                        return "Error: Could not find a user in our system with the Vercel email address. Please ensure you are logged in with the same email on both services.", 400
-                    user_id = user_response.data['id']
+                    # Find our app's user by matching the email
+                    user_lookup = supabase_client.from_('profiles').select('id').eq('email', vercel_user_email).single().execute()
+                    if not user_lookup.data:
+                        return "Error: Could not find a user in our system with the Vercel email address.", 400
+                    user_id = user_lookup.data['id']
 
-                else: # For GitHub/Google, the user was identified before the redirect.
+                else: # Legacy flow for GitHub/Google
                     supabase_token = session.get('supabase_token')
                     if not supabase_token:
                         return "Your session has expired. Please try connecting again.", 400
-                    user_id = supabase_client.auth.get_user(jwt=supabase_token).user.id
+                    user = supabase_client.auth.get_user(jwt=supabase_token).user
+                    if not user: raise AuthApiError("User not found for the provided token.", 401)
+                    user_id = user.id
+                    
+                    client = oauth.create_client(provider)
+                    token = client.authorize_access_token()
+                # ===================================================================
 
                 if not user_id:
                      return "Could not identify the user for this integration.", 400
 
-                # Save the integration details to the database.
+                # Save the integration details to the database
                 integration_data = {
                     'user_id': str(user_id), 
                     'service': provider, 
