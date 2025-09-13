@@ -37,6 +37,7 @@ from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
 from browser_tools import BrowserTools 
 from vercel_tools import VercelTools 
+from supabase_tools import SupabaseTools
 
 # Other Imports
 from supabase_client import supabase_client
@@ -55,7 +56,8 @@ def get_llm_os(
     internet_search: bool = False,
     coding_assistant: bool = False,
     World_Agent: bool = False,
-    Planner_Agent: bool = True,  # Enable planner by default
+    Planner_Agent: bool = True,
+    enable_supabase: bool = False,
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = False,
@@ -98,6 +100,9 @@ def get_llm_os(
         direct_tools.append(BrowserTools(**browser_tools_config))
     if enable_vercel and user_id:
         direct_tools.append(VercelTools(user_id=user_id))
+    if enable_supabase and user_id:
+        direct_tools.append(SupabaseTools(user_id=user_id))
+
 
     @tool(show_result=False)
     def generate_image(prompt: str) -> str:
@@ -182,6 +187,8 @@ def get_llm_os(
     if enable_vercel:
         available_resources["direct_tools"].append("VercelTools - Vercel project and deployment operations")
     available_resources["direct_tools"].append("generate_image - AI image generation")
+    if enable_supabase:
+        available_resources["direct_tools"].append("SupabaseTools - database related tool")
 
     # Document specialist agents that will be available
     if coding_assistant:
@@ -329,6 +336,7 @@ def get_llm_os(
         "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
         "• Vercel project management (listing projects, deployments) → VercelTools",
         "• Simple searches → GoogleSearchTools",
+        "• Supabase organization and project management -> SupabaseTools",
         "",
         "DECISION LOGIC:",
         "- Need to SEE and INTERACT with webpage → use browser_tools", 

@@ -1,4 +1,4 @@
-# python-backend/app.py (Final, Production-Ready Version with Correct Application Factory)
+# python-backend/app.py
 
 import os
 import logging
@@ -36,12 +36,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- Global Celery Instance ---
-# Celery needs a global instance that its command-line tool can find.
-# We will configure it inside the factory.
 celery = Celery(__name__)
 
 # --- Global Placeholders ---
-# These will be populated inside the factory.
 socketio = None
 redis_client = None
 connection_manager = None
@@ -55,8 +52,7 @@ class ConnectionManager:
         logger.info(f"Creating new session shell in Redis for conversation_id: {conversation_id}")
         config.update({
             'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
-            'enable_browser': True, 'enable_vercel': True 
-            # <-- FIX: 'enable_supabase': True has been removed to prevent the crash.
+            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True
         })
         session_data = {
             "user_id": user_id, "config": config, "created_at": datetime.datetime.now().isoformat(),
@@ -178,21 +174,13 @@ def get_user_from_token(request):
 
 # --- Application Factory ---
 def create_app():
-
-    vercel_id = os.getenv("VERCEL_CLIENT_ID")
-    print(f"--- DEBUG: VERCEL_CLIENT_ID loaded in app: {vercel_id} ---")
-
     global celery, socketio, redis_client, connection_manager, oauth
 
     app = Flask(__name__)
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-    # --- Initialize clients INSIDE the factory ---
     redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-    
-    # Configure the global celery instance
     celery.conf.update(broker_url=redis_url, result_backend=redis_url)
-    
     redis_client = redis.from_url(redis_url)
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet", message_queue=redis_url)
     connection_manager = ConnectionManager()
@@ -215,6 +203,17 @@ def create_app():
         access_token_url='https://api.vercel.com/v2/oauth/access_token', authorize_url='https://vercel.com/oauth/authorize',
         api_base_url='https://api.vercel.com/', client_kwargs={'scope': 'users:read teams:read projects:read deployments:read'}
     )
+    # --- START: Supabase OAuth Registration ---
+    oauth.register(
+        name='supabase',
+        client_id=os.getenv("SUPABASE_CLIENT_ID"),
+        client_secret=os.getenv("SUPABASE_CLIENT_SECRET"),
+        access_token_url='https://api.supabase.com/v1/oauth/token',
+        authorize_url='https://api.supabase.com/v1/oauth/authorize',
+        api_base_url='https://api.supabase.com/v1/',
+        client_kwargs={'scope': 'organizations:read projects:read'}
+    )
+    # --- END: Supabase OAuth Registration ---
 
     # --- Register Routes and Event Handlers within App Context ---
     with app.app_context():
@@ -226,102 +225,60 @@ def create_app():
             token = request.args.get('token')
             if not token: 
                 return "Authentication token is missing.", 400
-            
-            # For the legacy flow, we store the token in the session.
             session['supabase_token'] = token
-            
             redirect_uri = url_for('auth_callback', provider=provider, _external=True)
-            
             if provider not in oauth._clients: 
                 return "Invalid provider specified.", 404
-            
-            # ===================================================================
-            # CRITICAL FIX: For Vercel, we must pass our token as the 'state'.
-            # This tells authlib to use our token for the state parameter instead
-            # of generating its own random one. This is the key to disabling
-            # the automatic CSRF check for this specific flow.
-            # ===================================================================
-            if provider == 'vercel':
-                return oauth.vercel.authorize_redirect(redirect_uri, state=token)
-            # ===================================================================
-
             if provider == 'google': 
                 return oauth.google.authorize_redirect(redirect_uri, access_type='offline', prompt='consent')
-            
             return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
         @app.route('/auth/<provider>/callback')
         def auth_callback(provider):
             try:
-                # ===================================================================
-                # FINAL FIX: Manually handle the token exchange for Vercel
-                # to bypass the incompatible authlib CSRF check.
-                # ===================================================================
                 if provider == 'vercel':
                     code = request.args.get('code')
-                    if not code:
-                        return "Vercel authorization code is missing.", 400
-
-                    # Manually make the POST request to get the access token
+                    if not code: return "Vercel authorization code is missing.", 400
                     token_response = requests.post(
                         'https://api.vercel.com/v2/oauth/access_token',
                         data={
-                            'client_id': os.getenv("VERCEL_CLIENT_ID"),
-                            'client_secret': os.getenv("VERCEL_CLIENT_SECRET"),
-                            'code': code,
-                            'redirect_uri': url_for('auth_callback', provider='vercel', _external=True)
+                            'client_id': os.getenv("VERCEL_CLIENT_ID"), 'client_secret': os.getenv("VERCEL_CLIENT_SECRET"),
+                            'code': code, 'redirect_uri': url_for('auth_callback', provider='vercel', _external=True)
                         }
                     )
                     token_response.raise_for_status()
                     token = token_response.json()
-
-                    # Use the new token to get the Vercel user's email
                     user_info_response = requests.get(
                         'https://api.vercel.com/v2/user',
                         headers={'Authorization': f"Bearer {token['access_token']}"}
                     )
                     user_info_response.raise_for_status()
                     vercel_user_email = user_info_response.json()['user']['email']
-                    
-                    # Find our app's user by matching the email
                     user_lookup = supabase_client.from_('profiles').select('id').eq('email', vercel_user_email).single().execute()
-                    if not user_lookup.data:
-                        return "Error: Could not find a user in our system with the Vercel email address.", 400
+                    if not user_lookup.data: return "Error: Could not find a user in our system with the Vercel email address.", 400
                     user_id = user_lookup.data['id']
-
-                else: # Legacy flow for GitHub/Google
+                else:
                     supabase_token = session.get('supabase_token')
-                    if not supabase_token:
-                        return "Your session has expired. Please try connecting again.", 400
+                    if not supabase_token: return "Your session has expired.", 400
                     user = supabase_client.auth.get_user(jwt=supabase_token).user
-                    if not user: raise AuthApiError("User not found for the provided token.", 401)
+                    if not user: raise AuthApiError("User not found for token.", 401)
                     user_id = user.id
-                    
                     client = oauth.create_client(provider)
                     token = client.authorize_access_token()
-                # ===================================================================
 
-                if not user_id:
-                     return "Could not identify the user for this integration.", 400
-
-                # Save the integration details to the database
+                if not user_id: return "Could not identify the user.", 400
                 integration_data = {
-                    'user_id': str(user_id), 
-                    'service': provider, 
-                    'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'), 
-                    'scopes': token.get('scope', '').split(' '),
+                    'user_id': str(user_id), 'service': provider, 'access_token': token.get('access_token'),
+                    'refresh_token': token.get('refresh_token'), 'scopes': token.get('scope', '').split(' '),
                 }
                 integration_data = {k: v for k, v in integration_data.items() if v is not None}
                 supabase_client.from_('user_integrations').upsert(integration_data).execute()
-                
                 logger.info(f"Successfully saved {provider} integration for user {user_id}")
-                
                 return f"<h1>Authentication Successful!</h1><p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>"
             except Exception as e:
                 logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
                 return "An error occurred during authentication. Please try again.", 500
-
+        
         @app.route('/api/integrations', methods=['GET'])
         def get_integrations_status():
             user, error = get_user_from_token(request)
@@ -404,15 +361,11 @@ def create_app():
                 logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
                 emit("error", {"message": "AI service error. Please start a new chat.", "reset": True}, room=sid)
     
-    # The factory must return only the Flask app object for Gunicorn
     return app
 
 # --- Main Execution Block (for local development) ---
-# This block is NOT run by Gunicorn. It's only for when you run "python app.py" directly.
 if __name__ == "__main__":
-    # Create the app instance when running locally
     app = create_app()
     port = int(os.environ.get("PORT", 8765))
     app_debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
-    # When running locally, we need to use the `socketio` instance created by the factory
     socketio.run(app, host="0.0.0.0", port=port, debug=app_debug_mode, use_reloader=app_debug_mode)

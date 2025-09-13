@@ -84,6 +84,7 @@ class AIOS {
             // --- MODIFICATION START ---
             connectVercelBtn: document.getElementById('connect-vercel-btn'),
             // --- MODIFICATION END ---
+            connectSupabaseBtn: document.getElementById('connect-supabase-btn'),
         };
     }
 
@@ -144,6 +145,7 @@ class AIOS {
         // --- MODIFICATION START ---
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
         // --- MODIFICATION END ---
+        addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
@@ -230,12 +232,12 @@ class AIOS {
     async checkIntegrationStatus() {
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
-            // Not logged in, so can't have integrations. Ensure default state.
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
-            // --- MODIFICATION START ---
             this.updateIntegrationButton('vercel', false);
-            // --- MODIFICATION END ---
+            // --- START: Supabase Integration ---
+            this.updateIntegrationButton('supabase', false);
+            // --- END: Supabase Integration ---
             return;
         }
         try {
@@ -243,30 +245,25 @@ class AIOS {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch integration status');
-            
             const data = await response.json();
-            const isGithubConnected = data.integrations.includes('github');
-            const isGoogleConnected = data.integrations.includes('google');
-            // --- MODIFICATION START ---
-            const isVercelConnected = data.integrations.includes('vercel');
-            // --- MODIFICATION END ---
-
-            this.updateIntegrationButton('github', isGithubConnected);
-            this.updateIntegrationButton('google', isGoogleConnected);
-            // --- MODIFICATION START ---
-            this.updateIntegrationButton('vercel', isVercelConnected);
-            // --- MODIFICATION END ---
-
+            const connected = new Set(data.integrations);
+            this.updateIntegrationButton('github', connected.has('github'));
+            this.updateIntegrationButton('google', connected.has('google'));
+            this.updateIntegrationButton('vercel', connected.has('vercel'));
+            // --- START: Supabase Integration ---
+            this.updateIntegrationButton('supabase', connected.has('supabase'));
+            // --- END: Supabase Integration ---
         } catch (error) {
             console.error('Error checking integration status:', error);
-            // Don't show a notification, just default the UI
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
-            // --- MODIFICATION START ---
             this.updateIntegrationButton('vercel', false);
-            // --- MODIFICATION END ---
+            // --- START: Supabase Integration ---
+            this.updateIntegrationButton('supabase', false);
+            // --- END: Supabase Integration ---
         }
     }
+
 
     updateIntegrationButton(provider, isConnected) {
         // Dynamically find the button based on the provider name
@@ -598,6 +595,7 @@ class AIOS {
             // --- MODIFICATION START ---
             this.updateIntegrationButton('vercel', false);
             // --- MODIFICATION END ---
+            this.updateIntegrationButton('supabase', false);
         }
     }
 
