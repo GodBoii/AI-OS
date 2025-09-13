@@ -23,6 +23,7 @@ let chatConfig = {
         enable_github: true,
         enable_google_email: true,
         Planner_Agent: true,
+        enable_vercel: true,
         enable_google_drive: true
     },
     deepsearch: false
@@ -63,7 +64,7 @@ function startNewConversation() {
 
     chatConfig = {
         memory: false, tasks: false,
-        tools: { internet_search: true, Planner_Agent: true, coding_assistant: true, World_Agent: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
+        tools: { internet_search: true, Planner_Agent: true, coding_assistant: true, World_Agent: true, enable_vercel: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
         deepsearch: false
     };
     const aiOsCheckbox = document.getElementById('ai_os');

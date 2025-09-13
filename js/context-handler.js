@@ -66,7 +66,7 @@ class ContextHandler {
             return;
         }
         try {
-            const response = await fetch('https://ai-os-yjbb.onrender.com/api/sessions', {
+            const response = await fetch('https://aios-web.onrender.com', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);

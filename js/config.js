@@ -5,7 +5,7 @@ const config = {
     // Backend connection settings
     backend: {
         // URL for the Python backend running in Docker
-        url: 'http://localhost:8765', //http://localhost:8765
+        url: 'https://aios-web.onrender.com', //http://localhost:8765
         
         // Maximum number of reconnection attempts
         maxReconnectAttempts: 50,
