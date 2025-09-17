@@ -1,4 +1,4 @@
-# python-backend/app.py
+# python-backend/app.py (Final, Corrected Version for Agno v2.0.5)
 
 import os
 import logging
@@ -27,8 +27,8 @@ from browser_tools import BrowserTools
 from agno.agent import Agent
 from agno.team import Team
 from agno.media import Image, Audio, Video, File
-from agno.run.response import RunEvent
-from agno.run.team import TeamRunEvent
+from agno.run.agent import RunEvent
+from agno.run.team import TeamRunEvent, TeamRunOutput
 
 # --- Initial Configuration ---
 load_dotenv()
@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 # --- Global Celery Instance ---
 celery = Celery(__name__)
 
+redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+celery.conf.update(
+    broker_url=redis_url,
+    result_backend=redis_url
+)
+
 # --- Global Placeholders ---
 socketio = None
 redis_client = None
@@ -45,7 +51,7 @@ connection_manager = None
 oauth = None
 browser_waiting_events: Dict[str, eventlet.event.Event] = {}
 
-# --- Logic and Helper Classes (Defined Globally) ---
+# --- Logic and Helper Classes ---
 
 class ConnectionManager:
     def create_session(self, conversation_id: str, user_id: str, config: dict) -> dict:
@@ -69,13 +75,15 @@ class ConnectionManager:
             if history and user_id:
                 try:
                     now = int(datetime.datetime.now().timestamp())
+                    # Note: Agno v2 uses 'agno_sessions' by default. This upsert might target the old table.
+                    # This is fine as a fallback but the primary source of truth is now Agno's table.
                     supabase_client.from_('ai_os_sessions').upsert({
                         "session_id": conversation_id, "user_id": user_id, "agent_id": "AI_OS",
                         "created_at": now, "updated_at": now, "memory": {"runs": history}
                     }).execute()
                 except Exception as e:
-                    logger.error(f"Failed to save session {conversation_id} to Supabase: {e}")
-            
+                    logger.error(f"Failed to save session {conversation_id} to Supabase on termination: {e}")
+
             sandbox_api_url = os.getenv("SANDBOX_API_URL")
             if sandbox_api_url:
                 for sandbox_id in session_data.get("sandbox_ids", []):
@@ -92,56 +100,85 @@ class ConnectionManager:
 def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict):
     try:
         session_data = connection_manager.get_session(conversation_id)
-        if not session_data: raise Exception(f"Session data not found for {conversation_id}")
+        if not session_data:
+            raise Exception(f"Session data not found for {conversation_id}")
         user_id, message = session_data['user_id'], turn_data['user_message']
-        agent = get_llm_os(user_id=user_id, session_info=session_data, browser_tools_config=browser_tools_config, custom_tool_config=custom_tool_config, **session_data['config'])
-        
-        previous_history = session_data.get("history", [])
-        complete_history = previous_history + [{"role": "user", "content": message}]
-        
-        images, audio, videos, other_files = process_files(turn_data.get('files', []))
-        if agent.team_session_state is None: agent.team_session_state = {}
-        agent.team_session_state['turn_context'] = turn_data
-        
-        final_assistant_response = ""
-        
-        import inspect
-        params = inspect.signature(agent.run).parameters
-        supported_params = {'stream': True, 'stream_intermediate_steps': True, 'user_id': user_id}
-        if 'images' in params and images: supported_params['images'] = images
-        if 'audio' in params and audio: supported_params['audio'] = audio
-        if 'videos' in params and videos: supported_params['videos'] = videos
-        if 'files' in params and other_files: supported_params['files'] = other_files
 
-        for chunk in agent.run(complete_history, **supported_params):
-            if not chunk or not hasattr(chunk, 'event'): continue
+        agent = get_llm_os(user_id=user_id, session_info=session_data, browser_tools_config=browser_tools_config, custom_tool_config=custom_tool_config, **session_data['config'])
+
+        images, audio, videos, other_files = process_files(turn_data.get('files', []))
+
+        current_session_state = {
+            'turn_context': turn_data
+        }
+
+        final_assistant_response = ""
+        run_output = None
+
+        # --- VITAL FIX: Conditionally format the input to agent.run() ---
+        run_input: Union[str, Dict]
+        has_files = any([images, audio, videos, other_files])
+
+        if has_files:
+            # For multimodal input, use a dictionary
+            run_input = {"content": message}
+            if images: run_input['images'] = images
+            if audio: run_input['audio'] = audio
+            if videos: run_input['videos'] = videos
+            if other_files: run_input['files'] = other_files
+        else:
+            # For text-only input, pass the message directly as a string
+            run_input = message
+        # --- END FIX ---
+
+        for chunk in agent.run(
+            input=run_input,
+            session_id=conversation_id,
+            session_state=current_session_state,
+            stream=True,
+            stream_intermediate_steps=True,
+            add_history_to_context=True
+        ):
+            if not chunk or not hasattr(chunk, 'event'):
+                continue
+
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
-            if chunk.event in (RunEvent.run_response_content.value, TeamRunEvent.run_response_content.value):
+
+            if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
                 socketio.emit("response", {"content": chunk.content, "streaming": True, "id": message_id, "agent_name": owner_name, "is_log": not is_final}, room=sid)
-                if chunk.content and is_final: final_assistant_response += chunk.content
+                if chunk.content and is_final:
+                    final_assistant_response += chunk.content
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 socketio.emit("agent_step", {"type": "tool_start", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
 
+            if isinstance(chunk, TeamRunOutput):
+                run_output = chunk
+
         socketio.emit("response", {"done": True, "id": message_id}, room=sid)
-        
+
         session_data["history"].append({"role": "user", "content": message})
         assistant_turn = {"role": "assistant", "content": final_assistant_response, "events": []}
-        if hasattr(agent, 'run_response') and agent.run_response and agent.run_response.events:
-            assistant_turn["events"] = [event.to_dict() for event in agent.run_response.events]
+        
+        if run_output and run_output.events:
+            assistant_turn["events"] = [event.to_dict() for event in run_output.events]
         session_data["history"].append(assistant_turn)
         redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
 
-        if hasattr(agent, 'session_metrics') and agent.session_metrics:
-            metrics = agent.session_metrics
+        if run_output and run_output.metrics:
+            metrics = run_output.metrics
             if metrics.input_tokens > 0 or metrics.output_tokens > 0:
-                supabase_client.from_('request_logs').insert({'user_id': user_id, 'input_tokens': metrics.input_tokens, 'output_tokens': metrics.output_tokens}).execute()
+                supabase_client.from_('request_logs').insert({
+                    'user_id': user_id,
+                    'input_tokens': metrics.input_tokens,
+                    'output_tokens': metrics.output_tokens
+                }).execute()
 
     except Exception as e:
         logger.error(f"Agent run failed for {conversation_id}: {e}\n{traceback.format_exc()}")
-        socketio.emit("error", {"message": "An error occurred in the AI service. Please start a new chat.", "reset": True}, room=sid)
+        socketio.emit("error", {"message": str(e), "reset": True}, room=sid)
 
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
     images, audio, videos, other_files = [], [], [], []
@@ -174,19 +211,18 @@ def get_user_from_token(request):
 
 # --- Application Factory ---
 def create_app():
-    global celery, socketio, redis_client, connection_manager, oauth
+    global socketio, redis_client, connection_manager, oauth
 
     app = Flask(__name__)
     app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-    redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-    celery.conf.update(broker_url=redis_url, result_backend=redis_url)
     redis_client = redis.from_url(redis_url)
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet", message_queue=redis_url)
+    
     connection_manager = ConnectionManager()
     oauth = OAuth(app)
 
-    # --- Register OAuth providers ---
+    # Register OAuth providers
     oauth.register(
         name='github', client_id=os.getenv("GITHUB_CLIENT_ID"), client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
         access_token_url='https://github.com/login/oauth/access_token', authorize_url='https://github.com/login/oauth/authorize',
@@ -203,7 +239,6 @@ def create_app():
         access_token_url='https://api.vercel.com/v2/oauth/access_token', authorize_url='https://vercel.com/oauth/authorize',
         api_base_url='https://api.vercel.com/', client_kwargs={'scope': 'users:read teams:read projects:read deployments:read'}
     )
-    # --- START: Supabase OAuth Registration ---
     oauth.register(
         name='supabase',
         client_id=os.getenv("SUPABASE_CLIENT_ID"),
@@ -213,7 +248,6 @@ def create_app():
         api_base_url='https://api.supabase.com/v1/',
         client_kwargs={'scope': 'organizations:read projects:read'}
     )
-    # --- END: Supabase OAuth Registration ---
 
     # --- Register Routes and Event Handlers within App Context ---
     with app.app_context():
@@ -223,13 +257,13 @@ def create_app():
         @app.route('/login/<provider>')
         def login_provider(provider):
             token = request.args.get('token')
-            if not token: 
+            if not token:
                 return "Authentication token is missing.", 400
             session['supabase_token'] = token
             redirect_uri = url_for('auth_callback', provider=provider, _external=True)
-            if provider not in oauth._clients: 
+            if provider not in oauth._clients:
                 return "Invalid provider specified.", 404
-            if provider == 'google': 
+            if provider == 'google':
                 return oauth.google.authorize_redirect(redirect_uri, access_type='offline', prompt='consent')
             return oauth.create_client(provider).authorize_redirect(redirect_uri)
 
@@ -278,7 +312,7 @@ def create_app():
             except Exception as e:
                 logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
                 return "An error occurred during authentication. Please try again.", 500
-        
+
         @app.route('/api/integrations', methods=['GET'])
         def get_integrations_status():
             user, error = get_user_from_token(request)
@@ -335,14 +369,14 @@ def create_app():
                 access_token, conversation_id = data.get("accessToken"), data.get("conversationId")
                 if not conversation_id: return emit("error", {"message": "Critical error: conversationId is missing."}, room=sid)
                 if not access_token: return emit("error", {"message": "Authentication token is missing.", "reset": True}, room=sid)
-                
+
                 user = supabase_client.auth.get_user(jwt=access_token).user
                 if not user: raise AuthApiError("User not found for token.", 401)
 
                 if data.get("type") == "terminate_session":
                     connection_manager.terminate_session(conversation_id)
                     return emit("status", {"message": f"Session {conversation_id} terminated"}, room=sid)
-                    
+
                 if not connection_manager.get_session(conversation_id):
                     connection_manager.create_session(conversation_id, str(user.id), data.get("config", {}))
 
@@ -350,7 +384,7 @@ def create_app():
                 message_id = data.get("id") or str(uuid.uuid4())
                 browser_tools_config = {'sid': sid, 'socketio': socketio, 'waiting_events': browser_waiting_events}
                 custom_tool_config = {'sid': sid, 'socketio': socketio, 'message_id': message_id}
-                
+
                 eventlet.spawn(run_agent_and_stream, sid, conversation_id, message_id, turn_data, browser_tools_config, custom_tool_config)
                 logger.info(f"Spawned agent run for conversation: {conversation_id}")
 
@@ -360,7 +394,7 @@ def create_app():
             except Exception as e:
                 logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
                 emit("error", {"message": "AI service error. Please start a new chat.", "reset": True}, room=sid)
-    
+
     return app
 
 # --- Main Execution Block (for local development) ---

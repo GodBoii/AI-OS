@@ -1,3 +1,5 @@
+# python-backend/assistant.py (Final, Corrected Version for Agno v2.0.5)
+
 import os
 import base64
 import traceback
@@ -7,18 +9,17 @@ from typing import Optional, List, Dict, Any, Set, Union, Iterator
 
 # Agno Core Imports
 from agno.agent import Agent
-from agno.team import Team  # Import the Team class
+from agno.team import Team
 from agno.media import Image
 from PIL import Image
 from agno.tools import tool
 
-from agno.run.team import TeamRunResponseEvent
+# V2 Imports
+from agno.run.team import TeamRunEvent
+from agno.run.agent import RunEvent
 from agno.models.response import ModelResponseEvent
 from agno.run.messages import RunMessages
-
-from agno.memory.v2.memory import Memory as AgnoMemoryV2
-from agno.storage.postgres import PostgresStorage
-from agno.memory.v2.db.postgres import PostgresMemoryDb
+from agno.db.postgres import PostgresDb
 from agno.models.google import Gemini
 from agno.models.groq import Groq
 
@@ -35,8 +36,8 @@ from sandbox_tools import SandboxTools
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
-from browser_tools import BrowserTools 
-from vercel_tools import VercelTools 
+from browser_tools import BrowserTools
+from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
 
 # Other Imports
@@ -67,11 +68,10 @@ def get_llm_os(
     enable_browser: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
-) -> Team:  # The factory now returns a Team instance
+) -> Team:
     """
     Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
     """
-    # --- 1. CORE INFRASTRUCTURE SETUP (Unchanged) ---
     direct_tools: List[Toolkit] = []
 
     db_url_full = os.getenv("DATABASE_URL")
@@ -79,13 +79,14 @@ def get_llm_os(
         raise ValueError("DATABASE_URL environment variable is not set.")
     db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
 
-    if use_memory:
-        memory_db = PostgresMemoryDb(table_name="agent_memories", db_url=db_url_sqlalchemy, schema="public")
-        memory = AgnoMemoryV2(db=memory_db)
-    else:
-        memory = None
+    # --- VITAL FIX: All unsupported keyword arguments have been removed. ---
+    # Agno v2's PostgresDb class uses default table names (e.g., 'agno_sessions')
+    # and does not take table names or schema as constructor arguments.
+    db = PostgresDb(
+        db_url=db_url_sqlalchemy
+    )
+    # --- END FIX ---
 
-    # --- 2. DIRECT TOOL INTEGRATIONS (Unchanged) ---
     if enable_github and user_id:
         direct_tools.append(GitHubTools(user_id=user_id))
     if (enable_google_email or enable_google_drive) and user_id:
@@ -106,12 +107,6 @@ def get_llm_os(
 
     @tool(show_result=False)
     def generate_image(prompt: str) -> str:
-        """
-        Generates an image based on a textual prompt. This tool emits the image data directly
-        to the frontend and returns a markdown block with a unique ID for the frontend to render a button.
-        Args:
-            prompt (str): A detailed description of the image to be generated.
-        """
         logger.info(f"Initiating synchronous image generation with prompt: '{prompt}'")
         try:
             socketio = custom_tool_config.get('socketio') if custom_tool_config else None
@@ -155,24 +150,20 @@ def get_llm_os(
                 "agent_name": "artist_agent",
             }, room=sid)
             logger.info(f"Emitted 'image_generated' event for artifact {artifact_id}.")
-            
+
             return f"I have generated an image for you.\n\n```image\n{artifact_id}\n```"
 
         except Exception as e:
             logger.error(f"Error in generate_image tool: {e}\n{traceback.format_exc()}")
             return "An unexpected error occurred while trying to generate the image."
-    
+
     direct_tools.append(generate_image)
 
-    # --- 3. BUILD AVAILABLE RESOURCES INVENTORY ---
-    # This will be used by the planner to understand what's available
     available_resources = {
         "direct_tools": [],
         "specialist_agents": [],
         "capabilities": []
     }
-
-    # Document direct tools
     if enable_github:
         available_resources["direct_tools"].append("GitHubTools - GitHub repository operations")
     if enable_google_email:
@@ -189,8 +180,6 @@ def get_llm_os(
     available_resources["direct_tools"].append("generate_image - AI image generation")
     if enable_supabase:
         available_resources["direct_tools"].append("SupabaseTools - database related tool")
-
-    # Document specialist agents that will be available
     if coding_assistant:
         available_resources["specialist_agents"].append("dev_team - Code development, testing, file operations, terminal commands")
         available_resources["capabilities"].append("Code execution via sandbox")
@@ -198,19 +187,15 @@ def get_llm_os(
         available_resources["specialist_agents"].append("World_Agent - Wikipedia, ArXiv, HackerNews, YFinance, web crawling")
         available_resources["capabilities"].append("Research and data extraction")
 
-    # --- 4. SPECIALIST AGENT AND TEAM DEFINITIONS ---
     main_team_members: List[Union[Agent, Team]] = []
 
-    # --- 4.1. The Planner Agent ---
     if Planner_Agent:
         resources_summary = "\n".join([
             "AVAILABLE DIRECT TOOLS:",
             *[f"• {tool}" for tool in available_resources["direct_tools"]],
-            "",
-            "AVAILABLE SPECIALIST AGENTS:",
+            "", "AVAILABLE SPECIALIST AGENTS:",
             *[f"• {agent}" for agent in available_resources["specialist_agents"]],
-            "",
-            "SYSTEM CAPABILITIES:",
+            "", "SYSTEM CAPABILITIES:",
             *[f"• {cap}" for cap in available_resources["capabilities"]]
         ])
 
@@ -220,19 +205,15 @@ def get_llm_os(
             model=Groq(id="deepseek-r1-distill-llama-70b"),
             instructions=[
                 "You are the Strategic Planner for Aetheria AI. Your role is to analyze complex queries and create clear, actionable execution plans.",
-                "",
-                "ACCESS: You receive queries from team_session_state['turn_context']",
-                "",
-                resources_summary,
-                "",
-                "PLANNING APPROACH:",
+                "", "ACCESS: You receive queries from session_state['turn_context']",
+                "", resources_summary,
+                "", "PLANNING APPROACH:",
                 "1. Analyze the user's request to identify all requirements",
                 "2. Break down complex tasks into atomic, sequential steps",
                 "3. Identify which tools/agents are needed for each step",
                 "4. Consider dependencies between steps",
                 "5. Optimize for efficiency and accuracy",
-                "",
-                "PLAN FORMAT:",
+                "", "PLAN FORMAT:",
                 "• Keep plans concise: 3-7 steps maximum",
                 "• One line per step, clear and actionable",
                 "• Each step should specify: ACTION → TOOL/AGENT → EXPECTED OUTPUT",
@@ -240,14 +221,12 @@ def get_llm_os(
                 "  Step 1: Search for latest research papers → World_Agent (ArXiv) → Get 5 recent papers",
                 "  Step 2: Analyze findings → Direct analysis → Synthesize key insights",
                 "  Step 3: Generate visualization → generate_image → Create infographic",
-                "",
-                "WHEN TO CREATE PLANS:",
+                "", "WHEN TO CREATE PLANS:",
                 "• Multi-step workflows requiring different tools",
                 "• Tasks needing coordination between agents",
                 "• Complex analysis requiring sequential processing",
                 "• Projects with clear phases (research → analyze → create)",
-                "",
-                "OUTPUT:",
+                "", "OUTPUT:",
                 "Return ONLY the execution plan in the specified format.",
                 "Do not execute tasks yourself - only plan.",
                 "Be specific about which agent/tool handles each step."
@@ -257,17 +236,15 @@ def get_llm_os(
         )
         main_team_members.append(planner)
 
-    # --- 4.2. The Development Team ---
     if coding_assistant:
         dev_team = Team(
             name="dev_team",
-            mode="coordinate",
             model=Gemini(id="gemini-2.5-flash"),
             members=[],
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
             instructions=[
                 "Development team: Plan and execute code solutions using sandbox tools.",
-                "Access files from team_session_state['turn_context']['files'].",
+                "Access files from session_state['turn_context']['files'].",
                 "Workflow: 1) Analyze requirements 2) Plan solution 3) Implement code 4) Test & verify.",
                 "Use sandbox tools for file operations, code execution, terminal commands, testing.",
                 "Output: Brief summary + working code + test results.",
@@ -277,7 +254,6 @@ def get_llm_os(
         )
         main_team_members.append(dev_team)
 
-    # --- 4.3. The World Agent ---
     if World_Agent:
         world_ai = Agent(
             name="World_Agent",
@@ -286,24 +262,21 @@ def get_llm_os(
             tools=[YFinanceTools(),WikipediaTools(),HackerNewsTools(),ArxivTools(),WebsiteTools(),Crawl4aiTools(max_length=None)],
             instructions=[
                 "You are the World Agent with comprehensive access to global information sources.",
-                "Access context from team_session_state['turn_context'] for queries.",
-                "",
-                "AVAILABLE TOOLS:",
+                "Access context from session_state['turn_context'] for queries.",
+                "", "AVAILABLE TOOLS:",
                 "• WikipediaTools - Encyclopedic knowledge and factual information",
                 "• ArxivTools - Academic papers and research publications",
                 "• HackerNewsTools - Tech news, startup discussions",
                 "• Crawl4aiTools - Advanced web scraping for dynamic content",
                 "• WebsiteTools - Deep website content extraction",
                 "• YFinanceTools - Stock prices, company info, analyst recommendations",
-                "",
-                "TOOL SELECTION LOGIC:",
+                "", "TOOL SELECTION LOGIC:",
                 "• General knowledge queries → Wikipedia",
                 "• Academic/research papers → ArXiv",
                 "• Tech news/trends → HackerNews",
                 "• URL content extraction → Crawl4ai or WebsiteTools",
                 "• Financial/stock data → YFinance",
-                "",
-                "OUTPUT:",
+                "", "OUTPUT:",
                 "• Deliver clear, comprehensive responses",
                 "• Structure information logically",
                 "• Include relevant data points and insights",
@@ -314,22 +287,18 @@ def get_llm_os(
         )
         main_team_members.append(world_ai)
 
-    # --- 5. TOP-LEVEL TEAM (AETHERIA AI) CONFIGURATION ---
     aetheria_instructions = [
-        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via team_session_state['turn_context'].",
-        "",
-        "COMPLEXITY ASSESSMENT - First determine:",
+        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via session_state['turn_context'].",
+        "", "COMPLEXITY ASSESSMENT - First determine:",
         "• Is this a simple, single-step query? → Handle directly",
         "• Is this a complex, multi-step task? → Delegate to planner first",
         "• Does it require multiple tools/agents? → Delegate to planner first",
-        "",
-        "WORKFLOW FOR COMPLEX TASKS:",
+        "", "WORKFLOW FOR COMPLEX TASKS:",
         "1. If query is complex or multi-step → Send to 'planner' agent",
         "2. Receive execution plan from planner",
         "3. Execute plan step-by-step using specified agents/tools",
         "4. Compile results and deliver final response",
-        "",
-        "ROUTING GUIDE FOR SIMPLE TASKS:",
+        "", "ROUTING GUIDE FOR SIMPLE TASKS:",
         "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
         "• Web research/Data extraction → World_Agent",
         "• Image generation → generate_image",
@@ -337,18 +306,15 @@ def get_llm_os(
         "• Vercel project management (listing projects, deployments) → VercelTools",
         "• Simple searches → GoogleSearchTools",
         "• Supabase organization and project management -> SupabaseTools",
-        "",
-        "DECISION LOGIC:",
-        "- Need to SEE and INTERACT with webpage → use browser_tools", 
+        "", "DECISION LOGIC:",
+        "- Need to SEE and INTERACT with webpage → use browser_tools",
         "- Need to CODE/RUN commands → delegate to dev_team",
-        "",
-        "EXECUTION PRINCIPLES:",
+        "", "EXECUTION PRINCIPLES:",
         "• Follow planner's steps precisely when executing complex tasks",
         "• Maintain context between steps",
         "• If a step fails, adapt and continue or request new plan",
         "• Compile intermediate results for final synthesis",
-        "",
-        "RESPONSE STYLE:",
+        "", "RESPONSE STYLE:",
         "• Deliver results as if you personally completed the task",
         "• Use personalized responses when user data is available",
         "• Provide direct, clear answers without explaining internal processes",
@@ -357,33 +323,24 @@ def get_llm_os(
         "• Keep responses natural and conversational",
     ]
 
-    # The main orchestrator is now a PatchedTeam instance
     llm_os_team = PatchedTeam(
         name="Aetheria_AI",
         model=Gemini(id="gemini-2.5-flash"),
         members=main_team_members,
-        mode="coordinate",
         tools=direct_tools,
         instructions=aetheria_instructions,
         user_id=user_id,
-        storage=PostgresStorage(
-            table_name="ai_os_sessions",
-            db_url=db_url_sqlalchemy,
-            schema="public",
-            auto_upgrade_schema=True
-        ),
-        memory=memory,
+        db=db,
         enable_user_memories=use_memory,
         enable_session_summaries=use_memory,
         stream_intermediate_steps=True,
-        show_tool_calls=False,
         search_knowledge=use_memory,
         read_team_history=True,
-        add_history_to_messages=True,
+        add_history_to_context=True,
         num_history_runs=40,
         store_events=True,
         markdown=True,
-        add_datetime_to_instructions=True,
+        add_datetime_to_context=True,
         debug_mode=debug_mode,
     )
 

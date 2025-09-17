@@ -1,9 +1,8 @@
-# docker-compose.yml (Complete version with all services)
+# docker-compose.yml (Final Recommended Version)
 
 version: '3.8'
 
 services:
-  # Redis for Celery message brokering and backend caching
   redis:
     image: "redis:7.2-alpine"
     container_name: aios-redis
@@ -12,7 +11,6 @@ services:
     volumes:
       - redis_data:/data
 
-  # The main web server (Flask/SocketIO)
   web:
     build:
       context: .
@@ -26,38 +24,25 @@ services:
       - ./python-backend:/app
     depends_on:
       - redis
-      - sandbox-manager # Ensures sandbox-manager starts before the web server
+      - sandbox-manager
 
-  # The Celery worker for background AI tasks
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aios-worker
-    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info", "--concurrency=1"]
-    env_file:
-      - ./python-backend/.env
-    volumes:
-      - ./python-backend:/app
-    depends_on:
-      - redis
-      - web
-
-  # Flower for monitoring Celery workers
   flower:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: aios-flower
-    command: ["celery", "-A", "app.celery", "flower", "--broker=redis://redis:6379/0"]
+    # --- FINAL FIX: The command is now simpler ---
+    # Because app.py now configures the celery object on import,
+    # we don't need to specify the broker here anymore.
+    command: ["celery", "-A", "app.celery", "flower"]
     ports:
       - "5555:5555"
+    env_file:
+      - ./python-backend/.env
     depends_on:
       - redis
-      - worker
+      - web
 
-  # --- NEW: The Sandbox Manager Service ---
-  # This service manages creating, executing, and terminating sandbox containers.
   sandbox-manager:
     build:
       context: .
@@ -66,9 +51,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # CRITICAL: Mount the host's Docker socket into the container.
-      # This allows the sandbox-manager to control the Docker daemon
-      # to start and stop the actual sandbox containers.
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
