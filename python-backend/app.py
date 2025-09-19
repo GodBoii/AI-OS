@@ -38,11 +38,14 @@ logger = logging.getLogger(__name__)
 # --- Global Celery Instance ---
 celery = Celery(__name__)
 
+# --- FIX: Ensure Celery uses the correct Redis broker URL ---
+# This was already correct in your file but is confirmed here as per the plan.
 redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 celery.conf.update(
     broker_url=redis_url,
     result_backend=redis_url
 )
+# --- END FIX ---
 
 # --- Global Placeholders ---
 socketio = None
@@ -75,12 +78,17 @@ class ConnectionManager:
             if history and user_id:
                 try:
                     now = int(datetime.datetime.now().timestamp())
-                    # Note: Agno v2 uses 'agno_sessions' by default. This upsert might target the old table.
-                    # This is fine as a fallback but the primary source of truth is now Agno's table.
-                    supabase_client.from_('ai_os_sessions').upsert({
+                    
+                    # --- CRITICAL FIX: Align with Agno v2.0.5's default table name ---
+                    # The PostgresDb class in Agno v2 now reads from 'agno_sessions' by default.
+                    # This change ensures that your custom saving logic writes to the same table
+                    # that the agent's `read_team_history` feature reads from.
+                    supabase_client.from_('agno_sessions').upsert({
                         "session_id": conversation_id, "user_id": user_id, "agent_id": "AI_OS",
                         "created_at": now, "updated_at": now, "memory": {"runs": history}
                     }).execute()
+                    # --- END FIX ---
+
                 except Exception as e:
                     logger.error(f"Failed to save session {conversation_id} to Supabase on termination: {e}")
 
@@ -115,21 +123,17 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         final_assistant_response = ""
         run_output = None
 
-        # --- VITAL FIX: Conditionally format the input to agent.run() ---
         run_input: Union[str, Dict]
         has_files = any([images, audio, videos, other_files])
 
         if has_files:
-            # For multimodal input, use a dictionary
             run_input = {"content": message}
             if images: run_input['images'] = images
             if audio: run_input['audio'] = audio
             if videos: run_input['videos'] = videos
             if other_files: run_input['files'] = other_files
         else:
-            # For text-only input, pass the message directly as a string
             run_input = message
-        # --- END FIX ---
 
         for chunk in agent.run(
             input=run_input,
@@ -333,7 +337,12 @@ def create_app():
         def get_user_sessions():
             user, error = get_user_from_token(request)
             if error: return jsonify({"error": error[0]}), error[1]
-            response = supabase_client.from_('ai_os_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(50).execute()
+            
+            # --- CRITICAL FIX: Query the correct table for session history ---
+            # This ensures the frontend can retrieve session history from the same table Agno uses.
+            response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(50).execute()
+            # --- END FIX ---
+            
             return jsonify(response.data), 200
 
         @app.route('/api/generate-upload-url', methods=['POST'])
