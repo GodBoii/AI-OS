@@ -7,52 +7,92 @@
             <span class="context-label">Context</span>
             <span class="context-badge"></span>
         </div>
-        <div class="chat-tools">
-            <button class="tool-btn" data-tool="memory">
-                <i class="fa-solid fa-brain"></i>
-            </button>
-            <div class="tool-btn" data-tool="tools">
-                <i class="fas fa-wrench"></i>
-                <div class="tools-menu">
-                    <div class="tool-item">
-                        <input type="checkbox" id="ai_os" />
-                        <label for="ai_os">
-                            <i class="fa-solid fa-atom"></i>
-                            AI-OS
-                        </label>
-                    </div>
-                </div>
-            </div>
-            <button class="tool-btn" data-tool="context">
-                <i class="fa-solid fa-network-wired"></i>
-            </button>
-            <button class="tool-btn" data-tool="tasks">  <!-- Tasks Button -->
-                <i class="fa-solid fa-list-check"></i>
-            </button>
-        </div>
+        <!-- The .chat-tools div has been removed from here -->
     </div>
 </div>
 
+<!-- MODIFIED: Restructured floating input container -->
 <div id="floating-input-container" class="floating-input-container hidden">
-    <button class="add-btn">
-        <i class="fas fa-plus"></i>
-    </button>
-    <input type="file" id="file-input" style="display: none;" multiple />
-    <button id="attach-file-btn" class="attach-btn">
-        <i class="fas fa-paperclip"></i>
-    </button>
+    <!-- NEW: Horizontal file attachment bar -->
+    <div id="attached-files-bar" class="attached-files-bar hidden">
+        <div class="attached-files-content">
+            <!-- File chips will be dynamically added here -->
+        </div>
+    </div>
+    
+    <!-- The textarea is now the first and only direct child at the top -->
     <textarea 
         id="floating-input" 
         class="floating-input" 
         placeholder="Type your message..."
         rows="1"
     ></textarea>
-    <button id="send-message" class="send-btn">
-        <i class="fas fa-paper-plane"></i>
-    </button>
-</div>
 
-<!-- ... (The rest of your chat.html - context window, templates, etc.) ... -->
+    <!-- NEW: A dedicated toolbar for all buttons -->
+    <div class="input-toolbar">
+        <div class="toolbar-left">
+            <button class="add-btn">
+                <i class="fas fa-plus"></i>
+            </button>
+            <input type="file" id="file-input" style="display: none;" multiple />
+            <button id="attach-file-btn" class="attach-btn">
+                <i class="fas fa-paperclip"></i>
+            </button>
+            <!-- NEW: Shuffle button with dropdown menu -->
+            <div class="shuffle-btn tool-btn" data-tool="shuffle" role="button" tabindex="0" aria-label="Open shuffle menu" aria-expanded="false" aria-haspopup="true">
+                <i class="fas fa-random" aria-hidden="true"></i>
+                <div class="shuffle-menu" role="menu" aria-label="Shuffle menu options">
+                    <div class="shuffle-item" data-action="memory" role="menuitem" tabindex="-1" aria-label="Toggle memory">
+                        <i class="fa-solid fa-brain" aria-hidden="true"></i>
+                        <span>Memory</span>
+                    </div>
+                    <div class="shuffle-item" data-action="tools" role="menuitem" tabindex="-1" aria-label="Open tools submenu" aria-haspopup="true">
+                        <i class="fas fa-wrench" aria-hidden="true"></i>
+                        <span>Tools</span>
+                        <i class="fas fa-chevron-right submenu-indicator" aria-hidden="true"></i>
+                        <!-- Tools submenu will be dynamically positioned -->
+                        <div class="tools-menu" role="menu" aria-label="Tools options">
+                            <div class="tool-item" role="menuitem">
+                                <input type="checkbox" id="ai_os" aria-describedby="ai_os_desc" />
+                                <label for="ai_os">
+                                    <i class="fa-solid fa-atom" aria-hidden="true"></i>
+                                    AI-OS
+                                </label>
+                                <span id="ai_os_desc" class="sr-only">Enable all AI-OS tools</span>
+                            </div>
+                            <div class="tool-item" role="menuitem">
+                                <input type="checkbox" id="deep_search" aria-describedby="deep_search_desc" />
+                                <label for="deep_search">
+                                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                                    DeepSearch
+                                </label>
+                                <span id="deep_search_desc" class="sr-only">Enable deep search functionality</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="shuffle-item" data-action="tasks" role="menuitem" tabindex="-1" aria-label="Toggle tasks">
+                        <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+                        <span>Tasks</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Context button moved to left side as requested -->
+            <button class="tool-btn" data-tool="context">
+                <i class="fa-solid fa-network-wired"></i>
+            </button>
+        </div>
+        <div class="toolbar-center">
+            <!-- Empty center section -->
+        </div>
+        <div class="toolbar-right">
+            <button id="send-message" class="send-btn">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+</div>
+<!-- END MODIFICATION -->
+
 
 <div id="context-window" class="context-window hidden">
     <div class="context-header">
@@ -149,7 +189,7 @@
     </div>
 </template>
 
-<div id="file-preview-sidebar" class="file-preview-sidebar">
+<div id="file-preview-sidebar" class="file-preview-sidebar hidden">
     <div class="file-preview-header">
         <div class="file-preview-title">
             Attached Files <span class="file-count">0</span>
@@ -164,3 +204,12 @@
 </div>
 
 <div class="notification-container"></div>
+
+<script>
+// Initialize conversation state manager when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.conversationStateManager) {
+        window.conversationStateManager.init();
+    }
+});
+</script>

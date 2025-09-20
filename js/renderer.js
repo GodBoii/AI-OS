@@ -3,7 +3,7 @@ class StateManager {
         this._state = {
             isDarkMode: true,
             isWindowMaximized: false,
-            isChatOpen: false,
+            isChatOpen: true, // MODIFIED: Chat is now open by default
             isAIOSOpen: false,
             isToDoListOpen: false,
             webViewBounds: { x: 0, y: 0, width: 400, height: 300 }
@@ -59,7 +59,6 @@ class UIManager {
     cacheElements() {
         this.elements = {
             appIcon: document.getElementById('app-icon'),
-            chatIcon: document.getElementById('chat-icon'),
             toDoListIcon: document.getElementById('to-do-list-icon'),
 
             themeToggle: document.getElementById('theme-toggle'),
@@ -249,7 +248,6 @@ class UIManager {
 
         // Sidebar and app section toggles
         addClickHandler(this.elements.appIcon, () => this.state.setState({ isAIOSOpen: !this.state.getState().isAIOSOpen }));
-        addClickHandler(this.elements.chatIcon, () => this.state.setState({ isChatOpen: !this.state.getState().isChatOpen }));
         addClickHandler(this.elements.toDoListIcon, () => this.state.setState({ isToDoListOpen: !this.state.getState().isToDoListOpen }));
 
         // Window controls
@@ -257,8 +255,6 @@ class UIManager {
         addClickHandler(this.elements.resizeBtn, () => ipcRenderer.send('toggle-maximize-window'));
         addClickHandler(this.elements.closeBtn, () => ipcRenderer.send('close-window'));
         addClickHandler(this.elements.themeToggle, () => this.state.setState({ isDarkMode: !this.state.getState().isDarkMode }));
-
-        // No dropdown JS here — hover effect is fully CSS-based now
 
         ipcRenderer.on('window-state-changed', (isMaximized) => {
             this.state.setState({ isWindowMaximized: isMaximized });
@@ -283,20 +279,17 @@ class UIManager {
                         this.updateWindowControls(state.isWindowMaximized);
                         break;
                     case 'isChatOpen':
-                        if (state.isChatOpen && (state.isAIOSOpen || state.isToDoListOpen)) {
-                            this.state.setState({ isAIOSOpen: false, isToDoListOpen: false });
-                        }
                         this.updateChatVisibility(state.isChatOpen);
                         break;
                     case 'isAIOSOpen':
-                        if (state.isAIOSOpen && (state.isChatOpen || state.isToDoListOpen)) {
-                            this.state.setState({ isChatOpen: false, isToDoListOpen: false });
+                        if (state.isAIOSOpen && state.isToDoListOpen) {
+                            this.state.setState({ isToDoListOpen: false });
                         }
                         this.updateAIOSVisibility(state.isAIOSOpen);
                         break;
                     case 'isToDoListOpen':
-                        if (state.isToDoListOpen && (state.isChatOpen || state.isAIOSOpen)) {
-                            this.state.setState({ isChatOpen: false, isAIOSOpen: false });
+                        if (state.isToDoListOpen && state.isAIOSOpen) {
+                            this.state.setState({ isAIOSOpen: false });
                         }
                         this.updateToDoListVisibility(state.isToDoListOpen);
                         break;
@@ -338,10 +331,10 @@ class UIManager {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => { // Make the listener async
     const stateManager = new StateManager();
     window.stateManager = stateManager;
-    new UIManager(stateManager);
+    const uiManager = new UIManager(stateManager);
 
     const loadModule = async (name, containerId, initFunc) => {
         try {
@@ -354,7 +347,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    loadModule('aios', 'aios-container', () => window.AIOS?.init());
-    loadModule('chat', 'chat-root', () => window.chatModule?.init());
-    loadModule('to-do-list', 'to-do-list-root', () => window.todo?.init());
+    // --- CORRECTED LOGIC ---
+    // Create an array of promises for all modules that need to be loaded
+    const moduleLoadPromises = [
+        loadModule('aios', 'aios-container', () => window.AIOS?.init()),
+        loadModule('chat', 'chat-root', () => window.chatModule?.init()),
+        loadModule('to-do-list', 'to-do-list-root', () => window.todo?.init())
+    ];
+
+    // Wait for all of them to finish
+    await Promise.all(moduleLoadPromises);
+
+    // NOW that all HTML is guaranteed to be in the DOM,
+    // perform the initial UI sync.
+    const initialState = stateManager.getState();
+    uiManager.updateTheme(initialState.isDarkMode);
+    uiManager.updateChatVisibility(initialState.isChatOpen);
+    uiManager.updateAIOSVisibility(initialState.isAIOSOpen);
+    uiManager.updateToDoListVisibility(initialState.isToDoListOpen);
+    // --- END OF CORRECTED LOGIC ---
 });

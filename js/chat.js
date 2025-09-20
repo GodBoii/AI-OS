@@ -32,6 +32,7 @@ let chatConfig = {
 let ongoingStreams = {};
 let contextHandler = null;
 let fileAttachmentHandler = null;
+let shuffleMenuController = null;
 let connectionStatus = false;
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
@@ -45,6 +46,284 @@ const supportedFileTypes = {
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'c': 'text/x-c'
 };
+
+/**
+ * ShuffleMenuController - Manages the shuffle button dropdown menu
+ * that contains memory, tools, and tasks functionality
+ */
+class ShuffleMenuController {
+    constructor() {
+        this.shuffleBtn = null;
+        this.shuffleMenu = null;
+        this.isOpen = false;
+        this.activeItems = new Set();
+        this.animationFrame = null;
+    }
+
+    initialize() {
+        try {
+            this.shuffleBtn = document.querySelector('[data-tool="shuffle"]');
+            this.shuffleMenu = this.shuffleBtn?.querySelector('.shuffle-menu');
+            
+            if (!this.shuffleBtn || !this.shuffleMenu) {
+                console.warn('Shuffle menu elements not found');
+                return;
+            }
+
+            this.bindEvents();
+            this.initializeToolsState();
+            console.log('ShuffleMenuController initialized successfully');
+        } catch (error) {
+            console.error('Error initializing ShuffleMenuController:', error);
+        }
+    }
+
+    initializeToolsState() {
+        // Initialize checkbox states
+        const aiOsCheckbox = document.getElementById('ai_os');
+        const deepSearchCheckbox = document.getElementById('deep_search');
+        
+        if (aiOsCheckbox) {
+            const allToolsEnabledInitially = Object.values(chatConfig.tools).every(val => val === true);
+            aiOsCheckbox.checked = allToolsEnabledInitially;
+        }
+        
+        if (deepSearchCheckbox) {
+            deepSearchCheckbox.checked = chatConfig.deepsearch;
+        }
+        
+        // Update initial active states
+        this.updateToolsActiveState();
+    }
+
+    bindEvents() {
+        // Toggle menu on shuffle button click
+        this.shuffleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleMenu();
+        });
+
+        // Handle menu item clicks
+        const shuffleItems = this.shuffleMenu.querySelectorAll('.shuffle-item');
+        shuffleItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = item.dataset.action;
+                this.handleMenuItemClick(action);
+            });
+        });
+
+        // Close menu on outside click
+        document.addEventListener('click', (e) => {
+            if (!this.shuffleBtn.contains(e.target)) {
+                this.closeMenu();
+            }
+        });
+
+        // Handle keyboard navigation
+        this.shuffleMenu.addEventListener('keydown', (e) => {
+            this.handleKeyNavigation(e);
+        });
+    }
+
+    toggleMenu() {
+        if (this.isOpen) {
+            this.closeMenu();
+        } else {
+            this.openMenu();
+        }
+    }
+
+    openMenu() {
+        // Cancel any pending animation frame
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+        }
+        
+        this.shuffleMenu.classList.add('visible');
+        this.shuffleBtn.classList.add('active');
+        this.shuffleBtn.setAttribute('aria-expanded', 'true');
+        this.isOpen = true;
+        
+        // Set focus to first menu item for keyboard navigation using RAF for smooth transition
+        this.animationFrame = requestAnimationFrame(() => {
+            const firstItem = this.shuffleMenu.querySelector('.shuffle-item');
+            if (firstItem) {
+                firstItem.focus();
+            }
+        });
+    }
+
+    closeMenu() {
+        this.shuffleMenu.classList.remove('visible');
+        this.shuffleBtn.classList.remove('active');
+        this.shuffleBtn.setAttribute('aria-expanded', 'false');
+        this.isOpen = false;
+        
+        // Close any open submenus
+        this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
+            menu.classList.remove('visible');
+        });
+    }
+
+    handleMenuItemClick(action) {
+        switch (action) {
+            case 'memory':
+                this.handleMemoryAction();
+                break;
+            case 'tools':
+                this.handleToolsAction();
+                break;
+            case 'tasks':
+                this.handleTasksAction();
+                break;
+            default:
+                console.warn('Unknown shuffle menu action:', action);
+        }
+        
+        // Close menu after action (except for tools which has submenu)
+        if (action !== 'tools') {
+            this.closeMenu();
+        }
+    }
+
+    handleMemoryAction() {
+        // Delegate to existing memory toggle functionality
+        chatConfig.memory = !chatConfig.memory;
+        this.updateItemActiveState('memory', chatConfig.memory);
+    }
+
+    handleToolsAction() {
+        // For tools, we need to show the tools submenu
+        const toolsItem = this.shuffleMenu.querySelector('[data-action="tools"]');
+        const toolsSubmenu = toolsItem.querySelector('.tools-menu');
+        
+        if (toolsSubmenu) {
+            // Close any other open submenus first
+            this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
+                if (menu !== toolsSubmenu) {
+                    menu.classList.remove('visible');
+                }
+            });
+            
+            toolsSubmenu.classList.toggle('visible');
+            
+            // Set up tools submenu event handlers if not already done
+            this.setupToolsSubmenu(toolsSubmenu);
+        }
+    }
+
+    setupToolsSubmenu(toolsSubmenu) {
+        // Prevent submenu from closing shuffle menu when clicked
+        if (!toolsSubmenu.hasAttribute('data-shuffle-setup')) {
+            toolsSubmenu.setAttribute('data-shuffle-setup', 'true');
+            toolsSubmenu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        // Handle checkbox changes in tools submenu
+        const aiOsCheckbox = toolsSubmenu.querySelector('#ai_os');
+        const deepSearchCheckbox = toolsSubmenu.querySelector('#deep_search');
+        
+        if (aiOsCheckbox && !aiOsCheckbox.hasAttribute('data-shuffle-handler')) {
+            aiOsCheckbox.setAttribute('data-shuffle-handler', 'true');
+            aiOsCheckbox.addEventListener('change', (e) => {
+                const enableAll = e.target.checked;
+                for (const key in chatConfig.tools) {
+                    chatConfig.tools[key] = enableAll;
+                }
+                if (enableAll && deepSearchCheckbox) {
+                    deepSearchCheckbox.checked = false;
+                    chatConfig.deepsearch = false;
+                }
+                this.updateToolsActiveState();
+                e.stopPropagation();
+            });
+        }
+
+        if (deepSearchCheckbox && !deepSearchCheckbox.hasAttribute('data-shuffle-handler')) {
+            deepSearchCheckbox.setAttribute('data-shuffle-handler', 'true');
+            deepSearchCheckbox.addEventListener('change', (e) => {
+                chatConfig.deepsearch = e.target.checked;
+                if (e.target.checked && aiOsCheckbox) {
+                    aiOsCheckbox.checked = false;
+                    for (const key in chatConfig.tools) {
+                        chatConfig.tools[key] = false;
+                    }
+                }
+                this.updateToolsActiveState();
+                e.stopPropagation();
+            });
+        }
+    }
+
+    updateToolsActiveState() {
+        const aiOsCheckbox = document.getElementById('ai_os');
+        const deepSearchCheckbox = document.getElementById('deep_search');
+        const hasActiveTools = (aiOsCheckbox?.checked) || (deepSearchCheckbox?.checked);
+        
+        this.updateItemActiveState('tools', hasActiveTools);
+    }
+
+    handleTasksAction() {
+        // Delegate to existing tasks toggle functionality
+        chatConfig.tasks = !chatConfig.tasks;
+        this.updateItemActiveState('tasks', chatConfig.tasks);
+    }
+
+    updateItemActiveState(action, isActive) {
+        const item = this.shuffleMenu.querySelector(`[data-action="${action}"]`);
+        if (item) {
+            item.classList.toggle('active', isActive);
+        }
+
+        if (isActive) {
+            this.activeItems.add(action);
+        } else {
+            this.activeItems.delete(action);
+        }
+
+        // Update shuffle button active state based on any active items
+        this.updateShuffleButtonState();
+    }
+
+    updateShuffleButtonState() {
+        const hasActiveItems = this.activeItems.size > 0;
+        this.shuffleBtn.classList.toggle('has-active', hasActiveItems);
+    }
+
+    handleKeyNavigation(e) {
+        // Basic keyboard navigation support
+        const items = Array.from(this.shuffleMenu.querySelectorAll('.shuffle-item'));
+        const currentIndex = items.findIndex(item => item === document.activeElement);
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                const nextIndex = (currentIndex + 1) % items.length;
+                items[nextIndex].focus();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+                items[prevIndex].focus();
+                break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    items[currentIndex].click();
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                this.closeMenu();
+                this.shuffleBtn.focus();
+                break;
+        }
+    }
+}
 
 function startNewConversation() {
     if (currentConversationId) {
@@ -70,14 +349,27 @@ function startNewConversation() {
     const aiOsCheckbox = document.getElementById('ai_os');
     if (aiOsCheckbox) aiOsCheckbox.checked = true;
     
-    const tasksBtn = document.querySelector('[data-tool="tasks"]');
-    if (tasksBtn) tasksBtn.classList.remove('active');
-
     const deepSearchCheckbox = document.getElementById('deep_search');
     if (deepSearchCheckbox) deepSearchCheckbox.checked = false;
     
+    // Reset shuffle menu state
+    if (shuffleMenuController) {
+        shuffleMenuController.activeItems.clear();
+        shuffleMenuController.closeMenu();
+        shuffleMenuController.updateShuffleButtonState();
+        
+        // Reset shuffle menu item active states
+        const shuffleItems = document.querySelectorAll('.shuffle-item');
+        shuffleItems.forEach(item => item.classList.remove('active'));
+    }
+    
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-    if (window.updateToolsIndicator) window.updateToolsIndicator();
+    
+    // Reset input container to centered position
+    if (window.conversationStateManager) {
+        console.log('Calling onConversationCleared to center input');
+        window.conversationStateManager.onConversationCleared();
+    }
 }
 
 /**
@@ -339,6 +631,12 @@ function addUserMessage(message, turnContextData = null) {
     messageDiv.appendChild(userMessageContainer);
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Notify conversation state manager that a message was added
+    if (window.conversationStateManager) {
+        console.log('Calling onMessageAdded to move input to bottom');
+        window.conversationStateManager.onMessageAdded();
+    }
 }
 
 function createBotMessagePlaceholder(messageId) {
@@ -576,7 +874,10 @@ async function handleSendMessage() {
             const taskListContent = await fs.readFile(taskListPath, 'utf8');
             combinedContextForBackend += `User Context:\n${userContextContent}\n---\nTask List:\n${taskListContent}\n---\n`;
             chatConfig.tasks = false;
-            document.querySelector('[data-tool="tasks"]').classList.remove('active');
+            // Update shuffle menu to reflect tasks being turned off
+            if (shuffleMenuController) {
+                shuffleMenuController.updateItemActiveState('tasks', false);
+            }
         } catch (error) {
             console.error("Error reading context/task files:", error);
             showNotification("Error reading context files.", "error");
@@ -609,70 +910,9 @@ async function handleSendMessage() {
     contextHandler.clearSelectedContext();
 }
 
-function initializeToolsMenu() {
-    const toolsBtn = document.querySelector('[data-tool="tools"]');
-    const toolsMenu = toolsBtn.querySelector('.tools-menu');
-    const aiOsCheckbox = document.getElementById('ai_os');
-    const deepSearchDiv = document.createElement('div');
-    deepSearchDiv.className = 'tool-item';
-    deepSearchDiv.innerHTML = `<input type="checkbox" id="deep_search" /><label for="deep_search"><i class="fa-solid fa-magnifying-glass"></i>DeepSearch</label>`;
-    toolsMenu.appendChild(deepSearchDiv);
-    const deepSearchCheckbox = document.getElementById('deep_search');
-    const allToolsEnabledInitially = Object.values(chatConfig.tools).every(val => val === true);
-    aiOsCheckbox.checked = allToolsEnabledInitially;
-    deepSearchCheckbox.checked = chatConfig.deepsearch;
-    window.updateToolsIndicator = function() {
-        const anyActive = aiOsCheckbox.checked || deepSearchCheckbox.checked;
-        toolsBtn.classList.toggle('has-active', anyActive);
-    };
-    toolsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toolsBtn.classList.toggle('active');
-        toolsMenu.classList.toggle('visible');
-    });
-    aiOsCheckbox.addEventListener('change', (e) => {
-        const enableAll = e.target.checked;
-        for (const key in chatConfig.tools) chatConfig.tools[key] = enableAll;
-        if (enableAll) {
-            deepSearchCheckbox.checked = false;
-            chatConfig.deepsearch = false;
-        }
-        window.updateToolsIndicator();
-        e.stopPropagation();
-    });
-    deepSearchCheckbox.addEventListener('change', (e) => {
-        chatConfig.deepsearch = e.target.checked;
-        if (e.target.checked) {
-            aiOsCheckbox.checked = false;
-            for (const key in chatConfig.tools) chatConfig.tools[key] = false;
-        }
-        window.updateToolsIndicator();
-        e.stopPropagation();
-    });
-    document.addEventListener('click', (e) => {
-        if (!toolsBtn.contains(e.target)) {
-            toolsBtn.classList.remove('active');
-            toolsMenu.classList.remove('visible');
-        }
-    });
-    window.updateToolsIndicator();
-}
+// Tools menu functionality is now handled by ShuffleMenuController
 
-function handleMemoryToggle() {
-    const memoryBtn = document.querySelector('[data-tool="memory"]');
-    memoryBtn.addEventListener('click', () => {
-        chatConfig.memory = !chatConfig.memory;
-        memoryBtn.classList.toggle('active', chatConfig.memory);
-    });
-}
-
-function handleTasksToggle() {
-    const tasksBtn = document.querySelector('[data-tool="tasks"]');
-    tasksBtn.addEventListener('click', () => {
-        chatConfig.tasks = !chatConfig.tasks;
-        tasksBtn.classList.toggle('active', chatConfig.tasks);
-    });
-}
+// Memory and tasks toggle functionality is now handled by ShuffleMenuController
 
 async function terminateSession(conversationIdToTerminate) {
     if (!conversationIdToTerminate) return;
@@ -815,8 +1055,8 @@ class UnifiedPreviewHandler {
         const indicator = document.querySelector('.context-active-indicator');
         const badge = indicator.querySelector('.context-badge');
         const sessionCount = this.contextHandler?.getSelectedSessions()?.length || 0;
-        const fileCount = this.fileAttachmentHandler?.getAttachedFiles()?.length || 0;
-        const totalCount = sessionCount + fileCount;
+        // Only show context indicator for sessions, not files
+        const totalCount = sessionCount;
         if (totalCount > 0) {
             indicator.classList.add('visible');
             if (totalCount > 1) {
@@ -847,9 +1087,8 @@ function init() {
         attachBtn: document.getElementById('attach-file-btn')
     };
     contextHandler = new ContextHandler();
-    initializeToolsMenu();
-    handleMemoryToggle();
-    handleTasksToggle();
+    shuffleMenuController = new ShuffleMenuController();
+    shuffleMenuController.initialize();
     setupIpcListeners();
     initializeAutoExpandingTextarea();
     fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize);
