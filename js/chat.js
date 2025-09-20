@@ -1052,26 +1052,14 @@ class UnifiedPreviewHandler {
         return file.content || "No preview available";
     }
     updateContextIndicator() {
+        // Context indicator is now disabled - sessions appear as chips instead
         const indicator = document.querySelector('.context-active-indicator');
-        const badge = indicator.querySelector('.context-badge');
-        const sessionCount = this.contextHandler?.getSelectedSessions()?.length || 0;
-        // Only show context indicator for sessions, not files
-        const totalCount = sessionCount;
-        if (totalCount > 0) {
-            indicator.classList.add('visible');
-            if (totalCount > 1) {
-                badge.textContent = totalCount;
-                badge.classList.add('visible');
-            } else {
+        if (indicator) {
+            indicator.classList.remove('visible');
+            const badge = indicator.querySelector('.context-badge');
+            if (badge) {
                 badge.classList.remove('visible');
             }
-        } else {
-            indicator.classList.remove('visible');
-            badge.classList.remove('visible');
-        }
-        if (!indicator.hasClickHandler) {
-            indicator.addEventListener('click', () => this.showViewer());
-            indicator.hasClickHandler = true;
         }
     }
 }
@@ -1087,6 +1075,7 @@ function init() {
         attachBtn: document.getElementById('attach-file-btn')
     };
     contextHandler = new ContextHandler();
+    window.contextHandler = contextHandler;
     shuffleMenuController = new ShuffleMenuController();
     shuffleMenuController.initialize();
     setupIpcListeners();

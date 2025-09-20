@@ -215,8 +215,8 @@
     box-shadow: none;
 }
 
-/* --- Horizontal File Attachment Bar --- */
-.attached-files-bar {
+/* --- Horizontal Context and Files Bar --- */
+.context-files-bar {
     padding: 12px 16px 8px 16px;
     border-bottom: 1px solid var(--border-color);
     background: rgba(var(--accent-color-rgb), 0.02);
@@ -226,16 +226,16 @@
     transition: max-height var(--anim-normal) var(--easing-standard), padding var(--anim-normal) var(--easing-standard);
 }
 
-.attached-files-bar:not(.hidden) {
+.context-files-bar:not(.hidden) {
     max-height: 200px;
 }
 
-.attached-files-bar.hidden {
+.context-files-bar.hidden {
     padding: 0 16px;
     border-bottom: none;
 }
 
-.attached-files-content {
+.context-files-content {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -313,6 +313,63 @@
 
 .file-chip.failed .file-chip-icon {
     color: #ef4444;
+}
+
+/* --- Session Chips (similar to file chips) --- */
+.session-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--elevated-bg);
+    border: 1px solid var(--accent-color);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    transition: all var(--anim-fast) var(--easing-standard);
+    cursor: pointer;
+    max-width: 250px;
+}
+
+.session-chip:hover {
+    background: var(--accent-muted);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.session-chip-icon {
+    color: var(--accent-color);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.session-chip-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    flex: 1;
+}
+
+.session-chip-remove {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--anim-fast) var(--easing-standard);
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+
+.session-chip-remove:hover {
+    background: #ef4444;
+    color: white;
 }
 
 /* --- Input Toolbar --- */
@@ -1721,8 +1778,8 @@ body:not(.dark-mode) .formatted-table tbody tr:nth-of-type(odd) {
     border: 1px dashed var(--border-color);
 }
 
-/* Dark mode adjustments for file attachments */
-.dark-mode .attached-files-bar {
+/* Dark mode adjustments for context and file attachments */
+.dark-mode .context-files-bar {
     background: rgba(var(--accent-color-rgb), 0.05);
     border-color: var(--border-color);
 }
@@ -1739,6 +1796,15 @@ body:not(.dark-mode) .formatted-table tbody tr:nth-of-type(odd) {
 
 .dark-mode .file-chip.failed {
     background: rgba(239, 68, 68, 0.15);
+}
+
+.dark-mode .session-chip {
+    background: var(--elevated-bg);
+    border-color: var(--accent-color);
+}
+
+.dark-mode .session-chip:hover {
+    background: var(--accent-muted);
 }
 
 .dark-mode .floating-input-container.has-files {
@@ -2024,4 +2090,19 @@ a:hover {
 .dark-mode .artifact-reference {
     color: #e2e8f0;
     border-color: var(--border-color);
+}
+
+/* Respons
+ive adjustments for mobile */
+@media (max-width: 768px) {
+    .context-files-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .file-chip,
+    .session-chip {
+        max-width: none;
+        justify-content: space-between;
+    }
 }

@@ -22,17 +22,17 @@ class FileAttachmentHandler {
         this.attachButton = document.getElementById('attach-file-btn');
         this.fileInput = document.getElementById('file-input');
         this.inputContainer = document.getElementById('floating-input-container');
-        this.filesBar = document.getElementById('attached-files-bar');
-        this.filesContent = this.filesBar.querySelector('.attached-files-content');
+        this.contextFilesBar = document.getElementById('context-files-bar');
+        this.contextFilesContent = this.contextFilesBar.querySelector('.context-files-content');
 
         // Legacy sidebar elements (keep for compatibility)
         this.sidebar = document.getElementById('file-preview-sidebar');
         this.previewContent = this.sidebar.querySelector('.file-preview-content');
         this.fileCount = this.sidebar.querySelector('.file-count');
 
-        // Ensure sidebar starts hidden and files bar starts hidden
+        // Ensure sidebar starts hidden and context-files bar starts hidden
         this.sidebar.classList.add('hidden');
-        this.filesBar.classList.add('hidden');
+        this.contextFilesBar.classList.add('hidden');
 
         this.attachButton.addEventListener('click', (event) => {
             event.preventDefault();
@@ -224,25 +224,41 @@ class FileAttachmentHandler {
             console.log('File clicked:', file.name);
         });
 
-        this.filesContent.appendChild(chip);
+        this.contextFilesContent.appendChild(chip);
+    }
+
+    updateContextFilesBar() {
+        const hasFiles = this.attachedFiles.length > 0;
+        const hasSessions = window.contextHandler && window.contextHandler.getSelectedSessions().length > 0;
+        const hasContent = hasFiles || hasSessions;
+
+        if (hasContent) {
+            this.contextFilesBar.classList.remove('hidden');
+            this.inputContainer.classList.add('has-files');
+            this.sidebar.classList.add('hidden'); // Keep sidebar hidden, use horizontal bar
+        } else {
+            this.contextFilesBar.classList.add('hidden');
+            this.inputContainer.classList.remove('has-files');
+            this.sidebar.classList.add('hidden');
+        }
+
+        // Clear only the file chips, sessions will be managed by context handler
+        const fileChips = this.contextFilesContent.querySelectorAll('.file-chip');
+        fileChips.forEach(chip => chip.remove());
+    }
+
+    // Method to be called by context handler when sessions change
+    onContextChange() {
+        this.updateContextFilesBar();
     }
 
     renderFilePreview() {
         // Clear both old sidebar and new horizontal bar
         this.previewContent.innerHTML = '';
-        this.filesContent.innerHTML = '';
         this.fileCount.textContent = this.attachedFiles.length;
 
-        // Show/hide elements based on file count
-        if (this.attachedFiles.length > 0) {
-            this.filesBar.classList.remove('hidden');
-            this.inputContainer.classList.add('has-files');
-            this.sidebar.classList.add('hidden'); // Keep sidebar hidden, use horizontal bar
-        } else {
-            this.filesBar.classList.add('hidden');
-            this.inputContainer.classList.remove('has-files');
-            this.sidebar.classList.add('hidden');
-        }
+        // Update the combined context-files bar
+        this.updateContextFilesBar();
 
         // Render file chips in horizontal bar
         this.attachedFiles.forEach((file, index) => {

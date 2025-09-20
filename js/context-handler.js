@@ -309,7 +309,87 @@ class ContextHandler {
     }
 
     updateContextIndicator() {
-        if (window.unifiedPreviewHandler) window.unifiedPreviewHandler.updateContextIndicator();
+        // Instead of showing context indicator, render session chips
+        this.renderSessionChips();
+    }
+
+    renderSessionChips() {
+        const contextFilesBar = document.getElementById('context-files-bar');
+        const contextFilesContent = document.querySelector('.context-files-content');
+        
+        if (!contextFilesBar || !contextFilesContent) return;
+
+        // Remove existing session chips
+        const sessionChips = contextFilesContent.querySelectorAll('.session-chip');
+        sessionChips.forEach(chip => chip.remove());
+
+        // Add session chips for selected sessions
+        this.selectedContextSessions.forEach((session, index) => {
+            this.createSessionChip(session, index);
+        });
+
+        // Update bar visibility
+        this.updateContextFilesBarVisibility();
+    }
+
+    createSessionChip(session, index) {
+        const contextFilesContent = document.querySelector('.context-files-content');
+        if (!contextFilesContent) return;
+
+        const chip = document.createElement('div');
+        chip.className = 'session-chip';
+        
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-comments session-chip-icon';
+        
+        const title = document.createElement('span');
+        title.className = 'session-chip-title';
+        title.textContent = session.title || `Session ${index + 1}`;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'session-chip-remove';
+        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        removeBtn.title = 'Remove session';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.removeSelectedSession(index);
+        });
+        
+        chip.appendChild(icon);
+        chip.appendChild(title);
+        chip.appendChild(removeBtn);
+        
+        // Add click handler for session preview (optional)
+        chip.addEventListener('click', () => {
+            console.log('Session clicked:', session.title);
+            // Could open session details or preview
+        });
+        
+        contextFilesContent.appendChild(chip);
+    }
+
+    updateContextFilesBarVisibility() {
+        const contextFilesBar = document.getElementById('context-files-bar');
+        const inputContainer = document.getElementById('floating-input-container');
+        
+        if (!contextFilesBar || !inputContainer) return;
+
+        const hasFiles = window.fileAttachmentHandler && window.fileAttachmentHandler.attachedFiles.length > 0;
+        const hasSessions = this.selectedContextSessions.length > 0;
+        const hasContent = hasFiles || hasSessions;
+
+        if (hasContent) {
+            contextFilesBar.classList.remove('hidden');
+            inputContainer.classList.add('has-files');
+        } else {
+            contextFilesBar.classList.add('hidden');
+            inputContainer.classList.remove('has-files');
+        }
+
+        // Notify file handler about context changes
+        if (window.fileAttachmentHandler && window.fileAttachmentHandler.onContextChange) {
+            window.fileAttachmentHandler.onContextChange();
+        }
     }
 
     showNotification(message, type = 'info', duration = 3000) {
