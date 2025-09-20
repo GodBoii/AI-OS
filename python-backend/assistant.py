@@ -79,13 +79,12 @@ def get_llm_os(
         raise ValueError("DATABASE_URL environment variable is not set.")
     db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
 
-    # --- VITAL FIX: All unsupported keyword arguments have been removed. ---
-    # Agno v2's PostgresDb class uses default table names (e.g., 'agno_sessions')
-    # and does not take table names or schema as constructor arguments.
+    # --- CORRECTED: Instantiate a single, unified database handler ---
+    # The PostgresDb class in agno v2 handles both session history and long-term memory.
     db = PostgresDb(
         db_url=db_url_sqlalchemy
     )
-    # --- END FIX ---
+    # --- END CORRECTION ---
 
     if enable_github and user_id:
         direct_tools.append(GitHubTools(user_id=user_id))

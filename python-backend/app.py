@@ -1,4 +1,4 @@
-# python-backend/app.py (Final, Corrected Version for Agno v2.0.5)
+# python-backend/app.py (Final, Corrected Version for Agno v2.0.7)
 
 import os
 import logging
@@ -8,7 +8,7 @@ import traceback
 import requests
 import datetime
 from pathlib import Path
-from typing import Union, Dict, Any, List, Tuple
+from typing import Union, Dict, Any, List, Tuple, Optional
 
 import redis
 from celery import Celery
@@ -38,14 +38,11 @@ logger = logging.getLogger(__name__)
 # --- Global Celery Instance ---
 celery = Celery(__name__)
 
-# --- FIX: Ensure Celery uses the correct Redis broker URL ---
-# This was already correct in your file but is confirmed here as per the plan.
 redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 celery.conf.update(
     broker_url=redis_url,
     result_backend=redis_url
 )
-# --- END FIX ---
 
 # --- Global Placeholders ---
 socketio = None
@@ -79,15 +76,11 @@ class ConnectionManager:
                 try:
                     now = int(datetime.datetime.now().timestamp())
                     
-                    # --- CRITICAL FIX: Align with Agno v2.0.5's default table name ---
-                    # The PostgresDb class in Agno v2 now reads from 'agno_sessions' by default.
-                    # This change ensures that your custom saving logic writes to the same table
-                    # that the agent's `read_team_history` feature reads from.
+                    # This now correctly targets the 'agno_sessions' table.
                     supabase_client.from_('agno_sessions').upsert({
                         "session_id": conversation_id, "user_id": user_id, "agent_id": "AI_OS",
                         "created_at": now, "updated_at": now, "memory": {"runs": history}
                     }).execute()
-                    # --- END FIX ---
 
                 except Exception as e:
                     logger.error(f"Failed to save session {conversation_id} to Supabase on termination: {e}")
@@ -121,7 +114,8 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         }
 
         final_assistant_response = ""
-        run_output = None
+        # --- FIX 1: Initialize run_output to capture the final object from the stream ---
+        run_output: Optional[TeamRunOutput] = None
 
         run_input: Union[str, Dict]
         has_files = any([images, audio, videos, other_files])
@@ -146,6 +140,11 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
             if not chunk or not hasattr(chunk, 'event'):
                 continue
 
+            # --- FIX 2: Capture the final TeamRunOutput object from the stream ---
+            # This object contains the final metrics and structured event data.
+            if isinstance(chunk, TeamRunOutput):
+                run_output = chunk
+
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
@@ -158,19 +157,20 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
 
-            if isinstance(chunk, TeamRunOutput):
-                run_output = chunk
-
         socketio.emit("response", {"done": True, "id": message_id}, room=sid)
 
         session_data["history"].append({"role": "user", "content": message})
         assistant_turn = {"role": "assistant", "content": final_assistant_response, "events": []}
         
+        # --- FIX 3: Correctly serialize history events before saving ---
+        # The event objects in run_output.events must be converted to dictionaries.
         if run_output and run_output.events:
             assistant_turn["events"] = [event.to_dict() for event in run_output.events]
+        
         session_data["history"].append(assistant_turn)
         redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=86400)
 
+        # This block now works because `run_output` is correctly captured from the stream.
         if run_output and run_output.metrics:
             metrics = run_output.metrics
             if metrics.input_tokens > 0 or metrics.output_tokens > 0:
@@ -338,10 +338,7 @@ def create_app():
             user, error = get_user_from_token(request)
             if error: return jsonify({"error": error[0]}), error[1]
             
-            # --- CRITICAL FIX: Query the correct table for session history ---
-            # This ensures the frontend can retrieve session history from the same table Agno uses.
             response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(50).execute()
-            # --- END FIX ---
             
             return jsonify(response.data), 200
 
