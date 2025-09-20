@@ -1,0 +1,650 @@
+/* ================================================================= */
+/* SIMPLE FILE PREVIEW MODAL                                       */
+/* ================================================================= */
+
+/*
+ * Simple modal that appears when clicking on file chips
+ * Shows file content in a clean, focused overlay
+ */
+
+/* --- Modal Container --- */
+.file-preview-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--anim-normal) var(--easing-standard),
+                visibility 0s var(--anim-normal);
+}
+
+.file-preview-modal.visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--anim-normal) var(--easing-standard);
+}
+
+.file-preview-modal.closing {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* --- Modal Backdrop --- */
+.file-preview-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 0;
+}
+
+/* --- Modal Content --- */
+.file-preview-modal-content {
+    position: relative;
+    z-index: 10;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    background: var(--window-bg);
+    border-radius: 16px;
+    border: 2px solid var(--accent-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95);
+    transition: transform var(--anim-normal) var(--easing-standard);
+}
+
+.file-preview-modal.visible .file-preview-modal-content {
+    transform: scale(1);
+}
+
+/* --- Modal Header --- */
+.file-preview-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: var(--elevated-bg);
+    border-radius: 16px 16px 0 0;
+}
+
+.file-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex: 1;
+}
+
+.file-icon {
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.file-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 6px 0;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+.file-meta {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.close-preview-modal {
+    background: none;
+    border: none;
+    color: var(--icon-color);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.close-preview-modal:hover {
+    color: var(--accent-color);
+    background: var(--hover-bg);
+}
+
+/* --- Modal Body --- */
+.file-preview-modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.file-content-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 24px;
+}
+
+/* --- Text File Preview --- */
+.text-file-preview {
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    gap: 16px;
+}
+
+.loading-content i {
+    font-size: 2rem;
+    color: var(--accent-color);
+}
+
+.loading-content p {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.file-text-content {
+    padding: 20px;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-color);
+    background: transparent;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* --- Image File Preview --- */
+.image-file-preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.preview-image {
+    max-width: 100%;
+    max-height: 500px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+}
+
+/* --- Media File Preview --- */
+.media-file-preview,
+.binary-file-preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.media-placeholder,
+.binary-placeholder {
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.media-placeholder i,
+.binary-placeholder i {
+    font-size: 3rem;
+    color: var(--icon-color);
+    margin-bottom: 8px;
+}
+
+.media-placeholder p,
+.binary-placeholder p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.file-status {
+    font-size: 0.9rem !important;
+    color: var(--text-secondary) !important;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.file-info {
+    font-size: 0.9rem !important;
+    color: var(--text-secondary) !important;
+}
+
+.debug-info {
+    font-size: 0.8rem !important;
+    color: var(--warning-500) !important;
+    font-family: var(--font-mono) !important;
+    margin-top: 8px !important;
+}
+
+/* --- Responsive Design --- */
+@media (max-width: 768px) {
+    .file-preview-modal-content {
+        width: 95%;
+        max-height: 95vh;
+        margin: 10px;
+    }
+    
+    .file-preview-modal-header {
+        padding: 16px 20px;
+    }
+    
+    .file-info {
+        gap: 12px;
+    }
+    
+    .file-icon {
+        font-size: 1.3rem;
+    }
+    
+    .file-name {
+        font-size: 1.1rem;
+    }
+    
+    .file-content-preview {
+        padding: 20px;
+    }
+    
+    .file-text-content {
+        padding: 16px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .file-preview-modal-content {
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .file-preview-modal-header {
+        border-radius: 0;
+    }
+    
+    .file-content-preview {
+        padding: 16px;
+    }
+}
+
+/* --- Scrollbar Styling --- */
+.file-text-content::-webkit-scrollbar,
+.file-content-preview::-webkit-scrollbar {
+    width: 8px;
+}
+
+.file-text-content::-webkit-scrollbar-track,
+.file-content-preview::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-text-content::-webkit-scrollbar-thumb,
+.file-content-preview::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.file-text-content::-webkit-scrollbar-thumb:hover,
+.file-content-preview::-webkit-scrollbar-thumb:hover {
+    background: var(--icon-color);
+}
+
+/* --- Dark Mode Adjustments --- */
+.dark-mode .file-preview-modal-backdrop {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.dark-mode .session-preview-modal-backdrop {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+/* --- Reduced Motion Support --- */
+@media (prefers-reduced-motion: reduce) {
+    .file-preview-modal,
+    .file-preview-modal-content {
+        transition: opacity 0.1s ease;
+    }
+    
+    .file-preview-modal.visible .file-preview-modal-content {
+        transform: scale(1);
+    }
+}
+
+/* ================================================================= */
+/* SESSION PREVIEW MODAL                                           */
+/* ================================================================= */
+
+/* --- Session Modal (inherits most styles from file modal) --- */
+.session-preview-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--anim-normal) var(--easing-standard),
+                visibility 0s var(--anim-normal);
+}
+
+.session-preview-modal.visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--anim-normal) var(--easing-standard);
+}
+
+.session-preview-modal.closing {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.session-preview-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.session-preview-modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    background: var(--window-bg);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-xl);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95);
+    transition: transform var(--anim-normal) var(--easing-standard);
+}
+
+.session-preview-modal.visible .session-preview-modal-content {
+    transform: scale(1);
+}
+
+/* --- Session Modal Header --- */
+.session-preview-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: var(--elevated-bg);
+    border-radius: 16px 16px 0 0;
+}
+
+.session-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex: 1;
+}
+
+.session-icon {
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.session-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 6px 0;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+.session-meta {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* --- Session Modal Body --- */
+.session-preview-modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.session-content-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 24px;
+}
+
+/* --- Empty Session Preview --- */
+.empty-session-preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.empty-placeholder {
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.empty-placeholder i {
+    font-size: 3rem;
+    color: var(--icon-color);
+    margin-bottom: 8px;
+}
+
+.empty-placeholder p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+/* --- Session Messages Preview --- */
+.session-messages-preview {
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.messages-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--code-header-bg);
+}
+
+.messages-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.more-messages {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.messages-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* --- Message Preview Items --- */
+.message-preview {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.message-preview:last-child {
+    border-bottom: none;
+}
+
+.message-preview:hover {
+    background: var(--hover-bg);
+}
+
+.message-preview.user {
+    background: rgba(var(--accent-color-rgb), 0.05);
+}
+
+.message-role {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.message-preview.user .message-role {
+    color: var(--accent-color);
+}
+
+.message-content {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-color);
+    margin-bottom: 8px;
+    word-break: break-word;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* --- Responsive Design for Session Modal --- */
+@media (max-width: 768px) {
+    .session-preview-modal-content {
+        width: 95%;
+        max-height: 95vh;
+        margin: 10px;
+    }
+    
+    .session-preview-modal-header {
+        padding: 16px 20px;
+    }
+    
+    .session-info {
+        gap: 12px;
+    }
+    
+    .session-icon {
+        font-size: 1.3rem;
+    }
+    
+    .session-title {
+        font-size: 1.1rem;
+    }
+    
+    .session-content-preview {
+        padding: 20px;
+    }
+    
+    .message-preview {
+        padding: 12px 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .session-preview-modal-content {
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .session-preview-modal-header {
+        border-radius: 0;
+    }
+    
+    .session-content-preview {
+        padding: 16px;
+    }
+    
+    .messages-header {
+        padding: 12px 16px;
+    }
+    
+    .message-preview {
+        padding: 12px 16px;
+    }
+}

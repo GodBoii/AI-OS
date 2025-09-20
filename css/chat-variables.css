@@ -85,6 +85,7 @@
     --z-context-window: 1001;
     --z-dropdown-menu: 1000;
     --z-selected-context-viewer: 1000;
+    --z-welcome-message: 1002;
 }
 
 /* Dark Mode Theme Overrides */

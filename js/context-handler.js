@@ -359,10 +359,9 @@ class ContextHandler {
         chip.appendChild(title);
         chip.appendChild(removeBtn);
         
-        // Add click handler for session preview (optional)
+        // Add click handler for session preview
         chip.addEventListener('click', () => {
-            console.log('Session clicked:', session.title);
-            // Could open session details or preview
+            this.showSessionPreview(session, index);
         });
         
         contextFilesContent.appendChild(chip);
@@ -403,6 +402,145 @@ class ContextHandler {
             notification.classList.remove('show');
             setTimeout(() => notification.remove(), 300);
         }, duration);
+    }
+
+    /**
+     * Show session preview in a simple modal
+     */
+    showSessionPreview(session, index) {
+        // Remove existing preview modal if any
+        const existingModal = document.querySelector('.session-preview-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'session-preview-modal';
+        modal.innerHTML = `
+            <div class="session-preview-modal-content">
+                <div class="session-preview-modal-header">
+                    <div class="session-info">
+                        <i class="fas fa-comments session-icon"></i>
+                        <div class="session-details">
+                            <h3 class="session-title">${session.title || `Session ${index + 1}`}</h3>
+                            <span class="session-meta">${session.messages?.length || 0} messages • ${this.formatDate(session.lastActivity)}</span>
+                        </div>
+                    </div>
+                    <button class="close-preview-modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="session-preview-modal-body">
+                    <div class="session-content-preview">
+                        ${this.generateSessionPreview(session)}
+                    </div>
+                </div>
+            </div>
+            <div class="session-preview-modal-backdrop"></div>
+        `;
+
+        // Add to DOM
+        document.body.appendChild(modal);
+
+        // Add event listeners
+        const closeBtn = modal.querySelector('.close-preview-modal');
+        const backdrop = modal.querySelector('.session-preview-modal-backdrop');
+        
+        const closeModal = () => {
+            modal.classList.add('closing');
+            setTimeout(() => modal.remove(), 200);
+        };
+
+        closeBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+        
+        // Close on Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        // Show modal with animation
+        setTimeout(() => modal.classList.add('visible'), 10);
+    }
+
+    /**
+     * Generate session preview content
+     */
+    generateSessionPreview(session) {
+        if (!session.messages || session.messages.length === 0) {
+            return `
+                <div class="empty-session-preview">
+                    <div class="empty-placeholder">
+                        <i class="fas fa-comment-slash"></i>
+                        <p>No messages in this session</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Show recent messages (last 5)
+        const recentMessages = session.messages.slice(-5);
+        const messagesHtml = recentMessages.map(message => `
+            <div class="message-preview ${message.role}">
+                <div class="message-role">${message.role === 'user' ? 'You' : 'Assistant'}</div>
+                <div class="message-content">${this.escapeHtml(message.content.substring(0, 200))}${message.content.length > 200 ? '...' : ''}</div>
+                <div class="message-time">${this.formatTime(message.timestamp)}</div>
+            </div>
+        `).join('');
+
+        return `
+            <div class="session-messages-preview">
+                <div class="messages-header">
+                    <h4>Recent Messages</h4>
+                    ${session.messages.length > 5 ? `<span class="more-messages">+${session.messages.length - 5} more messages</span>` : ''}
+                </div>
+                <div class="messages-list">
+                    ${messagesHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Format date for display
+     */
+    formatDate(dateString) {
+        if (!dateString) return 'Unknown date';
+        
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) return 'Today';
+        if (diffDays === 2) return 'Yesterday';
+        if (diffDays <= 7) return `${diffDays} days ago`;
+        
+        return date.toLocaleDateString();
+    }
+
+    /**
+     * Format time for display
+     */
+    formatTime(timestamp) {
+        if (!timestamp) return '';
+        
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    /**
+     * Escape HTML content
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     getSelectedSessions() {

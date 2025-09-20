@@ -63,6 +63,7 @@
   --accent-color: var(--primary-600);
   --accent-hover: var(--primary-700);
   --accent-muted: var(--primary-100);
+  --accent-color-rgb: 79, 70, 229;
   
   --icon-color: var(--neutral-500);
   --icon-hover: var(--neutral-700);
@@ -117,6 +118,7 @@
   --accent-color: var(--primary-500);
   --accent-hover: var(--primary-400);
   --accent-muted: rgba(99, 102, 241, 0.2);
+  --accent-color-rgb: 99, 102, 241;
   
   --icon-color: var(--neutral-400);
   --icon-hover: var(--neutral-200);

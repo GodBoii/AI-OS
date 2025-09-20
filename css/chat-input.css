@@ -32,6 +32,20 @@
     transform: translateX(-50%) translateY(50%);
 }
 
+/* --- Welcome Mode (Centered) --- */
+.floating-input-container.welcome-mode {
+    bottom: 50%;
+    transform: translateX(-50%) translateY(50%);
+    transition: all var(--anim-normal) var(--easing-standard);
+}
+
+/* --- Chat Mode (Bottom Positioned) --- */
+.floating-input-container.chat-mode {
+    bottom: 20px;
+    transform: translateX(-50%);
+    transition: all var(--anim-normal) var(--easing-standard);
+}
+
 /* --- Input Container with Files Attached --- */
 .floating-input-container.has-files {
     background: rgba(var(--accent-color-rgb), 0.02);

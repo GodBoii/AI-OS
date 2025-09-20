@@ -3,6 +3,8 @@
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
+import WelcomeDisplay from './welcome-display.js';
+import ConversationStateManager from './conversation-state-manager.js';
 // Directly import the artifactHandler singleton to make the dependency explicit and eliminate race conditions.
 import { artifactHandler } from './artifact-handler.js';
 
@@ -33,6 +35,7 @@ let ongoingStreams = {};
 let contextHandler = null;
 let fileAttachmentHandler = null;
 let shuffleMenuController = null;
+let welcomeDisplay = null;
 let connectionStatus = false;
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
@@ -365,6 +368,9 @@ function startNewConversation() {
     
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
     
+    // Dispatch custom event for welcome display
+    document.dispatchEvent(new CustomEvent('conversationCleared'));
+    
     // Reset input container to centered position
     if (window.conversationStateManager) {
         console.log('Calling onConversationCleared to center input');
@@ -631,6 +637,9 @@ function addUserMessage(message, turnContextData = null) {
     messageDiv.appendChild(userMessageContainer);
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Dispatch custom event for welcome display
+    document.dispatchEvent(new CustomEvent('messageAdded'));
     
     // Notify conversation state manager that a message was added
     if (window.conversationStateManager) {
@@ -1078,6 +1087,15 @@ function init() {
     window.contextHandler = contextHandler;
     shuffleMenuController = new ShuffleMenuController();
     shuffleMenuController.initialize();
+    welcomeDisplay = new WelcomeDisplay();
+    welcomeDisplay.initialize();
+    
+
+    
+    // Initialize conversation state manager
+    if (window.conversationStateManager) {
+        window.conversationStateManager.init();
+    }
     setupIpcListeners();
     initializeAutoExpandingTextarea();
     fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize);

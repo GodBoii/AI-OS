@@ -218,10 +218,9 @@ class FileAttachmentHandler {
         chip.appendChild(name);
         chip.appendChild(removeBtn);
 
-        // Add click handler for file preview (optional)
+        // Add click handler for file preview
         chip.addEventListener('click', () => {
-            // Could open a preview modal or show file details
-            console.log('File clicked:', file.name);
+            this.showFilePreview(file, index);
         });
 
         this.contextFilesContent.appendChild(chip);
@@ -351,6 +350,7 @@ class FileAttachmentHandler {
         if (this.attachedFiles[index] && this.attachedFiles[index].previewUrl) {
             URL.revokeObjectURL(this.attachedFiles[index].previewUrl);
         }
+        
         this.attachedFiles.splice(index, 1);
         this.renderFilePreview();
     }
@@ -363,6 +363,7 @@ class FileAttachmentHandler {
         this.attachedFiles.forEach(file => {
             if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
         });
+        
         this.attachedFiles = [];
         this.renderFilePreview();
     }
@@ -377,6 +378,158 @@ class FileAttachmentHandler {
         } else {
             this.inputContainer.classList.add('centered');
         }
+    }
+
+    /**
+     * Show file preview in a simple modal
+     */
+    showFilePreview(file, index) {
+        console.log('Showing file preview for:', file);
+        
+        // Remove existing preview modal if any
+        const existingModal = document.querySelector('.file-preview-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'file-preview-modal';
+        
+        const previewContent = this.generateFilePreview(file);
+        console.log('Generated preview content:', previewContent);
+        
+        modal.innerHTML = `
+            <div class="file-preview-modal-backdrop"></div>
+            <div class="file-preview-modal-content">
+                <div class="file-preview-modal-header">
+                    <div class="file-info">
+                        <i class="${this.getFileIcon(file.name)} file-icon"></i>
+                        <div class="file-details">
+                            <h3 class="file-name">${file.name}</h3>
+                            <span class="file-meta">${this.formatFileSize(file.size || 0)} • ${file.type || 'Unknown'}</span>
+                        </div>
+                    </div>
+                    <button class="close-preview-modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="file-preview-modal-body">
+                    <div class="file-content-preview">
+                        ${previewContent}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add to DOM
+        document.body.appendChild(modal);
+
+        // Add event listeners
+        const closeBtn = modal.querySelector('.close-preview-modal');
+        const backdrop = modal.querySelector('.file-preview-modal-backdrop');
+        
+        const closeModal = () => {
+            modal.classList.add('closing');
+            setTimeout(() => modal.remove(), 200);
+        };
+
+        closeBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+        
+        // Close on Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        // Show modal with animation
+        console.log('Adding modal to DOM and showing...');
+        setTimeout(() => {
+            modal.classList.add('visible');
+            console.log('Modal should now be visible');
+        }, 10);
+    }
+
+    /**
+     * Generate file preview content based on file type
+     */
+    generateFilePreview(file) {
+        console.log('Generating preview for file:', file);
+        
+        if (file.isText && file.content) {
+            console.log('Showing text content, length:', file.content.length);
+            return `
+                <div class="text-file-preview">
+                    <pre class="file-text-content">${this.escapeHtml(file.content)}</pre>
+                </div>
+            `;
+        } else if (file.isText && !file.content) {
+            console.log('Text file but no content available');
+            return `
+                <div class="text-file-preview">
+                    <div class="loading-content">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading file content...</p>
+                    </div>
+                </div>
+            `;
+        } else if (file.previewUrl && file.type.startsWith('image/')) {
+            console.log('Showing image preview');
+            return `
+                <div class="image-file-preview">
+                    <img src="${file.previewUrl}" alt="${file.name}" class="preview-image" />
+                </div>
+            `;
+        } else if (file.isMedia) {
+            console.log('Showing media placeholder');
+            return `
+                <div class="media-file-preview">
+                    <div class="media-placeholder">
+                        <i class="fas fa-file-alt"></i>
+                        <p>Media file preview</p>
+                        <p class="file-status">Status: ${file.status}</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            console.log('Showing binary file placeholder');
+            return `
+                <div class="binary-file-preview">
+                    <div class="binary-placeholder">
+                        <i class="fas fa-file"></i>
+                        <p>Binary file - preview not available</p>
+                        <p class="file-info">Size: ${this.formatFileSize(file.size || 0)}</p>
+                        <p class="debug-info">Type: ${file.type}, isText: ${file.isText}, hasContent: ${!!file.content}</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Format file size for display
+     */
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * Escape HTML content
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     // Call this method when messages are added/removed

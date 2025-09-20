@@ -33,6 +33,12 @@
 /* --- Modal Interfaces: Context Windows and Popups --- */
 @import url('chat-context.css');
 
+/* --- Welcome Message: Initial Interface State --- */
+@import url('welcome-message.css');
+
+/* --- File Preview: Simple Modal Preview --- */
+@import url('file-preview-modal.css');
+
 /* ================================================================= */
 /* CRITICAL OVERRIDES & INTEGRATION FIXES                          */
 /* ================================================================= */
@@ -43,6 +49,10 @@
  */
 
 /* Ensure proper z-index stacking */
+.welcome-container {
+    z-index: var(--z-welcome-message);
+}
+
 .floating-input-container {
     z-index: var(--z-input-container);
 }
