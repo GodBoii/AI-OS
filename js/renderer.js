@@ -300,6 +300,15 @@ class UIManager {
 
     updateToDoListVisibility(isOpen) {
         document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
+        
+        // Notify FloatingWindowManager about tasks window state change
+        if (window.floatingWindowManager) {
+            if (isOpen) {
+                window.floatingWindowManager.onWindowOpen('tasks');
+            } else {
+                window.floatingWindowManager.onWindowClose('tasks');
+            }
+        }
     }
 
     updateTheme(isDarkMode) {

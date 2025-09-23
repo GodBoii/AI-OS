@@ -36,9 +36,19 @@ class ContextHandler {
         this.elements.contextBtn?.addEventListener('click', () => {
             this.elements.contextWindow?.classList.remove('hidden');
             this.loadSessions();
+            
+            // Notify FloatingWindowManager that context window opened
+            if (window.floatingWindowManager) {
+                window.floatingWindowManager.onWindowOpen('context');
+            }
         });
         this.elements.closeContextBtn?.addEventListener('click', () => {
             this.elements.contextWindow?.classList.add('hidden');
+            
+            // Notify FloatingWindowManager that context window closed
+            if (window.floatingWindowManager) {
+                window.floatingWindowManager.onWindowClose('context');
+            }
         });
         this.elements.syncBtn?.addEventListener('click', (e) => {
             e.preventDefault();
@@ -177,6 +187,11 @@ class ContextHandler {
                     this.elements.contextWindow.classList.add('hidden');
                     this.updateContextIndicator();
                     this.showNotification(`${selectedData.length} sessions selected as context`, 'info');
+                    
+                    // Notify FloatingWindowManager that context window closed
+                    if (window.floatingWindowManager) {
+                        window.floatingWindowManager.onWindowClose('context');
+                    }
                 }
             });
         }

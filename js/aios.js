@@ -601,10 +601,20 @@ class AIOS {
 
     showWindow() {
         this.elements.window?.classList.remove('hidden');
+        
+        // Notify FloatingWindowManager that AIOS window opened
+        if (window.floatingWindowManager) {
+            window.floatingWindowManager.onWindowOpen('aios-settings');
+        }
     }
 
     hideWindow() {
         this.elements.window?.classList.add('hidden');
+        
+        // Notify FloatingWindowManager that AIOS window closed
+        if (window.floatingWindowManager) {
+            window.floatingWindowManager.onWindowClose('aios-settings');
+        }
     }
 
     showNotification(message, type = 'success') {

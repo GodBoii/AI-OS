@@ -5,6 +5,7 @@ import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
 import WelcomeDisplay from './welcome-display.js';
 import ConversationStateManager from './conversation-state-manager.js';
+import FloatingWindowManager from './floating-window-manager.js';
 // Directly import the artifactHandler singleton to make the dependency explicit and eliminate race conditions.
 import { artifactHandler } from './artifact-handler.js';
 
@@ -36,6 +37,7 @@ let contextHandler = null;
 let fileAttachmentHandler = null;
 let shuffleMenuController = null;
 let welcomeDisplay = null;
+let floatingWindowManager = null;
 let connectionStatus = false;
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
@@ -1092,6 +1094,48 @@ function init() {
     shuffleMenuController.initialize();
     welcomeDisplay = new WelcomeDisplay();
     welcomeDisplay.initialize();
+    
+    // Initialize FloatingWindowManager and connect it to WelcomeDisplay
+    try {
+        floatingWindowManager = new FloatingWindowManager(welcomeDisplay);
+        window.floatingWindowManager = floatingWindowManager;
+    } catch (error) {
+        console.error('Error initializing FloatingWindowManager:', error);
+        // Continue without floating window management
+        window.floatingWindowManager = null;
+    }
+    
+    // Register floating windows with error handling
+    setTimeout(() => {
+        try {
+            // Register AIOS settings window
+            const aiosWindow = document.getElementById('floating-window');
+            if (aiosWindow) {
+                floatingWindowManager.registerWindow('aios-settings', aiosWindow);
+            } else {
+                console.warn('AIOS settings window element not found for registration');
+            }
+            
+            // Register tasks window
+            const tasksWindow = document.getElementById('to-do-list-container');
+            if (tasksWindow) {
+                floatingWindowManager.registerWindow('tasks', tasksWindow);
+            } else {
+                console.warn('Tasks window element not found for registration');
+            }
+            
+            // Register context window
+            const contextWindow = document.getElementById('context-window');
+            if (contextWindow) {
+                floatingWindowManager.registerWindow('context', contextWindow);
+            } else {
+                console.warn('Context window element not found for registration');
+            }
+        } catch (error) {
+            console.error('Error registering floating windows:', error);
+            // Continue without floating window management if registration fails
+        }
+    }, 100);
     
 
     
