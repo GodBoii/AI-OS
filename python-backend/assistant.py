@@ -1,24 +1,21 @@
-# python-backend/assistant.py (Final, Corrected Version for Agno v2.0.5)
+# python-backend/assistant.py (Final, Corrected Version for Agno v2.0.7 - Path B)
 
 import os
 import base64
 import traceback
 import logging
 import uuid
-from typing import Optional, List, Dict, Any, Set, Union, Iterator
+from typing import Optional, List, Dict, Any, Union
 
 # Agno Core Imports
 from agno.agent import Agent
-from agno.team import Team
+from agno.team import Team  # <-- Use the standard Team class
 from agno.media import Image
-from PIL import Image
 from agno.tools import tool
 
 # V2 Imports
 from agno.run.team import TeamRunEvent
 from agno.run.agent import RunEvent
-from agno.models.response import ModelResponseEvent
-from agno.run.messages import RunMessages
 from agno.db.postgres import PostgresDb
 from agno.models.google import Gemini
 from agno.models.groq import Groq
@@ -45,10 +42,15 @@ from supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
 
-class PatchedTeam(Team):
-    def write_to_storage(self, session_id: str, user_id: Optional[str] = None) -> Optional[Any]:
-        logging.debug(f"Turn-by-turn write_to_storage for team session {session_id} is disabled by patch.")
-        pass
+# --- REMOVED ---
+# The PatchedTeam class is no longer necessary, as we now want Agno's native
+# database writing capabilities to be active.
+#
+# class PatchedTeam(Team):
+#     def write_to_storage(self, session_id: str, user_id: Optional[str] = None) -> Optional[Any]:
+#         logging.debug(f"Turn-by-turn write_to_storage for team session {session_id} is disabled by patch.")
+#         pass
+# --- END REMOVAL ---
 
 
 def get_llm_os(
@@ -68,7 +70,7 @@ def get_llm_os(
     enable_browser: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
-) -> Team:
+) -> Team:  # <-- CRITICAL CHANGE: Return the standard Team object
     """
     Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
     """
@@ -79,12 +81,13 @@ def get_llm_os(
         raise ValueError("DATABASE_URL environment variable is not set.")
     db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
 
-    # --- CORRECTED: Instantiate a single, unified database handler ---
-    # The PostgresDb class in agno v2 handles both session history and long-term memory.
+    # This PostgresDb object is now the single source of truth for persistence.
+    # The Team will use it automatically to save runs and memories to Supabase.
     db = PostgresDb(
-        db_url=db_url_sqlalchemy
+        db_url=db_url_sqlalchemy,
+        db_schema="public"
+
     )
-    # --- END CORRECTION ---
 
     if enable_github and user_id:
         direct_tools.append(GitHubTools(user_id=user_id))
@@ -106,6 +109,7 @@ def get_llm_os(
 
     @tool(show_result=False)
     def generate_image(prompt: str) -> str:
+        # This custom tool remains unchanged. Its logic is sound.
         logger.info(f"Initiating synchronous image generation with prompt: '{prompt}'")
         try:
             socketio = custom_tool_config.get('socketio') if custom_tool_config else None
@@ -158,6 +162,7 @@ def get_llm_os(
 
     direct_tools.append(generate_image)
 
+    # This section for building the planner's context remains unchanged and is a good design pattern.
     available_resources = {
         "direct_tools": [],
         "specialist_agents": [],
@@ -176,7 +181,6 @@ def get_llm_os(
     available_resources["direct_tools"].append("generate_image - AI image generation")
     if enable_vercel:
         available_resources["direct_tools"].append("VercelTools - Vercel project and deployment operations")
-    available_resources["direct_tools"].append("generate_image - AI image generation")
     if enable_supabase:
         available_resources["direct_tools"].append("SupabaseTools - database related tool")
     if coding_assistant:
@@ -322,22 +326,31 @@ def get_llm_os(
         "• Keep responses natural and conversational",
     ]
 
-    llm_os_team = PatchedTeam(
+    # --- CRITICAL CHANGE: Instantiate the standard Team class ---
+    # This allows the `db` object to automatically handle session persistence.
+    llm_os_team = Team(
         name="Aetheria_AI",
         model=Gemini(id="gemini-2.5-flash"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
         user_id=user_id,
-        db=db,
+        db=db,  # This now controls persistence
+        enable_agentic_memory=use_memory,
         enable_user_memories=use_memory,
         enable_session_summaries=use_memory,
         stream_intermediate_steps=True,
         search_knowledge=use_memory,
+        events_to_skip=[
+            TeamRunEvent.run_started,
+            TeamRunEvent.run_completed,
+            TeamRunEvent.memory_update_started,
+            TeamRunEvent.memory_update_completed,
+        ],
         read_team_history=True,
         add_history_to_context=True,
         num_history_runs=40,
-        store_events=True,
+        store_events=True, # This is crucial for saving the full history
         markdown=True,
         add_datetime_to_context=True,
         debug_mode=debug_mode,

@@ -456,11 +456,11 @@ function setupIpcListeners() {
 
     ipcRenderer.on('image_generated', (data) => {
         console.log('Received image_generated event with artifact ID:', data.artifactId);
-        const { id: messageId, image_base64, agent_name, artifactId } = data;
+        const { id: messageId, image_base_64, agent_name, artifactId } = data;
 
-        if (artifactHandler && image_base64 && artifactId) {
-            artifactHandler.cachePendingImage(artifactId, image_base64);
-            artifactHandler.showArtifact('image', image_base64, artifactId);
+        if (artifactHandler && image_base_64 && artifactId) {
+            artifactHandler.cachePendingImage(artifactId, image_base_64);
+            artifactHandler.showArtifact('image', image_base_64, artifactId);
         }
 
         if (messageId && ongoingStreams[messageId]) {
@@ -520,7 +520,7 @@ function setupIpcListeners() {
                 }
             }
             
-            if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base64) {
+            if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base_64) {
                 if (artifactHandler) {
                     console.log("Detected browser tool output. Showing artifact.");
                     artifactHandler.showArtifact('browser_view', tool.tool_output);
@@ -722,6 +722,7 @@ function populateBotMessage(data) {
     }
 }
 
+// --- START OF CRITICAL MODIFICATION ---
 /**
  * Renders a complete assistant turn from a static array of saved event objects.
  * This is used for displaying historical sessions with full fidelity.
@@ -730,12 +731,11 @@ function populateBotMessage(data) {
  */
 function renderTurnFromEvents(targetContainer, events) {
     if (!targetContainer || !events || events.length === 0) {
-        // Fallback for safety
         targetContainer.innerHTML = '<div class="message-text">(Could not render detailed events)</div>';
         return;
     }
 
-    // Data aggregation step
+    // --- AGGREGATION PHASE: Loop through events once to gather all data ---
     const agentData = {};
     let toolLogsHtml = '';
     let finalContentEvent = null;
@@ -744,13 +744,13 @@ function renderTurnFromEvents(targetContainer, events) {
         const owner = event.agent_name || event.team_name;
         if (!owner) return;
 
-        // Initialize agent data if not present
+        // Initialize a container for the agent if it's the first time we see it
         if (!agentData[owner]) {
             agentData[owner] = { content: '', isLog: false };
         }
 
-        // Handle tool calls by generating HTML directly
-        if (event.event.includes('ToolCallStarted')) {
+        // Aggregate tool call events into pre-rendered HTML
+        if (event.event === 'TeamToolCallCompleted') {
             const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
             toolLogsHtml += `
                 <div class="tool-log-entry">
@@ -763,33 +763,37 @@ function renderTurnFromEvents(targetContainer, events) {
                 </div>`;
         }
 
-        // Aggregate content from response events
-        if (event.event.includes('ResponseContent')) {
-            const isFinalContent = owner === "Aetheria_AI" && !(event.member_responses && event.member_responses.length > 0);
+        // Aggregate content from all relevant events
+        if (event.event.includes('RunContent') || event.event.includes('ResponseContent')) {
+            // Determine if the content is a "log" (from a sub-agent) or the main answer
+            const isFinalContent = (owner === "Aetheria_AI");
             agentData[owner].isLog = !isFinalContent;
             if (event.content) {
                  agentData[owner].content += event.content;
             }
         }
         
-        // Capture the final, complete content event from the main agent
+        // Capture the final, complete run event from the main agent. This is the most reliable
+        // source for the final, synthesized content.
         if (event.event === 'TeamRunCompleted' && owner === 'Aetheria_AI') {
             finalContentEvent = event;
         }
     });
     
-    // If a final complete event exists, use its content for the main agent to avoid duplication
+    // If a final complete event exists, use its content for the main agent to avoid
+    // potential duplication or artifacts from concatenating streamed chunks.
     if (finalContentEvent && agentData['Aetheria_AI']) {
         agentData['Aetheria_AI'].content = finalContentEvent.content;
     }
 
-    // Build the final HTML structure
+    // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---
     let mainContentHtml = '';
     let logContentHtml = '';
 
     for (const owner in agentData) {
         if (!agentData[owner].content) continue;
         
+        // Use the messageFormatter to render Markdown, code blocks, etc.
         const formattedContent = messageFormatter.format(agentData[owner].content);
         const blockHtml = `
             <div class="content-block ${agentData[owner].isLog ? 'log-block' : ''}">
@@ -804,6 +808,7 @@ function renderTurnFromEvents(targetContainer, events) {
         }
     }
 
+    // Create the summary text for the collapsible "Reasoning" header
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
     const agentLogCount = (logContentHtml.match(/log-block/g) || []).length;
     let summaryText = "Aetheria AI's Reasoning";
@@ -814,6 +819,7 @@ function renderTurnFromEvents(targetContainer, events) {
         summaryText = `Reasoning involved ${parts.join(' and ')}`;
     }
 
+    // Assemble the final HTML structure, mirroring the live message structure
     const finalHtml = `
         <div class="message message-bot expanded">
             <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
@@ -821,12 +827,13 @@ function renderTurnFromEvents(targetContainer, events) {
                 <i class="fas fa-chevron-down summary-chevron"></i>
             </div>
             <div class="detailed-logs">${toolLogsHtml}${logContentHtml}</div>
-            <div class="message-content">${mainContentHtml}</div>
+            <div class="message-content">${mainContentHtml || '<div class="message-text">(No final response content)</div>'}</div>
         </div>
     `;
 
     targetContainer.innerHTML = finalHtml;
 }
+// --- END OF CRITICAL MODIFICATION ---
 
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');
@@ -918,10 +925,6 @@ async function handleSendMessage() {
     fileAttachmentHandler.clearAttachedFiles();
     contextHandler.clearSelectedContext();
 }
-
-// Tools menu functionality is now handled by ShuffleMenuController
-
-// Memory and tasks toggle functionality is now handled by ShuffleMenuController
 
 async function terminateSession(conversationIdToTerminate) {
     if (!conversationIdToTerminate) return;
@@ -1131,7 +1134,7 @@ function init() {
 
 const style = document.createElement('style');
 style.textContent = `
-.error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items-center; gap: 8px; }
+.error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .dark-mode .error-message { background-color: rgba(239, 68, 68, 0.2); }
 .status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items-center; gap: 8px; }
 .content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }

@@ -1,4 +1,4 @@
-// context-handler.js (Final Version with Turn-Based History Rendering)
+// context-handler.js (Definitive Version, Corrected for Pre-Parsed JSON)
 
 class ContextHandler {
     constructor() {
@@ -114,19 +114,21 @@ class ContextHandler {
         sessionItem.className = 'session-item';
         sessionItem.dataset.sessionId = session.session_id;
         
+        // --- MODIFICATION START: Removed JSON.parse ---
         let sessionName = `Session ${session.session_id.substring(0, 8)}...`;
-        if (session.memory?.runs?.length > 0) {
-            const firstUserRun = session.memory.runs.find(run => run.role === 'user' && run.content.trim() !== '');
-            if (firstUserRun) {
-                let title = firstUserRun.content.split('\n')[0].trim();
-                if (title.length > 45) title = title.substring(0, 45) + '...';
-                sessionName = title;
-            }
+        // The 'runs' field is already a JavaScript array.
+        const runs = session.runs || [];
+        const messageCount = runs.length;
+
+        if (runs.length > 0 && runs[0].input?.input_content) {
+            let title = runs[0].input.input_content.split('\n')[0].trim();
+            if (title.length > 45) title = title.substring(0, 45) + '...';
+            if (title) sessionName = title;
         }
+        // --- MODIFICATION END ---
         
         const creationDate = new Date(session.created_at * 1000);
         const formattedDate = creationDate.toLocaleDateString() + ' ' + creationDate.toLocaleTimeString();
-        const messageCount = session.memory?.runs?.length || 0;
 
         sessionItem.innerHTML = this.getSessionItemHTML(session, sessionName, formattedDate, messageCount);
         
@@ -157,7 +159,7 @@ class ContextHandler {
                     </div>
                     <div class="meta-item">
                         <i class="far fa-comments"></i>
-                        <span>${messageCount} messages</span>
+                        <span>${messageCount} turns</span>
                     </div>
                 </div>
             </div>
@@ -198,18 +200,19 @@ class ContextHandler {
         });
         return this.loadedSessions
             .filter(session => selectedIds.has(session.session_id))
-            .map(session => ({
-                interactions: session.memory.runs.map(run => ({
-                    user_input: run.role === 'user' ? run.content : '',
-                    llm_output: run.role === 'assistant' ? run.content : ''
-                }))
-            }));
+            .map(session => {
+                // --- MODIFICATION START: Removed JSON.parse ---
+                const runs = session.runs || [];
+                return {
+                    interactions: runs.map(run => ({
+                        user_input: run.input?.input_content || '',
+                        llm_output: run.content || ''
+                    }))
+                };
+                // --- MODIFICATION END ---
+            });
     }
 
-    /**
-     * Displays the detailed conversation view for a selected session using a turn-based layout.
-     * @param {string} sessionId - The ID of the session to display.
-     */
     showSessionDetails(sessionId) {
         const session = this.loadedSessions.find(s => s.session_id === sessionId);
         if (!session) {
@@ -220,68 +223,46 @@ class ContextHandler {
         if (!template) return console.error("Session detail template not found!");
 
         const view = template.content.cloneNode(true);
-        let sessionName = `Session ${session.session_id.substring(0, 8)}...`;
-        if (session.memory?.runs?.length > 0) {
-            const firstUserRun = session.memory.runs.find(run => run.role === 'user' && run.content.trim() !== '');
-            if (firstUserRun) {
-                let title = firstUserRun.content.split('\n')[0].trim();
-                if (title.length > 45) title = title.substring(0, 45) + '...';
-                sessionName = title;
-            }
-        }
-
-        view.querySelector('h3').textContent = sessionName;
+        const sessionNameEl = view.querySelector('h3');
         const messagesContainer = view.querySelector('.conversation-messages');
         messagesContainer.innerHTML = '';
 
-        // --- MODIFICATION START: Refactored to a turn-based rendering loop ---
-        if (session.memory?.runs?.length > 0) {
-            const runs = session.memory.runs;
-            // Iterate through the runs array in pairs (turns)
-            for (let i = 0; i < runs.length; i += 2) {
-                const userRun = runs[i];
-                const assistantRun = (i + 1 < runs.length) ? runs[i + 1] : null;
+        // --- MODIFICATION START: Removed JSON.parse and its try/catch block ---
+        // The 'runs' field is already a JavaScript array.
+        const runs = session.runs;
 
-                // Create a single container for the entire turn
-                const turnContainer = document.createElement('div');
-                turnContainer.className = 'conversation-turn';
-
-                // 1. Render the user part of the turn
-                if (userRun && userRun.role === 'user') {
-                    const userMessageDiv = document.createElement('div');
-                    userMessageDiv.className = 'turn-user-message';
-                    userMessageDiv.innerHTML = `
-                        <div class="message-label">User</div>
-                        <div class="message-text">${userRun.content}</div>
-                    `;
-                    turnContainer.appendChild(userMessageDiv);
-                }
-
-                // 2. Render the assistant part of the turn
-                if (assistantRun && assistantRun.role === 'assistant') {
-                    const assistantResponseDiv = document.createElement('div');
-                    assistantResponseDiv.className = 'turn-assistant-response';
-                    
-                    // Check for rich event data
-                    if (assistantRun.events && Array.isArray(assistantRun.events) && assistantRun.events.length > 0) {
-                        if (window.renderTurnFromEvents) {
-                            // Delegate the complex rendering to our existing function
-                            window.renderTurnFromEvents(assistantResponseDiv, assistantRun.events);
-                        } else {
-                            // Fallback if the function is missing
-                            assistantResponseDiv.innerHTML = `<div class="message-text">${assistantRun.content || '(Could not render detailed view)'}</div>`;
-                        }
-                    } else {
-                        // Fallback for old, simple assistant messages
-                        assistantResponseDiv.innerHTML = `<div class="message-text">${assistantRun.content}</div>`;
-                    }
-                    turnContainer.appendChild(assistantResponseDiv);
-                }
-                
-                messagesContainer.appendChild(turnContainer);
-            }
-        } else {
+        if (!runs || runs.length === 0) {
             messagesContainer.innerHTML = '<div class="message-entry">No messages in this session.</div>';
+            return;
+        }
+        
+        sessionNameEl.textContent = runs[0].input?.input_content.substring(0, 45) + '...' || `Session ${sessionId.substring(0, 8)}`;
+
+        for (const run of runs) {
+            const turnContainer = document.createElement('div');
+            turnContainer.className = 'conversation-turn';
+
+            if (run.input?.input_content) {
+                const userMessageDiv = document.createElement('div');
+                userMessageDiv.className = 'turn-user-message';
+                userMessageDiv.innerHTML = `
+                    <div class="message-label">User</div>
+                    <div class="message-text">${run.input.input_content}</div>
+                `;
+                turnContainer.appendChild(userMessageDiv);
+            }
+
+            const assistantResponseDiv = document.createElement('div');
+            assistantResponseDiv.className = 'turn-assistant-response';
+            
+            if (window.renderTurnFromEvents && Array.isArray(run.events) && run.events.length > 0) {
+                window.renderTurnFromEvents(assistantResponseDiv, run.events);
+            } else {
+                assistantResponseDiv.innerHTML = `<div class="message-text">${run.content || '(Could not render detailed response)'}</div>`;
+            }
+            turnContainer.appendChild(assistantResponseDiv);
+            
+            messagesContainer.appendChild(turnContainer);
         }
         // --- MODIFICATION END ---
 
@@ -309,7 +290,6 @@ class ContextHandler {
     }
 
     updateContextIndicator() {
-        // Instead of showing context indicator, render session chips
         this.renderSessionChips();
     }
 
@@ -319,16 +299,12 @@ class ContextHandler {
         
         if (!contextFilesBar || !contextFilesContent) return;
 
-        // Remove existing session chips
-        const sessionChips = contextFilesContent.querySelectorAll('.session-chip');
-        sessionChips.forEach(chip => chip.remove());
+        contextFilesContent.querySelectorAll('.session-chip').forEach(chip => chip.remove());
 
-        // Add session chips for selected sessions
         this.selectedContextSessions.forEach((session, index) => {
             this.createSessionChip(session, index);
         });
 
-        // Update bar visibility
         this.updateContextFilesBarVisibility();
     }
 
@@ -344,7 +320,8 @@ class ContextHandler {
         
         const title = document.createElement('span');
         title.className = 'session-chip-title';
-        title.textContent = session.title || `Session ${index + 1}`;
+        const firstInteraction = session.interactions?.[0]?.user_input || `Session ${index + 1}`;
+        title.textContent = firstInteraction.substring(0, 25) + (firstInteraction.length > 25 ? '...' : '');
         
         const removeBtn = document.createElement('button');
         removeBtn.className = 'session-chip-remove';
@@ -358,11 +335,6 @@ class ContextHandler {
         chip.appendChild(icon);
         chip.appendChild(title);
         chip.appendChild(removeBtn);
-        
-        // Add click handler for session preview
-        chip.addEventListener('click', () => {
-            this.showSessionPreview(session, index);
-        });
         
         contextFilesContent.appendChild(chip);
     }
@@ -385,7 +357,6 @@ class ContextHandler {
             inputContainer.classList.remove('has-files');
         }
 
-        // Notify file handler about context changes
         if (window.fileAttachmentHandler && window.fileAttachmentHandler.onContextChange) {
             window.fileAttachmentHandler.onContextChange();
         }
@@ -402,145 +373,6 @@ class ContextHandler {
             notification.classList.remove('show');
             setTimeout(() => notification.remove(), 300);
         }, duration);
-    }
-
-    /**
-     * Show session preview in a simple modal
-     */
-    showSessionPreview(session, index) {
-        // Remove existing preview modal if any
-        const existingModal = document.querySelector('.session-preview-modal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-
-        // Create modal
-        const modal = document.createElement('div');
-        modal.className = 'session-preview-modal';
-        modal.innerHTML = `
-            <div class="session-preview-modal-content">
-                <div class="session-preview-modal-header">
-                    <div class="session-info">
-                        <i class="fas fa-comments session-icon"></i>
-                        <div class="session-details">
-                            <h3 class="session-title">${session.title || `Session ${index + 1}`}</h3>
-                            <span class="session-meta">${session.messages?.length || 0} messages • ${this.formatDate(session.lastActivity)}</span>
-                        </div>
-                    </div>
-                    <button class="close-preview-modal">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="session-preview-modal-body">
-                    <div class="session-content-preview">
-                        ${this.generateSessionPreview(session)}
-                    </div>
-                </div>
-            </div>
-            <div class="session-preview-modal-backdrop"></div>
-        `;
-
-        // Add to DOM
-        document.body.appendChild(modal);
-
-        // Add event listeners
-        const closeBtn = modal.querySelector('.close-preview-modal');
-        const backdrop = modal.querySelector('.session-preview-modal-backdrop');
-        
-        const closeModal = () => {
-            modal.classList.add('closing');
-            setTimeout(() => modal.remove(), 200);
-        };
-
-        closeBtn.addEventListener('click', closeModal);
-        backdrop.addEventListener('click', closeModal);
-        
-        // Close on Escape key
-        const handleEscape = (e) => {
-            if (e.key === 'Escape') {
-                closeModal();
-                document.removeEventListener('keydown', handleEscape);
-            }
-        };
-        document.addEventListener('keydown', handleEscape);
-
-        // Show modal with animation
-        setTimeout(() => modal.classList.add('visible'), 10);
-    }
-
-    /**
-     * Generate session preview content
-     */
-    generateSessionPreview(session) {
-        if (!session.messages || session.messages.length === 0) {
-            return `
-                <div class="empty-session-preview">
-                    <div class="empty-placeholder">
-                        <i class="fas fa-comment-slash"></i>
-                        <p>No messages in this session</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Show recent messages (last 5)
-        const recentMessages = session.messages.slice(-5);
-        const messagesHtml = recentMessages.map(message => `
-            <div class="message-preview ${message.role}">
-                <div class="message-role">${message.role === 'user' ? 'You' : 'Assistant'}</div>
-                <div class="message-content">${this.escapeHtml(message.content.substring(0, 200))}${message.content.length > 200 ? '...' : ''}</div>
-                <div class="message-time">${this.formatTime(message.timestamp)}</div>
-            </div>
-        `).join('');
-
-        return `
-            <div class="session-messages-preview">
-                <div class="messages-header">
-                    <h4>Recent Messages</h4>
-                    ${session.messages.length > 5 ? `<span class="more-messages">+${session.messages.length - 5} more messages</span>` : ''}
-                </div>
-                <div class="messages-list">
-                    ${messagesHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Format date for display
-     */
-    formatDate(dateString) {
-        if (!dateString) return 'Unknown date';
-        
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffTime = Math.abs(now - date);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (diffDays === 1) return 'Today';
-        if (diffDays === 2) return 'Yesterday';
-        if (diffDays <= 7) return `${diffDays} days ago`;
-        
-        return date.toLocaleDateString();
-    }
-
-    /**
-     * Format time for display
-     */
-    formatTime(timestamp) {
-        if (!timestamp) return '';
-        
-        const date = new Date(timestamp);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    /**
-     * Escape HTML content
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     getSelectedSessions() {
