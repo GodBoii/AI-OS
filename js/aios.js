@@ -1,4 +1,4 @@
-// aios.js
+// aios.js (Verified Correct Version)
 
 class AIOS {
     constructor() {
@@ -50,6 +50,7 @@ class AIOS {
 
     cacheElements() {
         this.elements = {
+            settingsAvatarContainer: document.getElementById('aios-settings-avatar-container'),
             window: document.getElementById('floating-window'),
             closeBtn: document.getElementById('close-aios'),
             tabs: document.querySelectorAll('.tab-btn'),
@@ -79,11 +80,10 @@ class AIOS {
             confirmPassword: document.getElementById('confirmPassword'),
             loginError: document.getElementById('login-error'),
             signupError: document.getElementById('signup-error'),
+            googleSignInBtn: document.getElementById('google-signin-btn'),
             connectGithubBtn: document.getElementById('connect-github-btn'),
             connectGoogleBtn: document.getElementById('connect-google-btn'),
-            // --- MODIFICATION START ---
             connectVercelBtn: document.getElementById('connect-vercel-btn'),
-            // --- MODIFICATION END ---
             connectSupabaseBtn: document.getElementById('connect-supabase-btn'),
         };
     }
@@ -92,6 +92,13 @@ class AIOS {
         const addClickHandler = (element, handler) => {
             element?.addEventListener('click', handler);
         };
+
+        // This listener is crucial. It waits for the signal from main.js after a deep link is received.
+        window.electron.ipcRenderer.on('auth-state-changed', (data) => {
+            console.log('[aios.js] Received "auth-state-changed" event from main process.');
+            console.log('[aios.js] This event should trigger the Supabase client to refresh its state.');
+            // The onAuthStateChange listener in auth-service.js will now fire automatically.
+        });
 
         addClickHandler(this.elements.closeBtn, () => this.hideWindow());
 
@@ -128,6 +135,8 @@ class AIOS {
             this.handleSignup();
         });
         
+        addClickHandler(this.elements.googleSignInBtn, () => this.handleGoogleSignIn());
+
         const integrationButtonHandler = (e) => {
             const button = e.currentTarget;
             const action = button.dataset.action;
@@ -142,32 +151,95 @@ class AIOS {
         
         addClickHandler(this.elements.connectGithubBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectGoogleBtn, integrationButtonHandler);
-        // --- MODIFICATION START ---
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
-        // --- MODIFICATION END ---
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
                 console.log('Auth change detected:', user);
                 this.updateAuthUI();
+                this.updateAvatar(user);
+
                 if (user) {
                     if (this.elements.userEmail) {
                         this.elements.userEmail.textContent = user.email;
                     }
                     if (this.elements.userName) {
-                        const name = user.user_metadata?.name || user.name || 'User';
+                        const name = user.user_metadata?.name || user.user_metadata?.full_name || 'User';
                         this.elements.userName.textContent = name;
                     }
                     this.userData.account.email = user.email;
-                    if (user.user_metadata && user.user_metadata.name) {
-                        this.userData.account.name = user.user_metadata.name;
+                    if (user.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) {
+                        this.userData.account.name = user.user_metadata.name || user.user_metadata.full_name;
                     }
                     this.saveUserData();
                 }
             });
         }
     }
+
+    async handleGoogleSignIn() {
+        if (!this.authService) {
+            this.showNotification('Authentication service not available', 'error');
+            return;
+        }
+        
+        this.elements.loginError.textContent = '';
+        
+        try {
+            const result = await this.authService.signInWithGoogle();
+
+            if (result.success && result.url) {
+                await window.electron.shell.openExternal(result.url);
+            } else {
+                this.elements.loginError.textContent = result.error || 'Could not start Google Sign-In';
+                this.showNotification(result.error || 'Could not start Google Sign-In', 'error');
+            }
+        } catch (error) {
+            console.error('Google Sign-In error:', error);
+            this.elements.loginError.textContent = 'An unexpected error occurred during Google Sign-In';
+        }
+    }
+
+    updateAvatar(user) {
+        if (!this.elements.settingsAvatarContainer) return;
+
+        const container = this.elements.settingsAvatarContainer;
+        container.innerHTML = '';
+
+        if (!user) {
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-user-cog';
+            container.appendChild(icon);
+            return;
+        }
+
+        const avatarUrl = user.user_metadata?.picture;
+        if (avatarUrl) {
+            const img = document.createElement('img');
+            img.src = avatarUrl;
+            img.alt = 'User Avatar';
+            img.className = 'user-avatar';
+            container.appendChild(img);
+        } else {
+            const initialsDiv = document.createElement('div');
+            initialsDiv.className = 'user-initials-avatar';
+            
+            const name = user.user_metadata?.name || user.email || '';
+            let initials = 'U';
+            
+            if (name.includes(' ')) {
+                const parts = name.split(' ');
+                initials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+            } else if (name) {
+                initials = name[0].toUpperCase();
+            }
+            
+            initialsDiv.textContent = initials;
+            container.appendChild(initialsDiv);
+        }
+    }
+
 
     async startAuthFlow(provider) {
         if (!this.authService) {
@@ -182,18 +254,12 @@ class AIOS {
     
         let authUrl;
     
-        // ===================================================================
-        // FINAL FIX: Use the modern Vercel flow
-        // ===================================================================
         if (provider === 'vercel') {
-            // Go directly to the Vercel installation page. Vercel handles the rest.
             authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
         } else {
-            // Use the legacy, backend-driven flow for other providers.
             const backendUrl = 'https://aios-web.onrender.com';
             authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
         }
-        // ===================================================================
     
         console.log(`Opening auth URL for ${provider}: ${authUrl}`);
         window.electron.ipcRenderer.send('open-webview', authUrl);
@@ -222,7 +288,7 @@ class AIOS {
                 throw new Error(errorData.error || 'Failed to disconnect');
             }
             this.showNotification(`Successfully disconnected from ${provider}.`, 'success');
-            this.checkIntegrationStatus(); // Refresh the UI
+            this.checkIntegrationStatus();
         } catch (error) {
             console.error(`Error disconnecting ${provider}:`, error);
             this.showNotification(error.message, 'error');
@@ -235,9 +301,7 @@ class AIOS {
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
             this.updateIntegrationButton('vercel', false);
-            // --- START: Supabase Integration ---
             this.updateIntegrationButton('supabase', false);
-            // --- END: Supabase Integration ---
             return;
         }
         try {
@@ -250,23 +314,18 @@ class AIOS {
             this.updateIntegrationButton('github', connected.has('github'));
             this.updateIntegrationButton('google', connected.has('google'));
             this.updateIntegrationButton('vercel', connected.has('vercel'));
-            // --- START: Supabase Integration ---
             this.updateIntegrationButton('supabase', connected.has('supabase'));
-            // --- END: Supabase Integration ---
         } catch (error) {
             console.error('Error checking integration status:', error);
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
             this.updateIntegrationButton('vercel', false);
-            // --- START: Supabase Integration ---
             this.updateIntegrationButton('supabase', false);
-            // --- END: Supabase Integration ---
         }
     }
 
 
     updateIntegrationButton(provider, isConnected) {
-        // Dynamically find the button based on the provider name
         const button = this.elements[`connect${provider.charAt(0).toUpperCase() + provider.slice(1)}Btn`];
         if (!button) return;
 
@@ -400,7 +459,6 @@ class AIOS {
                 this.elements.loginForm.reset();
                 this.elements.loginError.textContent = '';
                 this.showNotification('Logged in successfully', 'success');
-                this.updateAuthUI();
             } else {
                 this.elements.loginError.textContent = result.error || 'Login failed';
             }
@@ -459,7 +517,7 @@ class AIOS {
                 const result = await this.authService.signOut();
                 if (result.success) {
                     this.showNotification('Logged out successfully', 'success');
-                    this.updateAuthUI();
+                    this.updateAvatar(null);
                 } else {
                     this.showNotification('Logout failed: ' + result.error, 'error');
                 }
@@ -487,7 +545,6 @@ class AIOS {
                 this.userData = this.loadUserData();
                 this.loadSavedData();
                 this.showNotification('Account deleted successfully', 'success');
-                this.updateAuthUI();
             } catch (error) {
                 console.error('Error deleting account:', error);
                 this.showNotification('Failed to delete account', 'error');
@@ -586,23 +643,21 @@ class AIOS {
         if (isAuthenticated) {
             const user = this.authService.getCurrentUser();
             if (this.elements.userEmail) this.elements.userEmail.textContent = user.email;
-            if (this.elements.userName) this.elements.userName.textContent = user.user_metadata?.name || user.name || 'User';
+            if (this.elements.userName) this.elements.userName.textContent = user.user_metadata?.name || user.user_metadata?.full_name || 'User';
             
             this.checkIntegrationStatus();
         } else {
             this.updateIntegrationButton('github', false);
             this.updateIntegrationButton('google', false);
-            // --- MODIFICATION START ---
             this.updateIntegrationButton('vercel', false);
-            // --- MODIFICATION END ---
             this.updateIntegrationButton('supabase', false);
+            this.updateAvatar(null);
         }
     }
 
     showWindow() {
         this.elements.window?.classList.remove('hidden');
         
-        // Notify FloatingWindowManager that AIOS window opened
         if (window.floatingWindowManager) {
             window.floatingWindowManager.onWindowOpen('aios-settings');
         }
@@ -611,7 +666,6 @@ class AIOS {
     hideWindow() {
         this.elements.window?.classList.add('hidden');
         
-        // Notify FloatingWindowManager that AIOS window closed
         if (window.floatingWindowManager) {
             window.floatingWindowManager.onWindowClose('aios-settings');
         }
