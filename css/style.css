@@ -424,3 +424,34 @@ body {
 .gap-4 {
     gap: 1rem;
 }
+
+#aios-settings-avatar-container {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em; /* For the default cog icon */
+    border-radius: 50%; /* Make the container a circle */
+    overflow: hidden; /* Hide anything that spills out */
+}
+
+/* This styles the IMG tag for Google users */
+.user-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* This is the magic property: scales image to fill space without distortion */
+}
+
+/* This styles the DIV for email users (fallback) */
+.user-initials-avatar {
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-500);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+    font-weight: bold;
+}
