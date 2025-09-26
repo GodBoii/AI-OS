@@ -1,4 +1,4 @@
-// auth-service.js (Verified Correct Version)
+// auth-service.js (Complete, with the new setSession method)
 
 const { createClient } = require('@supabase/supabase-js');
 const config = require('./config');
@@ -131,16 +131,11 @@ class AuthService {
         }
     }
 
-    /**
-     * Generates the Google Sign-In URL for the secure PKCE flow.
-     * It does NOT navigate; it returns the URL for the renderer to open externally.
-     */
     async signInWithGoogle() {
         try {
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    // This is the crucial instruction for Supabase to redirect back to our app protocol.
                     redirectTo: 'aios://auth-callback'
                 }
             });
@@ -149,10 +144,36 @@ class AuthService {
                 throw error;
             }
 
-            // The 'data' object contains the URL that must be opened in the external browser.
             return { success: true, url: data.url };
         } catch (error) {
             console.error('Google Sign-In URL generation error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // --- THIS IS THE NEW, CRITICAL METHOD ---
+    /**
+     * Manually sets the session from tokens received via deep link.
+     * This authoritatively establishes the session and prevents the SIGNED_OUT race condition.
+     */
+    async setSession(accessToken, refreshToken) {
+        try {
+            const { data, error } = await this.supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+
+            if (error) {
+                console.error('Error setting session in auth service:', error);
+                return { success: false, error: error.message };
+            }
+
+            // The onAuthStateChange listener will now fire with the correct user data
+            // and the state will be a persistent SIGNED_IN.
+            console.log('Session successfully set in auth service.');
+            return { success: true, data };
+        } catch (error) {
+            console.error('Catch block error setting session:', error);
             return { success: false, error: error.message };
         }
     }

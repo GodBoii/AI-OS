@@ -1,4 +1,4 @@
-// aios.js (Verified Correct Version)
+// aios.js (Complete, with Active Session Setting Logic)
 
 class AIOS {
     constructor() {
@@ -93,12 +93,35 @@ class AIOS {
             element?.addEventListener('click', handler);
         };
 
-        // This listener is crucial. It waits for the signal from main.js after a deep link is received.
-        window.electron.ipcRenderer.on('auth-state-changed', (data) => {
+        // --- THIS IS THE FINAL, CORRECTED LISTENER ---
+        // It actively parses the URL and commands the auth service to set the session.
+        window.electron.ipcRenderer.on('auth-state-changed', async (data) => {
             console.log('[aios.js] Received "auth-state-changed" event from main process.');
-            console.log('[aios.js] This event should trigger the Supabase client to refresh its state.');
-            // The onAuthStateChange listener in auth-service.js will now fire automatically.
+            
+            try {
+                // The URL contains tokens in the hash fragment (#)
+                const url = new URL(data.url);
+                const hash = new URLSearchParams(url.hash.substring(1)); // remove #
+                
+                const accessToken = hash.get('access_token');
+                const refreshToken = hash.get('refresh_token');
+
+                if (accessToken && refreshToken) {
+                    console.log('[aios.js] Tokens found in URL. Actively setting session.');
+                    
+                    // Command the auth service to set the session
+                    await this.authService.setSession(accessToken, refreshToken);
+                    
+                    // The onAuthChange listener will now fire with a persistent SIGNED_IN state.
+                    console.log('[aios.js] Session set command sent. UI should now update.');
+                } else {
+                    console.error('[aios.js] "auth-state-changed" event received, but no tokens were found in the URL hash.');
+                }
+            } catch (e) {
+                console.error('[aios.js] Error parsing URL from deep link:', e);
+            }
         });
+        // --- END OF CORRECTION ---
 
         addClickHandler(this.elements.closeBtn, () => this.hideWindow());
 
