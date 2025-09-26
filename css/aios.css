@@ -1,32 +1,30 @@
+/* aios.css (Complete, Updated Version) */
+
 .floating-window {
     position: fixed;
     top: 50%;
-    /* MODIFICATION: Adjusted left position to account for the new sidebar */
     left: 52.5%;
-    transform: translate(-50%, -50%) scale(1); /* Default visible state */
+    transform: translate(-50%, -50%) scale(1);
     width: 800px;
     max-width: 90%;
     height: 600px;
     max-height: 90vh;
-    background-color: var(--bg-color);
+    background-color: var(--window-bg);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     z-index: 1000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* MODIFICATION: Smooth animation for open/close */
     transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
     opacity: 1;
     visibility: visible;
 }
 
-/* MODIFICATION: Hidden state with fade/scale animation */
 .floating-window.hidden {
     opacity: 0;
     visibility: hidden;
     transform: translate(-50%, -50%) scale(0.95);
-    /* Delay hiding visibility until after fade-out */
     transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s var(--anim-slow);
 }
 
@@ -185,21 +183,12 @@
     color: var(--text-color);
 }
 
-.danger {
-    background-color: var(--danger-color);
-    color: white;
-}
-
 button.primary:hover {
     background-color: var(--accent-hover);
 }
 
 button.secondary:hover {
     background-color: var(--secondary-btn-hover);
-}
-
-button.danger:hover {
-    background-color: var(--danger-hover);
 }
 
 .save-btn,
@@ -214,29 +203,6 @@ button.danger:hover {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-}
-
-.action-btn {
-    display: flex;
-    align-items: center;
-    margin-right: 10px;
-}
-
-.action-btn i {
-    margin-right: 8px;
-}
-
-.account-actions {
-    display: flex;
-    margin-top: 20px;
-}
-
-.email-display {
-    padding: 10px;
-    background-color: var(--input-bg);
-    border-radius: 6px;
-    font-size: 14px;
-    color: var(--text-color);
 }
 
 /* About Section */
@@ -296,29 +262,6 @@ button.danger:hover {
     border-radius: 12px;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* Notification */
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 24px;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.notification.success {
-    background-color: #4CAF50;
-    color: white;
-}
-
-.notification.error {
-    background-color: #f44336;
-    color: white;
 }
 
 /* Auth specific styles */
@@ -487,10 +430,98 @@ button.danger:hover {
     }
 }
 
-.user-info-display {
-    padding: 10px;
+/*
+================================================
+NEW STYLES FOR AVATAR & USER IDENTITY CARD
+================================================
+*/
+
+/* Generic Avatar Styles (for both sidebar and identity card) */
+.user-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.user-initials-avatar {
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-500);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+
+/* User Identity Card Styles */
+.user-identity-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
     background-color: var(--input-bg);
-    border-radius: 6px;
-    font-size: 14px;
+    margin-bottom: 24px;
+}
+
+.user-identity-card .user-avatar-container {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: var(--hover-bg);
+    flex-shrink: 0;
+}
+
+.user-identity-card .user-info {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Prevents text from overflowing */
+}
+
+.user-identity-card .user-name-display {
+    font-weight: 600;
+    font-size: 1rem;
     color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-identity-card .user-email-display {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-identity-card .logout-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 8px;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.user-identity-card .logout-button:hover {
+    color: var(--error-500);
+    background-color: var(--error-50);
+}
+
+.dark-mode .user-identity-card .logout-button:hover {
+    background-color: rgba(239, 68, 68, 0.1); /* Red with alpha for dark mode */
 }

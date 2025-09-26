@@ -1,4 +1,4 @@
-// preload.js (Verified Correct Version)
+// preload.js (Complete, with the new setSession function exposed)
 
 const { contextBridge, ipcRenderer, shell } = require('electron');
 const fs = require('fs');
@@ -164,6 +164,8 @@ contextBridge.exposeInMainWorld(
             signUp: async (email, password, name) => await authService.signUp(email, password, name),
             signIn: async (email, password) => await authService.signIn(email, password),
             signInWithGoogle: async () => await authService.signInWithGoogle(),
+            // --- THIS IS THE NEW, CRITICAL LINE ---
+            setSession: async (accessToken, refreshToken) => await authService.setSession(accessToken, refreshToken),
             signOut: async () => await authService.signOut(),
             getCurrentUser: () => authService.getCurrentUser(),
             isAuthenticated: () => authService.isAuthenticated(),

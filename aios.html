@@ -1,4 +1,4 @@
-<!-- aios.html (Complete, with Google Sign-In Button) -->
+<!-- aios.html (Complete, Updated Version) -->
 <div id="floating-window" class="floating-window hidden">
     <div class="window-header">
         <div class="window-title">Account Settings</div>
@@ -9,11 +9,7 @@
     <div class="window-content">
         <div class="split-layout">
             <div class="tabs-sidebar">
-                <button class="tab-btn active" data-tab="profile">
-                    <i class="fas fa-user"></i>
-                    <span>Profile</span>
-                </button>
-                <button class="tab-btn" data-tab="account">
+                <button class="tab-btn active" data-tab="account">
                     <i class="fas fa-cog"></i>
                     <span>Account</span>
                 </button>
@@ -28,28 +24,7 @@
             </div>
 
             <div class="tab-content-area">
-                <div class="tab-content active" id="profile-tab">
-                    <h3 class="tab-heading">Profile Information</h3>
-                    <form id="profile-form">
-                        <div class="form-group">
-                            <label for="fullName">Full Name</label>
-                            <input type="text" id="fullName" placeholder="Enter your full name" aria-label="Full Name">
-                        </div>
-                        <div class="form-group">
-                            <label for="nickname">Nickname</label>
-                            <input type="text" id="nickname" placeholder="Enter your preferred name" aria-label="Nickname">
-                        </div>
-                        <div class="form-group">
-                            <label for="occupation">Occupation</label>
-                            <input type="text" id="occupation" placeholder="Enter your occupation" aria-label="Occupation">
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="save-btn primary">Save changes</button>
-                        </div>
-                    </form>
-                </div>
-
-                <div class="tab-content" id="account-tab">
+                <div class="tab-content active" id="account-tab">
                     <h3 class="tab-heading">Account Settings</h3>
                     
                     <!-- Logged Out State -->
@@ -74,7 +49,6 @@
                                 <button type="submit" class="auth-btn primary">Login</button>
                             </div>
                             
-                            <!-- --- NEW: Social Login Section --- -->
                             <div class="social-auth-divider">OR</div>
                             <div class="social-auth-actions">
                                 <button type="button" id="google-signin-btn" class="auth-btn social">
@@ -82,7 +56,6 @@
                                     <span>Sign in with Google</span>
                                 </button>
                             </div>
-                            <!-- --- END: Social Login Section --- -->
                         </form>
                         
                         <!-- Sign Up Form -->
@@ -112,14 +85,21 @@
                     
                     <!-- Logged In State -->
                     <div id="account-logged-in" class="auth-state hidden">
-                        <div class="form-group">
-                            <label>Name</label>
-                            <div class="user-info-display" id="userName">User Name</div>
+                        
+                        <!-- NEW: User Identity Card -->
+                        <div class="user-identity-card">
+                            <div class="user-avatar-container" id="account-avatar">
+                                <!-- Avatar img or initials div will be dynamically inserted here -->
+                            </div>
+                            <div class="user-info">
+                                <span class="user-name-display" id="account-userName"></span>
+                                <span class="user-email-display" id="account-userEmail"></span>
+                            </div>
+                            <button class="logout-button" id="logout-btn" title="Log out">
+                                <i class="fas fa-sign-out-alt"></i>
+                            </button>
                         </div>
-                        <div class="form-group">
-                            <label>Email ID</label>
-                            <div class="email-display" id="userEmail">user@example.com</div>
-                        </div>
+                        <!-- END: User Identity Card -->
 
                         <!-- Integrations Section -->
                         <div class="integrations-section">
@@ -174,17 +154,6 @@
                                 </button>
                             </div>
                         </div>
-
-                        <div class="account-actions">
-                            <button class="action-btn secondary" id="logout-btn" aria-label="Logout">
-                                <i class="fas fa-sign-out-alt"></i>
-                                <span>Log out</span>
-                            </button>
-                            <button class="action-btn danger" id="delete-account-btn" aria-label="Delete Account">
-                                <i class="fas fa-trash-alt"></i>
-                                <span>Delete account</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -233,7 +202,7 @@
     </div>
 </div>
 
-<!-- Style for the new SVG icons and social login button -->
+<!-- Style for the new components -->
 <style>
     .integration-info .provider-icon {
         width: 1.1em;
@@ -282,5 +251,63 @@
     }
     .auth-btn.social .fab {
         font-size: 1.2em;
+    }
+
+    /* NEW STYLES FOR USER IDENTITY CARD */
+    .user-identity-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background-color: var(--input-bg);
+        margin-bottom: 24px;
+    }
+    .user-avatar-container {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        overflow: hidden;
+        background-color: var(--active-bg); /* Fallback color */
+        flex-shrink: 0;
+    }
+    .user-avatar-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .user-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .user-name-display {
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-color);
+    }
+    .user-email-display {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+    .logout-button {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 1.1rem;
+        padding: 8px;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+    .logout-button:hover {
+        color: var(--danger-color);
+        background-color: var(--danger-hover-bg); /* You may need to define this variable */
     }
 </style>
