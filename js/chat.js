@@ -724,118 +724,99 @@ function populateBotMessage(data) {
     }
 }
 
-// --- START OF CRITICAL MODIFICATION ---
 /**
- * Renders a complete assistant turn from a static array of saved event objects.
- * This is used for displaying historical sessions with full fidelity.
+ * Renders a complete assistant turn from a static, high-fidelity 'run' object.
+ * This function is now intelligent, parsing the data to separate reasoning from the final answer
+ * and ignoring internal system prompts.
  * @param {HTMLElement} targetContainer - The DOM element to render the turn into.
- * @param {Array<Object>} events - The array of event objects from the saved session.
+ * @param {Object} run - The complete 'run' object from the saved session.
  */
-function renderTurnFromEvents(targetContainer, events) {
-    if (!targetContainer || !events || events.length === 0) {
-        targetContainer.innerHTML = '<div class="message-text">(Could not render detailed events)</div>';
+function renderTurnFromEvents(targetContainer, run) {
+    if (!targetContainer || !run) {
+        targetContainer.innerHTML = '<div class="message-text">(Could not render turn)</div>';
         return;
     }
 
-    // --- AGGREGATION PHASE: Loop through events once to gather all data ---
-    const agentData = {};
-    let toolLogsHtml = '';
-    let finalContentEvent = null;
+    const events = run.events || [];
+    const mainAgentName = 'Aetheria_AI';
 
+    // --- AGGREGATION PHASE: Loop through events once to gather all data ---
+    let toolLogsHtml = '';
+    let subAgentBlocksHtml = '';
+    // The final, synthesized content is on the top-level run object.
+    const finalContent = run.content || '';
+
+    // Process events to build the reasoning/log section
     events.forEach(event => {
         const owner = event.agent_name || event.team_name;
         if (!owner) return;
 
-        // Initialize a container for the agent if it's the first time we see it
-        if (!agentData[owner]) {
-            agentData[owner] = { content: '', isLog: false };
-        }
-
         // Aggregate tool call events into pre-rendered HTML
-        if (event.event === 'TeamToolCallCompleted') {
+        if (event.event === 'TeamToolCallCompleted' || event.event === 'ToolCallCompleted') {
             const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
             toolLogsHtml += `
                 <div class="tool-log-entry">
                     <i class="fas fa-wrench tool-log-icon"></i>
                     <div class="tool-log-details">
-                        <span class="tool-log-owner">${owner}</span>
+                        <span class="tool-log-owner">${owner.replace(/_/g, ' ')}</span>
                         <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
                     </div>
                     <span class="tool-log-status completed">Completed</span>
                 </div>`;
         }
 
-        // Aggregate content from all relevant events
-        if (event.event.includes('RunContent') || event.event.includes('ResponseContent')) {
-            // Determine if the content is a "log" (from a sub-agent) or the main answer
-            const isFinalContent = (owner === "Aetheria_AI");
-            agentData[owner].isLog = !isFinalContent;
+        // Aggregate content from sub-agent runs
+        if (event.event === 'RunCompleted' && owner !== mainAgentName) {
             if (event.content) {
-                 agentData[owner].content += event.content;
+                const formattedContent = messageFormatter.format(event.content);
+                subAgentBlocksHtml += `
+                    <div class="content-block log-block">
+                        <div class="content-block-header">${owner.replace(/_/g, ' ')}</div>
+                        <div class="inner-content">${formattedContent}</div>
+                    </div>`;
             }
         }
-        
-        // Capture the final, complete run event from the main agent. This is the most reliable
-        // source for the final, synthesized content.
-        if (event.event === 'TeamRunCompleted' && owner === 'Aetheria_AI') {
-            finalContentEvent = event;
-        }
     });
-    
-    // If a final complete event exists, use its content for the main agent to avoid
-    // potential duplication or artifacts from concatenating streamed chunks.
-    if (finalContentEvent && agentData['Aetheria_AI']) {
-        agentData['Aetheria_AI'].content = finalContentEvent.content;
-    }
 
     // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---
-    let mainContentHtml = '';
-    let logContentHtml = '';
-
-    for (const owner in agentData) {
-        if (!agentData[owner].content) continue;
-        
-        // Use the messageFormatter to render Markdown, code blocks, etc.
-        const formattedContent = messageFormatter.format(agentData[owner].content);
-        const blockHtml = `
-            <div class="content-block ${agentData[owner].isLog ? 'log-block' : ''}">
-                <div class="content-block-header">${owner.replace(/_/g, ' ')}</div>
-                <div class="inner-content">${formattedContent}</div>
-            </div>`;
-        
-        if (agentData[owner].isLog) {
-            logContentHtml += blockHtml;
-        } else {
-            mainContentHtml += blockHtml;
-        }
-    }
-
+    
     // Create the summary text for the collapsible "Reasoning" header
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
-    const agentLogCount = (logContentHtml.match(/log-block/g) || []).length;
+    const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
     let summaryText = "Aetheria AI's Reasoning";
-    if (toolLogCount > 0 || agentLogCount > 0) {
+    let hasReasoning = toolLogCount > 0 || agentLogCount > 0;
+
+    if (hasReasoning) {
         const parts = [];
         if (agentLogCount > 0) parts.push(`${agentLogCount} agent${agentLogCount > 1 ? 's' : ''}`);
         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
         summaryText = `Reasoning involved ${parts.join(' and ')}`;
     }
 
-    // Assemble the final HTML structure, mirroring the live message structure
+    // Only show the reasoning header if there are logs to display.
+    const reasoningHeaderHtml = hasReasoning ? `
+        <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
+            <span class="summary-text">${summaryText}</span>
+            <i class="fas fa-chevron-down summary-chevron"></i>
+        </div>
+    ` : '';
+
+    // Assemble the final HTML structure for the assistant's message
     const finalHtml = `
-        <div class="message message-bot expanded">
-            <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
-                <span class="summary-text">${summaryText}</span>
-                <i class="fas fa-chevron-down summary-chevron"></i>
+        <div class="message message-bot">
+            ${reasoningHeaderHtml}
+            <div class="detailed-logs">${toolLogsHtml}${subAgentBlocksHtml}</div>
+            <div class="message-content">
+                <div class="content-block">
+                    <div class="content-block-header">${mainAgentName.replace(/_/g, ' ')}</div>
+                    <div class="inner-content">${messageFormatter.format(finalContent) || '(No final response content)'}</div>
+                </div>
             </div>
-            <div class="detailed-logs">${toolLogsHtml}${logContentHtml}</div>
-            <div class="message-content">${mainContentHtml || '<div class="message-text">(No final response content)</div>'}</div>
         </div>
     `;
 
     targetContainer.innerHTML = finalHtml;
 }
-// --- END OF CRITICAL MODIFICATION ---
 
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');

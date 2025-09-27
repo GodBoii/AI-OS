@@ -1,4 +1,4 @@
-// context-handler.js (Definitive Version, Corrected for Pre-Parsed JSON)
+// context-handler.js (Definitive Version, Corrected for High-Fidelity History)
 
 class ContextHandler {
     constructor() {
@@ -37,7 +37,6 @@ class ContextHandler {
             this.elements.contextWindow?.classList.remove('hidden');
             this.loadSessions();
             
-            // Notify FloatingWindowManager that context window opened
             if (window.floatingWindowManager) {
                 window.floatingWindowManager.onWindowOpen('context');
             }
@@ -45,7 +44,6 @@ class ContextHandler {
         this.elements.closeContextBtn?.addEventListener('click', () => {
             this.elements.contextWindow?.classList.add('hidden');
             
-            // Notify FloatingWindowManager that context window closed
             if (window.floatingWindowManager) {
                 window.floatingWindowManager.onWindowClose('context');
             }
@@ -124,18 +122,17 @@ class ContextHandler {
         sessionItem.className = 'session-item';
         sessionItem.dataset.sessionId = session.session_id;
         
-        // --- MODIFICATION START: Removed JSON.parse ---
         let sessionName = `Session ${session.session_id.substring(0, 8)}...`;
-        // The 'runs' field is already a JavaScript array.
         const runs = session.runs || [];
-        const messageCount = runs.length;
+        // Filter for top-level runs to get an accurate turn count and title
+        const topLevelRuns = runs.filter(run => !run.parent_run_id);
+        const messageCount = topLevelRuns.length;
 
-        if (runs.length > 0 && runs[0].input?.input_content) {
-            let title = runs[0].input.input_content.split('\n')[0].trim();
+        if (topLevelRuns.length > 0 && topLevelRuns[0].input?.input_content) {
+            let title = topLevelRuns[0].input.input_content.split('\n')[0].trim();
             if (title.length > 45) title = title.substring(0, 45) + '...';
             if (title) sessionName = title;
         }
-        // --- MODIFICATION END ---
         
         const creationDate = new Date(session.created_at * 1000);
         const formattedDate = creationDate.toLocaleDateString() + ' ' + creationDate.toLocaleTimeString();
@@ -188,7 +185,6 @@ class ContextHandler {
                     this.updateContextIndicator();
                     this.showNotification(`${selectedData.length} sessions selected as context`, 'info');
                     
-                    // Notify FloatingWindowManager that context window closed
                     if (window.floatingWindowManager) {
                         window.floatingWindowManager.onWindowClose('context');
                     }
@@ -216,18 +212,17 @@ class ContextHandler {
         return this.loadedSessions
             .filter(session => selectedIds.has(session.session_id))
             .map(session => {
-                // --- MODIFICATION START: Removed JSON.parse ---
-                const runs = session.runs || [];
+                const topLevelRuns = (session.runs || []).filter(run => !run.parent_run_id);
                 return {
-                    interactions: runs.map(run => ({
+                    interactions: topLevelRuns.map(run => ({
                         user_input: run.input?.input_content || '',
                         llm_output: run.content || ''
                     }))
                 };
-                // --- MODIFICATION END ---
             });
     }
 
+    // --- MODIFIED FUNCTION ---
     showSessionDetails(sessionId) {
         const session = this.loadedSessions.find(s => s.session_id === sessionId);
         if (!session) {
@@ -242,44 +237,57 @@ class ContextHandler {
         const messagesContainer = view.querySelector('.conversation-messages');
         messagesContainer.innerHTML = '';
 
-        // --- MODIFICATION START: Removed JSON.parse and its try/catch block ---
-        // The 'runs' field is already a JavaScript array.
-        const runs = session.runs;
+        const runs = session.runs || [];
 
-        if (!runs || runs.length === 0) {
+        if (runs.length === 0) {
             messagesContainer.innerHTML = '<div class="message-entry">No messages in this session.</div>';
+            this.elements.sessionsContainer.innerHTML = '';
+            this.elements.sessionsContainer.style.display = 'block';
+            this.elements.sessionsContainer.appendChild(view);
             return;
         }
         
-        sessionNameEl.textContent = runs[0].input?.input_content.substring(0, 45) + '...' || `Session ${sessionId.substring(0, 8)}`;
+        // --- START OF THE CRITICAL FIX ---
+        // Filter the 'runs' array to only include top-level runs where 'parent_run_id' is null.
+        // This ensures we only render actual conversational turns initiated by the user.
+        const topLevelRuns = runs.filter(run => !run.parent_run_id);
+        // --- END OF THE CRITICAL FIX ---
 
-        for (const run of runs) {
+        sessionNameEl.textContent = topLevelRuns[0]?.input?.input_content.substring(0, 45) + '...' || `Session ${sessionId.substring(0, 8)}`;
+
+        for (const run of topLevelRuns) { // Loop over the filtered array
             const turnContainer = document.createElement('div');
             turnContainer.className = 'conversation-turn';
 
             if (run.input?.input_content) {
                 const userMessageDiv = document.createElement('div');
                 userMessageDiv.className = 'turn-user-message';
-                userMessageDiv.innerHTML = `
-                    <div class="message-label">User</div>
-                    <div class="message-text">${run.input.input_content}</div>
-                `;
+                const messageText = document.createElement('div');
+                messageText.className = 'message-text';
+                messageText.textContent = run.input.input_content;
+                
+                userMessageDiv.innerHTML = `<div class="message-label">User</div>`;
+                userMessageDiv.appendChild(messageText);
                 turnContainer.appendChild(userMessageDiv);
             }
 
             const assistantResponseDiv = document.createElement('div');
             assistantResponseDiv.className = 'turn-assistant-response';
             
-            if (window.renderTurnFromEvents && Array.isArray(run.events) && run.events.length > 0) {
-                window.renderTurnFromEvents(assistantResponseDiv, run.events);
+            if (window.renderTurnFromEvents) {
+                // Pass the entire top-level run object to the intelligent renderer
+                window.renderTurnFromEvents(assistantResponseDiv, run);
             } else {
-                assistantResponseDiv.innerHTML = `<div class="message-text">${run.content || '(Could not render detailed response)'}</div>`;
+                const fallbackText = document.createElement('div');
+                fallbackText.className = 'message-text';
+                fallbackText.textContent = run.content || '(Could not render detailed response)';
+                assistantResponseDiv.innerHTML = `<div class="message-label">Assistant</div>`;
+                assistantResponseDiv.appendChild(fallbackText);
             }
             turnContainer.appendChild(assistantResponseDiv);
             
             messagesContainer.appendChild(turnContainer);
         }
-        // --- MODIFICATION END ---
 
         view.querySelector('.back-button').addEventListener('click', () => {
             this.showSessionList(this.loadedSessions);
@@ -288,6 +296,7 @@ class ContextHandler {
         this.elements.sessionsContainer.style.display = 'block';
         this.elements.sessionsContainer.appendChild(view);
     }
+    // --- END OF MODIFIED FUNCTION ---
 
     clearSelectedContext() {
         this.elements.sessionsContainer?.querySelectorAll('.session-checkbox:checked').forEach(cb => cb.checked = false);
