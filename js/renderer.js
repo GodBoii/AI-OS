@@ -3,12 +3,11 @@ class StateManager {
         this._state = {
             isDarkMode: true,
             isWindowMaximized: false,
-            isChatOpen: true, // MODIFIED: Chat is now open by default
+            isChatOpen: true, // Chat open by default
             isAIOSOpen: false,
             isToDoListOpen: false,
             webViewBounds: { x: 0, y: 0, width: 400, height: 300 }
         };
-
         this.subscribers = new Set();
     }
 
@@ -16,9 +15,7 @@ class StateManager {
         const changedKeys = Object.keys(updates).filter(
             key => this._state[key] !== updates[key]
         );
-
         Object.assign(this._state, updates);
-
         if (changedKeys.length > 0) {
             this.notifySubscribers(changedKeys);
         }
@@ -60,54 +57,42 @@ class UIManager {
         this.elements = {
             appIcon: document.getElementById('app-icon'),
             toDoListIcon: document.getElementById('to-do-list-icon'),
-
             themeToggle: document.getElementById('theme-toggle'),
             minimizeBtn: document.getElementById('minimize-window'),
             resizeBtn: document.getElementById('resize-window'),
             closeBtn: document.getElementById('close-window'),
-
             webViewContainer: null,
         };
     }
 
     setupWebViewEvents() {
         const ipcRenderer = window.electron.ipcRenderer;
-
-        ipcRenderer.on('webview-created', (bounds) => {
-            this.createWebViewContainer(bounds);
-        });
-
-        ipcRenderer.on('webview-closed', () => {
-            this.removeWebViewContainer();
-        });
+        ipcRenderer.on('webview-created', (bounds) => this.createWebViewContainer(bounds));
+        ipcRenderer.on('webview-closed', () => this.removeWebViewContainer());
     }
 
     createWebViewContainer(bounds) {
         if (this.elements.webViewContainer) {
             this.removeWebViewContainer();
         }
-
         this.elements.webViewContainer = document.createElement('div');
         this.elements.webViewContainer.id = 'webview-container';
         this.elements.webViewContainer.className = 'webview-container';
-        this.elements.webViewContainer.style.left = `${bounds.x}px`;
-        this.elements.webViewContainer.style.top = `${bounds.y}px`;
-        this.elements.webViewContainer.style.width = `${bounds.width}px`;
-        this.elements.webViewContainer.style.height = `${bounds.height}px`;
-        this.elements.webViewContainer.style.pointerEvents = 'all';
+        Object.assign(this.elements.webViewContainer.style, {
+            left: `${bounds.x}px`,
+            top: `${bounds.y}px`,
+            width: `${bounds.width}px`,
+            height: `${bounds.height}px`,
+            pointerEvents: 'all'
+        });
 
         const header = document.createElement('div');
         header.className = 'webview-header';
         header.innerHTML = `
-            <div class="drag-handle">
-                <span class="webview-title">Web View</span>
-            </div>
+            <div class="drag-handle"><span class="webview-title">Web View</span></div>
             <div class="webview-controls">
-                <button class="close-webview" title="Close Webview">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
+                <button class="close-webview" title="Close Webview"><i class="fas fa-times"></i></button>
+            </div>`;
         header.style.position = 'relative';
         header.style.zIndex = '1004';
         header.style.pointerEvents = 'all';
@@ -115,9 +100,7 @@ class UIManager {
         header.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!e.target.closest('.close-webview')) {
-                this.startDragging(e);
-            }
+            if (!e.target.closest('.close-webview')) this.startDragging(e);
         }, true);
 
         const closeButton = header.querySelector('.close-webview');
@@ -131,18 +114,17 @@ class UIManager {
 
         this.elements.webViewContainer.appendChild(header);
 
-        const resizePositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-        resizePositions.forEach(position => {
+        ['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(pos => {
             const resizer = document.createElement('div');
-            resizer.className = `resizer ${position}`;
+            resizer.className = `resizer ${pos}`;
             resizer.style.pointerEvents = 'all';
             resizer.style.zIndex = '1005';
-            this.elements.webViewContainer.appendChild(resizer);
             resizer.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.startResizing(e, position);
+                this.startResizing(e, pos);
             }, true);
+            this.elements.webViewContainer.appendChild(resizer);
         });
 
         document.body.appendChild(this.elements.webViewContainer);
@@ -157,14 +139,12 @@ class UIManager {
 
     startDragging(e) {
         if (e.target.closest('.resizer')) return;
-
         this.isDragging = true;
         const container = this.elements.webViewContainer;
         this.dragStart = {
             x: e.clientX - container.offsetLeft,
             y: e.clientY - container.offsetTop
         };
-
         const handleDrag = (e) => {
             if (!this.isDragging) return;
             e.preventDefault();
@@ -179,13 +159,11 @@ class UIManager {
                 y: parseInt(container.style.top)
             });
         };
-
         const stopDragging = () => {
             this.isDragging = false;
             document.removeEventListener('mousemove', handleDrag);
             document.removeEventListener('mouseup', stopDragging);
         };
-
         document.addEventListener('mousemove', handleDrag, { capture: true });
         document.addEventListener('mouseup', stopDragging, { capture: true });
     }
@@ -201,7 +179,6 @@ class UIManager {
             mouseX: e.clientX,
             mouseY: e.clientY
         };
-
         const handleResize = (e) => {
             if (!this.isResizing) return;
             e.preventDefault();
@@ -209,7 +186,6 @@ class UIManager {
             let newBounds = { ...startBounds };
             const dx = e.clientX - startBounds.mouseX;
             const dy = e.clientY - startBounds.mouseY;
-
             if (position.includes('right')) newBounds.width = Math.max(300, startBounds.width + dx);
             if (position.includes('left')) {
                 const newWidth = Math.max(300, startBounds.width - dx);
@@ -222,44 +198,33 @@ class UIManager {
                 newBounds.y = startBounds.y + (startBounds.height - newHeight);
                 newBounds.height = newHeight;
             }
-
-            container.style.left = `${newBounds.x}px`;
-            container.style.top = `${newBounds.y}px`;
-            container.style.width = `${newBounds.width}px`;
-            container.style.height = `${newBounds.height}px`;
+            Object.assign(container.style, {
+                left: `${newBounds.x}px`,
+                top: `${newBounds.y}px`,
+                width: `${newBounds.width}px`,
+                height: `${newBounds.height}px`
+            });
             window.electron.ipcRenderer.send('resize-webview', newBounds);
         };
-
         const stopResizing = () => {
             this.isResizing = false;
             document.removeEventListener('mousemove', handleResize);
             document.removeEventListener('mouseup', stopResizing);
         };
-
         document.addEventListener('mousemove', handleResize, { capture: true });
         document.addEventListener('mouseup', stopResizing, { capture: true });
     }
 
     setupEventListeners() {
         const ipcRenderer = window.electron.ipcRenderer;
-        const addClickHandler = (element, handler) => {
-            element?.addEventListener('click', handler);
-        };
-
-        // Sidebar and app section toggles
+        const addClickHandler = (el, handler) => el?.addEventListener('click', handler);
         addClickHandler(this.elements.appIcon, () => this.state.setState({ isAIOSOpen: !this.state.getState().isAIOSOpen }));
         addClickHandler(this.elements.toDoListIcon, () => this.state.setState({ isToDoListOpen: !this.state.getState().isToDoListOpen }));
-
-        // Window controls
         addClickHandler(this.elements.minimizeBtn, () => ipcRenderer.send('minimize-window'));
         addClickHandler(this.elements.resizeBtn, () => ipcRenderer.send('toggle-maximize-window'));
         addClickHandler(this.elements.closeBtn, () => ipcRenderer.send('close-window'));
         addClickHandler(this.elements.themeToggle, () => this.state.setState({ isDarkMode: !this.state.getState().isDarkMode }));
-
-        ipcRenderer.on('window-state-changed', (isMaximized) => {
-            this.state.setState({ isWindowMaximized: isMaximized });
-        });
-
+        ipcRenderer.on('window-state-changed', (isMaximized) => this.state.setState({ isWindowMaximized: isMaximized }));
         document.addEventListener('click', (event) => {
             if (event.target.tagName === 'A' && event.target.href && event.target.href.startsWith('http')) {
                 event.preventDefault();
@@ -272,43 +237,20 @@ class UIManager {
         this.state.subscribe((state, changedKeys) => {
             changedKeys.forEach(key => {
                 switch (key) {
-                    case 'isDarkMode':
-                        this.updateTheme(state.isDarkMode);
-                        break;
-                    case 'isWindowMaximized':
-                        this.updateWindowControls(state.isWindowMaximized);
-                        break;
-                    case 'isChatOpen':
-                        this.updateChatVisibility(state.isChatOpen);
-                        break;
+                    case 'isDarkMode': this.updateTheme(state.isDarkMode); break;
+                    case 'isWindowMaximized': this.updateWindowControls(state.isWindowMaximized); break;
+                    case 'isChatOpen': this.updateChatVisibility(state.isChatOpen); break;
                     case 'isAIOSOpen':
-                        if (state.isAIOSOpen && state.isToDoListOpen) {
-                            this.state.setState({ isToDoListOpen: false });
-                        }
+                        if (state.isAIOSOpen && state.isToDoListOpen) this.state.setState({ isToDoListOpen: false });
                         this.updateAIOSVisibility(state.isAIOSOpen);
                         break;
                     case 'isToDoListOpen':
-                        if (state.isToDoListOpen && state.isAIOSOpen) {
-                            this.state.setState({ isAIOSOpen: false });
-                        }
+                        if (state.isToDoListOpen && state.isAIOSOpen) this.state.setState({ isAIOSOpen: false });
                         this.updateToDoListVisibility(state.isToDoListOpen);
                         break;
                 }
             });
         });
-    }
-
-    updateToDoListVisibility(isOpen) {
-        document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
-        
-        // Notify FloatingWindowManager about tasks window state change
-        if (window.floatingWindowManager) {
-            if (isOpen) {
-                window.floatingWindowManager.onWindowOpen('tasks');
-            } else {
-                window.floatingWindowManager.onWindowClose('tasks');
-            }
-        }
     }
 
     updateTheme(isDarkMode) {
@@ -325,12 +267,8 @@ class UIManager {
     }
 
     updateChatVisibility(isOpen) {
-        const chatContainer = document.getElementById('chat-container');
-        const inputContainer = document.getElementById('floating-input-container');
-        if (chatContainer && inputContainer) {
-            chatContainer.classList.toggle('hidden', !isOpen);
-            inputContainer.classList.toggle('hidden', !isOpen);
-        }
+        document.getElementById('chat-container')?.classList.toggle('hidden', !isOpen);
+        document.getElementById('floating-input-container')?.classList.toggle('hidden', !isOpen);
     }
 
     updateAIOSVisibility(isOpen) {
@@ -338,9 +276,17 @@ class UIManager {
             document.getElementById('floating-window')?.classList.toggle('hidden', !isOpen);
         }
     }
+
+    updateToDoListVisibility(isOpen) {
+        document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
+        if (window.floatingWindowManager) {
+            if (isOpen) window.floatingWindowManager.onWindowOpen('tasks');
+            else window.floatingWindowManager.onWindowClose('tasks');
+        }
+    }
 }
 
-document.addEventListener('DOMContentLoaded', async () => { // Make the listener async
+document.addEventListener('DOMContentLoaded', async () => {
     const stateManager = new StateManager();
     window.stateManager = stateManager;
     const uiManager = new UIManager(stateManager);
@@ -348,31 +294,24 @@ document.addEventListener('DOMContentLoaded', async () => { // Make the listener
     const loadModule = async (name, containerId, initFunc) => {
         try {
             const response = await fetch(`${name}.html`);
+            if (!response.ok) throw new Error(`Failed to load ${name}: ${response.statusText}`);
             const html = await response.text();
             document.getElementById(containerId).innerHTML = html;
             initFunc?.();
-        } catch (error) {
-            console.error(`Error loading ${name}:`, error);
+        } catch (err) {
+            console.error(`Error loading ${name}:`, err);
         }
     };
 
-    // --- CORRECTED LOGIC ---
-    // Create an array of promises for all modules that need to be loaded
-    const moduleLoadPromises = [
+    await Promise.all([
         loadModule('aios', 'aios-container', () => window.AIOS?.init()),
         loadModule('chat', 'chat-root', () => window.chatModule?.init()),
         loadModule('to-do-list', 'to-do-list-root', () => window.todo?.init())
-    ];
+    ]);
 
-    // Wait for all of them to finish
-    await Promise.all(moduleLoadPromises);
-
-    // NOW that all HTML is guaranteed to be in the DOM,
-    // perform the initial UI sync.
     const initialState = stateManager.getState();
     uiManager.updateTheme(initialState.isDarkMode);
     uiManager.updateChatVisibility(initialState.isChatOpen);
     uiManager.updateAIOSVisibility(initialState.isAIOSOpen);
     uiManager.updateToDoListVisibility(initialState.isToDoListOpen);
-    // --- END OF CORRECTED LOGIC ---
 });

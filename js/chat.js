@@ -1095,6 +1095,14 @@ function init() {
     welcomeDisplay = new WelcomeDisplay();
     welcomeDisplay.initialize();
     
+    if (window.electron?.auth) {
+        window.electron.auth.onAuthChange((user) => {
+            if (welcomeDisplay) {
+                welcomeDisplay.refreshUsername();
+            }
+        });
+    }
+
     // Initialize FloatingWindowManager and connect it to WelcomeDisplay
     try {
         floatingWindowManager = new FloatingWindowManager(welcomeDisplay);
