@@ -16,6 +16,15 @@
  * - .context-active-indicator: Context status display
  */
 
+:root {
+    /* Improved layout variables */
+    --chat-container-width: 65%; /* Increased from 55% */
+    --chat-container-left: 50%; /* Centered from 52.5% */
+    --chat-max-width: 900px; /* Increased from 800px */
+    --message-max-width: 95%; /* Increased from 85% */
+    --input-container-max-width: 900px; /* Increased from 800px */
+}
+
 /* --- Main Chat Container --- */
 .chat-container {
     position: fixed;
@@ -54,7 +63,7 @@
     max-width: var(--chat-max-width);
     width: 100%;
     margin: 0 auto;
-    padding: 20px 8px;
+    padding: 20px 0;
     pointer-events: auto;
 }
 

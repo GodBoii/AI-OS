@@ -200,7 +200,9 @@
 }
 
 .message-bot.expanded .detailed-logs {
-    max-height: 1500px;
+    max-height: 60vh;       /* Change: Use a responsive viewport height */
+    overflow-y: auto; 
+    padding-right: 8px;
     opacity: 1;
     margin-top: 10px;
     padding-top: 10px;
