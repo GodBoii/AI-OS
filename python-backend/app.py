@@ -1,4 +1,4 @@
-# python-backend/app.py (Final, Refactored for Native Agno v2 Persistence)
+# python-backend/app.py (Final, Corrected for Multimodal Input with Context Session IDs)
 
 import os
 import logging
@@ -60,9 +60,6 @@ class ConnectionManager:
             'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
             'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True
         })
-        # --- CHANGE: The 'history' key is removed. ---
-        # Redis no longer stores conversation history. It only manages the active
-        # session's configuration and associated sandbox IDs.
         session_data = {
             "user_id": user_id, "config": config, "created_at": datetime.datetime.now().isoformat(),
             "sandbox_ids": []
@@ -75,22 +72,14 @@ class ConnectionManager:
         if session_json:
             session_data = json.loads(session_json)
             
-            # --- CRITICAL CHANGE: Removed manual Supabase upsert. ---
-            # Agno's `PostgresDb` engine, configured in `assistant.py`, now handles
-            # saving the complete session history to the `agno_sessions` table
-            # automatically after every single turn. This manual save on termination
-            # is no longer needed and would cause errors and data conflicts.
-
             sandbox_api_url = os.getenv("SANDBOX_API_URL")
             if sandbox_api_url:
                 for sandbox_id in session_data.get("sandbox_ids", []):
                     try:
-                        # Increased timeout for better reliability
                         requests.delete(f"{sandbox_api_url}/sessions/{sandbox_id}", timeout=30)
                     except requests.RequestException as e:
                         logger.error(f"Failed to clean up sandbox {sandbox_id}: {e}")
             
-            # The session shell is deleted from Redis upon termination.
             redis_client.delete(f"session:{conversation_id}")
             logger.info(f"Terminated session {conversation_id} and cleaned up resources.")
 
@@ -98,54 +87,63 @@ class ConnectionManager:
         session_json = redis_client.get(f"session:{conversation_id}")
         return json.loads(session_json) if session_json else None
 
-def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict):
+# --- FIX START: Update function signature and add context fetching logic ---
+def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_data: dict, browser_tools_config: dict, custom_tool_config: dict, context_session_ids: List[str]):
     try:
         session_data = connection_manager.get_session(conversation_id)
         if not session_data:
             raise Exception(f"Session data not found for {conversation_id}")
-        user_id, message = session_data['user_id'], turn_data['user_message']
+        user_id = session_data['user_id']
 
-        # The agent is now configured with a `db` object that will automatically
-        # persist the full, detailed run output to Supabase.
         agent = get_llm_os(user_id=user_id, session_info=session_data, browser_tools_config=browser_tools_config, custom_tool_config=custom_tool_config, **session_data['config'])
 
         images, audio, videos, other_files = process_files(turn_data.get('files', []))
 
-        current_session_state = {
-            'turn_context': turn_data
-        }
-
-        # --- CHANGE: We still capture the final run_output, but only for metrics. ---
-        # The primary purpose of capturing this is to log token usage to your
-        # separate `request_logs` table. Session history persistence is now handled by Agno.
+        current_session_state = {'turn_context': turn_data}
         run_output: Optional[TeamRunOutput] = None
+        
+        user_message = turn_data.get("user_message", "")
 
-        run_input: Union[str, Dict]
-        has_files = any([images, audio, videos, other_files])
+        # New logic to fetch and prepend historical context
+        historical_context_str = ""
+        if context_session_ids:
+            logger.info(f"Fetching context from {len(context_session_ids)} sessions.")
+            historical_context_str += "CONTEXT FROM PREVIOUS CHATS:\n---\n"
+            for session_id in context_session_ids:
+                try:
+                    response = supabase_client.from_('agno_sessions').select('runs').eq('session_id', session_id).single().execute()
+                    if response.data and response.data.get('runs'):
+                        runs = response.data['runs']
+                        # Filter for top-level runs only
+                        top_level_runs = [run for run in runs if not run.get('parent_run_id')]
+                        for run in top_level_runs:
+                            user_input = run.get('input', {}).get('input_content', '')
+                            assistant_output = run.get('content', '')
+                            if user_input: # Only include turns with a user input
+                                historical_context_str += f"User: {user_input}\nAssistant: {assistant_output}\n---\n"
+                except Exception as e:
+                    logger.error(f"Failed to fetch or process context for session_id {session_id}: {e}")
+            historical_context_str += "\n"
 
-        if has_files:
-            run_input = {"content": message}
-            if images: run_input['images'] = images
-            if audio: run_input['audio'] = audio
-            if videos: run_input['videos'] = videos
-            if other_files: run_input['files'] = other_files
-        else:
-            run_input = message
-
-        # The streaming loop remains. It is essential for sending real-time
-        # updates to the frontend.
+        # Prepend the context to the current user message
+        final_user_message = f"{historical_context_str}CURRENT QUESTION:\n{user_message}" if historical_context_str else user_message
+        
         for chunk in agent.run(
-            input=run_input,
+            input=final_user_message, # Use the message with prepended context
+            images=images if images else None,
+            audio=audio if audio else None,
+            videos=videos if videos else None,
+            files=other_files if other_files else None,
             session_id=conversation_id,
             session_state=current_session_state,
             stream=True,
             stream_intermediate_steps=True,
             add_history_to_context=True
         ):
+        # --- FIX END ---
             if not chunk or not hasattr(chunk, 'event'):
                 continue
 
-            # Capture the final TeamRunOutput object from the stream for metrics.
             if isinstance(chunk, TeamRunOutput):
                 run_output = chunk
 
@@ -160,14 +158,7 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
                 socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
 
         socketio.emit("response", {"done": True, "id": message_id}, room=sid)
-
-        # --- CRITICAL CHANGE: Removed manual history management and Redis persistence. ---
-        # The Agno `Team` object, configured with the `OptimizedPostgresDb` instance,
-        # has already saved the complete, detailed, and optimized `TeamRunOutput` of this turn
-        # to the `agno_sessions` table in your 'ai' schema. This manual logic is no longer needed.
         
-        # This block for logging token usage remains, as it writes to a separate table
-        # for analytics and is a distinct concern from session history.
         if run_output and run_output.metrics:
             metrics = run_output.metrics
             if metrics.input_tokens > 0 or metrics.output_tokens > 0:
@@ -181,7 +172,6 @@ def run_agent_and_stream(sid: str, conversation_id: str, message_id: str, turn_d
         logger.error(f"Agent run failed for {conversation_id}: {e}\n{traceback.format_exc()}")
         socketio.emit("error", {"message": str(e), "reset": True}, room=sid)
 
-# The process_files function remains unchanged.
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
     images, audio, videos, other_files = [], [], [], []
     if not files_data: return images, audio, videos, other_files
@@ -199,7 +189,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
             other_files.append(File(content=file_data['content'].encode('utf-8'), name=file_name, mime_type=file_type))
     return images, audio, videos, other_files
 
-# The get_user_from_token function remains unchanged.
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '): return None, ('Authorization header is missing or invalid', 401)
@@ -213,8 +202,6 @@ def get_user_from_token(request):
         return None, ('Invalid or expired token', 401)
 
 # --- Application Factory ---
-# All routes and OAuth logic remain unchanged as they are not directly
-# related to the agent persistence mechanism.
 def create_app():
     global socketio, redis_client, connection_manager, oauth
 
@@ -227,7 +214,6 @@ def create_app():
     connection_manager = ConnectionManager()
     oauth = OAuth(app)
 
-    # Register OAuth providers (code unchanged)
     oauth.register(
         name='github', client_id=os.getenv("GITHUB_CLIENT_ID"), client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
         access_token_url='https://github.com/login/oauth/access_token', authorize_url='https://github.com/login/oauth/authorize',
@@ -254,9 +240,7 @@ def create_app():
         client_kwargs={'scope': 'organizations:read projects:read'}
     )
 
-    # --- Register Routes and Event Handlers within App Context ---
     with app.app_context():
-        # All routes remain unchanged (code omitted for brevity)
         @app.route('/healthz')
         def health_check(): return "OK", 200
 
@@ -339,10 +323,7 @@ def create_app():
         def get_user_sessions():
             user, error = get_user_from_token(request)
             if error: return jsonify({"error": error[0]}), error[1]
-            
-            # This endpoint now correctly reads from the table being populated by Agno
             response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(50).execute()
-            
             return jsonify(response.data), 200
 
         @app.route('/api/generate-upload-url', methods=['POST'])
@@ -389,13 +370,16 @@ def create_app():
                 if not connection_manager.get_session(conversation_id):
                     connection_manager.create_session(conversation_id, str(user.id), data.get("config", {}))
 
+                # --- FIX START: Extract session IDs and pass them to the agent runner ---
                 turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
+                context_session_ids = data.get("context_session_ids", []) # Extract the new key
                 message_id = data.get("id") or str(uuid.uuid4())
                 browser_tools_config = {'sid': sid, 'socketio': socketio, 'waiting_events': browser_waiting_events}
                 custom_tool_config = {'sid': sid, 'socketio': socketio, 'message_id': message_id}
 
-                eventlet.spawn(run_agent_and_stream, sid, conversation_id, message_id, turn_data, browser_tools_config, custom_tool_config)
+                eventlet.spawn(run_agent_and_stream, sid, conversation_id, message_id, turn_data, browser_tools_config, custom_tool_config, context_session_ids) # Pass as argument
                 logger.info(f"Spawned agent run for conversation: {conversation_id}")
+                # --- FIX END ---
 
             except AuthApiError as e:
                 logger.error(f"Invalid token for SID {sid}: {e.message}")

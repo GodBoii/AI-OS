@@ -1,4 +1,4 @@
-// context-handler.js (Definitive Version, Corrected for High-Fidelity History)
+// context-handler.js (Updated to include session_id)
 
 class ContextHandler {
     constructor() {
@@ -74,7 +74,7 @@ class ContextHandler {
             return;
         }
         try {
-            const response = await fetch('https://aios-web.onrender.com/api/sessions', {
+            const response = await fetch('http://localhost:8765/api/sessions', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -124,7 +124,6 @@ class ContextHandler {
         
         let sessionName = `Session ${session.session_id.substring(0, 8)}...`;
         const runs = session.runs || [];
-        // Filter for top-level runs to get an accurate turn count and title
         const topLevelRuns = runs.filter(run => !run.parent_run_id);
         const messageCount = topLevelRuns.length;
 
@@ -204,25 +203,17 @@ class ContextHandler {
         }
     }
 
+    // --- FIX START: This function now returns the full session object ---
     getSelectedSessionsData() {
         const selectedIds = new Set();
         this.elements.sessionsContainer.querySelectorAll('.session-checkbox:checked').forEach(checkbox => {
             selectedIds.add(checkbox.closest('.session-item').dataset.sessionId);
         });
-        return this.loadedSessions
-            .filter(session => selectedIds.has(session.session_id))
-            .map(session => {
-                const topLevelRuns = (session.runs || []).filter(run => !run.parent_run_id);
-                return {
-                    interactions: topLevelRuns.map(run => ({
-                        user_input: run.input?.input_content || '',
-                        llm_output: run.content || ''
-                    }))
-                };
-            });
+        // Return the full session object for selected sessions, not just the interactions.
+        return this.loadedSessions.filter(session => selectedIds.has(session.session_id));
     }
+    // --- FIX END ---
 
-    // --- MODIFIED FUNCTION ---
     showSessionDetails(sessionId) {
         const session = this.loadedSessions.find(s => s.session_id === sessionId);
         if (!session) {
@@ -247,15 +238,11 @@ class ContextHandler {
             return;
         }
         
-        // --- START OF THE CRITICAL FIX ---
-        // Filter the 'runs' array to only include top-level runs where 'parent_run_id' is null.
-        // This ensures we only render actual conversational turns initiated by the user.
         const topLevelRuns = runs.filter(run => !run.parent_run_id);
-        // --- END OF THE CRITICAL FIX ---
 
         sessionNameEl.textContent = topLevelRuns[0]?.input?.input_content.substring(0, 45) + '...' || `Session ${sessionId.substring(0, 8)}`;
 
-        for (const run of topLevelRuns) { // Loop over the filtered array
+        for (const run of topLevelRuns) {
             const turnContainer = document.createElement('div');
             turnContainer.className = 'conversation-turn';
 
@@ -275,7 +262,6 @@ class ContextHandler {
             assistantResponseDiv.className = 'turn-assistant-response';
             
             if (window.renderTurnFromEvents) {
-                // Pass the entire top-level run object to the intelligent renderer
                 window.renderTurnFromEvents(assistantResponseDiv, run);
             } else {
                 const fallbackText = document.createElement('div');
@@ -296,7 +282,6 @@ class ContextHandler {
         this.elements.sessionsContainer.style.display = 'block';
         this.elements.sessionsContainer.appendChild(view);
     }
-    // --- END OF MODIFIED FUNCTION ---
 
     clearSelectedContext() {
         this.elements.sessionsContainer?.querySelectorAll('.session-checkbox:checked').forEach(cb => cb.checked = false);
@@ -344,7 +329,9 @@ class ContextHandler {
         
         const title = document.createElement('span');
         title.className = 'session-chip-title';
-        const firstInteraction = session.interactions?.[0]?.user_input || `Session ${index + 1}`;
+        
+        const topLevelRuns = (session.runs || []).filter(run => !run.parent_run_id);
+        const firstInteraction = topLevelRuns[0]?.input?.input_content || `Session ${index + 1}`;
         title.textContent = firstInteraction.substring(0, 25) + (firstInteraction.length > 25 ? '...' : '');
         
         const removeBtn = document.createElement('button');

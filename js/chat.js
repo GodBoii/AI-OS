@@ -1,4 +1,4 @@
-// chat.js (Complete, Final, with High-Fidelity History Rendering)
+// chat.js (Complete, Final, with High-Fidelity History Rendering - Updated for Session Context)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
@@ -825,7 +825,8 @@ async function handleSendMessage() {
     const attachedFiles = fileAttachmentHandler.getAttachedFiles();
     const selectedSessions = contextHandler.getSelectedSessions();
 
-    if (!message && attachedFiles.length === 0) return;
+    // Allow sending even with just context sessions selected
+    if (!message && attachedFiles.length === 0 && selectedSessions.length === 0) return;
 
     floatingInput.disabled = true;
     sendMessageBtn.disabled = true;
@@ -856,43 +857,23 @@ async function handleSendMessage() {
     const messageId = Date.now().toString();
     createBotMessagePlaceholder(messageId);
 
-    let combinedContextForBackend = "";
-    if (selectedSessions && selectedSessions.length > 0) {
-        const contextStr = selectedSessions.map(session => {
-            if (!session.interactions || !session.interactions.length) return '';
-            return session.interactions.map(interaction => `User: ${interaction.user_input}\nAssistant: ${interaction.llm_output}`).join('\n\n');
-        }).filter(Boolean).join('\n---\n');
-        if (contextStr) combinedContextForBackend += contextStr + "\n---\n";
-    }
+    // --- FIX START: Send session IDs instead of full context string ---
+    // Extract just the session_ids from the selected sessions
+    const contextSessionIds = selectedSessions.map(session => session.session_id);
 
-    if (chatConfig.tasks) {
-        try {
-            const userContextPath = path.join(__dirname, '../user_context.txt');
-            const taskListPath = path.join(__dirname, '../tasklist.txt');
-            const userContextContent = await fs.readFile(userContextPath, 'utf8');
-            const taskListContent = await fs.readFile(taskListPath, 'utf8');
-            combinedContextForBackend += `User Context:\n${userContextContent}\n---\nTask List:\n${taskListContent}\n---\n`;
-            chatConfig.tasks = false;
-            // Update shuffle menu to reflect tasks being turned off
-            if (shuffleMenuController) {
-                shuffleMenuController.updateItemActiveState('tasks', false);
-            }
-        } catch (error) {
-            console.error("Error reading context/task files:", error);
-            showNotification("Error reading context files.", "error");
-        }
-    }
-
+    // Add the new `context_session_ids` key to the payload
     const messageData = {
         conversationId: currentConversationId,
         message: message,
         id: messageId,
         files: attachedFiles,
+        context_session_ids: contextSessionIds, // New key with an array of IDs
         is_deepsearch: chatConfig.deepsearch,
         accessToken: session.access_token,
-        context: combinedContextForBackend || undefined,
+        // The old 'context' key is now removed
         config: { use_memory: chatConfig.memory, ...chatConfig.tools }
     };
+    // --- FIX END ---
 
     try {
         ipcRenderer.send('send-message', messageData);

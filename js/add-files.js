@@ -1,4 +1,4 @@
-// add-files.js (Final, Definitive Version with Path-based Logic)
+// add-files.js (Final, Definitive Version with Race Condition Fix for Linux Compatibility)
 
 class FileAttachmentHandler {
     constructor(socket, supportedFileTypes, maxFileSize) {
@@ -13,7 +13,7 @@ class FileAttachmentHandler {
             'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'webm': 'video/webm',
             'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska'
         };
-        this.maxFileSize = maxFileSize || 50 * 1024 * 1024; // 10MB default
+        this.maxFileSize = maxFileSize || 50 * 1024 * 1024; // 50MB default
         this.attachedFiles = [];
         this.initialize();
     }
@@ -30,7 +30,6 @@ class FileAttachmentHandler {
         this.previewContent = this.sidebar.querySelector('.file-preview-content');
         this.fileCount = this.sidebar.querySelector('.file-count');
 
-        // Ensure sidebar starts hidden and context-files bar starts hidden
         this.sidebar.classList.add('hidden');
         this.contextFilesBar.classList.add('hidden');
 
@@ -47,13 +46,11 @@ class FileAttachmentHandler {
             this.toggleSidebar(false);
         });
 
-        // Initialize conversation state manager
         if (window.conversationStateManager) {
             window.conversationStateManager.setFileHandler(this);
             window.conversationStateManager.init();
         }
 
-        // Initial positioning update
         this.updateInputPositioning();
     }
 
@@ -63,7 +60,9 @@ class FileAttachmentHandler {
             throw new Error("User not authenticated. Please log in again.");
         }
 
-        const response = await fetch('https://ai-os-yjbb.onrender.com/api/generate-upload-url', {
+        // NOTE: This now uses the correct, centralized URL from your previous fix.
+        const backendUrl = window.config.backend.url;
+        const response = await fetch(`${backendUrl}/api/generate-upload-url`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -97,10 +96,7 @@ class FileAttachmentHandler {
             throw new Error('File upload to cloud storage failed.');
         }
 
-        // --- FIX ---
-        // Return the path, not a public URL. The backend will use this path to securely download the content.
         return path;
-        // --- END FIX ---
     }
 
     async handleFileSelection(event) {
@@ -127,44 +123,46 @@ class FileAttachmentHandler {
             const fileIndex = this.attachedFiles.length;
             const isMedia = file.type.startsWith('image/') || file.type.startsWith('audio/') || file.type.startsWith('video/') || file.type === 'application/pdf' || file.type.includes('document');
 
+            // --- FIX START: Introduce the 'reading' status to prevent the race condition ---
             const placeholderFileObject = {
                 name: file.name,
                 type: file.type,
                 previewUrl: URL.createObjectURL(file),
-                status: isMedia ? 'uploading' : 'completed',
+                // If it's media, status is 'uploading'. If it's a text file, status is 'reading'.
+                status: isMedia ? 'uploading' : 'reading',
                 isMedia: isMedia,
                 isText: !isMedia,
             };
+            // --- FIX END ---
 
             this.attachedFiles.push(placeholderFileObject);
-            this.renderFilePreview();
+            this.renderFilePreview(); // Render the initial state (will show a spinner for 'reading')
 
             if (isMedia) {
                 try {
-                    // This now returns the path of the file in the bucket.
                     const filePathInBucket = await this.uploadFileToSupabase(file);
-
-                    // --- FIX ---
-                    // Store the path in the file object. This is what the backend needs.
                     this.attachedFiles[fileIndex].path = filePathInBucket;
-                    // --- END FIX ---
-
                     this.attachedFiles[fileIndex].status = 'completed';
-
                 } catch (error) {
                     console.error('Upload failed:', error);
                     alert(`Upload failed for ${file.name}: ${error.message}`);
                     this.attachedFiles[fileIndex].status = 'failed';
                 }
-            } else {
+            } else { // This block handles text files
                 try {
-                    this.attachedFiles[fileIndex].content = await this.readFileAsText(file);
+                    // --- FIX START: Read content first, THEN update status ---
+                    const fileContent = await this.readFileAsText(file);
+                    this.attachedFiles[fileIndex].content = fileContent;
+                    // Only after the content is successfully read, we mark it as complete.
+                    this.attachedFiles[fileIndex].status = 'completed';
+                    // --- FIX END ---
                 } catch (error) {
                     console.error('Error reading text file:', error);
                     this.attachedFiles[fileIndex].status = 'failed';
                 }
             }
 
+            // Re-render to show the final status (e.g., remove spinner)
             this.renderFilePreview();
         }
         this.fileInput.value = '';
@@ -199,7 +197,13 @@ class FileAttachmentHandler {
         chip.className = `file-chip ${file.status}`;
 
         const icon = document.createElement('i');
-        icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
+        // --- UI ENHANCEMENT: Show spinner for reading/uploading status ---
+        if (file.status === 'reading' || file.status === 'uploading') {
+            icon.className = 'fas fa-spinner fa-spin file-chip-icon';
+        } else {
+            icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
+        }
+        // --- END UI ENHANCEMENT ---
 
         const name = document.createElement('span');
         name.className = 'file-chip-name';
@@ -218,7 +222,6 @@ class FileAttachmentHandler {
         chip.appendChild(name);
         chip.appendChild(removeBtn);
 
-        // Add click handler for file preview
         chip.addEventListener('click', () => {
             this.showFilePreview(file, index);
         });
@@ -234,37 +237,31 @@ class FileAttachmentHandler {
         if (hasContent) {
             this.contextFilesBar.classList.remove('hidden');
             this.inputContainer.classList.add('has-files');
-            this.sidebar.classList.add('hidden'); // Keep sidebar hidden, use horizontal bar
+            this.sidebar.classList.add('hidden');
         } else {
             this.contextFilesBar.classList.add('hidden');
             this.inputContainer.classList.remove('has-files');
             this.sidebar.classList.add('hidden');
         }
 
-        // Clear only the file chips, sessions will be managed by context handler
         const fileChips = this.contextFilesContent.querySelectorAll('.file-chip');
         fileChips.forEach(chip => chip.remove());
     }
 
-    // Method to be called by context handler when sessions change
     onContextChange() {
         this.updateContextFilesBar();
     }
 
     renderFilePreview() {
-        // Clear both old sidebar and new horizontal bar
         this.previewContent.innerHTML = '';
         this.fileCount.textContent = this.attachedFiles.length;
 
-        // Update the combined context-files bar
         this.updateContextFilesBar();
 
-        // Render file chips in horizontal bar
         this.attachedFiles.forEach((file, index) => {
             this.createFileChip(file, index);
         });
 
-        // Also render in sidebar for legacy compatibility
         this.attachedFiles.forEach((file, index) => {
             const fileItem = document.createElement('div');
             fileItem.className = 'file-preview-item';
@@ -275,11 +272,13 @@ class FileAttachmentHandler {
             const fileInfo = document.createElement('div');
             fileInfo.className = 'file-info';
             let statusIcon = '';
-            if (file.status === 'uploading') {
+            // --- UI ENHANCEMENT: Show spinner for reading/uploading status ---
+            if (file.status === 'uploading' || file.status === 'reading') {
                 statusIcon = '<i class="fas fa-spinner fa-spin status-icon"></i>';
             } else if (file.status === 'failed') {
                 statusIcon = '<i class="fas fa-exclamation-circle status-icon-failed"></i>';
             }
+            // --- END UI ENHANCEMENT ---
             fileInfo.innerHTML = `
                 <i class="${this.getFileIcon(file.name)} file-icon"></i>
                 <span class="file-name">${file.name}</span>
@@ -368,7 +367,6 @@ class FileAttachmentHandler {
         this.renderFilePreview();
     }
 
-    // Method to update input positioning based on conversation state
     updateInputPositioning() {
         const chatMessages = document.getElementById('chat-messages');
         const hasMessages = chatMessages && chatMessages.children.length > 0;
@@ -380,24 +378,16 @@ class FileAttachmentHandler {
         }
     }
 
-    /**
-     * Show file preview in a simple modal
-     */
     showFilePreview(file, index) {
-        console.log('Showing file preview for:', file);
-        
-        // Remove existing preview modal if any
         const existingModal = document.querySelector('.file-preview-modal');
         if (existingModal) {
             existingModal.remove();
         }
 
-        // Create modal
         const modal = document.createElement('div');
         modal.className = 'file-preview-modal';
         
         const previewContent = this.generateFilePreview(file);
-        console.log('Generated preview content:', previewContent);
         
         modal.innerHTML = `
             <div class="file-preview-modal-backdrop"></div>
@@ -422,10 +412,8 @@ class FileAttachmentHandler {
             </div>
         `;
 
-        // Add to DOM
         document.body.appendChild(modal);
 
-        // Add event listeners
         const closeBtn = modal.querySelector('.close-preview-modal');
         const backdrop = modal.querySelector('.file-preview-modal-backdrop');
         
@@ -437,7 +425,6 @@ class FileAttachmentHandler {
         closeBtn.addEventListener('click', closeModal);
         backdrop.addEventListener('click', closeModal);
         
-        // Close on Escape key
         const handleEscape = (e) => {
             if (e.key === 'Escape') {
                 closeModal();
@@ -446,29 +433,19 @@ class FileAttachmentHandler {
         };
         document.addEventListener('keydown', handleEscape);
 
-        // Show modal with animation
-        console.log('Adding modal to DOM and showing...');
         setTimeout(() => {
             modal.classList.add('visible');
-            console.log('Modal should now be visible');
         }, 10);
     }
 
-    /**
-     * Generate file preview content based on file type
-     */
     generateFilePreview(file) {
-        console.log('Generating preview for file:', file);
-        
         if (file.isText && file.content) {
-            console.log('Showing text content, length:', file.content.length);
             return `
                 <div class="text-file-preview">
                     <pre class="file-text-content">${this.escapeHtml(file.content)}</pre>
                 </div>
             `;
         } else if (file.isText && !file.content) {
-            console.log('Text file but no content available');
             return `
                 <div class="text-file-preview">
                     <div class="loading-content">
@@ -478,14 +455,12 @@ class FileAttachmentHandler {
                 </div>
             `;
         } else if (file.previewUrl && file.type.startsWith('image/')) {
-            console.log('Showing image preview');
             return `
                 <div class="image-file-preview">
                     <img src="${file.previewUrl}" alt="${file.name}" class="preview-image" />
                 </div>
             `;
         } else if (file.isMedia) {
-            console.log('Showing media placeholder');
             return `
                 <div class="media-file-preview">
                     <div class="media-placeholder">
@@ -496,7 +471,6 @@ class FileAttachmentHandler {
                 </div>
             `;
         } else {
-            console.log('Showing binary file placeholder');
             return `
                 <div class="binary-file-preview">
                     <div class="binary-placeholder">
@@ -510,9 +484,6 @@ class FileAttachmentHandler {
         }
     }
 
-    /**
-     * Format file size for display
-     */
     formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
         
@@ -523,22 +494,17 @@ class FileAttachmentHandler {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    /**
-     * Escape HTML content
-     */
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
 
-    // Call this method when messages are added/removed
     onConversationStateChange() {
         this.updateInputPositioning();
     }
 }
 
-// Global conversation state manager
 window.conversationStateManager = {
     hasMessages: false,
     fileHandler: null,
@@ -567,20 +533,16 @@ window.conversationStateManager = {
             inputContainer.classList.add('centered');
         }
 
-        // Also update file handler if available
         if (this.fileHandler) {
             this.fileHandler.updateInputPositioning();
         }
     },
 
-    // Initialize on page load
     init() {
-        // Check if there are existing messages
         const chatMessages = document.getElementById('chat-messages');
         this.hasMessages = chatMessages && chatMessages.children.length > 0;
         this.updateInputPositioning();
 
-        // Set up mutation observer to watch for message changes
         if (chatMessages) {
             const observer = new MutationObserver(() => {
                 const hasMessages = chatMessages.children.length > 0;
