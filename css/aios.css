@@ -237,6 +237,25 @@ button.secondary:hover {
     text-decoration: underline;
 }
 
+/* External Link Styles */
+.external-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.external-link::after {
+    content: '↗';
+    font-size: 12px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.external-link:hover::after {
+    opacity: 1;
+}
+
 /* Upload Section */
 .upload-container {
     border: 1px dashed var(--border-color);
@@ -312,13 +331,29 @@ button.secondary:hover {
     min-height: 20px;
 }
 
+/* Integration Tab Content */
+.integration-content {
+    color: var(--text-color);
+}
+
+.integration-description {
+    line-height: 1.6;
+    margin-bottom: 24px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 16px 20px;
+    background-color: var(--accent-muted);
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-color);
+}
+
 /* Integrations Section */
 .integrations-section {
-    margin-top: 24px;
-    padding: 20px;
-    background-color: var(--input-bg);
+    margin-top: 0;
+    padding: 0;
+    background-color: transparent;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: none;
 }
 
 .section-subheading {
@@ -332,27 +367,45 @@ button.secondary:hover {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border-color);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.integration-item:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent-muted);
 }
 
 .integration-item:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
 }
 
 .integration-info {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
 }
 
-.integration-info i {
-    font-size: 20px;
-    color: var(--text-color);
+.integration-info i,
+.integration-info .provider-icon {
+    font-size: 24px;
+    color: var(--accent-color);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .integration-info span {
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 500;
     color: var(--text-color);
 }
 
@@ -360,20 +413,25 @@ button.secondary:hover {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-color);
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    background-color: var(--card-bg);
     color: var(--text-color);
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    min-width: 120px;
+    justify-content: center;
 }
 
 .connect-btn:hover {
-    background-color: var(--hover-bg);
+    background-color: var(--accent-color);
     border-color: var(--accent-color);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
 }
 
 .connect-btn[data-action="connect"] {
@@ -384,10 +442,20 @@ button.secondary:hover {
     display: none;
 }
 
+.icon-connected {
+    display: none;
+}
+
 .connect-btn[data-action="disconnect"] {
-    background-color: var(--success-light);
-    border-color: var(--success-color);
-    color: var(--success-color);
+    background-color: var(--status-completed-bg);
+    border-color: var(--status-completed);
+    color: var(--status-completed);
+}
+
+.connect-btn[data-action="disconnect"]:hover {
+    background-color: var(--error-500);
+    border-color: var(--error-500);
+    color: white;
 }
 
 .connect-btn[data-action="disconnect"] .icon-connect {
@@ -428,6 +496,28 @@ button.secondary:hover {
         font-size: 24px;
         margin-bottom: 24px;
     }
+    
+    /* Integration Tab Mobile Styles */
+    .integration-description {
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+    
+    .integration-item {
+        padding: 12px 16px;
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+    }
+    
+    .integration-info {
+        justify-content: center;
+    }
+    
+    .connect-btn {
+        width: 100%;
+        min-width: auto;
+    }
 }
 
 /*
@@ -455,7 +545,77 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     font-weight: bold;
 }
 
-/* User Identity Card Styles */
+/* User Identity Card Styles (Enhanced) */
+
+.dark-mode .user-identity-card .logout-button:hover {
+    background-color: rgba(239, 68, 68, 0.1); /* Red with alpha for dark mode */
+}
+
+/* ================================================================= */
+/* EXTRACTED INLINE STYLES FROM AIOS.HTML                          */
+/* ================================================================= */
+
+/* Provider Icon Styles */
+.integration-info .provider-icon {
+    width: 1.1em;
+    height: 1.1em;
+    fill: currentColor;
+    vertical-align: middle;
+    margin-right: -2px;
+}
+
+/* Social Authentication Divider */
+.social-auth-divider {
+    text-align: center;
+    margin: 16px 0;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    position: relative;
+}
+
+.social-auth-divider::before,
+.social-auth-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+.social-auth-divider::before {
+    left: 0;
+}
+
+.social-auth-divider::after {
+    right: 0;
+}
+
+/* Social Authentication Actions */
+.social-auth-actions {
+    display: flex;
+    flex-direction: column;
+}
+
+.auth-btn.social {
+    background-color: var(--background-secondary);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.auth-btn.social:hover {
+    background-color: var(--background-tertiary);
+}
+
+.auth-btn.social .fab {
+    font-size: 1.2em;
+}
+
+/* Enhanced User Identity Card Styles */
 .user-identity-card {
     display: flex;
     align-items: center;
@@ -467,23 +627,29 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     margin-bottom: 24px;
 }
 
-.user-identity-card .user-avatar-container {
+.user-avatar-container {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     overflow: hidden;
-    background-color: var(--hover-bg);
+    background-color: var(--active-bg); /* Fallback color */
     flex-shrink: 0;
 }
 
-.user-identity-card .user-info {
+.user-avatar-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.user-info {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
     min-width: 0; /* Prevents text from overflowing */
 }
 
-.user-identity-card .user-name-display {
+.user-name-display {
     font-weight: 600;
     font-size: 1rem;
     color: var(--text-color);
@@ -492,7 +658,7 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     text-overflow: ellipsis;
 }
 
-.user-identity-card .user-email-display {
+.user-email-display {
     color: var(--text-secondary);
     font-size: 0.9rem;
     white-space: nowrap;
@@ -500,7 +666,7 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     text-overflow: ellipsis;
 }
 
-.user-identity-card .logout-button {
+.logout-button {
     background: none;
     border: none;
     color: var(--text-muted);
@@ -517,11 +683,7 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     flex-shrink: 0;
 }
 
-.user-identity-card .logout-button:hover {
-    color: var(--error-500);
-    background-color: var(--error-50);
-}
-
-.dark-mode .user-identity-card .logout-button:hover {
-    background-color: rgba(239, 68, 68, 0.1); /* Red with alpha for dark mode */
+.logout-button:hover {
+    color: var(--danger-color);
+    background-color: var(--danger-hover-bg);
 }

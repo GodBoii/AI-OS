@@ -121,6 +121,19 @@ class AIOS {
             tab.addEventListener('click', () => this.switchTab(tab.dataset.tab));
         });
 
+        // Handle external links in About section
+        document.querySelectorAll('.external-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const url = link.href;
+                if (url && window.electron?.shell) {
+                    window.electron.shell.openExternal(url);
+                } else {
+                    console.error('Cannot open external link: Electron shell not available');
+                }
+            });
+        });
+
         this.elements.supportForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleSupportSubmit();
@@ -524,6 +537,11 @@ class AIOS {
         this.elements.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
         this.elements.tabContents.forEach(content => content.classList.toggle('active', content.id === `${tabName}-tab`));
         this.currentTab = tabName;
+        
+        // If switching to integration tab, check integration status
+        if (tabName === 'integration') {
+            this.checkIntegrationStatus();
+        }
     }
     
     switchAuthTab(tabName) {

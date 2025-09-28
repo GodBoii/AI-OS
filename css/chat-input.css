@@ -529,3 +529,8 @@
     overflow-y: auto;
     padding: 12px;
 }
+
+/* --- Hidden File Input --- */
+#file-input {
+    display: none;
+}

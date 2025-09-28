@@ -10,8 +10,12 @@
         <div class="split-layout">
             <div class="tabs-sidebar">
                 <button class="tab-btn active" data-tab="account">
-                    <i class="fas fa-cog"></i>
+                    <i class="fas fa-user"></i>
                     <span>Account</span>
+                </button>
+                <button class="tab-btn" data-tab="integration">
+                    <i class="fas fa-plug"></i>
+                    <span>Integration</span>
                 </button>
                 <button class="tab-btn" data-tab="about">
                     <i class="fas fa-info-circle"></i>
@@ -100,10 +104,19 @@
                             </button>
                         </div>
                         <!-- END: User Identity Card -->
+                    </div>
+                </div>
 
+                <div class="tab-content" id="integration-tab">
+                    <h3 class="tab-heading">Integrations</h3>
+                    <div class="integration-content">
+                        <p class="integration-description">
+                            Connect your third-party services to enhance your AI-OS experience. 
+                            Manage all your integrations and their permissions from this central location.
+                        </p>
+                        
                         <!-- Integrations Section -->
                         <div class="integrations-section">
-                            <h4 class="section-subheading">Integrations</h4>
                             <!-- GitHub Integration Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
@@ -112,7 +125,7 @@
                                 </div>
                                 <button class="connect-btn" id="connect-github-btn" data-provider="github" data-action="connect">
                                     <i class="fas fa-link icon-connect"></i>
-                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <i class="fas fa-check icon-connected"></i>
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
@@ -124,7 +137,7 @@
                                 </div>
                                 <button class="connect-btn" id="connect-google-btn" data-provider="google" data-action="connect">
                                     <i class="fas fa-link icon-connect"></i>
-                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <i class="fas fa-check icon-connected"></i>
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
@@ -136,7 +149,7 @@
                                 </div>
                                 <button class="connect-btn" id="connect-vercel-btn" data-provider="vercel" data-action="connect">
                                     <i class="fas fa-link icon-connect"></i>
-                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <i class="fas fa-check icon-connected"></i>
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
@@ -149,7 +162,7 @@
                                 </div>
                                 <button class="connect-btn" id="connect-supabase-btn" data-provider="supabase" data-action="connect">
                                     <i class="fas fa-link icon-connect"></i>
-                                    <i class="fas fa-check icon-connected" style="display: none;"></i>
+                                    <i class="fas fa-check icon-connected"></i>
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
@@ -166,9 +179,9 @@
                             Built with Electron for optimal performance and user experience.
                         </p>
                         <div class="about-links">
-                            <a href="#" class="link" aria-label="Privacy Policy">Privacy Policy</a>
-                            <a href="#" class="link" aria-label="Terms of Service">Terms of Service</a>
-                            <a href="#" class="link" aria-label="Documentation">Documentation</a>
+                            <a href="https://ai-os-website.vercel.app/privacy" class="link external-link" aria-label="Privacy Policy" data-external="true">Privacy Policy</a>
+                            <a href="https://ai-os-website.vercel.app/terms" class="link external-link" aria-label="Terms of Service" data-external="true">Terms of Service</a>
+                            <a href="https://github.com/GodBoii/AI-OS" class="link external-link" aria-label="Documentation" data-external="true">Documentation</a>
                         </div>
                     </div>
                 </div>
@@ -202,112 +215,3 @@
     </div>
 </div>
 
-<!-- Style for the new components -->
-<style>
-    .integration-info .provider-icon {
-        width: 1.1em;
-        height: 1.1em;
-        fill: currentColor;
-        vertical-align: middle;
-        margin-right: -2px;
-    }
-    .social-auth-divider {
-        text-align: center;
-        margin: 16px 0;
-        color: var(--text-muted);
-        font-size: 0.9em;
-        position: relative;
-    }
-    .social-auth-divider::before,
-    .social-auth-divider::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        width: 40%;
-        height: 1px;
-        background-color: var(--border-color);
-    }
-    .social-auth-divider::before {
-        left: 0;
-    }
-    .social-auth-divider::after {
-        right: 0;
-    }
-    .social-auth-actions {
-        display: flex;
-        flex-direction: column;
-    }
-    .auth-btn.social {
-        background-color: var(--background-secondary);
-        color: var(--text-color);
-        border: 1px solid var(--border-color);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-    }
-    .auth-btn.social:hover {
-        background-color: var(--background-tertiary);
-    }
-    .auth-btn.social .fab {
-        font-size: 1.2em;
-    }
-
-    /* NEW STYLES FOR USER IDENTITY CARD */
-    .user-identity-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        background-color: var(--input-bg);
-        margin-bottom: 24px;
-    }
-    .user-avatar-container {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        overflow: hidden;
-        background-color: var(--active-bg); /* Fallback color */
-        flex-shrink: 0;
-    }
-    .user-avatar-container img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    .user-info {
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
-    }
-    .user-name-display {
-        font-weight: 600;
-        font-size: 1rem;
-        color: var(--text-color);
-    }
-    .user-email-display {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-    }
-    .logout-button {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: 1.1rem;
-        padding: 8px;
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-    }
-    .logout-button:hover {
-        color: var(--danger-color);
-        background-color: var(--danger-hover-bg); /* You may need to define this variable */
-    }
-</style>

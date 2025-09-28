@@ -44,6 +44,74 @@
   --error-500: #ef4444;
   --error-700: #b91c1c;
   
+  /* Danger Colors (alias for error) */
+  --danger-color: var(--error-500);
+  --danger-hover-bg: var(--error-50);
+  
+  /* Priority System Colors */
+  --priority-high: var(--error-500);
+  --priority-high-bg: var(--error-50);
+  --priority-medium: var(--warning-500);
+  --priority-medium-bg: var(--warning-50);
+  --priority-low: var(--success-500);
+  --priority-low-bg: var(--success-50);
+  
+  /* Status Indicator Colors */
+  --status-active: var(--primary-500);
+  --status-active-bg: var(--primary-50);
+  --status-inactive: var(--neutral-400);
+  --status-inactive-bg: var(--neutral-50);
+  --status-pending: var(--warning-500);
+  --status-pending-bg: var(--warning-50);
+  --status-completed: var(--success-500);
+  --status-completed-bg: var(--success-50);
+  --status-overdue: var(--error-500);
+  --status-overdue-bg: var(--error-50);
+  
+  /* Enhanced Spacing System */
+  --space-xs: 0.25rem;    /* 4px */
+  --space-sm: 0.5rem;     /* 8px */
+  --space-md: 0.75rem;    /* 12px */
+  --space-lg: 1rem;       /* 16px */
+  --space-xl: 1.25rem;    /* 20px */
+  --space-2xl: 1.5rem;    /* 24px */
+  --space-3xl: 2rem;      /* 32px */
+  --space-4xl: 2.5rem;    /* 40px */
+  --space-5xl: 3rem;      /* 48px */
+  
+  /* Component Specific Variables */
+  --header-height: 3.5rem;
+  --sidebar-width: 16rem;
+  --modal-max-width: 32rem;
+  --input-height: 2.75rem;
+  --button-height: 2.5rem;
+  --avatar-size-sm: 2rem;
+  --avatar-size-md: 2.5rem;
+  --avatar-size-lg: 3rem;
+  
+  /* Chat Interface Variables */
+  --session-item-height: 4rem;
+  --message-bubble-max-width: 70%;
+  --context-viewer-width: 24rem;
+  
+  /* Task Management Variables */
+  --task-item-min-height: 4rem;
+  --priority-indicator-width: 0.25rem;
+  --tag-height: 1.5rem;
+  
+  /* Integration Variables */
+  --integration-item-height: 3.5rem;
+  --connect-button-width: 6rem;
+  
+  /* Border Radius System */
+  --radius-xs: 0.125rem;  /* 2px */
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.375rem;  /* 6px */
+  --radius-lg: 0.5rem;    /* 8px */
+  --radius-xl: 0.75rem;   /* 12px */
+  --radius-2xl: 1rem;     /* 16px */
+  --radius-full: 9999px;
+  
   /* Light Theme Variables */
   --bg-color: #FAF8F0;
   --elevated-bg: white;
@@ -86,7 +154,18 @@
   --card-bg: white;
   --code-bg: #F5F3EB; 
   --code-text: var(--neutral-900);
-  --code-border: #EAE0C8; 
+  --code-border: #EAE0C8;
+  
+  /* Additional Theme Variables */
+  --hover-bg: rgba(0, 0, 0, 0.05);
+  --active-bg: rgba(79, 70, 229, 0.1);
+  --sidebar-bg: rgba(255, 255, 255, 0.8);
+  --header-bg: rgba(255, 255, 255, 0.95);
+  --text-muted: var(--neutral-500);
+  --background-secondary: var(--neutral-100);
+  --background-tertiary: var(--neutral-200);
+  --secondary-btn-bg: var(--neutral-200);
+  --secondary-btn-hover: var(--neutral-300); 
 }
 
 /* Animation tokens */
@@ -145,6 +224,41 @@
   --code-bg: var(--neutral-800);
   --code-text: var(--neutral-100);
   --code-border: var(--neutral-700);
+  
+  /* Additional Theme Variables Dark Mode */
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --active-bg: rgba(99, 102, 241, 0.2);
+  --sidebar-bg: rgba(17, 24, 39, 0.8);
+  --header-bg: rgba(17, 24, 39, 0.95);
+  --text-muted: var(--neutral-400);
+  --background-secondary: var(--neutral-800);
+  --background-tertiary: var(--neutral-700);
+  --secondary-btn-bg: var(--neutral-700);
+  --secondary-btn-hover: var(--neutral-600);
+  
+  /* Danger Colors Dark Mode */
+  --danger-color: var(--error-500);
+  --danger-hover-bg: rgba(239, 68, 68, 0.1);
+  
+  /* Priority System Colors Dark Mode */
+  --priority-high: var(--error-500);
+  --priority-high-bg: rgba(239, 68, 68, 0.1);
+  --priority-medium: var(--warning-500);
+  --priority-medium-bg: rgba(245, 158, 11, 0.1);
+  --priority-low: var(--success-500);
+  --priority-low-bg: rgba(16, 185, 129, 0.1);
+  
+  /* Status Indicator Colors Dark Mode */
+  --status-active: var(--primary-500);
+  --status-active-bg: rgba(99, 102, 241, 0.1);
+  --status-inactive: var(--neutral-500);
+  --status-inactive-bg: rgba(107, 114, 128, 0.1);
+  --status-pending: var(--warning-500);
+  --status-pending-bg: rgba(245, 158, 11, 0.1);
+  --status-completed: var(--success-500);
+  --status-completed-bg: rgba(16, 185, 129, 0.1);
+  --status-overdue: var(--error-500);
+  --status-overdue-bg: rgba(239, 68, 68, 0.1);
 }
 
 /* Typography System */
