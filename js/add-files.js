@@ -1,4 +1,4 @@
-// add-files.js (Final, Definitive Version with Race Condition Fix for Linux Compatibility)
+// add-files.js (Corrected with proper URL and Race Condition Fix)
 
 class FileAttachmentHandler {
     constructor(socket, supportedFileTypes, maxFileSize) {
@@ -25,7 +25,6 @@ class FileAttachmentHandler {
         this.contextFilesBar = document.getElementById('context-files-bar');
         this.contextFilesContent = this.contextFilesBar.querySelector('.context-files-content');
 
-        // Legacy sidebar elements (keep for compatibility)
         this.sidebar = document.getElementById('file-preview-sidebar');
         this.previewContent = this.sidebar.querySelector('.file-preview-content');
         this.fileCount = this.sidebar.querySelector('.file-count');
@@ -60,9 +59,8 @@ class FileAttachmentHandler {
             throw new Error("User not authenticated. Please log in again.");
         }
 
-        // NOTE: This now uses the correct, centralized URL from your previous fix.
-        const backendUrl = window.config.backend.url;
-        const response = await fetch(`${backendUrl}/api/generate-upload-url`, {
+        // --- FIX #1: Use the correct, new backend URL ---
+        const response = await fetch('https://aios-web.onrender.com/api/generate-upload-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -70,10 +68,18 @@ class FileAttachmentHandler {
             },
             body: JSON.stringify({ fileName: file.name })
         });
+        // --- END FIX #1 ---
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Could not get an upload URL from the server.');
+            // It's possible the response is not JSON on failure, so handle that gracefully.
+            let errorMsg = 'Could not get an upload URL from the server.';
+            try {
+                const errorData = await response.json();
+                errorMsg = errorData.error || errorMsg;
+            } catch (e) {
+                errorMsg = `${errorMsg} (Status: ${response.status})`;
+            }
+            throw new Error(errorMsg);
         }
 
         const responseData = await response.json();
@@ -123,20 +129,19 @@ class FileAttachmentHandler {
             const fileIndex = this.attachedFiles.length;
             const isMedia = file.type.startsWith('image/') || file.type.startsWith('audio/') || file.type.startsWith('video/') || file.type === 'application/pdf' || file.type.includes('document');
 
-            // --- FIX START: Introduce the 'reading' status to prevent the race condition ---
+            // --- FIX #2: Introduce the 'reading' status to prevent the race condition ---
             const placeholderFileObject = {
                 name: file.name,
                 type: file.type,
                 previewUrl: URL.createObjectURL(file),
-                // If it's media, status is 'uploading'. If it's a text file, status is 'reading'.
-                status: isMedia ? 'uploading' : 'reading',
+                status: isMedia ? 'uploading' : 'reading', // Use 'reading' for text files
                 isMedia: isMedia,
                 isText: !isMedia,
             };
-            // --- FIX END ---
+            // --- END FIX #2 ---
 
             this.attachedFiles.push(placeholderFileObject);
-            this.renderFilePreview(); // Render the initial state (will show a spinner for 'reading')
+            this.renderFilePreview();
 
             if (isMedia) {
                 try {
@@ -150,19 +155,17 @@ class FileAttachmentHandler {
                 }
             } else { // This block handles text files
                 try {
-                    // --- FIX START: Read content first, THEN update status ---
+                    // --- FIX #2 (continued): Read content first, THEN update status ---
                     const fileContent = await this.readFileAsText(file);
                     this.attachedFiles[fileIndex].content = fileContent;
-                    // Only after the content is successfully read, we mark it as complete.
-                    this.attachedFiles[fileIndex].status = 'completed';
-                    // --- FIX END ---
+                    this.attachedFiles[fileIndex].status = 'completed'; // Update status only after success
+                    // --- END FIX #2 ---
                 } catch (error) {
                     console.error('Error reading text file:', error);
                     this.attachedFiles[fileIndex].status = 'failed';
                 }
             }
 
-            // Re-render to show the final status (e.g., remove spinner)
             this.renderFilePreview();
         }
         this.fileInput.value = '';
@@ -197,13 +200,11 @@ class FileAttachmentHandler {
         chip.className = `file-chip ${file.status}`;
 
         const icon = document.createElement('i');
-        // --- UI ENHANCEMENT: Show spinner for reading/uploading status ---
         if (file.status === 'reading' || file.status === 'uploading') {
             icon.className = 'fas fa-spinner fa-spin file-chip-icon';
         } else {
             icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
         }
-        // --- END UI ENHANCEMENT ---
 
         const name = document.createElement('span');
         name.className = 'file-chip-name';
@@ -272,13 +273,11 @@ class FileAttachmentHandler {
             const fileInfo = document.createElement('div');
             fileInfo.className = 'file-info';
             let statusIcon = '';
-            // --- UI ENHANCEMENT: Show spinner for reading/uploading status ---
             if (file.status === 'uploading' || file.status === 'reading') {
                 statusIcon = '<i class="fas fa-spinner fa-spin status-icon"></i>';
             } else if (file.status === 'failed') {
                 statusIcon = '<i class="fas fa-exclamation-circle status-icon-failed"></i>';
             }
-            // --- END UI ENHANCEMENT ---
             fileInfo.innerHTML = `
                 <i class="${this.getFileIcon(file.name)} file-icon"></i>
                 <span class="file-name">${file.name}</span>
@@ -440,57 +439,23 @@ class FileAttachmentHandler {
 
     generateFilePreview(file) {
         if (file.isText && file.content) {
-            return `
-                <div class="text-file-preview">
-                    <pre class="file-text-content">${this.escapeHtml(file.content)}</pre>
-                </div>
-            `;
+            return `<div class="text-file-preview"><pre class="file-text-content">${this.escapeHtml(file.content)}</pre></div>`;
         } else if (file.isText && !file.content) {
-            return `
-                <div class="text-file-preview">
-                    <div class="loading-content">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <p>Loading file content...</p>
-                    </div>
-                </div>
-            `;
+            return `<div class="text-file-preview"><div class="loading-content"><i class="fas fa-spinner fa-spin"></i><p>Loading file content...</p></div></div>`;
         } else if (file.previewUrl && file.type.startsWith('image/')) {
-            return `
-                <div class="image-file-preview">
-                    <img src="${file.previewUrl}" alt="${file.name}" class="preview-image" />
-                </div>
-            `;
+            return `<div class="image-file-preview"><img src="${file.previewUrl}" alt="${file.name}" class="preview-image" /></div>`;
         } else if (file.isMedia) {
-            return `
-                <div class="media-file-preview">
-                    <div class="media-placeholder">
-                        <i class="fas fa-file-alt"></i>
-                        <p>Media file preview</p>
-                        <p class="file-status">Status: ${file.status}</p>
-                    </div>
-                </div>
-            `;
+            return `<div class="media-file-preview"><div class="media-placeholder"><i class="fas fa-file-alt"></i><p>Media file preview</p><p class="file-status">Status: ${file.status}</p></div></div>`;
         } else {
-            return `
-                <div class="binary-file-preview">
-                    <div class="binary-placeholder">
-                        <i class="fas fa-file"></i>
-                        <p>Binary file - preview not available</p>
-                        <p class="file-info">Size: ${this.formatFileSize(file.size || 0)}</p>
-                        <p class="debug-info">Type: ${file.type}, isText: ${file.isText}, hasContent: ${!!file.content}</p>
-                    </div>
-                </div>
-            `;
+            return `<div class="binary-file-preview"><div class="binary-placeholder"><i class="fas fa-file"></i><p>Binary file - preview not available</p><p class="file-info">Size: ${this.formatFileSize(file.size || 0)}</p><p class="debug-info">Type: ${file.type}, isText: ${file.isText}, hasContent: ${!!file.content}</p></div></div>`;
         }
     }
 
     formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
-        
         const k = 1024;
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
@@ -509,40 +474,25 @@ window.conversationStateManager = {
     hasMessages: false,
     fileHandler: null,
 
-    setFileHandler(handler) {
-        this.fileHandler = handler;
-    },
-
-    onMessageAdded() {
-        this.hasMessages = true;
-        this.updateInputPositioning();
-    },
-
-    onConversationCleared() {
-        this.hasMessages = false;
-        this.updateInputPositioning();
-    },
-
+    setFileHandler(handler) { this.fileHandler = handler; },
+    onMessageAdded() { this.hasMessages = true; this.updateInputPositioning(); },
+    onConversationCleared() { this.hasMessages = false; this.updateInputPositioning(); },
     updateInputPositioning() {
         const inputContainer = document.getElementById('floating-input-container');
         if (!inputContainer) return;
-
         if (this.hasMessages) {
             inputContainer.classList.remove('centered');
         } else {
             inputContainer.classList.add('centered');
         }
-
         if (this.fileHandler) {
             this.fileHandler.updateInputPositioning();
         }
     },
-
     init() {
         const chatMessages = document.getElementById('chat-messages');
         this.hasMessages = chatMessages && chatMessages.children.length > 0;
         this.updateInputPositioning();
-
         if (chatMessages) {
             const observer = new MutationObserver(() => {
                 const hasMessages = chatMessages.children.length > 0;
@@ -551,7 +501,6 @@ window.conversationStateManager = {
                     this.updateInputPositioning();
                 }
             });
-
             observer.observe(chatMessages, { childList: true });
         }
     }
