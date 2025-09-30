@@ -200,15 +200,17 @@ class FileAttachmentHandler {
         chip.className = `file-chip ${file.status}`;
 
         const icon = document.createElement('i');
-        if (file.status === 'reading' || file.status === 'uploading') {
-            icon.className = 'fas fa-spinner fa-spin file-chip-icon';
-        } else {
-            icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
-        }
+        icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
 
         const name = document.createElement('span');
         name.className = 'file-chip-name';
-        name.textContent = file.name;
+        
+        // For uploading/reading files, show status in the name
+        if (file.status === 'reading' || file.status === 'uploading') {
+            name.innerHTML = `<span class="upload-status-text">${file.status === 'uploading' ? 'Uploading' : 'Reading'} ${file.name}</span>`;
+        } else {
+            name.textContent = file.name;
+        }
 
         const removeBtn = document.createElement('button');
         removeBtn.className = 'file-chip-remove';
@@ -265,22 +267,29 @@ class FileAttachmentHandler {
 
         this.attachedFiles.forEach((file, index) => {
             const fileItem = document.createElement('div');
-            fileItem.className = 'file-preview-item';
+            fileItem.className = `file-preview-item ${file.status}`;
 
             const headerItem = document.createElement('div');
             headerItem.className = 'file-preview-header-item';
 
             const fileInfo = document.createElement('div');
             fileInfo.className = 'file-info';
+            let fileName = '';
             let statusIcon = '';
+            
             if (file.status === 'uploading' || file.status === 'reading') {
-                statusIcon = '<i class="fas fa-spinner fa-spin status-icon"></i>';
-            } else if (file.status === 'failed') {
-                statusIcon = '<i class="fas fa-exclamation-circle status-icon-failed"></i>';
+                const statusText = file.status === 'uploading' ? 'Uploading' : 'Reading';
+                fileName = `<span class="upload-status-text">${statusText} ${file.name}</span>`;
+            } else {
+                fileName = file.name;
+                if (file.status === 'failed') {
+                    statusIcon = '<i class="fas fa-exclamation-circle status-icon-failed"></i>';
+                }
             }
+            
             fileInfo.innerHTML = `
                 <i class="${this.getFileIcon(file.name)} file-icon"></i>
-                <span class="file-name">${file.name}</span>
+                <span class="file-name">${fileName}</span>
                 ${statusIcon}
             `;
 
@@ -441,11 +450,17 @@ class FileAttachmentHandler {
         if (file.isText && file.content) {
             return `<div class="text-file-preview"><pre class="file-text-content">${this.escapeHtml(file.content)}</pre></div>`;
         } else if (file.isText && !file.content) {
-            return `<div class="text-file-preview"><div class="loading-content"><i class="fas fa-spinner fa-spin"></i><p>Loading file content...</p></div></div>`;
+            const statusText = file.status === 'uploading' ? 'Uploading' : 'Reading';
+            return `<div class="text-file-preview"><div class="loading-content"><i class="fas fa-file-alt"></i><span class="upload-status-text">${statusText} file content...</span></div></div>`;
         } else if (file.previewUrl && file.type.startsWith('image/')) {
             return `<div class="image-file-preview"><img src="${file.previewUrl}" alt="${file.name}" class="preview-image" /></div>`;
         } else if (file.isMedia) {
-            return `<div class="media-file-preview"><div class="media-placeholder"><i class="fas fa-file-alt"></i><p>Media file preview</p><p class="file-status">Status: ${file.status}</p></div></div>`;
+            const statusText = file.status === 'uploading' ? 'Uploading' : file.status === 'reading' ? 'Reading' : file.status;
+            if (file.status === 'uploading' || file.status === 'reading') {
+                return `<div class="media-file-preview"><div class="loading-content"><i class="fas fa-file-alt"></i><span class="upload-status-text">${statusText} media file...</span></div></div>`;
+            } else {
+                return `<div class="media-file-preview"><div class="media-placeholder"><i class="fas fa-file-alt"></i><p>Media file preview</p><p class="file-status">Status: ${file.status}</p></div></div>`;
+            }
         } else {
             return `<div class="binary-file-preview"><div class="binary-placeholder"><i class="fas fa-file"></i><p>Binary file - preview not available</p><p class="file-info">Size: ${this.formatFileSize(file.size || 0)}</p><p class="debug-info">Type: ${file.type}, isText: ${file.isText}, hasContent: ${!!file.content}</p></div></div>`;
         }

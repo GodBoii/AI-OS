@@ -186,12 +186,84 @@
     color: white;
 }
 
-.file-chip.uploading {
-    opacity: 0.7;
+/* --- Upload Status Text Animation --- */
+.upload-status-text {
+    position: relative;
+    display: inline-block;
+    animation: textShimmer 2.5s ease-in-out infinite;
+    background: linear-gradient(90deg,
+            var(--accent-color) 0%,
+            rgba(var(--accent-color-rgb), 0.7) 25%,
+            var(--accent-color) 50%,
+            rgba(var(--accent-color-rgb), 0.7) 75%,
+            var(--accent-color) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
-.file-chip.uploading .file-chip-icon {
-    animation: spin 1s linear infinite;
+/* --- Glassmorphism Animations --- */
+@keyframes glassmorphPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    50% {
+        transform: scale(1.05);
+        background: rgba(255, 255, 255, 0.25);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    }
+}
+
+@keyframes glassmorphPulseDark {
+
+    0%,
+    100% {
+        transform: scale(1);
+        background: rgba(0, 0, 0, 0.25);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    50% {
+        transform: scale(1.05);
+        background: rgba(0, 0, 0, 0.35);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+}
+
+@keyframes textShimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* --- File Chip States with Glassmorphism --- */
+.file-chip.uploading,
+.file-chip.reading {
+    position: relative;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    animation: glassmorphPulse 2s ease-in-out infinite;
+}
+
+.dark-mode .file-chip.uploading,
+.dark-mode .file-chip.reading {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    animation: glassmorphPulseDark 2s ease-in-out infinite;
 }
 
 .file-chip.failed {
@@ -530,7 +602,70 @@
     padding: 12px;
 }
 
+/* --- File Preview Item Glassmorphism States --- */
+.file-preview-item.uploading,
+.file-preview-item.reading {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    animation: glassmorphPulse 2s ease-in-out infinite;
+}
+
+.dark-mode .file-preview-item.uploading,
+.dark-mode .file-preview-item.reading {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    animation: glassmorphPulseDark 2s ease-in-out infinite;
+}
+
+
+
 /* --- Hidden File Input --- */
 #file-input {
     display: none;
+}
+
+/* --- Reduced Motion Support --- */
+@media (prefers-reduced-motion: reduce) {
+
+    .upload-status-text,
+    .file-chip.uploading,
+    .file-chip.reading,
+    .file-preview-item.uploading,
+    .file-preview-item.reading {
+        animation: none;
+    }
+
+    .upload-status-text {
+        background: var(--accent-color);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .file-chip.uploading,
+    .file-chip.reading {
+        background: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        transform: scale(1);
+    }
+
+    .dark-mode .file-chip.uploading,
+    .dark-mode .file-chip.reading {
+        background: rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .file-preview-item.uploading,
+    .file-preview-item.reading {
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1);
+    }
+
+    .dark-mode .file-preview-item.uploading,
+    .dark-mode .file-preview-item.reading {
+        background: rgba(0, 0, 0, 0.2);
+    }
 }

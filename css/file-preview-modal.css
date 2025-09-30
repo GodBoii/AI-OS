@@ -160,16 +160,59 @@
     padding: 40px 20px;
     color: var(--text-secondary);
     gap: 16px;
+    position: relative;
+}
+
+.loading-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    animation: glassmorphPulse 2s ease-in-out infinite;
+}
+
+.dark-mode .loading-content::before {
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    animation: glassmorphPulseDark 2s ease-in-out infinite;
+}
+
+.loading-content .upload-status-text {
+    position: relative;
+    z-index: 1;
+    font-size: 1rem;
+    font-weight: 600;
+    animation: textShimmer 2.5s ease-in-out infinite;
+    background: linear-gradient(
+        90deg,
+        var(--accent-color) 0%,
+        rgba(var(--accent-color-rgb), 0.7) 25%,
+        var(--accent-color) 50%,
+        rgba(var(--accent-color-rgb), 0.7) 75%,
+        var(--accent-color) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .loading-content i {
     font-size: 2rem;
     color: var(--accent-color);
+    position: relative;
+    z-index: 1;
 }
 
 .loading-content p {
     margin: 0;
     font-size: 1rem;
+    position: relative;
+    z-index: 1;
 }
 
 .file-text-content {
@@ -343,6 +386,42 @@
     background: rgba(0, 0, 0, 0.6);
 }
 
+/* --- Glassmorphism Animations --- */
+@keyframes glassmorphPulse {
+    0%, 100% {
+        transform: scale(1);
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+    50% {
+        transform: scale(1.02);
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    }
+}
+
+@keyframes glassmorphPulseDark {
+    0%, 100% {
+        transform: scale(1);
+        background: rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        transform: scale(1.02);
+        background: rgba(0, 0, 0, 0.25);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+}
+
+@keyframes textShimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
 /* --- Reduced Motion Support --- */
 @media (prefers-reduced-motion: reduce) {
     .file-preview-modal,
@@ -352,6 +431,26 @@
     
     .file-preview-modal.visible .file-preview-modal-content {
         transform: scale(1);
+    }
+    
+    .loading-content::before,
+    .upload-status-text {
+        animation: none;
+    }
+    
+    .loading-content::before {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .dark-mode .loading-content::before {
+        background: rgba(0, 0, 0, 0.2);
+    }
+    
+    .upload-status-text {
+        background: var(--accent-color);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
 }
 

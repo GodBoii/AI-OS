@@ -1,7 +1,7 @@
 {
   "name": "aetheria-ai",
   "version": "1.0.4",
-  "description": "Aetheria ai Desktop Assistant: An AI-Powered Desktop Application",
+  "description": "Aetheria AI Desktop Assistant: An AI-Powered Desktop Application",
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",
@@ -9,9 +9,9 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.mycompany.aiosdesktop",
-    "productName": "Aetheria ai",
-    "copyright": "Copyright © 2024 Aetheria ai",
+    "appId": "com.aetheria-ai.desktop",
+    "productName": "Aetheria AI",
+    "copyright": "Copyright © 2024 Aetheria AI",
     "directories": {
       "output": "dist",
       "buildResources": "assets"
@@ -21,13 +21,10 @@
       "css/**/*",
       "*.html",
       "assets/**/*",
-      "!python-backend/**/*",
-      "!*.md",
-      "!*.log",
-      "!dist/**/*",
-      "!aios_env/**/*",
+      "node_modules/**/*",
       "package.json"
     ],
+    "asar": true,
     "win": {
       "target": [
         {
@@ -42,24 +39,27 @@
     "mac": {
       "target": "dmg",
       "icon": "assets/icon.icns",
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
     },
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "rpm"
       ],
       "icon": "assets/icons",
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "Aetheria AI <support@aetheria-ai.com>"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    },
-    "asar": true
+    }
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.10",
