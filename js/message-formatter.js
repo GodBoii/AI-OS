@@ -117,8 +117,14 @@ class MessageFormatter {
         return `
             <div class="inline-mermaid-block" data-view-mode="preview">
                 <div class="inline-mermaid-header" role="group" aria-label="Diagram view toggle">
-                    <button type="button" class="inline-mermaid-toggle active" data-view="preview" aria-pressed="true">Diagram</button>
-                    <button type="button" class="inline-mermaid-toggle" data-view="source" aria-pressed="false">Code</button>
+                    <button type="button" class="inline-mermaid-toggle active" data-view="preview" aria-pressed="true" title="Preview diagram">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                        <span class="sr-only">Diagram</span>
+                    </button>
+                    <button type="button" class="inline-mermaid-toggle" data-view="source" aria-pressed="false" title="View source code">
+                        <i class="fas fa-code" aria-hidden="true"></i>
+                        <span class="sr-only">Code</span>
+                    </button>
                 </div>
                 <div class="inline-mermaid-content">
                     <div class="inline-artifact-mermaid">${sanitized}</div>

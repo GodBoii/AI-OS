@@ -108,6 +108,10 @@
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
     transition: background-color var(--anim-fast, 150ms) var(--easing-standard, ease), color var(--anim-fast, 150ms) var(--easing-standard, ease);
 }
 
@@ -121,6 +125,10 @@
 .inline-mermaid-toggle.active {
     background: var(--accent-color);
     color: #ffffff;
+}
+
+.inline-mermaid-toggle i {
+    font-size: 0.95rem;
 }
 
 .inline-mermaid-content {
