@@ -1,7 +1,8 @@
 {
   "name": "aetheria-ai",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Aetheria AI Desktop Assistant: An AI-Powered Desktop Application",
+  "author": "Aetheria AI <support@aetheria-ai.com>",
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",

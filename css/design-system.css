@@ -80,27 +80,27 @@
   --space-5xl: 3rem;      /* 48px */
   
   /* Component Specific Variables */
-  --header-height: 3.5rem;
+  --header-height: 3rem;
   --sidebar-width: 16rem;
   --modal-max-width: 32rem;
-  --input-height: 2.75rem;
-  --button-height: 2.5rem;
-  --avatar-size-sm: 2rem;
-  --avatar-size-md: 2.5rem;
-  --avatar-size-lg: 3rem;
+  --input-height: 2.5rem;
+  --button-height: 2.25rem;
+  --avatar-size-sm: 1.75rem;
+  --avatar-size-md: 2.25rem;
+  --avatar-size-lg: 2.75rem;
   
   /* Chat Interface Variables */
-  --session-item-height: 4rem;
+  --session-item-height: 3.5rem;
   --message-bubble-max-width: 70%;
-  --context-viewer-width: 24rem;
+  --context-viewer-width: 22rem;
   
   /* Task Management Variables */
-  --task-item-min-height: 4rem;
+  --task-item-min-height: 3.5rem;
   --priority-indicator-width: 0.25rem;
-  --tag-height: 1.5rem;
+  --tag-height: 1.375rem;
   
   /* Integration Variables */
-  --integration-item-height: 3.5rem;
+  --integration-item-height: 3rem;
   --connect-button-width: 6rem;
   
   /* Border Radius System */
@@ -267,13 +267,13 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   
   /* Font sizes using fluid typography */
-  --text-xs: clamp(0.75rem, 0.7vw, 0.85rem);
-  --text-sm: clamp(0.875rem, 0.8vw, 0.95rem);
-  --text-base: clamp(1rem, 0.9vw, 1.1rem);
-  --text-lg: clamp(1.125rem, 1.1vw, 1.25rem);
-  --text-xl: clamp(1.25rem, 1.3vw, 1.5rem);
-  --text-2xl: clamp(1.5rem, 1.6vw, 1.875rem);
-  --text-3xl: clamp(1.875rem, 2vw, 2.25rem);
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
   
   /* Line heights */
   --leading-none: 1;
@@ -312,7 +312,7 @@
 
 html {
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

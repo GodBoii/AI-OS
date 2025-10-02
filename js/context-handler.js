@@ -252,7 +252,7 @@ class ContextHandler {
                 const messageText = document.createElement('div');
                 messageText.className = 'message-text';
                 messageText.textContent = run.input.input_content;
-                
+
                 userMessageDiv.innerHTML = `<div class="message-label">User</div>`;
                 userMessageDiv.appendChild(messageText);
                 turnContainer.appendChild(userMessageDiv);
@@ -262,7 +262,7 @@ class ContextHandler {
             assistantResponseDiv.className = 'turn-assistant-response';
             
             if (window.renderTurnFromEvents) {
-                window.renderTurnFromEvents(assistantResponseDiv, run);
+                window.renderTurnFromEvents(assistantResponseDiv, run, { inlineArtifacts: true, replaying: true });
             } else {
                 const fallbackText = document.createElement('div');
                 fallbackText.className = 'message-text';
@@ -270,6 +270,7 @@ class ContextHandler {
                 assistantResponseDiv.innerHTML = `<div class="message-label">Assistant</div>`;
                 assistantResponseDiv.appendChild(fallbackText);
             }
+
             turnContainer.appendChild(assistantResponseDiv);
             
             messagesContainer.appendChild(turnContainer);

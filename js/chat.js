@@ -731,7 +731,7 @@ function populateBotMessage(data) {
  * @param {HTMLElement} targetContainer - The DOM element to render the turn into.
  * @param {Object} run - The complete 'run' object from the saved session.
  */
-function renderTurnFromEvents(targetContainer, run) {
+function renderTurnFromEvents(targetContainer, run, options = {}) {
     if (!targetContainer || !run) {
         targetContainer.innerHTML = '<div class="message-text">(Could not render turn)</div>';
         return;
@@ -739,6 +739,7 @@ function renderTurnFromEvents(targetContainer, run) {
 
     const events = run.events || [];
     const mainAgentName = 'Aetheria_AI';
+    const inlineArtifacts = options.inlineArtifacts === true;
 
     // --- AGGREGATION PHASE: Loop through events once to gather all data ---
     let toolLogsHtml = '';
@@ -768,7 +769,7 @@ function renderTurnFromEvents(targetContainer, run) {
         // Aggregate content from sub-agent runs
         if (event.event === 'RunCompleted' && owner !== mainAgentName) {
             if (event.content) {
-                const formattedContent = messageFormatter.format(event.content);
+                const formattedContent = messageFormatter.format(event.content, { inlineArtifacts });
                 subAgentBlocksHtml += `
                     <div class="content-block log-block">
                         <div class="content-block-header">${owner.replace(/_/g, ' ')}</div>
@@ -809,13 +810,17 @@ function renderTurnFromEvents(targetContainer, run) {
             <div class="message-content">
                 <div class="content-block">
                     <div class="content-block-header">${mainAgentName.replace(/_/g, ' ')}</div>
-                    <div class="inner-content">${messageFormatter.format(finalContent) || '(No final response content)'}</div>
+                    <div class="inner-content">${messageFormatter.format(finalContent, { inlineArtifacts }) || '(No final response content)'}</div>
                 </div>
             </div>
         </div>
     `;
 
     targetContainer.innerHTML = finalHtml;
+
+    if (inlineArtifacts && typeof messageFormatter.applyInlineEnhancements === 'function') {
+        messageFormatter.applyInlineEnhancements(targetContainer);
+    }
 }
 
 async function handleSendMessage() {
