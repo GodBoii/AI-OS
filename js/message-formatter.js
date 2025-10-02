@@ -6,6 +6,7 @@ class MessageFormatter {
     constructor() {
         this.pendingContent = new Map();
         this.inlineRenderer = this.buildInlineRenderer();
+        this.mermaidInteractionMap = new WeakMap();
 
         mermaid.initialize({
             startOnLoad: true,
@@ -169,18 +170,180 @@ class MessageFormatter {
         });
 
         const mermaidElements = [];
-        root.querySelectorAll('.inline-artifact-mermaid').forEach(block => {
+        root.querySelectorAll('.inline-artifact-mermaid:not(.inline-mermaid-interactive)').forEach(block => {
             const graphDefinition = block.textContent;
-            block.classList.add('mermaid-inline');
-            block.classList.add('mermaid');
-            block.textContent = graphDefinition;
-            block.removeAttribute('data-processed');
-            mermaidElements.push(block);
+            const mermaidBlock = this.prepareInlineMermaidBlock(block);
+            if (!mermaidBlock) return;
+
+            mermaidBlock.classList.add('mermaid-inline');
+            mermaidBlock.classList.add('mermaid');
+            mermaidBlock.textContent = graphDefinition;
+            mermaidBlock.removeAttribute('data-processed');
+            mermaidElements.push(mermaidBlock);
         });
 
         if (mermaidElements.length && typeof mermaid !== 'undefined') {
             mermaid.init(undefined, mermaidElements);
+            mermaidElements.forEach(el => this.resetMermaidView(el));
         }
+    }
+
+    prepareInlineMermaidBlock(block) {
+        if (!block || this.mermaidInteractionMap.has(block)) return block;
+
+        const parent = block.parentNode;
+        if (!parent) return null;
+
+        const inlineWrapper = document.createElement('div');
+        inlineWrapper.className = 'inline-artifact-mermaid inline-mermaid-interactive';
+
+        const panContainer = document.createElement('div');
+        panContainer.className = 'mermaid-pan-container';
+
+        const hint = document.createElement('div');
+        hint.className = 'mermaid-interactive-hint';
+        hint.textContent = 'Drag with left mouse • Scroll to zoom';
+
+        panContainer.appendChild(block.cloneNode(true));
+        inlineWrapper.appendChild(panContainer);
+        inlineWrapper.appendChild(hint);
+
+        parent.replaceChild(inlineWrapper, block);
+
+        const mermaidContent = panContainer.querySelector(':scope > div');
+        mermaidContent.dataset.mermaidInteractive = 'true';
+        this.setupMermaidInteraction(mermaidContent, inlineWrapper, panContainer, hint);
+
+        return mermaidContent;
+    }
+
+    setupMermaidInteraction(mermaidElement, wrapper, panContainer, hint) {
+        if (this.mermaidInteractionMap.has(mermaidElement)) return;
+
+        const state = {
+            scale: 1,
+            panX: 0,
+            panY: 0,
+            pointerDown: false,
+            isPanning: false,
+            startX: 0,
+            startY: 0,
+            lastX: 0,
+            lastY: 0,
+            pointerId: null
+        };
+
+        const entry = { wrapper, panContainer, hint, state };
+        this.mermaidInteractionMap.set(mermaidElement, entry);
+
+        panContainer.style.transformOrigin = 'center center';
+        this.applyMermaidTransform(entry);
+
+        const markInteracted = () => {
+            if (hint) wrapper.classList.add('mermaid-interacted');
+        };
+
+        wrapper.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+
+            state.pointerDown = true;
+            state.startX = e.clientX;
+            state.startY = e.clientY;
+            state.lastX = e.clientX;
+            state.lastY = e.clientY;
+            state.pointerId = e.pointerId;
+
+            if (wrapper.setPointerCapture) {
+                wrapper.setPointerCapture(state.pointerId);
+            }
+
+            e.preventDefault();
+        });
+
+        wrapper.addEventListener('pointermove', (e) => {
+            if (!state.pointerDown) return;
+
+            const dx = e.clientX - state.lastX;
+            const dy = e.clientY - state.lastY;
+
+            state.lastX = e.clientX;
+            state.lastY = e.clientY;
+
+            if (!state.isPanning) {
+                const distanceX = e.clientX - state.startX;
+                const distanceY = e.clientY - state.startY;
+                if (Math.abs(distanceX) > 3 || Math.abs(distanceY) > 3) {
+                    state.isPanning = true;
+                    wrapper.classList.add('mermaid-grabbing');
+                    markInteracted();
+                } else {
+                    return;
+                }
+            }
+
+            state.panX += dx;
+            state.panY += dy;
+            this.applyMermaidTransform(entry);
+        });
+
+        const endPan = (e) => {
+            if (state.pointerId !== null && wrapper.releasePointerCapture) {
+                wrapper.releasePointerCapture(state.pointerId);
+            }
+
+            state.pointerDown = false;
+            state.isPanning = false;
+            state.pointerId = null;
+            wrapper.classList.remove('mermaid-grabbing');
+        };
+
+        wrapper.addEventListener('pointerup', endPan);
+        wrapper.addEventListener('pointerleave', endPan);
+        wrapper.addEventListener('pointercancel', endPan);
+
+        wrapper.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) return;
+
+            e.preventDefault();
+
+            const direction = e.deltaY < 0 ? 1 : -1;
+            const factor = direction > 0 ? 1.1 : 0.9;
+            const newScale = Math.min(2.5, Math.max(0.5, state.scale * factor));
+            if (newScale === state.scale) return;
+
+            state.scale = newScale;
+            markInteracted();
+            this.applyMermaidTransform(entry);
+        }, { passive: false });
+
+        wrapper.addEventListener('dblclick', () => {
+            state.scale = 1;
+            state.panX = 0;
+            state.panY = 0;
+            state.pointerDown = false;
+            state.isPanning = false;
+            wrapper.classList.remove('mermaid-grabbing');
+            markInteracted();
+            this.applyMermaidTransform(entry);
+        });
+    }
+
+    applyMermaidTransform(entry) {
+        if (!entry || !entry.panContainer) return;
+        const { panContainer, state } = entry;
+        panContainer.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+    }
+
+    resetMermaidView(mermaidElement) {
+        const entry = this.mermaidInteractionMap.get(mermaidElement);
+        if (!entry) return;
+
+        entry.state.scale = 1;
+        entry.state.panX = 0;
+        entry.state.panY = 0;
+        entry.state.pointerDown = false;
+        entry.state.isPanning = false;
+        this.applyMermaidTransform(entry);
     }
 
     getFinalContent(streamId) {

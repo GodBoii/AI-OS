@@ -458,6 +458,48 @@
     height: auto;
 }
 
+.conversation-messages .inline-mermaid-interactive {
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+}
+
+.conversation-messages .inline-mermaid-interactive .mermaid-pan-container {
+    display: inline-block;
+    transform-origin: center center;
+    will-change: transform;
+}
+
+.conversation-messages .inline-mermaid-interactive.mermaid-grabbing {
+    cursor: grabbing;
+}
+
+.conversation-messages .inline-mermaid-interactive .mermaid-interactive-hint {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateY(0);
+}
+
+.dark-mode .conversation-messages .inline-mermaid-interactive .mermaid-interactive-hint {
+    background: rgba(15, 23, 42, 0.7);
+}
+
+.conversation-messages .inline-mermaid-interactive.mermaid-interacted .mermaid-interactive-hint {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
 .conversation-messages .inline-artifact-placeholder {
     margin: 12px 0;
     padding: 12px 16px;
