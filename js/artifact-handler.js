@@ -200,6 +200,8 @@ class ArtifactHandler {
 
         mermaid.init(undefined, [mermaidDiv]);
 
+        const padding = 32;
+
         const hint = document.createElement('div');
         hint.className = 'mermaid-interactive-hint';
         hint.textContent = 'Scroll to zoom · Drag to pan · Press 0 to reset';
@@ -223,7 +225,7 @@ class ArtifactHandler {
                 return { width: panContainer.offsetWidth, height: panContainer.offsetHeight };
             }
             const bbox = svg.getBBox();
-            return { width: bbox.width, height: bbox.height };
+            return { width: bbox.width + padding * 2, height: bbox.height + padding * 2 };
         };
 
         const centerDiagram = () => {
@@ -231,11 +233,23 @@ class ArtifactHandler {
             const wrapperHeight = interactiveWrapper.clientHeight;
             const { width: contentWidth, height: contentHeight } = measureDiagram();
 
-            const offsetX = wrapperWidth > contentWidth ? (wrapperWidth - contentWidth) / 2 : 0;
-            const offsetY = wrapperHeight > contentHeight ? (wrapperHeight - contentHeight) / 2 : 0;
+            if (!contentWidth || !contentHeight || !wrapperWidth || !wrapperHeight) {
+                transform.x = 0;
+                transform.y = 0;
+                transform.scale = 1;
+                applyTransform();
+                return;
+            }
 
-            transform.x = offsetX;
-            transform.y = offsetY;
+            const fitScaleRaw = Math.min(wrapperWidth / contentWidth, wrapperHeight / contentHeight);
+            const fitScale = Number.isFinite(fitScaleRaw) && fitScaleRaw > 0 ? Math.min(fitScaleRaw, 1) : 1;
+
+            transform.scale = fitScale;
+            const scaledWidth = contentWidth * transform.scale;
+            const scaledHeight = contentHeight * transform.scale;
+
+            transform.x = (wrapperWidth - scaledWidth) / 2;
+            transform.y = (wrapperHeight - scaledHeight) / 2;
             applyTransform();
         };
 
@@ -274,19 +288,24 @@ class ArtifactHandler {
             transform.scale = 1;
             transform.x = 0;
             transform.y = 0;
+            this.normalizeMermaidSvg(panContainer, interactiveWrapper, padding);
             centerDiagram();
             applyTransform();
             markInteracted();
         };
 
-        requestAnimationFrame(() => {
+        const prepareDiagram = () => {
+            this.normalizeMermaidSvg(panContainer, interactiveWrapper, padding);
             centerDiagram();
-        });
+        };
+
+        requestAnimationFrame(prepareDiagram);
 
         let resizeObserver = null;
         if (typeof ResizeObserver !== 'undefined') {
             resizeObserver = new ResizeObserver(() => {
                 if (hasInteracted) return;
+                this.normalizeMermaidSvg(panContainer, interactiveWrapper, padding);
                 centerDiagram();
             });
             resizeObserver.observe(interactiveWrapper);
@@ -392,6 +411,45 @@ class ArtifactHandler {
         zoomControls.querySelector('.zoom-reset-btn').addEventListener('click', () => {
             resetTransform();
         });
+    }
+
+    normalizeMermaidSvg(panContainer, wrapper, padding = 0) {
+        if (!panContainer) return;
+
+        const svg = panContainer.querySelector('svg');
+        if (!svg) return;
+
+        let bbox;
+        try {
+            bbox = svg.getBBox();
+        } catch (error) {
+            console.warn('ArtifactHandler: Unable to measure Mermaid diagram.', error);
+            return;
+        }
+
+        const viewBoxWidth = bbox.width + padding * 2;
+        const viewBoxHeight = bbox.height + padding * 2;
+        if (!Number.isFinite(viewBoxWidth) || !Number.isFinite(viewBoxHeight) || viewBoxWidth <= 0 || viewBoxHeight <= 0) {
+            return;
+        }
+
+        const viewBoxX = bbox.x - padding;
+        const viewBoxY = bbox.y - padding;
+
+        svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.maxWidth = 'none';
+        svg.style.maxHeight = 'none';
+
+        const targetWidth = wrapper ? Math.max(wrapper.clientWidth, viewBoxWidth) : viewBoxWidth;
+        const targetHeight = wrapper ? Math.max(wrapper.clientHeight, viewBoxHeight) : viewBoxHeight;
+
+        panContainer.style.minWidth = `${targetWidth}px`;
+        panContainer.style.minHeight = `${targetHeight}px`;
+        panContainer.style.padding = `${padding}px`;
     }
 
     renderCode(content, language, container) {

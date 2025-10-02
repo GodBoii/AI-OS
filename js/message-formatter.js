@@ -242,6 +242,7 @@ class MessageFormatter {
 
         panContainer.style.transformOrigin = 'center center';
         this.applyMermaidTransform(entry);
+        this.normalizeInlineMermaidSvg(entry, 24);
         this.observeInlineResize(entry);
 
         const markInteracted = () => {
@@ -330,6 +331,7 @@ class MessageFormatter {
             wrapper.classList.remove('mermaid-grabbing');
             markInteracted();
             this.applyMermaidTransform(entry);
+            this.normalizeInlineMermaidSvg(entry, 24);
         });
     }
 
@@ -354,10 +356,50 @@ class MessageFormatter {
             if (!state) return;
             if (state.pointerDown || state.isPanning) return;
             if (state.scale !== 1 || state.panX !== 0 || state.panY !== 0) return;
+            this.normalizeInlineMermaidSvg(entry, 24);
             this.applyMermaidTransform(entry);
         });
 
         entry.resizeObserver.observe(wrapper);
+    }
+
+    normalizeInlineMermaidSvg(entry, padding = 0) {
+        if (!entry || !entry.panContainer || !entry.wrapper) return;
+
+        const svg = entry.panContainer.querySelector('svg');
+        if (!svg) return;
+
+        let bbox;
+        try {
+            bbox = svg.getBBox();
+        } catch (error) {
+            console.warn('MessageFormatter: Unable to measure inline Mermaid diagram.', error);
+            return;
+        }
+
+        const viewBoxWidth = bbox.width + padding * 2;
+        const viewBoxHeight = bbox.height + padding * 2;
+        if (!Number.isFinite(viewBoxWidth) || !Number.isFinite(viewBoxHeight) || viewBoxWidth <= 0 || viewBoxHeight <= 0) {
+            return;
+        }
+
+        const viewBoxX = bbox.x - padding;
+        const viewBoxY = bbox.y - padding;
+
+        svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.maxWidth = 'none';
+        svg.style.maxHeight = 'none';
+
+        const targetWidth = Math.max(entry.wrapper.clientWidth, viewBoxWidth);
+        const targetHeight = Math.max(entry.wrapper.clientHeight, viewBoxHeight);
+
+        entry.panContainer.style.minWidth = `${targetWidth}px`;
+        entry.panContainer.style.minHeight = `${targetHeight}px`;
+        entry.panContainer.style.padding = `${padding}px`;
     }
 
     resetMermaidView(mermaidElement) {
