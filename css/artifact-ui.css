@@ -126,12 +126,16 @@
 
 .artifact-content {
     flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px;
     font-family: 'Orbitron', var(--font-sans);
     line-height: 1.5;
     position: relative;
     padding-bottom: 64px; /* Space for zoom controls */
+    min-height: 0;
 }
 
 .artifact-code {
@@ -259,10 +263,16 @@
     overflow: hidden;
     cursor: grab;
     touch-action: none;
-    margin: 0 auto;
+    margin: 0;
     max-width: 100%;
     min-height: 240px;
     outline: none;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .artifact-content .mermaid-interactive:focus-visible {
@@ -270,11 +280,15 @@
 }
 
 .artifact-content .mermaid-pan-container {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transform-origin: center center;
     transition: transform 0.05s ease-out;
     will-change: transform;
     padding: 16px;
+    min-height: 100%;
+    min-width: 100%;
 }
 
 .artifact-content .mermaid {

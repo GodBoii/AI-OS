@@ -445,12 +445,14 @@
 
 .conversation-messages .inline-artifact-mermaid {
     margin: 16px auto;
-    padding: 16px;
+    padding: 0;
     border-radius: 10px;
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
-    overflow: auto;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
 }
 
 .conversation-messages .mermaid-inline svg {
@@ -463,12 +465,22 @@
     overflow: hidden;
     cursor: grab;
     touch-action: none;
+    min-height: 260px;
+    max-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .conversation-messages .inline-mermaid-interactive .mermaid-pan-container {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transform-origin: center center;
     will-change: transform;
+    min-height: 100%;
+    min-width: 100%;
+    padding: 16px;
 }
 
 .conversation-messages .inline-mermaid-interactive.mermaid-grabbing {

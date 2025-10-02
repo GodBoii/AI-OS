@@ -217,14 +217,22 @@ class ArtifactHandler {
             panContainer.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
         };
 
+        const measureDiagram = () => {
+            const svg = panContainer.querySelector('svg');
+            if (!svg) {
+                return { width: panContainer.offsetWidth, height: panContainer.offsetHeight };
+            }
+            const bbox = svg.getBBox();
+            return { width: bbox.width, height: bbox.height };
+        };
+
         const centerDiagram = () => {
             const wrapperWidth = interactiveWrapper.clientWidth;
             const wrapperHeight = interactiveWrapper.clientHeight;
-            const contentWidth = panContainer.offsetWidth;
-            const contentHeight = panContainer.offsetHeight;
+            const { width: contentWidth, height: contentHeight } = measureDiagram();
 
-            const offsetX = contentWidth < wrapperWidth ? (wrapperWidth - contentWidth) / 2 : 0;
-            const offsetY = contentHeight < wrapperHeight ? (wrapperHeight - contentHeight) / 2 : 0;
+            const offsetX = wrapperWidth > contentWidth ? (wrapperWidth - contentWidth) / 2 : 0;
+            const offsetY = wrapperHeight > contentHeight ? (wrapperHeight - contentHeight) / 2 : 0;
 
             transform.x = offsetX;
             transform.y = offsetY;
@@ -271,7 +279,18 @@ class ArtifactHandler {
             markInteracted();
         };
 
-        requestAnimationFrame(centerDiagram);
+        requestAnimationFrame(() => {
+            centerDiagram();
+        });
+
+        let resizeObserver = null;
+        if (typeof ResizeObserver !== 'undefined') {
+            resizeObserver = new ResizeObserver(() => {
+                if (hasInteracted) return;
+                centerDiagram();
+            });
+            resizeObserver.observe(interactiveWrapper);
+        }
 
         interactiveWrapper.addEventListener('wheel', (event) => {
             event.preventDefault();

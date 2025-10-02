@@ -196,9 +196,13 @@ class MessageFormatter {
 
         const inlineWrapper = document.createElement('div');
         inlineWrapper.className = 'inline-artifact-mermaid inline-mermaid-interactive';
+        inlineWrapper.tabIndex = 0;
+        inlineWrapper.setAttribute('role', 'region');
+        inlineWrapper.setAttribute('aria-label', 'Inline Mermaid diagram');
 
         const panContainer = document.createElement('div');
         panContainer.className = 'mermaid-pan-container';
+        panContainer.setAttribute('data-mermaid-pan-container', 'true');
 
         const hint = document.createElement('div');
         hint.className = 'mermaid-interactive-hint';
@@ -238,6 +242,7 @@ class MessageFormatter {
 
         panContainer.style.transformOrigin = 'center center';
         this.applyMermaidTransform(entry);
+        this.observeInlineResize(entry);
 
         const markInteracted = () => {
             if (hint) wrapper.classList.add('mermaid-interacted');
@@ -332,6 +337,27 @@ class MessageFormatter {
         if (!entry || !entry.panContainer) return;
         const { panContainer, state } = entry;
         panContainer.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+    }
+
+    observeInlineResize(entry) {
+        if (!entry || typeof ResizeObserver === 'undefined') return;
+
+        const { wrapper } = entry;
+        if (!wrapper) return;
+
+        if (entry.resizeObserver) {
+            entry.resizeObserver.disconnect();
+        }
+
+        entry.resizeObserver = new ResizeObserver(() => {
+            const { state } = entry;
+            if (!state) return;
+            if (state.pointerDown || state.isPanning) return;
+            if (state.scale !== 1 || state.panX !== 0 || state.panY !== 0) return;
+            this.applyMermaidTransform(entry);
+        });
+
+        entry.resizeObserver.observe(wrapper);
     }
 
     resetMermaidView(mermaidElement) {
