@@ -51,6 +51,42 @@
     gap: 8px;
 }
 
+.artifact-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--card-bg);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.view-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background-color var(--anim-fast) var(--easing-standard), color var(--anim-fast) var(--easing-standard), transform var(--anim-fast) var(--easing-spring);
+}
+
+.view-toggle-btn:hover,
+.view-toggle-btn:focus-visible {
+    background-color: var(--hover-bg);
+    color: var(--text-color);
+    outline: none;
+}
+
+.view-toggle-btn.active {
+    background: var(--accent-color);
+    color: #ffffff;
+}
+
 .copy-artifact-btn,
 .download-artifact-btn,
 .close-artifact-btn {

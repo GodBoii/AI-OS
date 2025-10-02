@@ -6,6 +6,7 @@ class ArtifactHandler {
         this.pendingImages = new Map();
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
+        this.currentViewMode = 'preview';
         this.init();
     }
 
@@ -19,6 +20,14 @@ class ArtifactHandler {
                 <div class="artifact-header">
                     <div class="artifact-title">Artifact Viewer</div>
                     <div class="artifact-controls">
+                        <div class="artifact-view-toggle hidden" role="group" aria-label="View mode">
+                            <button type="button" class="view-toggle-btn active" data-view="preview" aria-pressed="true" title="Preview mode">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button type="button" class="view-toggle-btn" data-view="source" aria-pressed="false" title="Source mode">
+                                <i class="fas fa-code"></i>
+                            </button>
+                        </div>
                         <button class="copy-artifact-btn" title="Copy to Clipboard">
                             <i class="fas fa-copy"></i>
                         </button>
@@ -47,6 +56,15 @@ class ArtifactHandler {
         container.querySelector('.download-artifact-btn').addEventListener('click', () => {
             this.downloadArtifact();
         });
+
+        this.viewToggleContainer = container.querySelector('.artifact-view-toggle');
+        this.viewToggleButtons = Array.from(this.viewToggleContainer.querySelectorAll('.view-toggle-btn'));
+        this.viewToggleButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.view;
+                this.setViewMode(mode);
+            });
+        });
     }
 
     cachePendingImage(artifactId, base64Data) {
@@ -54,7 +72,7 @@ class ArtifactHandler {
         console.log(`ArtifactHandler: Cached pending image with ID: ${artifactId}`);
     }
 
-    createArtifact(content, type, artifactId = null) {
+    createArtifact(content, type, artifactId = null, viewMode = 'preview') {
         // --- START OF THE CRITICAL FIX ---
         // Handle the special case for images first.
         if (type === 'image') {
@@ -80,7 +98,11 @@ class ArtifactHandler {
 
         // For all other artifact types (code, mermaid), the logic is simple.
         const id = artifactId || `artifact-${this.currentId++}`;
-        this.artifacts.set(id, { content, type });
+        const artifactData = { content, type };
+        if (type === 'mermaid') {
+            artifactData.viewMode = viewMode;
+        }
+        this.artifacts.set(id, artifactData);
         return id;
     }
 
@@ -90,9 +112,14 @@ class ArtifactHandler {
         const titleEl = container.querySelector('.artifact-title');
         const copyBtn = container.querySelector('.copy-artifact-btn');
         const downloadBtn = container.querySelector('.download-artifact-btn');
+        const viewToggle = container.querySelector('.artifact-view-toggle');
 
         contentDiv.innerHTML = '';
         let currentArtifactId = artifactId;
+
+        if (viewToggle) {
+            viewToggle.classList.add('hidden');
+        }
 
         switch (type) {
             case 'browser_view':
@@ -115,9 +142,21 @@ class ArtifactHandler {
                 titleEl.textContent = 'Diagram Viewer';
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
-                this.renderMermaid(data, contentDiv);
+                if (viewToggle) {
+                    viewToggle.classList.remove('hidden');
+                }
+
+                const existingArtifact = currentArtifactId ? this.artifacts.get(currentArtifactId) : null;
+                const viewMode = existingArtifact && existingArtifact.viewMode ? existingArtifact.viewMode : 'preview';
+
+                this.currentViewMode = viewMode;
+                this.updateViewToggleButtons(viewMode);
+                this.renderMermaidView(data, contentDiv, viewMode);
+
                 if (!currentArtifactId) {
-                    currentArtifactId = this.createArtifact(data, type);
+                    currentArtifactId = this.createArtifact(data, type, null, viewMode);
+                } else {
+                    this.updateArtifactViewMode(currentArtifactId, viewMode);
                 }
                 break;
 
@@ -138,7 +177,58 @@ class ArtifactHandler {
         chatContainer.classList.add('with-artifact');
         inputContainer.classList.add('with-artifact');
 
+        if (currentArtifactId) {
+            container.dataset.activeArtifactId = currentArtifactId;
+        } else {
+            delete container.dataset.activeArtifactId;
+        }
+
         return currentArtifactId;
+    }
+
+    updateArtifactViewMode(artifactId, viewMode) {
+        const artifact = this.artifacts.get(artifactId);
+        if (artifact && artifact.type === 'mermaid') {
+            artifact.viewMode = viewMode;
+        }
+    }
+
+    setViewMode(mode) {
+        if (!mode || this.currentViewMode === mode) {
+            return;
+        }
+
+        this.currentViewMode = mode;
+        this.updateViewToggleButtons(mode);
+
+        const container = document.getElementById('artifact-container');
+        const contentDiv = container.querySelector('.artifact-content');
+        const activeId = container.dataset.activeArtifactId;
+
+        if (!activeId || !contentDiv) {
+            return;
+        }
+
+        const artifact = this.artifacts.get(activeId);
+        if (!artifact || artifact.type !== 'mermaid') {
+            return;
+        }
+
+        this.updateArtifactViewMode(activeId, mode);
+        contentDiv.innerHTML = '';
+        this.renderMermaidView(artifact.content, contentDiv, mode);
+    }
+
+    updateViewToggleButtons(mode) {
+        if (!Array.isArray(this.viewToggleButtons)) {
+            return;
+        }
+
+        this.viewToggleButtons.forEach((button) => {
+            const isActive = button.dataset.view === mode;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', String(isActive));
+        });
     }
 
     renderBrowserView(data) {
@@ -180,7 +270,19 @@ class ArtifactHandler {
         container.appendChild(img);
     }
 
-    renderMermaid(content, container) {
+    renderMermaidView(content, container, mode = 'preview') {
+        if (mode === 'source') {
+            this.renderMermaidSource(content, container);
+        } else {
+            this.renderMermaidPreview(content, container);
+        }
+    }
+
+    renderMermaidSource(content, container) {
+        this.renderCode(content, 'mermaid', container);
+    }
+
+    renderMermaidPreview(content, container) {
         const interactiveWrapper = document.createElement('div');
         interactiveWrapper.className = 'mermaid-interactive';
         interactiveWrapper.tabIndex = 0;
@@ -199,6 +301,11 @@ class ArtifactHandler {
         container.appendChild(interactiveWrapper);
 
         mermaid.init(undefined, [mermaidDiv]);
+
+        const hiddenSource = document.createElement('div');
+        hiddenSource.className = 'mermaid-source-cache hidden';
+        hiddenSource.textContent = content;
+        container.appendChild(hiddenSource);
 
         const padding = 32;
 
@@ -484,12 +591,26 @@ class ArtifactHandler {
     }
 
     async copyArtifactContent() {
-        const contentDiv = document.querySelector('.artifact-content');
+        const container = document.getElementById('artifact-container');
+        const contentDiv = container.querySelector('.artifact-content');
         let content = '';
 
-        if (contentDiv.querySelector('.mermaid')) {
-            content = contentDiv.querySelector('.mermaid').textContent;
-        } else if (contentDiv.querySelector('code')) {
+        const activeId = container.dataset.activeArtifactId;
+        if (activeId && this.artifacts.has(activeId)) {
+            const artifact = this.artifacts.get(activeId);
+            if (artifact.type === 'mermaid') {
+                content = artifact.content;
+            }
+        }
+
+        if (!content) {
+            const cachedSource = contentDiv.querySelector('.mermaid-source-cache');
+            if (cachedSource) {
+                content = cachedSource.textContent;
+            }
+        }
+
+        if (!content && contentDiv.querySelector('code')) {
             content = contentDiv.querySelector('code').textContent;
         }
 
@@ -504,11 +625,31 @@ class ArtifactHandler {
     }
 
     async downloadArtifact() {
-        const contentDiv = document.querySelector('.artifact-content');
+        const container = document.getElementById('artifact-container');
+        const contentDiv = container.querySelector('.artifact-content');
         let content = '';
         let suggestedName = 'artifact';
         let extension = '.txt';
         let encoding = 'utf8';
+
+        const activeId = container.dataset.activeArtifactId;
+        if (activeId && this.artifacts.has(activeId)) {
+            const artifact = this.artifacts.get(activeId);
+            if (artifact.type === 'mermaid') {
+                content = artifact.content;
+                extension = '.mmd';
+                suggestedName = 'diagram';
+            }
+        }
+
+        if (!content) {
+            const cachedSource = contentDiv.querySelector('.mermaid-source-cache');
+            if (cachedSource) {
+                content = cachedSource.textContent;
+                extension = '.mmd';
+                suggestedName = 'diagram';
+            }
+        }
 
         const imageEl = contentDiv.querySelector('.generated-image-artifact');
 
@@ -518,7 +659,7 @@ class ArtifactHandler {
             suggestedName = 'generated-image';
             extension = '.png';
             encoding = 'base64';
-        } else if (contentDiv.querySelector('.mermaid')) {
+        } else if (!content && contentDiv.querySelector('.mermaid')) {
             content = contentDiv.querySelector('.mermaid').textContent;
             extension = '.mmd';
             suggestedName = 'diagram';
@@ -562,7 +703,7 @@ class ArtifactHandler {
         const extensions = {
             javascript: '.js', python: '.py', html: '.html', css: '.css', json: '.json',
             typescript: '.ts', java: '.java', cpp: '.cpp', c: '.c', ruby: '.rb',
-            php: '.php', go: '.go', rust: '.rs', swift: '.swift', kotlin: '.kt',
+            php: '.php', go: '.go', rust: '.rs', swift: '.swift', kotlin: '.kt', mermaid: '.mmd',
             plaintext: '.txt'
         };
         return extensions[language] || '.txt';
