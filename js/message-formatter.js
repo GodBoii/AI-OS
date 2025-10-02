@@ -102,9 +102,30 @@ class MessageFormatter {
         return `<pre class="inline-artifact-code"><code class="language-${language}">${sanitizedCode}</code></pre>`;
     }
 
+    escapeHtml(text = '') {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     renderMermaidInline(code) {
         const sanitized = DOMPurify.sanitize(code, { USE_PROFILES: { html: false } });
-        return `<div class="inline-artifact-mermaid">${sanitized}</div>`;
+        const escaped = this.escapeHtml(code);
+        return `
+            <div class="inline-mermaid-block" data-view-mode="preview">
+                <div class="inline-mermaid-header" role="group" aria-label="Diagram view toggle">
+                    <button type="button" class="inline-mermaid-toggle active" data-view="preview" aria-pressed="true">Diagram</button>
+                    <button type="button" class="inline-mermaid-toggle" data-view="source" aria-pressed="false">Code</button>
+                </div>
+                <div class="inline-mermaid-content">
+                    <div class="inline-artifact-mermaid">${sanitized}</div>
+                    <pre class="inline-mermaid-source hidden"><code class="language-mermaid">${escaped}</code></pre>
+                </div>
+            </div>
+        `;
     }
 
     setupMermaidThemeObserver() {
@@ -171,6 +192,7 @@ class MessageFormatter {
 
         const mermaidElements = [];
         root.querySelectorAll('.inline-artifact-mermaid:not(.inline-mermaid-interactive)').forEach(block => {
+            const container = block.closest('.inline-mermaid-block');
             const graphDefinition = block.textContent;
             const mermaidBlock = this.prepareInlineMermaidBlock(block);
             if (!mermaidBlock) return;
@@ -180,6 +202,15 @@ class MessageFormatter {
             mermaidBlock.textContent = graphDefinition;
             mermaidBlock.removeAttribute('data-processed');
             mermaidElements.push(mermaidBlock);
+
+            if (container) {
+                this.configureInlineMermaidToggle(container, mermaidBlock);
+                const sourceCode = container.querySelector('.inline-mermaid-source code');
+                if (sourceCode && typeof hljs !== 'undefined' && !sourceCode.dataset.highlighted) {
+                    hljs.highlightElement(sourceCode);
+                    sourceCode.dataset.highlighted = 'true';
+                }
+            }
         });
 
         if (mermaidElements.length && typeof mermaid !== 'undefined') {
@@ -195,7 +226,7 @@ class MessageFormatter {
         if (!parent) return null;
 
         const inlineWrapper = document.createElement('div');
-        inlineWrapper.className = 'inline-artifact-mermaid inline-mermaid-interactive';
+        inlineWrapper.className = 'inline-artifact-mermaid inline-mermaid-interactive inline-mermaid-preview';
         inlineWrapper.tabIndex = 0;
         inlineWrapper.setAttribute('role', 'region');
         inlineWrapper.setAttribute('aria-label', 'Inline Mermaid diagram');
@@ -219,6 +250,75 @@ class MessageFormatter {
         this.setupMermaidInteraction(mermaidContent, inlineWrapper, panContainer, hint);
 
         return mermaidContent;
+    }
+
+    configureInlineMermaidToggle(container, mermaidElement) {
+        if (!container || container.dataset.inlineToggleInitialized === 'true') {
+            return;
+        }
+
+        const toggles = container.querySelectorAll('.inline-mermaid-toggle');
+        if (!toggles.length) {
+            return;
+        }
+
+        const setMode = (mode) => {
+            this.setInlineMermaidView(container, mermaidElement, mode);
+        };
+
+        toggles.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.view || 'preview';
+                if (container.dataset.viewMode === mode) return;
+                setMode(mode);
+            });
+        });
+
+        const initialMode = container.dataset.viewMode || 'preview';
+        setMode(initialMode);
+
+        container.dataset.inlineToggleInitialized = 'true';
+    }
+
+    setInlineMermaidView(container, mermaidElement, mode = 'preview') {
+        const toggles = container.querySelectorAll('.inline-mermaid-toggle');
+        const previewWrapper = container.querySelector('.inline-mermaid-preview');
+        const sourceWrapper = container.querySelector('.inline-mermaid-source');
+        const codeEl = sourceWrapper ? sourceWrapper.querySelector('code') : null;
+
+        container.dataset.viewMode = mode;
+
+        toggles.forEach((button) => {
+            const isActive = button.dataset.view === mode;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', String(isActive));
+        });
+
+        if (previewWrapper) {
+            previewWrapper.classList.toggle('hidden', mode === 'source');
+        }
+
+        if (sourceWrapper) {
+            sourceWrapper.classList.toggle('hidden', mode !== 'source');
+        }
+
+        if (mode === 'source' && codeEl && typeof hljs !== 'undefined' && !codeEl.dataset.highlighted) {
+            hljs.highlightElement(codeEl);
+            codeEl.dataset.highlighted = 'true';
+        }
+
+        if (mode === 'preview' && mermaidElement) {
+            const entry = this.mermaidInteractionMap.get(mermaidElement);
+            if (entry) {
+                entry.state.scale = 1;
+                entry.state.panX = 0;
+                entry.state.panY = 0;
+                entry.state.pointerDown = false;
+                entry.state.isPanning = false;
+                this.applyMermaidTransform(entry);
+                this.normalizeInlineMermaidSvg(entry, 24);
+            }
+        }
     }
 
     setupMermaidInteraction(mermaidElement, wrapper, panContainer, hint) {
