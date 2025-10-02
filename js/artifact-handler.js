@@ -181,33 +181,197 @@ class ArtifactHandler {
     }
 
     renderMermaid(content, container) {
+        const interactiveWrapper = document.createElement('div');
+        interactiveWrapper.className = 'mermaid-interactive';
+        interactiveWrapper.tabIndex = 0;
+        interactiveWrapper.setAttribute('role', 'region');
+        interactiveWrapper.setAttribute('aria-label', 'Interactive Mermaid diagram');
+
+        const panContainer = document.createElement('div');
+        panContainer.className = 'mermaid-pan-container';
+
         const mermaidDiv = document.createElement('div');
         mermaidDiv.className = 'mermaid';
         mermaidDiv.textContent = content;
-        container.appendChild(mermaidDiv);
+
+        panContainer.appendChild(mermaidDiv);
+        interactiveWrapper.appendChild(panContainer);
+        container.appendChild(interactiveWrapper);
+
         mermaid.init(undefined, [mermaidDiv]);
+
+        const hint = document.createElement('div');
+        hint.className = 'mermaid-interactive-hint';
+        hint.textContent = 'Scroll to zoom · Drag to pan · Press 0 to reset';
+        interactiveWrapper.appendChild(hint);
+
+        const transform = { x: 0, y: 0, scale: 1 };
+        const bounds = { minScale: 0.3, maxScale: 3 };
+        const zoomStep = 0.1;
+        let isDragging = false;
+        let pointerId = null;
+        let lastPointerPosition = { x: 0, y: 0 };
+        let hasInteracted = false;
+
+        const applyTransform = () => {
+            panContainer.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+        };
+
+        const centerDiagram = () => {
+            const wrapperWidth = interactiveWrapper.clientWidth;
+            const wrapperHeight = interactiveWrapper.clientHeight;
+            const contentWidth = panContainer.offsetWidth;
+            const contentHeight = panContainer.offsetHeight;
+
+            const offsetX = contentWidth < wrapperWidth ? (wrapperWidth - contentWidth) / 2 : 0;
+            const offsetY = contentHeight < wrapperHeight ? (wrapperHeight - contentHeight) / 2 : 0;
+
+            transform.x = offsetX;
+            transform.y = offsetY;
+            applyTransform();
+        };
+
+        const markInteracted = () => {
+            if (hasInteracted) return;
+            hasInteracted = true;
+            interactiveWrapper.classList.add('mermaid-interacted');
+        };
+
+        const setScale = (nextScale, centerX, centerY) => {
+            const clamped = Math.min(bounds.maxScale, Math.max(bounds.minScale, nextScale));
+            if (clamped === transform.scale) return;
+
+            const rect = interactiveWrapper.getBoundingClientRect();
+            const focalX = centerX !== undefined ? centerX : rect.width / 2;
+            const focalY = centerY !== undefined ? centerY : rect.height / 2;
+
+            const previousScale = transform.scale;
+            const relativeX = (focalX - transform.x) / previousScale;
+            const relativeY = (focalY - transform.y) / previousScale;
+
+            transform.scale = clamped;
+            transform.x = focalX - relativeX * transform.scale;
+            transform.y = focalY - relativeY * transform.scale;
+
+            applyTransform();
+        };
+
+        const zoomByStep = (direction, centerX, centerY) => {
+            const factor = direction > 0 ? 1 + zoomStep : 1 - zoomStep;
+            setScale(transform.scale * factor, centerX, centerY);
+            markInteracted();
+        };
+
+        const resetTransform = () => {
+            transform.scale = 1;
+            transform.x = 0;
+            transform.y = 0;
+            centerDiagram();
+            applyTransform();
+            markInteracted();
+        };
+
+        requestAnimationFrame(centerDiagram);
+
+        interactiveWrapper.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            const rect = interactiveWrapper.getBoundingClientRect();
+            const localX = event.clientX - rect.left;
+            const localY = event.clientY - rect.top;
+            zoomByStep(event.deltaY < 0 ? 1 : -1, localX, localY);
+        }, { passive: false });
+
+        interactiveWrapper.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) return;
+            isDragging = true;
+            pointerId = event.pointerId;
+            interactiveWrapper.setPointerCapture(pointerId);
+            lastPointerPosition = { x: event.clientX, y: event.clientY };
+            interactiveWrapper.classList.add('mermaid-grabbing');
+            markInteracted();
+        });
+
+        interactiveWrapper.addEventListener('pointermove', (event) => {
+            if (!isDragging || event.pointerId !== pointerId) return;
+            const deltaX = event.clientX - lastPointerPosition.x;
+            const deltaY = event.clientY - lastPointerPosition.y;
+            lastPointerPosition = { x: event.clientX, y: event.clientY };
+            transform.x += deltaX;
+            transform.y += deltaY;
+            applyTransform();
+        });
+
+        const endPointerInteraction = (event) => {
+            if (!isDragging || (event && event.pointerId !== pointerId)) return;
+            isDragging = false;
+            interactiveWrapper.classList.remove('mermaid-grabbing');
+            if (pointerId !== null) {
+                interactiveWrapper.releasePointerCapture(pointerId);
+            }
+            pointerId = null;
+        };
+
+        ['pointerup', 'pointercancel'].forEach((evtName) => {
+            interactiveWrapper.addEventListener(evtName, endPointerInteraction);
+        });
+
+        interactiveWrapper.addEventListener('pointerleave', (event) => {
+            if (!isDragging) return;
+            endPointerInteraction(event);
+        });
+
+        interactiveWrapper.addEventListener('keydown', (event) => {
+            if (event.key === '+' || (event.key === '=' && event.shiftKey)) {
+                zoomByStep(1);
+                event.preventDefault();
+            } else if (event.key === '-') {
+                zoomByStep(-1);
+                event.preventDefault();
+            } else if (event.key === '0') {
+                resetTransform();
+                event.preventDefault();
+            } else if (event.key === 'ArrowUp') {
+                transform.y += 20;
+                applyTransform();
+                markInteracted();
+                event.preventDefault();
+            } else if (event.key === 'ArrowDown') {
+                transform.y -= 20;
+                applyTransform();
+                markInteracted();
+                event.preventDefault();
+            } else if (event.key === 'ArrowLeft') {
+                transform.x += 20;
+                applyTransform();
+                markInteracted();
+                event.preventDefault();
+            } else if (event.key === 'ArrowRight') {
+                transform.x -= 20;
+                applyTransform();
+                markInteracted();
+                event.preventDefault();
+            }
+        });
 
         const zoomControls = document.createElement('div');
         zoomControls.className = 'mermaid-controls';
         zoomControls.innerHTML = `
             <button class="zoom-in-btn" title="Zoom In"><i class="fas fa-plus"></i></button>
             <button class="zoom-out-btn" title="Zoom Out"><i class="fas fa-minus"></i></button>
-            <button class="zoom-reset-btn" title="Reset Zoom"><i class="fas fa-search"></i></button>
+            <button class="zoom-reset-btn" title="Reset View"><i class="fas fa-search"></i></button>
         `;
         container.appendChild(zoomControls);
 
-        let currentZoom = 1;
         zoomControls.querySelector('.zoom-in-btn').addEventListener('click', () => {
-            currentZoom = Math.min(currentZoom + 0.1, 2);
-            mermaidDiv.style.transform = `scale(${currentZoom})`;
+            zoomByStep(1, interactiveWrapper.clientWidth / 2, interactiveWrapper.clientHeight / 2);
         });
+
         zoomControls.querySelector('.zoom-out-btn').addEventListener('click', () => {
-            currentZoom = Math.max(currentZoom - 0.1, 0.5);
-            mermaidDiv.style.transform = `scale(${currentZoom})`;
+            zoomByStep(-1, interactiveWrapper.clientWidth / 2, interactiveWrapper.clientHeight / 2);
         });
+
         zoomControls.querySelector('.zoom-reset-btn').addEventListener('click', () => {
-            currentZoom = 1;
-            mermaidDiv.style.transform = 'scale(1)';
+            resetTransform();
         });
     }
 

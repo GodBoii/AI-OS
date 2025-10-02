@@ -251,16 +251,64 @@
 }
 
 /* Mermaid diagrams */
-.artifact-content .mermaid {
+.artifact-content .mermaid-interactive {
+    position: relative;
     background: var(--card-bg);
-    padding: 16px;
     border-radius: 8px;
-    overflow-x: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
     margin: 0 auto;
     max-width: 100%;
+    min-height: 240px;
+    outline: none;
+}
+
+.artifact-content .mermaid-interactive:focus-visible {
+    box-shadow: 0 0 0 3px var(--accent-color);
+}
+
+.artifact-content .mermaid-pan-container {
+    display: inline-block;
+    transform-origin: center center;
+    transition: transform 0.05s ease-out;
+    will-change: transform;
+    padding: 16px;
+}
+
+.artifact-content .mermaid {
+    display: inline-block;
     overflow: visible;
+}
+
+.artifact-content .mermaid-grabbing {
+    cursor: grabbing;
+}
+
+.artifact-content .mermaid-interactive-hint {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.dark-mode .artifact-content .mermaid-interactive-hint {
+    background: rgba(15, 23, 42, 0.75);
+}
+
+.artifact-content .mermaid-interacted .mermaid-interactive-hint {
+    opacity: 0;
+    transform: translateY(8px);
 }
 
 .mermaid-controls {
