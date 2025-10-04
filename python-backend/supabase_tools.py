@@ -2,7 +2,7 @@
 
 import logging
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from agno.tools import Toolkit
 from supabase_client import supabase_client

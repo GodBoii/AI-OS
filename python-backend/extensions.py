@@ -21,6 +21,3 @@ oauth = OAuth()
 
 # Redis: We export the class itself for the factory to instantiate.
 RedisClient = redis.Redis
-
-# Browser Command State: A simple shared dictionary.
-browser_waiting_events = {}
