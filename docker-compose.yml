@@ -31,10 +31,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: aios-flower
-    # --- FINAL FIX: The command is now simpler ---
-    # Because app.py now configures the celery object on import,
-    # we don't need to specify the broker here anymore.
-    command: ["celery", "-A", "app.celery", "flower"]
+    # The -A flag now targets the centralized Celery app defined in `celery_app.py`.
+    command: ["celery", "-A", "celery_app:celery_app", "flower"]
     ports:
       - "5555:5555"
     env_file:

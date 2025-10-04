@@ -16,7 +16,7 @@ services:
     # ===================================================================
     # CRITICAL FIX: Use a single set of quotes. The YAML parser treats this
     # as one literal string, and the shell correctly interprets it.
-    dockerCommand: 'gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:create_app()'
+    dockerCommand: 'gunicorn --worker-class eventlet -w 1 --timeout 300 --keep-alive 65 --bind 0.0.0.0:$PORT app:app'
     # ===================================================================
     envVars:
       - fromGroup: aios-secrets
@@ -37,7 +37,7 @@ services:
     # ===================================================================
     # CRITICAL FIX: Reorder the command to place global Celery options
     # (-A and --broker) BEFORE the 'flower' subcommand.
-    dockerCommand: "celery -A app.celery --broker=$REDIS_URL flower"
+    dockerCommand: "celery -A celery_app:celery_app flower --broker=$REDIS_URL"
     # ===================================================================
     envVars:
       - fromGroup: aios-secrets
