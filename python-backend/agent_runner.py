@@ -1,12 +1,12 @@
-# python-backend/agent_runner.py
+# python-backend/agent_runner.py (Updated for Redis Pub/Sub)
 
 import logging
 import json
 import traceback
 from typing import Dict, Any, List, Tuple
+from redis import Redis
 
 # --- Local Module Imports ---
-# Import extensions and services that the runner depends on
 from extensions import socketio
 from assistant import get_llm_os
 from supabase_client import supabase_client
@@ -25,13 +25,8 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     Processes a list of file data from the frontend, downloading media from
     Supabase storage or encoding text content, and converting them into
     Agno media objects.
-
-    Args:
-        files_data (List[Dict[str, Any]]): A list of file dictionaries from the client.
-
-    Returns:
-        A tuple containing lists of Image, Audio, Video, and File objects.
     """
+    # This function's logic remains the same.
     images, audio, videos, other_files = [], [], [], []
     if not files_data:
         return images, audio, videos, other_files
@@ -40,7 +35,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
         file_name = file_data.get('name', 'untitled')
         file_type = file_data.get('type', 'application/octet-stream')
 
-        # Handle cloud-stored media files (images, videos, etc.)
         if 'path' in file_data:
             try:
                 logger.info(f"Downloading file from Supabase storage: {file_data['path']}")
@@ -57,7 +51,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
             except Exception as e:
                 logger.error(f"Error downloading file {file_data['path']} from Supabase: {e}")
         
-        # Handle text-based files sent directly from the client
         elif file_data.get('isText') and 'content' in file_data:
             logger.info(f"Processing text file content for: {file_name}")
             other_files.append(File(content=file_data['content'].encode('utf-8'), name=file_name, mime_type=file_type))
@@ -73,21 +66,12 @@ def run_agent_and_stream(
     browser_tools_config: dict,
     custom_tool_config: dict,
     context_session_ids: List[str],
-    connection_manager: ConnectionManager
+    connection_manager: ConnectionManager,
+    redis_client: Redis  # <-- NEW DEPENDENCY
 ):
     """
-    Orchestrates a full agent run for a single user turn. This function is
-    designed to be run in a separate greenlet to avoid blocking the main server thread.
-
-    Args:
-        sid (str): The client's Socket.IO session ID.
-        conversation_id (str): The unique ID for the current conversation.
-        message_id (str): The unique ID for the current message turn.
-        turn_data (dict): Data for this turn, including the user message and files.
-        browser_tools_config (dict): Configuration for the BrowserTools.
-        custom_tool_config (dict): Configuration for custom tools like image generation.
-        context_session_ids (List[str]): A list of session IDs to use as historical context.
-        connection_manager (ConnectionManager): An instance of the session service.
+    Orchestrates a full agent run. This function is now passed the redis_client
+    so it can correctly initialize the scalable BrowserTools.
     """
     try:
         # 1. Retrieve Session and User Data
@@ -100,7 +84,7 @@ def run_agent_and_stream(
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
-            browser_tools_config=browser_tools_config,
+            browser_tools_config=browser_tools_config, # Pass the new config
             custom_tool_config=custom_tool_config,
             **session_data['config']
         )
@@ -113,6 +97,7 @@ def run_agent_and_stream(
         # 4. Fetch and Prepend Historical Context
         historical_context_str = ""
         if context_session_ids:
+            # ... (This logic remains the same) ...
             logger.info(f"Fetching context from {len(context_session_ids)} sessions.")
             historical_context_str = "CONTEXT FROM PREVIOUS CHATS:\n---\n"
             for session_id in context_session_ids:
@@ -146,6 +131,7 @@ def run_agent_and_stream(
             stream_intermediate_steps=True,
             add_history_to_context=True
         ):
+            # ... (This streaming logic remains the same) ...
             if not chunk or not hasattr(chunk, 'event'):
                 continue
 
@@ -154,7 +140,6 @@ def run_agent_and_stream(
 
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
 
-            # Stream content and tool usage events to the client
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
                 socketio.emit("response", {"content": chunk.content, "streaming": True, "id": message_id, "agent_name": owner_name, "is_log": not is_final}, room=sid)

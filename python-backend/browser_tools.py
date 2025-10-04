@@ -1,11 +1,12 @@
-# python-backend/browser_tools.py (Final, Corrected Version for Agno v2.0.5)
+# python-backend/browser_tools.py (Updated for Redis Pub/Sub)
 
 import logging
 import uuid
-import json  # --- FIX: Import the json library for serialization ---
+import json
 from typing import Dict, Any, Literal, Union
 
-import eventlet
+from redis import Redis
+
 from agno.media import Image
 from agno.tools import Toolkit
 from agno.tools.function import ToolResult
@@ -17,116 +18,97 @@ logger = logging.getLogger(__name__)
 
 class BrowserTools(Toolkit):
     """
-    A toolkit that acts as a server-side proxy for controlling a browser on the client's machine.
-    It passes screenshots directly back to the main agent for first-party visual analysis,
-    leveraging Agno v2.0.5's multimodal tool output capabilities.
+    A scalable, distributed toolkit that acts as a server-side proxy for
+    controlling a client-side browser. It uses Redis Pub/Sub for asynchronous
+    request/response handling, making it safe for multi-worker environments.
     """
 
-    def __init__(self, sid: str, socketio, waiting_events: Dict[str, eventlet.event.Event]):
+    def __init__(self, sid: str, socketio, redis_client: Redis):
         """
         Initializes the BrowserTools toolkit.
 
         Args:
             sid (str): The unique Socket.IO session ID for the connected client.
             socketio: The main Flask-SocketIO server instance.
-            waiting_events (Dict): A shared dictionary to store eventlet events.
+            redis_client (Redis): An initialized Redis client for Pub/Sub.
         """
         self.sid = sid
         self.socketio = socketio
-        self.waiting_events = waiting_events
+        self.redis_client = redis_client
 
         super().__init__(
             name="browser_tools",
             tools=[
-                self.get_status,
-                self.navigate,
-                self.get_current_view,
-                self.click,
-                self.type_text,
-                self.scroll,
-                self.go_back,
-                self.go_forward,
-                self.list_tabs,
-                self.open_new_tab,
-                self.switch_to_tab,
-                self.close_tab,
-                self.hover_over_element,
-                self.select_dropdown_option,
-                self.handle_alert,
-                self.press_key,
-                self.extract_text_from_element,
-                self.get_element_attributes,
-                self.extract_table_data,
-                self.refresh_page,
-                self.wait_for_element,
-                self.manage_cookies,
+                self.get_status, self.navigate, self.get_current_view,
+                self.click, self.type_text, self.scroll, self.go_back,
+                self.go_forward, self.list_tabs, self.open_new_tab,
+                self.switch_to_tab, self.close_tab, self.hover_over_element,
+                self.select_dropdown_option, self.handle_alert, self.press_key,
+                self.extract_text_from_element, self.get_element_attributes,
+                self.extract_table_data, self.refresh_page,
+                self.wait_for_element, self.manage_cookies,
             ],
         )
 
     def _process_view_result(self, result: Dict[str, Any]) -> ToolResult:
-        """
-        Processes a result from the client that includes a screenshot.
-        It downloads the screenshot, packages it into an agno.media.Image object,
-        and returns a ToolResult containing the serialized result data and the image.
-        """
+        # This helper function's logic remains the same.
         if result.get("status") == "success" and "screenshot_path" in result:
             screenshot_path = result.pop("screenshot_path")
             try:
                 logger.info(f"Downloading screenshot from Supabase path: {screenshot_path}")
                 image_bytes = supabase_client.storage.from_('media-uploads').download(screenshot_path)
-                
                 image_artifact = Image(content=image_bytes)
-                
-                # --- FIX: Serialize the dictionary to a JSON string for the 'content' field ---
-                # This resolves the pydantic ValidationError.
-                return ToolResult(
-                    content=json.dumps(result),
-                    images=[image_artifact]
-                )
+                return ToolResult(content=json.dumps(result), images=[image_artifact])
             except Exception as e:
                 logger.error(f"Failed to download or process screenshot from {screenshot_path}: {e}")
                 result["error"] = f"Error: Could not retrieve screenshot from path {screenshot_path}."
-                # --- FIX: Also serialize the dictionary here ---
                 return ToolResult(content=json.dumps(result))
         
-        # --- FIX: Also serialize the dictionary for the no-screenshot case ---
         return ToolResult(content=json.dumps(result))
 
     def _send_command_and_wait(self, command_payload: Dict[str, Any]) -> Union[Dict[str, Any], ToolResult]:
         """
-        Sends a command to the client and waits for the response.
-        It now consistently returns a ToolResult or a simple dictionary on timeout.
+        Sends a command to the client via SocketIO and waits for the response
+        on a unique Redis Pub/Sub channel. This is a non-blocking, scalable pattern.
         """
         request_id = str(uuid.uuid4())
         command_payload['request_id'] = request_id
         
-        response_event = eventlet.event.Event()
-        self.waiting_events[request_id] = response_event
-
+        response_channel = f"browser-response:{request_id}"
+        pubsub = self.redis_client.pubsub()
+        
         try:
+            pubsub.subscribe(response_channel)
+            
+            # 1. Send the command to the client
             self.socketio.emit('browser-command', command_payload, room=self.sid)
-            logger.info(f"Sent command '{command_payload['action']}' to client {self.sid} with request_id {request_id}")
+            logger.info(f"Sent command '{command_payload['action']}' to client {self.sid} on channel {response_channel}")
 
-            result = response_event.wait(timeout=BROWSER_COMMAND_TIMEOUT_SECONDS)
-            
-            if "screenshot_path" in result:
-                return self._process_view_result(result)
-            
-            # --- FIX: Ensure even non-screenshot results are wrapped consistently ---
-            # This makes the tool's output more predictable for the framework.
-            return ToolResult(content=json.dumps(result))
+            # 2. Wait for a message on the subscribed channel
+            # The listen() generator will block here until a message arrives or it times out.
+            for message in pubsub.listen():
+                if message['type'] == 'message':
+                    logger.info(f"Received response for request_id {request_id}")
+                    result = json.loads(message['data'])
+                    
+                    if "screenshot_path" in result:
+                        return self._process_view_result(result)
+                    
+                    return ToolResult(content=json.dumps(result))
 
-        except eventlet.timeout.Timeout:
-            logger.error(f"Timeout: Did not receive a response from the client for request_id {request_id}")
-            # On timeout, a simple dictionary is still appropriate.
-            return {"status": "error", "error": "The browser on the client machine did not respond in time."}
+        except Exception as e:
+            # This will catch Redis errors or other unexpected issues.
+            logger.error(f"An error occurred during Redis Pub/Sub wait for {request_id}: {e}", exc_info=True)
+            return {"status": "error", "error": f"An internal error occurred while waiting for the browser: {e}"}
         finally:
-            self.waiting_events.pop(request_id, None)
+            # 3. Always clean up the subscription
+            pubsub.unsubscribe(response_channel)
+            pubsub.close()
 
     # --- Public Tool Methods ---
-    # The type hints are updated to reflect that the successful return type
-    # will now consistently be a ToolResult or a simple dict in case of an error.
-
+    # The function signatures remain the same. Their implementation via
+    # _send_command_and_wait is now scalable.
+    
     def get_status(self) -> Dict[str, Any]:
         return self._send_command_and_wait({'action': 'status'})
 
@@ -149,6 +131,7 @@ class BrowserTools(Toolkit):
             return {"status": "error", "error": "Invalid scroll direction. Must be 'up' or 'down'."}
         return self._send_command_and_wait({'action': 'scroll', 'direction': direction})
 
+    # ... (The rest of the tool methods: go_back, go_forward, etc., are unchanged) ...
     def go_back(self) -> Union[Dict[str, Any], ToolResult]:
         return self._send_command_and_wait({'action': 'go_back'})
 

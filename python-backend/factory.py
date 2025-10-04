@@ -1,4 +1,4 @@
-# python-backend/factory.py (Corrected Version)
+# python-backend/factory.py (Updated for Redis Pub/Sub)
 
 import logging
 from flask import Flask
@@ -13,7 +13,6 @@ from session_service import ConnectionManager
 # --- Route and Handler Registration Imports ---
 from auth import auth_bp
 from api import api_bp
-# We now import the sockets module itself and a setter function
 import sockets 
 
 logger = logging.getLogger(__name__)
@@ -38,16 +37,21 @@ def create_app():
     connection_manager = ConnectionManager(redis_client)
 
     # --- 3. Inject Dependencies into Modules ---
-    # This is the crucial step. We pass the created service instances
-    # to the modules that need them before the first request.
-    sockets.set_connection_manager(connection_manager)
+    # Pass BOTH the connection_manager and the redis_client to the sockets module.
+    sockets.set_dependencies(manager=connection_manager, redis_client=redis_client)
 
     # --- 4. Register OAuth Providers ---
     # (This section is unchanged)
     if config.GITHUB_CLIENT_ID and config.GITHUB_CLIENT_SECRET:
-        oauth.register(...)
+        oauth.register(
+            name='github', client_id=config.GITHUB_CLIENT_ID, client_secret=config.GITHUB_CLIENT_SECRET,
+            access_token_url='https://github.com/login/oauth/access_token', authorize_url='https://github.com/login/oauth/authorize',
+            api_base_url='https://api.github.com/', client_kwargs={'scope': 'repo user:email'}
+        )
         logger.info("GitHub OAuth provider registered.")
-    # ... (rest of the OAuth registrations) ...
+    else:
+        logger.warning("GitHub OAuth credentials not set. GitHub integration will be disabled.")
+
     if config.GOOGLE_CLIENT_ID and config.GOOGLE_CLIENT_SECRET:
         oauth.register(
             name='google', client_id=config.GOOGLE_CLIENT_ID, client_secret=config.GOOGLE_CLIENT_SECRET,
@@ -58,6 +62,7 @@ def create_app():
         logger.info("Google OAuth provider registered.")
     else:
         logger.warning("Google OAuth credentials not set. Google integration will be disabled.")
+
     if config.VERCEL_CLIENT_ID and config.VERCEL_CLIENT_SECRET:
         oauth.register(
             name='vercel', client_id=config.VERCEL_CLIENT_ID, client_secret=config.VERCEL_CLIENT_SECRET,
@@ -67,6 +72,7 @@ def create_app():
         logger.info("Vercel OAuth provider registered.")
     else:
         logger.warning("Vercel OAuth credentials not set. Vercel integration will be disabled.")
+
     if config.SUPABASE_CLIENT_ID and config.SUPABASE_CLIENT_SECRET:
         oauth.register(
             name='supabase', client_id=config.SUPABASE_CLIENT_ID, client_secret=config.SUPABASE_CLIENT_SECRET,
@@ -77,12 +83,8 @@ def create_app():
     else:
         logger.warning("Supabase OAuth credentials not set. Supabase integration will be disabled.")
 
-
     # --- 5. Register Blueprints (HTTP Routes) ---
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
-
-    # The socket handlers are now registered automatically when the `sockets`
-    # module is imported, because they use the decorator syntax.
 
     return app

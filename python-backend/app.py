@@ -1,4 +1,5 @@
 # python-backend/app.py
+import os
 from factory import create_app
 from extensions import socketio
 
@@ -6,7 +7,6 @@ from extensions import socketio
 app = create_app()
 
 # This block is for local development and debugging.
-# In production, Gunicorn will be the server.
 if __name__ == "__main__":
     # Use socketio.run to correctly handle both Flask and SocketIO requests
     socketio.run(

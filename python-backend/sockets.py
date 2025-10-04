@@ -1,68 +1,83 @@
-# python-backend/sockets.py (Corrected Version)
+# python-backend/sockets.py (Updated for Redis Pub/Sub)
 
 import logging
 import json
 import uuid
 import traceback
 from typing import Dict, Any
+from redis import Redis
 
 import eventlet
 from flask import request
 from gotrue.errors import AuthApiError
 
 # Import the shared socketio instance from extensions
-from extensions import socketio, browser_waiting_events
+from extensions import socketio
 from supabase_client import supabase_client
-
-# We need to import the services that our handlers will use
-# This creates a dependency, which we will manage in the factory
 from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
 
 logger = logging.getLogger(__name__)
 
-# This is a placeholder. The real instance will be injected by the factory.
-# This is a common pattern to solve circular dependencies while allowing type hinting.
+# --- Dependency Injection Placeholders ---
+# These will be populated by the factory at startup.
 connection_manager_service: ConnectionManager = None
+redis_client_instance: Redis = None
 
-def set_connection_manager(manager: ConnectionManager):
-    """A setter function to inject the connection manager dependency from the factory."""
-    global connection_manager_service
+def set_dependencies(manager: ConnectionManager, redis_client: Redis):
+    """A setter function to inject dependencies from the factory."""
+    global connection_manager_service, redis_client_instance
     connection_manager_service = manager
-    logger.info("ConnectionManager service injected into sockets module.")
+    redis_client_instance = redis_client
+    logger.info("Dependencies (ConnectionManager, RedisClient) injected into sockets module.")
 
 
 # ==============================================================================
-# SOCKET.IO EVENT HANDLERS (using decorators)
+# SOCKET.IO EVENT HANDLERS
 # ==============================================================================
 
 @socketio.on("connect")
 def on_connect():
-    """Handles a new client connection. Logs the connection."""
     logger.info(f"Client connected: {request.sid}")
     socketio.emit("status", {"message": "Connected to server"}, room=request.sid)
 
 
 @socketio.on("disconnect")
 def on_disconnect():
-    """Handles a client disconnection. Logs the event."""
     logger.info(f"Client disconnected: {request.sid}")
 
 
 @socketio.on('browser-command-result')
 def handle_browser_command_result(data: Dict[str, Any]):
-    """Receives the result of a browser command from the client."""
+    """
+    Receives a result from the client and PUBLISHES it to the corresponding
+    Redis channel, waking up the waiting agent tool.
+    """
+    if not redis_client_instance:
+        logger.error("Redis client not initialized. Cannot handle browser command result.")
+        return
+
     request_id = data.get('request_id')
-    if request_id in browser_waiting_events:
-        browser_waiting_events.get(request_id).send(data.get('result', {}))
+    result_payload = data.get('result', {})
+
+    if request_id:
+        response_channel = f"browser-response:{request_id}"
+        try:
+            # Publish the result to the unique channel for the waiting greenlet
+            redis_client_instance.publish(response_channel, json.dumps(result_payload))
+            logger.info(f"Published result for request_id {request_id} to Redis channel {response_channel}")
+        except Exception as e:
+            logger.error(f"Failed to publish browser result to Redis for {request_id}: {e}")
+    else:
+        logger.warning("Received browser command result with no request_id.")
 
 
 @socketio.on("send_message")
 def on_send_message(data: str):
-    """The main message handler. It now uses the globally injected connection_manager_service."""
+    """The main message handler for incoming chat messages."""
     sid = request.sid
-    if not connection_manager_service:
-        logger.error("ConnectionManager service not initialized. Cannot handle message.")
+    if not connection_manager_service or not redis_client_instance:
+        logger.error("Services not initialized. Cannot handle message.")
         return
 
     try:
@@ -90,14 +105,21 @@ def on_send_message(data: str):
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
         
-        browser_tools_config = {'sid': sid, 'socketio': socketio, 'waiting_events': browser_waiting_events}
+        # The browser_tools_config will now include the redis_client
+        browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         custom_tool_config = {'sid': sid, 'socketio': socketio, 'message_id': message_id}
 
         eventlet.spawn(
             run_agent_and_stream,
-            sid, conversation_id, message_id, turn_data,
-            browser_tools_config, custom_tool_config,
-            context_session_ids, connection_manager_service
+            sid,
+            conversation_id,
+            message_id,
+            turn_data,
+            browser_tools_config,  # Correctly passed as the 5th argument
+            custom_tool_config,  # Correctly passed as the 6th argument
+            context_session_ids,  # Correctly passed as the 7th argument
+            connection_manager_service,  # Correctly passed as the 8th argument
+            redis_client_instance  # Correctly passed as the 9th argument
         )
         logger.info(f"Spawned agent run for conversation: {conversation_id}")
 
