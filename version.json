@@ -1,0 +1,14 @@
+{
+  "version": "1.1.0",
+  "releaseDate": "2025-10-05",
+  "downloadUrl": "https://github.com/GodBoii/AI-OS-website/releases/tag/v1.1.0",
+  "downloads": {
+    "windows": "https://github.com/GodBoii/AI-OS-website/releases/download/v1.1.0/Aetheria.AI.Setup.1.1.0.exe",
+    "linux-appimage": "https://github.com/GodBoii/AI-OS-website/releases/download/v1.1.0/Aetheria.AI-1.1.0.AppImage",
+    "linux-deb": "https://github.com/GodBoii/AI-OS-website/releases/download/v1.1.0/aetheria-ai_1.1.0_amd64.deb",
+    "linux-rpm": "https://github.com/GodBoii/AI-OS-website/releases/download/v1.1.0/aetheria-ai-1.1.0.x86_64.rpm"
+  },
+  "releaseNotes": "<ul><li>Initial release with auto-update checker</li><li>Multi-platform support (Windows, Linux)</li><li>Bug fixes and improvements</li></ul>",
+  "critical": false,
+  "minVersion": "1.0.0"
+}
