@@ -374,17 +374,8 @@ class ContextHandler {
         }
     }
 
-    showNotification(message, type = 'info', duration = 3000) {
-        const container = document.querySelector('.notification-container') || document.body;
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.innerHTML = `<i class="fas ${type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i><div class="notification-text">${message}</div>`;
-        container.appendChild(notification);
-        setTimeout(() => notification.classList.add('show'), 10);
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
-        }, duration);
+    showNotification(message, type = 'info', duration = 5000) {
+        window.NotificationService.show(message, type, duration);
     }
 
     getSelectedSessions() {

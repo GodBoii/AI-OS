@@ -1,4 +1,4 @@
-// chat.js (Complete, Final, with High-Fidelity History Rendering - Updated for Session Context)
+// chat.js (Complete, Refactored with Race Condition Fix)
 
 import { messageFormatter } from './message-formatter.js';
 import ContextHandler from './context-handler.js';
@@ -408,7 +408,58 @@ function setupIpcListeners() {
 
             if (done && messageId && ongoingStreams[messageId]) {
                 const messageDiv = ongoingStreams[messageId];
-                
+
+                if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                    data.images.forEach(image => {
+                        if (image.artifactId && image.content_base_64) {
+                            artifactHandler.cachePendingImage(image.artifactId, image.content_base_64);
+                        }
+                    });
+                }
+
+                // First, render the final text content for all blocks.
+                // This ensures the DOM structure is in place before we try to modify it.
+                const contentBlocks = messageDiv.querySelectorAll('.content-block');
+                contentBlocks.forEach(block => {
+                    const ownerName = block.dataset.owner;
+                    const streamId = `${messageId}-${ownerName}`;
+                    const finalContent = messageFormatter.getFinalContent(streamId);
+                    const innerContentDiv = block.querySelector('.inner-content');
+                    if (finalContent && innerContentDiv) {
+                        innerContentDiv.innerHTML = messageFormatter.format(finalContent);
+                    }
+                });
+
+                // --- CHANGE START: NEW LOGIC FOR IMAGE ARTIFACTS ---
+                // This is the core of the new architecture. We handle images here,
+                // after the data has definitively arrived.
+
+                if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                    console.log(`[FIX] Received final payload with ${data.images.length} image(s).`);
+                    const targetContainer = messageDiv.querySelector('.content-block[data-owner="Aetheria_AI"] .inner-content');
+
+                    data.images.forEach(image => {
+                        if (!image.artifactId) {
+                            return;
+                        }
+                        const { artifactId } = image;
+                        if (targetContainer) {
+                            const button = document.createElement('button');
+                            button.className = 'artifact-reference';
+                            button.dataset.artifactId = artifactId;
+                            button.innerHTML = `<i class="fas fa-image"></i> View Generated Image`;
+
+                            targetContainer.appendChild(document.createElement('br'));
+                            targetContainer.appendChild(document.createElement('br'));
+                            targetContainer.appendChild(button);
+                            console.log(`[FIX] Injected artifact button for ${artifactId} into the message body.`);
+                        } else {
+                            console.error(`[FIX] Could not find target container to inject artifact button for ${artifactId}.`);
+                        }
+                    });
+                }
+                // --- CHANGE END ---
+
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     thinkingIndicator.classList.add('steps-done');
@@ -424,17 +475,6 @@ function setupIpcListeners() {
                     thinkingIndicator.innerHTML = `<span class="summary-text">${summaryText}</span><i class="fas fa-chevron-down summary-chevron"></i>`;
                     thinkingIndicator.addEventListener('click', () => messageDiv.classList.toggle('expanded'));
                 }
-
-                const contentBlocks = messageDiv.querySelectorAll('.content-block');
-                contentBlocks.forEach(block => {
-                    const ownerName = block.dataset.owner;
-                    const streamId = `${messageId}-${ownerName}`;
-                    const finalContent = messageFormatter.getFinalContent(streamId);
-                    const innerContentDiv = block.querySelector('.inner-content');
-                    if (finalContent && innerContentDiv) {
-                        innerContentDiv.innerHTML = messageFormatter.format(finalContent);
-                    }
-                });
                 
                 messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
@@ -453,34 +493,6 @@ function setupIpcListeners() {
             populateBotMessage({ content: 'Error processing response', id: data.id });
             document.getElementById('floating-input').disabled = false;
             document.getElementById('send-message').disabled = false;
-        }
-    });
-
-    ipcRenderer.on('image_generated', (data) => {
-        console.log('Received image_generated event with artifact ID:', data.artifactId);
-        const { id: messageId, image_base_64, agent_name, artifactId } = data;
-
-        if (artifactHandler && image_base_64 && artifactId) {
-            artifactHandler.cachePendingImage(artifactId, image_base_64);
-            artifactHandler.showArtifact('image', image_base_64, artifactId);
-        }
-
-        if (messageId && ongoingStreams[messageId]) {
-            const messageDiv = ongoingStreams[messageId];
-            const logsContainer = messageDiv.querySelector('.detailed-logs');
-            if (logsContainer) {
-                const logEntry = document.createElement('div');
-                logEntry.className = 'tool-log-entry';
-                logEntry.innerHTML = `
-                    <i class="fas fa-palette tool-log-icon"></i>
-                    <div class="tool-log-details">
-                        <span class="tool-log-owner">${agent_name.replace(/_/g, ' ') || 'Artist Agent'}</span>
-                        <span class="tool-log-action"><strong>Generated an image</strong></span>
-                    </div>
-                    <span class="tool-log-status completed">Completed</span>
-                `;
-                logsContainer.appendChild(logEntry);
-            }
         }
     });
     
@@ -640,10 +652,8 @@ function addUserMessage(message, turnContextData = null) {
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     
-    // Dispatch custom event for welcome display
     document.dispatchEvent(new CustomEvent('messageAdded'));
     
-    // Notify conversation state manager that a message was added
     if (window.conversationStateManager) {
         console.log('Calling onMessageAdded to move input to bottom');
         window.conversationStateManager.onMessageAdded();
@@ -724,13 +734,6 @@ function populateBotMessage(data) {
     }
 }
 
-/**
- * Renders a complete assistant turn from a static, high-fidelity 'run' object.
- * This function is now intelligent, parsing the data to separate reasoning from the final answer
- * and ignoring internal system prompts.
- * @param {HTMLElement} targetContainer - The DOM element to render the turn into.
- * @param {Object} run - The complete 'run' object from the saved session.
- */
 function renderTurnFromEvents(targetContainer, run, options = {}) {
     if (!targetContainer || !run) {
         targetContainer.innerHTML = '<div class="message-text">(Could not render turn)</div>';
@@ -741,18 +744,14 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     const mainAgentName = 'Aetheria_AI';
     const inlineArtifacts = options.inlineArtifacts === true;
 
-    // --- AGGREGATION PHASE: Loop through events once to gather all data ---
     let toolLogsHtml = '';
     let subAgentBlocksHtml = '';
-    // The final, synthesized content is on the top-level run object.
     const finalContent = run.content || '';
 
-    // Process events to build the reasoning/log section
     events.forEach(event => {
         const owner = event.agent_name || event.team_name;
         if (!owner) return;
 
-        // Aggregate tool call events into pre-rendered HTML
         if (event.event === 'TeamToolCallCompleted' || event.event === 'ToolCallCompleted') {
             const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
             toolLogsHtml += `
@@ -766,7 +765,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
                 </div>`;
         }
 
-        // Aggregate content from sub-agent runs
         if (event.event === 'RunCompleted' && owner !== mainAgentName) {
             if (event.content) {
                 const formattedContent = messageFormatter.format(event.content, { inlineArtifacts });
@@ -779,9 +777,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         }
     });
 
-    // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---
-    
-    // Create the summary text for the collapsible "Reasoning" header
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
     const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
     let summaryText = "Aetheria AI's Reasoning";
@@ -794,7 +789,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         summaryText = `Reasoning involved ${parts.join(' and ')}`;
     }
 
-    // Only show the reasoning header if there are logs to display.
     const reasoningHeaderHtml = hasReasoning ? `
         <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
             <span class="summary-text">${summaryText}</span>
@@ -802,7 +796,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         </div>
     ` : '';
 
-    // Assemble the final HTML structure for the assistant's message
     const finalHtml = `
         <div class="message message-bot">
             ${reasoningHeaderHtml}
@@ -830,7 +823,6 @@ async function handleSendMessage() {
     const attachedFiles = fileAttachmentHandler.getAttachedFiles();
     const selectedSessions = contextHandler.getSelectedSessions();
 
-    // Allow sending even with just context sessions selected
     if (!message && attachedFiles.length === 0 && selectedSessions.length === 0) return;
 
     floatingInput.disabled = true;
@@ -862,23 +854,18 @@ async function handleSendMessage() {
     const messageId = Date.now().toString();
     createBotMessagePlaceholder(messageId);
 
-    // --- FIX START: Send session IDs instead of full context string ---
-    // Extract just the session_ids from the selected sessions
     const contextSessionIds = selectedSessions.map(session => session.session_id);
 
-    // Add the new `context_session_ids` key to the payload
     const messageData = {
         conversationId: currentConversationId,
         message: message,
         id: messageId,
         files: attachedFiles,
-        context_session_ids: contextSessionIds, // New key with an array of IDs
+        context_session_ids: contextSessionIds,
         is_deepsearch: chatConfig.deepsearch,
         accessToken: session.access_token,
-        // The old 'context' key is now removed
         config: { use_memory: chatConfig.memory, ...chatConfig.tools }
     };
-    // --- FIX END ---
 
     try {
         ipcRenderer.send('send-message', messageData);
@@ -1033,7 +1020,6 @@ class UnifiedPreviewHandler {
         return file.content || "No preview available";
     }
     updateContextIndicator() {
-        // Context indicator is now disabled - sessions appear as chips instead
         const indicator = document.querySelector('.context-active-indicator');
         if (indicator) {
             indicator.classList.remove('visible');
@@ -1045,9 +1031,6 @@ class UnifiedPreviewHandler {
     }
 }
 
-/**
- * Initializes the chat module.
- */
 function init() {
     const elements = {
         container: document.getElementById('chat-container'), messages: document.getElementById('chat-messages'),
@@ -1070,51 +1053,32 @@ function init() {
         });
     }
 
-    // Initialize FloatingWindowManager and connect it to WelcomeDisplay
     try {
         floatingWindowManager = new FloatingWindowManager(welcomeDisplay);
         window.floatingWindowManager = floatingWindowManager;
     } catch (error) {
         console.error('Error initializing FloatingWindowManager:', error);
-        // Continue without floating window management
         window.floatingWindowManager = null;
     }
     
-    // Register floating windows with error handling
     setTimeout(() => {
         try {
-            // Register AIOS settings window
             const aiosWindow = document.getElementById('floating-window');
-            if (aiosWindow) {
-                floatingWindowManager.registerWindow('aios-settings', aiosWindow);
-            } else {
-                console.warn('AIOS settings window element not found for registration');
-            }
+            if (aiosWindow) floatingWindowManager.registerWindow('aios-settings', aiosWindow);
+            else console.warn('AIOS settings window element not found for registration');
             
-            // Register tasks window
             const tasksWindow = document.getElementById('to-do-list-container');
-            if (tasksWindow) {
-                floatingWindowManager.registerWindow('tasks', tasksWindow);
-            } else {
-                console.warn('Tasks window element not found for registration');
-            }
+            if (tasksWindow) floatingWindowManager.registerWindow('tasks', tasksWindow);
+            else console.warn('Tasks window element not found for registration');
             
-            // Register context window
             const contextWindow = document.getElementById('context-window');
-            if (contextWindow) {
-                floatingWindowManager.registerWindow('context', contextWindow);
-            } else {
-                console.warn('Context window element not found for registration');
-            }
+            if (contextWindow) floatingWindowManager.registerWindow('context', contextWindow);
+            else console.warn('Context window element not found for registration');
         } catch (error) {
             console.error('Error registering floating windows:', error);
-            // Continue without floating window management if registration fails
         }
     }, 100);
     
-
-    
-    // Initialize conversation state manager
     if (window.conversationStateManager) {
         window.conversationStateManager.init();
     }
@@ -1145,7 +1109,6 @@ function init() {
         }
     });
 
-    // Expose the renderer function globally so context-handler.js can use it
     window.renderTurnFromEvents = renderTurnFromEvents;
 
     startNewConversation();
@@ -1155,7 +1118,7 @@ const style = document.createElement('style');
 style.textContent = `
 .error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .dark-mode .error-message { background-color: rgba(239, 68, 68, 0.2); }
-.status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items-center; gap: 8px; }
+.status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
 .content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
 .inner-content { padding: 8px; }

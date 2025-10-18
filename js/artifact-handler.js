@@ -3,10 +3,10 @@
 class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
-        this.pendingImages = new Map();
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
+        this.pendingImages = new Map();
         this.init();
     }
 
@@ -67,43 +67,49 @@ class ArtifactHandler {
         });
     }
 
-    cachePendingImage(artifactId, base64Data) {
-        this.pendingImages.set(artifactId, base64Data);
-        console.log(`ArtifactHandler: Cached pending image with ID: ${artifactId}`);
-    }
-
     createArtifact(content, type, artifactId = null, viewMode = 'preview') {
-        // --- START OF THE CRITICAL FIX ---
-        // Handle the special case for images first.
-        if (type === 'image') {
-            const imageId = content; // For images, 'content' is the ID from the formatter.
-            if (this.artifacts.has(imageId)) {
-                // If we've already finalized this artifact due to streaming, do nothing.
-                return imageId;
-            }
-            if (this.pendingImages.has(imageId)) {
-                const imageContent = this.pendingImages.get(imageId);
-                this.artifacts.set(imageId, { content: imageContent, type: 'image' });
-                this.pendingImages.delete(imageId); // Clean up the cache
-                console.log(`ArtifactHandler: Finalized image artifact from cache: ${imageId}`);
-                // **THE FIX**: Return immediately to prevent fall-through.
-                return imageId;
-            } else {
-                // This will still log during streaming, but it won't corrupt state.
-                console.warn(`ArtifactHandler: Tried to create image artifact for ID ${imageId}, but no pending data was found.`);
-                return imageId;
-            }
-        }
-        // --- END OF THE CRITICAL FIX ---
-
-        // For all other artifact types (code, mermaid), the logic is simple.
         const id = artifactId || `artifact-${this.currentId++}`;
+        if (type === 'image') {
+            if (this.artifacts.has(id)) {
+                return id;
+            }
+            this.finalizeImageArtifact(id, content);
+            return id;
+        }
+
         const artifactData = { content, type };
         if (type === 'mermaid') {
             artifactData.viewMode = viewMode;
         }
         this.artifacts.set(id, artifactData);
         return id;
+    }
+
+    cachePendingImage(artifactId, base64Data) {
+        if (!artifactId || !base64Data) {
+            return;
+        }
+        this.pendingImages.set(artifactId, base64Data);
+        console.log(`ArtifactHandler: Cached pending image with ID: ${artifactId}`);
+    }
+
+    finalizeImageArtifact(artifactId, base64Data = null) {
+        if (!artifactId) {
+            return null;
+        }
+        if (this.artifacts.has(artifactId)) {
+            return this.artifacts.get(artifactId);
+        }
+        const imageContent = base64Data || this.pendingImages.get(artifactId);
+        if (imageContent) {
+            const artifactData = { content: imageContent, type: 'image' };
+            this.artifacts.set(artifactId, artifactData);
+            this.pendingImages.delete(artifactId);
+            console.log(`ArtifactHandler: Finalized image artifact from cache: ${artifactId}`);
+            return artifactData;
+        }
+        console.warn(`ArtifactHandler: Tried to create image artifact for ID ${artifactId}, but no pending data was found.`);
+        return null;
     }
 
     showArtifact(type, data, artifactId = null) {
@@ -135,7 +141,25 @@ class ArtifactHandler {
                 titleEl.textContent = 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
-                this.renderImage(data, contentDiv);
+
+                let imageData = data;
+                if (artifactId) {
+                    const artifact = this.finalizeImageArtifact(artifactId, imageData);
+                    if (artifact && artifact.content) {
+                        imageData = artifact.content;
+                    } else if (!imageData) {
+                        const existing = this.artifacts.get(artifactId);
+                        if (existing && existing.content) {
+                            imageData = existing.content;
+                        }
+                    }
+                }
+
+                if (imageData) {
+                    this.renderImage(imageData, contentDiv);
+                } else {
+                    console.warn(`ArtifactHandler: Unable to render image artifact ${artifactId || '(no id)'}. No image data available.`);
+                }
                 break;
 
             case 'mermaid':

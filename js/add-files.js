@@ -60,7 +60,7 @@ class FileAttachmentHandler {
         }
 
         // --- FIX #1: Use the correct, new backend URL ---
-        const response = await fetch('https://aios-web.onrender.com/api/generate-upload-url', {
+        const response = await fetch('http://localhost:8765/api/generate-upload-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

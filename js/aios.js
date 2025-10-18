@@ -579,17 +579,7 @@ class AIOS {
     }
 
     showNotification(message, type = 'success') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-        requestAnimationFrame(() => {
-            notification.style.opacity = '1';
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                setTimeout(() => document.body.removeChild(notification), 300);
-            }, 3000);
-        });
+        window.NotificationService.show(message, type);
     }
 }
 

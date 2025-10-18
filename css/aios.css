@@ -403,6 +403,27 @@ button.secondary:hover {
     justify-content: center;
 }
 
+/* Brand-specific icon colors that adapt to theme */
+.integration-info .fa-github {
+    color: #181717;
+}
+
+.dark-mode .integration-info .fa-github {
+    color: #ffffff;
+}
+
+.integration-info .fa-google {
+    color: #4285F4;
+}
+
+.integration-info .vercel-icon {
+    fill: #000000;
+}
+
+.dark-mode .integration-info .vercel-icon {
+    fill: #ffffff;
+}
+
 .integration-info span {
     font-size: 16px;
     font-weight: 500;

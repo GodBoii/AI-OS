@@ -325,58 +325,7 @@ body {
     margin-right: 0.5rem;
 }
 
-/* Connection Status */
-.connection-error {
-    position: fixed;
-    top: 1rem;
-    left: 1rem;
-    background-color: var(--error-500);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: var(--text-sm);
-    z-index: 1000;
-    box-shadow: var(--shadow-md);
-    animation: fadeIn 0.3s ease;
-}
-
-/* Animated Notifications */
-.notification-container {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    z-index: 9999;
-    pointer-events: none;
-}
-
-.notification {
-    background-color: var(--elevated-bg);
-    border-left: 4px solid var(--accent-color);
-    padding: 1rem;
-    border-radius: 0.5rem;
-    box-shadow: var(--shadow-lg);
-    pointer-events: all;
-    animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    max-width: 24rem;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-}
-
-.notification.error {
-    border-left-color: var(--error-500);
-}
-
-.notification.success {
-    border-left-color: var(--success-500);
-}
-
-.notification.warning {
-    border-left-color: var(--warning-500);
-}
+/* Legacy notification styles removed - now using unified notification system */
 
 /* Media queries */
 @media (max-width: 768px) {

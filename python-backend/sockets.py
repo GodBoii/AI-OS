@@ -1,4 +1,4 @@
-# python-backend/sockets.py (Updated for Redis Pub/Sub)
+# python-backend/sockets.py (Corrected to align with refactored agent_runner)
 
 import logging
 import json
@@ -20,7 +20,6 @@ from agent_runner import run_agent_and_stream
 logger = logging.getLogger(__name__)
 
 # --- Dependency Injection Placeholders ---
-# These will be populated by the factory at startup.
 connection_manager_service: ConnectionManager = None
 redis_client_instance: Redis = None
 
@@ -63,7 +62,6 @@ def handle_browser_command_result(data: Dict[str, Any]):
     if request_id:
         response_channel = f"browser-response:{request_id}"
         try:
-            # Publish the result to the unique channel for the waiting greenlet
             redis_client_instance.publish(response_channel, json.dumps(result_payload))
             logger.info(f"Published result for request_id {request_id} to Redis channel {response_channel}")
         except Exception as e:
@@ -105,21 +103,22 @@ def on_send_message(data: str):
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
         
-        # The browser_tools_config will now include the redis_client
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
-        custom_tool_config = {'sid': sid, 'socketio': socketio, 'message_id': message_id}
-
+        
+        # --- FIX APPLIED HERE ---
+        # The obsolete `custom_tool_config` variable and its corresponding argument
+        # in the spawn call have been removed to match the new 8-argument signature
+        # of `run_agent_and_stream`.
         eventlet.spawn(
             run_agent_and_stream,
             sid,
             conversation_id,
             message_id,
             turn_data,
-            browser_tools_config,  # Correctly passed as the 5th argument
-            custom_tool_config,  # Correctly passed as the 6th argument
-            context_session_ids,  # Correctly passed as the 7th argument
-            connection_manager_service,  # Correctly passed as the 8th argument
-            redis_client_instance  # Correctly passed as the 9th argument
+            browser_tools_config,
+            context_session_ids,
+            connection_manager_service,
+            redis_client_instance
         )
         logger.info(f"Spawned agent run for conversation: {conversation_id}")
 
