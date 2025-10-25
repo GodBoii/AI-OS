@@ -1,256 +1,534 @@
 # Aetheria AI-OS
 
-> An advanced, feature-rich AI desktop assistant built with Electron and Python
+> An advanced, production-ready AI desktop assistant built with Electron and Python, featuring a hierarchical multi-agent system powered by the Agno framework
 
-Aetheria functions as a personal AI Operating System, designed to understand user needs and leverage a powerful suite of tools, integrations, and specialized AI agents to fulfill them effectively.
+Aetheria AI-OS is a sophisticated personal AI Operating System that intelligently orchestrates specialized AI agents and integrations to handle complex, multi-step tasks through natural conversation.
 
+---
 
-## ✨ Key Features
+## 🌟 Key Features
 
-### 🤖 Modular Agentic Architecture
-Built on the **agno framework**, Aetheria uses a primary orchestrator agent that delegates complex tasks to a team of specialized sub-agents:
-- **Coding Assistant** - Handle development tasks
-- **Investment Assistant** - Manage financial queries
-- **And more specialized agents**
+### 🤖 Hierarchical Multi-Agent Architecture
 
-### 🔧 Rich Toolset & Integrations
+Built on **Agno v2.0.7**, Aetheria employs a strategic planner that coordinates specialized agents:
+
+- **Planner Agent** - Analyzes complex queries and creates execution plans using DeepSeek R1
+- **Development Team** - Handles coding, testing, and sandbox execution with Gemini 2.5 Flash
+- **World Agent** - Accesses Wikipedia, ArXiv, HackerNews, YFinance, and web crawling
+- **Main Orchestrator (Aetheria AI)** - Routes tasks and synthesizes results using Gemini 2.5 Flash
+
+### 🔧 Comprehensive Integration Ecosystem
 
 | Integration | Capabilities |
 |-------------|-------------|
-| **GitHub** | List repositories, read file content, create issues, manage pull requests |
-| **Google Suite** | Search/read Google Drive files, Gmail search/read/send |
-| **Internet Search** | Access up-to-date web information |
-| **Web Crawler** | Extract and summarize content from any URL |
+| **GitHub** | Repository management, file operations, PR/issue handling, branch management, multi-file commits |
+| **Google Gmail** | Read, send, search, reply to emails, manage labels |
+| **Google Drive** | Search, read, create, share files and documents |
+| **Vercel** | Project management, deployments, environment variables, domains, teams |
+| **Supabase** | Organization and project management, storage buckets, edge functions |
+| **Browser Automation** | Visual web interaction with Playwright-powered browser control |
+| **Image Generation** | AI-powered image creation using Gemini 2.0 Flash |
 
 ### 🏃‍♂️ Advanced Capabilities
 
-- **🔒 Stateful Sandbox** - Secure, isolated environment for code execution with persistent state
-- **🧠 Long-Term Memory** - Store and recall information across sessions with manual context selection
-- **🔐 Secure Authentication** - Supabase-managed user accounts with OAuth flows
-- **🎨 Advanced UI with Artifact Viewer** - Clean chat interface with separate rendering for complex outputs
-- **📁 File Uploads & Multimodality** - Support for text, images, and various file types
+- **🔒 Stateful Docker Sandbox** - Secure, isolated code execution environment with persistent state across commands
+- **🧠 Session-Based Memory** - Manual context selection from previous conversations for continuity
+- **🔐 Supabase Authentication** - Secure user accounts with OAuth2 flows for GitHub, Google, Vercel, and Supabase
+- **🎨 Artifact Viewer** - Dedicated viewer for code, diagrams (Mermaid), images, and browser screenshots
+- **📁 Multimodal Support** - Process text, images, audio, video, PDFs, and documents
+- **⚡ Real-Time Communication** - WebSocket-based streaming with Redis Pub/Sub for scalability
+- **📊 Interactive Diagrams** - Pan, zoom, and interact with Mermaid diagrams
+- **🌐 Visual Browser Control** - See and interact with web pages through the AI
 
-## 🏛️ Architecture Overview
+---
+
+## 🏗️ Architecture Overview
 
 ```
-┌─────────────────────┐    IPC    ┌──────────────────────┐    WebSocket    ┌────────────────────────┐
-│  🖥️ Electron         │◄────────►│  ⚙️ Node.js          │◄──────────────►│  🐍 Python Backend    │
-│  Frontend           │           │  Main Process        │                 │  (Flask)               │
-│  (UI/UX)            │           │  (Window & OS Mgmt)  │                 │  (AI Agents & Tools)   │
-└─────────────────────┘           └──────────────────────┘                 └────────────────────────┘
-           │                                 │                                          │
-           └─────────────────────────────────┼──────────────────────────────────────────┘
-                                             │
-                                    ┌────────▼────────┐
-                                    │  ☁️ Supabase     │
-                                    │  (Auth, DB,     │
-                                    │   Storage)      │
-                                    └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          ELECTRON DESKTOP APP                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │
+│  │   Chat UI    │  │  Artifact    │  │   Settings   │  │    Tasks    │ │
+│  │   (HTML/CSS/ │  │   Viewer     │  │   (AIOS)     │  │   Manager   │ │
+│  │   JavaScript)│  │              │  │              │  │             │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘ │
+│         │                  │                  │                  │        │
+│         └──────────────────┴──────────────────┴──────────────────┘        │
+│                                    │                                      │
+│                              IPC (Secure)                                 │
+│                                    │                                      │
+│  ┌─────────────────────────────────▼────────────────────────────────┐   │
+│  │              ELECTRON MAIN PROCESS (Node.js)                      │   │
+│  │  • Window Management  • Deep Link Handler  • Python Bridge        │   │
+│  └─────────────────────────────────┬────────────────────────────────┘   │
+└────────────────────────────────────┼──────────────────────────────────────┘
+                                     │
+                            WebSocket (Socket.IO)
+                                     │
+┌────────────────────────────────────▼──────────────────────────────────────┐
+│                       PYTHON BACKEND (Flask + Gunicorn)                   │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                    AETHERIA AI ORCHESTRATOR                        │  │
+│  │                      (Gemini 2.5 Flash)                            │  │
+│  │                                                                    │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │  │
+│  │  │   Planner    │  │  Dev Team    │  │ World Agent  │           │  │
+│  │  │  (DeepSeek)  │  │  (Gemini)    │  │  (Gemini)    │           │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘           │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                         TOOL ECOSYSTEM                           │    │
+│  │  • GitHubTools        • GoogleEmailTools    • GoogleDriveTools  │    │
+│  │  • VercelTools        • SupabaseTools       • BrowserTools      │    │
+│  │  • SandboxTools       • ImageTools          • WebCrawler        │    │
+│  │  • GoogleSearch       • Wikipedia           • ArXiv             │    │
+│  │  • HackerNews         • YFinance                                │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+└───────────────────────────────────┬───────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+         ┌──────────▼─────┐  ┌─────▼──────┐  ┌────▼─────────┐
+         │  Redis Pub/Sub │  │  Supabase  │  │   Sandbox    │
+         │  (Messaging)   │  │  (Auth/DB) │  │   Manager    │
+         └────────────────┘  └────────────┘  └──────────────┘
+                                                     │
+                                              ┌──────▼──────┐
+                                              │   Docker    │
+                                              │  Containers │
+                                              └─────────────┘
 ```
 
 ### Component Breakdown
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Electron Frontend** | HTML5, CSS3, JavaScript | User interface and interactions |
-| **Node.js Main Process** | Electron.js, Node.js | Window management and secure bridging |
-| **Python Backend** | Flask, Socket.IO | AI agents and tool execution |
-| **Supabase** | PostgreSQL, Auth, Storage | Data persistence and authentication |
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | Electron, HTML5, CSS3, Vanilla JS | Desktop UI, chat interface, artifact viewer, file handling |
+| **Main Process** | Node.js, Electron IPC | Window management, deep link handling, Python bridge |
+| **Backend API** | Flask, Socket.IO, Gunicorn + Eventlet | WebSocket server, agent orchestration, tool execution |
+| **AI Framework** | Agno 2.0.7 | Multi-agent coordination, memory management, tool integration |
+| **LLM Models** | Gemini 2.5 Flash, DeepSeek R1, Groq | Strategic planning, code generation, research |
+| **Message Broker** | Redis Pub/Sub | Scalable real-time communication for browser tools |
+| **Database** | Supabase (PostgreSQL) | User auth, session storage, integration tokens, run history |
+| **Code Execution** | Docker + FastAPI Sandbox Manager | Isolated, secure command execution environment |
+| **Storage** | Supabase Storage | Media uploads (images, audio, video, documents) |
+
+---
 
 ## 🛠️ Technology Stack
 
-<table>
-<tr>
-<th>Frontend</th>
-<th>Main Process</th>
-<th>Backend</th>
-<th>Database & Services</th>
-</tr>
-<tr>
-<td>
+### Frontend Technologies
+- **Electron 37.2.6** - Cross-platform desktop framework
+- **Vanilla JavaScript (ES6+)** - No framework dependencies
+- **Marked.js** - Markdown rendering
+- **Highlight.js** - Syntax highlighting
+- **Mermaid.js** - Diagram rendering with pan/zoom
+- **DOMPurify** - XSS protection
+- **Socket.IO Client** - Real-time communication
 
-- HTML5
-- CSS3
-- JavaScript (ES6+)
-- marked.js
-- highlight.js
-- mermaid.js
-- dompurify
+### Backend Technologies
+- **Python 3.11** - Core backend language
+- **Flask 3.1.0** - Web framework
+- **Flask-SocketIO 5.5.1** - WebSocket support
+- **Gunicorn + Eventlet** - Production WSGI server
+- **Agno 2.0.7** - AI agent framework
+- **Redis 5.0.1** - Pub/Sub messaging
+- **Celery 5.3.6** - Background task processing
+- **Playwright** - Browser automation
+- **FastAPI** - Sandbox manager API
+- **Docker SDK** - Container management
 
-</td>
-<td>
+### AI & ML
+- **Google Gemini 2.5 Flash** - Main orchestrator and dev team
+- **Google Gemini 2.0 Flash (Image Gen)** - Image generation
+- **DeepSeek R1 Distill (Groq)** - Strategic planning
+- **Gemini 2.5 Flash Lite** - World agent research
 
-- Node.js
-- Electron.js
-- python-socketio
-- eventlet
+### Database & Storage
+- **Supabase** - Backend-as-a-Service
+- **PostgreSQL** - Relational database
+- **Supabase Auth** - OAuth2 authentication
+- **Supabase Storage** - File storage
 
-</td>
-<td>
+### DevOps & Deployment
+- **Docker & Docker Compose** - Containerization
+- **Gunicorn** - Production server
+- **Redis** - Caching and messaging
+- **Flower** - Celery monitoring
 
-- Python 3.10+
-- Flask
-- agno (AI Framework)
-- PyGithub
-- google-api-python-client
-
-</td>
-<td>
-
-- Supabase
-- PostgreSQL
-- Supabase Auth
-- Supabase Storage
-
-</td>
-</tr>
-</table>
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-Before you begin, ensure you have the following installed:
+Ensure you have the following installed:
 
-- [ ] **Node.js** (v18 or later) and npm
-- [ ] **Python** (v3.10 or later) and pip
-- [ ] **Supabase account** (free tier is sufficient)
-- [ ] **GitHub OAuth Application** for GitHub integration
-- [ ] **Google Cloud Platform Project** with Gmail API and Google Drive API enabled
+- **Node.js** v18+ and npm
+- **Python** 3.11+
+- **Docker** and Docker Compose (for production deployment)
+- **Redis** (or use Docker)
+- **Supabase Account** (free tier works)
 
-### 1. 🗄️ Supabase Setup
+### API Keys Required
 
-#### Create a Supabase Project
-1. Go to your [Supabase dashboard](https://supabase.com/dashboard)
-2. Create a new project
+- **OpenAI API Key** (optional, for OpenAI models)
+- **Groq API Key** (for DeepSeek R1)
+- **Google AI API Key** (for Gemini models)
+- **GitHub OAuth App** (for GitHub integration)
+- **Google Cloud OAuth** (for Gmail/Drive)
+- **Vercel OAuth** (optional, for Vercel integration)
+- **Supabase OAuth** (optional, for Supabase integration)
 
-#### Run the Database Schema
-1. Navigate to the **SQL Editor** in your Supabase project dashboard
-2. Copy the entire content of the `supabase.md` file
-3. Paste it into the SQL editor and click **Run**
+---
 
-#### Enable Third-Party Providers
-1. Go to **Authentication** → **Providers**
-2. Enable and configure:
-   - **GitHub provider** using your OAuth app credentials
-   - **Google provider** using your OAuth app credentials
-3. Add the Supabase Redirect URL to your OAuth app configurations
+## 📦 Installation
 
-#### Get API Keys
-Navigate to **Project Settings** → **API** and collect:
-- Project URL
-- anon (public) key
-- service_role (secret) key
+### 1. Clone the Repository
 
-### 2. 🐍 Backend Setup
-
-#### Clone the Repository
 ```bash
 git clone https://github.com/your-username/aetheria-ai-os.git
 cd aetheria-ai-os
 ```
 
-#### Set up Python Virtual Environment
+### 2. Backend Setup
+
+#### Create Python Virtual Environment
+
 ```bash
+cd python-backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
 ```
 
-#### Install Dependencies
+#### Install Python Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 🖥️ Frontend Setup
+#### Configure Environment Variables
 
-#### Install Node.js Dependencies
+Create a `.env` file in `python-backend/`:
+
+```env
+# === AI Model API Keys ===
+OPENAI_API_KEY=sk-your-openai-key
+GROQ_API_KEY=your-groq-key
+GOOGLE_API_KEY=your-google-ai-key
+ANTHROPIC_API_KEY=your-anthropic-key  # Optional
+MISTRAL_API_KEY=your-mistral-key      # Optional
+
+# === Supabase Configuration ===
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+DATABASE_URL=postgresql+psycopg2://postgres:password@host:5432/postgres
+
+# === Redis Configuration ===
+REDIS_URL=redis://localhost:6379/0
+
+# === Celery Configuration ===
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
+# === Sandbox Manager ===
+SANDBOX_API_URL=http://localhost:8000
+
+# === OAuth Credentials ===
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+VERCEL_CLIENT_ID=your-vercel-client-id          # Optional
+VERCEL_CLIENT_SECRET=your-vercel-client-secret  # Optional
+
+SUPABASE_CLIENT_ID=your-supabase-client-id          # Optional
+SUPABASE_CLIENT_SECRET=your-supabase-client-secret  # Optional
+
+# === Flask Configuration ===
+FLASK_SECRET_KEY=your-strong-random-secret-key
+DEBUG=false
+LOG_LEVEL=INFO
+```
+
+### 3. Supabase Database Setup
+
+1. Create a new Supabase project at [supabase.com](https://supabase.com)
+2. Navigate to **SQL Editor**
+3. Run the schema from `supabase.md` (if available) or create tables:
+   - `profiles` - User profiles
+   - `user_integrations` - OAuth tokens
+   - `agno_sessions` - Conversation sessions
+   - `agno_runs` - Agent run history
+   - `request_logs` - Token usage tracking
+
+4. Enable **Storage** bucket named `media-uploads` for file uploads
+
+5. Configure **Authentication Providers**:
+   - Enable Email/Password
+   - Enable Google OAuth
+   - Enable GitHub OAuth
+   - Set redirect URLs to `aios://auth-callback`
+
+### 4. Frontend Setup
+
 ```bash
+# From project root
 npm install
 ```
 
-## ⚙️ Configuration
+Update `js/config.js` with your backend URL:
 
-Create a `.env` file in the project's root directory:
-
-```env
-# Supabase Credentials
-SUPABASE_URL="YOUR_SUPABASE_PROJECT_URL"
-SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_PUBLIC_KEY"
-SUPABASE_SERVICE_KEY="YOUR_SUPABASE_SERVICE_ROLE_SECRET_KEY"
-
-# Database URL for SQLAlchemy
-DATABASE_URL="postgresql+psycopg2://postgres:[YOUR-PASSWORD]@[YOUR-DB-HOST]:5432/postgres"
-
-# Google OAuth Credentials
-GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID"
-GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET"
-
-# GitHub OAuth Credentials
-GITHUB_CLIENT_ID="YOUR_GITHUB_CLIENT_ID"
-GITHUB_CLIENT_SECRET="YOUR_GITHUB_CLIENT_SECRET"
-
-# Flask Configuration
-FLASK_SECRET_KEY="a_strong_random_secret_key_here"
-
-# Sandbox API URL (if running separately)
-SANDBOX_API_URL="http://127.0.0.1:8000"
-
-# Debug Mode
-DEBUG="True"
+```javascript
+const config = {
+    backend: {
+        url: 'http://localhost:8765',  // Your backend URL
+        maxReconnectAttempts: 50,
+        reconnectDelay: 20000,
+        connectionTimeout: 20000
+    },
+    supabase: {
+        url: 'https://your-project.supabase.co',
+        anonKey: 'your-anon-key'
+    }
+};
 ```
+
+---
 
 ## ▶️ Running the Application
 
-You need to run both the backend server and the Electron application:
+### Development Mode (Local)
 
-### Terminal 1: Start Python Backend
+#### Terminal 1: Start Redis (if not using Docker)
+
 ```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run Flask application
-flask --app app.py run --port 5001
+redis-server
 ```
 
-### Terminal 2: Start Electron App
+#### Terminal 2: Start Sandbox Manager
+
+```bash
+cd sandbox_manager
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+#### Terminal 3: Start Python Backend
+
+```bash
+cd python-backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+python app.py
+```
+
+#### Terminal 4: Start Electron App
+
 ```bash
 npm start
 ```
 
+### Production Mode (Docker)
+
+See [DOCKER.md](DOCKER.md) for complete Docker deployment instructions.
+
+```bash
+# Build and start all services
+docker-compose up --build -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+```
+
+---
+
+## 🎯 Usage Guide
+
+### Basic Chat
+
+1. **Start a Conversation**: Type your message in the input field
+2. **Attach Files**: Click the paperclip icon to upload images, documents, PDFs
+3. **Select Context**: Click the context icon to include previous conversations
+4. **View Reasoning**: Expand the "Reasoning" section to see agent steps and tool usage
+
+### Advanced Features
+
+#### Code Execution
+
+```
+"Create a Python script that analyzes CSV data and generates a plot"
+```
+
+The dev team will:
+1. Create the script in the sandbox
+2. Execute it
+3. Show you the output and any generated files
+
+#### Web Research
+
+```
+"Find the latest research papers on quantum computing from ArXiv"
+```
+
+The World Agent will:
+1. Search ArXiv
+2. Summarize findings
+3. Provide links to papers
+
+#### GitHub Operations
+
+```
+"Create a new branch called 'feature/auth' in my repo 'myapp' and add a login.py file"
+```
+
+GitHub Tools will:
+1. Create the branch
+2. Commit the file
+3. Confirm the operation
+
+#### Image Generation
+
+```
+"Generate an image of a futuristic city at sunset"
+```
+
+Image Tools will:
+1. Generate the image using Gemini 2.0
+2. Display it in the artifact viewer
+3. Allow you to download it
+
+#### Browser Automation
+
+```
+"Go to example.com and click the login button"
+```
+
+Browser Tools will:
+1. Navigate to the URL
+2. Take a screenshot
+3. Identify interactive elements
+4. Perform the click action
+5. Show you the result
+
+### Artifact Viewer
+
+The artifact viewer displays:
+- **Code blocks** with syntax highlighting
+- **Mermaid diagrams** with pan/zoom controls
+- **Generated images** in full resolution
+- **Browser screenshots** with element annotations
+
+Click any artifact reference in the chat to reopen it.
+
+---
+
+## 🔧 Configuration
+
+### Agent Configuration
+
+Edit `python-backend/assistant.py` to customize:
+- Model selection (Gemini, GPT-4, Claude, etc.)
+- Agent instructions and behavior
+- Tool availability
+- Memory settings
+
+### Tool Toggles
+
+Users can enable/disable tools via the shuffle menu:
+- **AI-OS Mode**: All tools enabled (default)
+- **Deep Search Mode**: Research-focused tools only
+- **Memory**: Enable conversation memory
+- **Tasks**: Task management integration
+
+---
+
+## 🐳 Docker Deployment
+
+For production deployment with Docker, see the comprehensive [DOCKER.md](DOCKER.md) guide which covers:
+
+- Multi-service orchestration (Web, Redis, Celery, Flower, Sandbox Manager)
+- Environment configuration
+- Security best practices
+- Monitoring and logging
+- Troubleshooting
+- Production optimizations
+
+Quick start:
+
+```bash
+docker-compose up --build -d
+```
+
+Access services:
+- **Web App**: http://localhost:8765
+- **Flower (Celery Monitor)**: http://localhost:5555
+- **Sandbox Manager**: http://localhost:8000
+
+---
+
 ## 🤝 Contributing
 
-We welcome contributions! Here's how to get started:
+We welcome contributions! Please follow these guidelines:
 
-### Steps to Contribute
+### Development Workflow
 
-1. **Fork** the repository
-2. **Create** a new branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. **Make** your changes with clear, descriptive commit messages
-4. **Push** to your forked repository:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-5. **Submit** a pull request to the main repository's `main` branch
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Test thoroughly
+5. Commit with clear messages: `git commit -m 'Add amazing feature'`
+6. Push to your fork: `git push origin feature/amazing-feature`
+7. Open a Pull Request
 
-### Guidelines
+### Code Style
 
-- Ensure your code adheres to the existing style
-- Address security considerations for sensitive data changes
-- Include tests for new features when applicable
+- **Python**: Follow PEP 8, use type hints
+- **JavaScript**: Use ES6+, consistent naming
+- **Comments**: Document complex logic
+- **Tests**: Add tests for new features
+
+### Areas for Contribution
+
+- New tool integrations (Slack, Discord, etc.)
+- Additional AI model support
+- UI/UX improvements
+- Documentation enhancements
+- Bug fixes and optimizations
+
+---
 
 ## 📄 License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+---
 
 ## 🙏 Acknowledgments
 
-- **[agno framework](https://github.com/agno-ai/agno)** - Powers our agentic architecture
-- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop app framework
+- **[Agno Framework](https://github.com/agno-ai/agno)** - Powerful multi-agent AI framework
+- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop apps
 - **[Flask](https://flask.palletsprojects.com/)** - Python web framework
-- **[Supabase](https://supabase.com/)** - Open source Firebase alternative
+- **[Supabase](https://supabase.com/)** - Open-source Firebase alternative
+- **[Google Gemini](https://deepmind.google/technologies/gemini/)** - Advanced AI models
+- **[DeepSeek](https://www.deepseek.com/)** - Reasoning-focused AI models
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/your-username/aetheria-ai-os/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/aetheria-ai-os/discussions)
+- **Email**: support@aetheria-ai.com
 
 ---
 
@@ -258,6 +536,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 **[⭐ Star this repo](https://github.com/your-username/aetheria-ai-os)** • **[🐛 Report Bug](https://github.com/your-username/aetheria-ai-os/issues)** • **[💡 Request Feature](https://github.com/your-username/aetheria-ai-os/issues)**
 
-Made with ❤️ by the Aetheria Team
+Made with ❤️ by the Aetheria AI Team
 
 </div>
