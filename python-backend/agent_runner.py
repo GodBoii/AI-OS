@@ -1,10 +1,8 @@
-# python-backend/agent_runner.py (Updated for Frontend-Driven UI)
+# python-backend/agent_runner.py (Corrected for Dependency Injection)
 
 import logging
 import json
 import traceback
-import base64
-import uuid
 from typing import Dict, Any, List, Tuple
 from redis import Redis
 
@@ -28,6 +26,7 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     Supabase storage or encoding text content, and converting them into
     Agno media objects.
     """
+    # This function's logic remains correct and does not require changes.
     images, audio, videos, other_files = [], [], [], []
     if not files_data:
         return images, audio, videos, other_files
@@ -64,34 +63,54 @@ def run_agent_and_stream(
     conversation_id: str,
     message_id: str,
     turn_data: dict,
-    browser_tools_config: dict,
+    browser_tools_config: dict, # This is now only used to extract socketio and redis_client
     context_session_ids: List[str],
     connection_manager: ConnectionManager,
     redis_client: Redis
 ):
     """
-    Orchestrates a full agent run, adapted for the frontend-driven UI architecture.
+    Orchestrates a full agent run, ensuring all real-time tools receive the
+    necessary per-request dependencies for communication.
     """
     try:
+        # --- DEBUG LOG ---
+        print(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}")
+        logger.info(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}")
+
         # 1. Retrieve Session and User Data
         session_data = connection_manager.get_session(conversation_id)
         if not session_data:
             raise Exception(f"Session data not found for conversation {conversation_id}")
         user_id = session_data['user_id']
 
+        # --- MODIFICATION START: Create a dedicated config for real-time tools ---
+        # This new dictionary will contain ALL dependencies needed by any tool that
+        # communicates directly with the frontend or uses Redis Pub/Sub.
+        realtime_tool_config = {
+            'socketio': socketio,
+            'sid': sid,
+            'message_id': message_id,
+            'redis_client': redis_client
+        }
+        # --- DEBUG LOG ---
+        print(f"[AGENT_RUNNER] Created realtime_tool_config: { {k: type(v).__name__ for k, v in realtime_tool_config.items()} }")
+        logger.info(f"[AGENT_RUNNER] Created realtime_tool_config with keys: {list(realtime_tool_config.keys())}")
+
         # 2. Initialize the Agent
+        # --- MODIFICATION START: Pass the new, complete config dictionary ---
+        # Both BrowserTools and ImageTools now receive the same complete set of
+        # dependencies, ensuring they are initialized correctly.
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
-            browser_tools_config=browser_tools_config,
+            browser_tools_config=realtime_tool_config,
+            custom_tool_config=realtime_tool_config, # Pass the complete config to ImageTools
             **session_data['config']
         )
+        # --- MODIFICATION END ---
 
         # 3. Process Input Data
         images, audio, videos, other_files = process_files(turn_data.get('files', []))
-
-        # --- CHANGE: SIMPLIFIED SESSION STATE ---
-        # The pre-generated image_artifact_id is no longer needed and has been removed.
         current_session_state = {'turn_context': turn_data}
         user_message = turn_data.get("user_message", "")
         
@@ -118,6 +137,9 @@ def run_agent_and_stream(
         final_user_message = f"{historical_context_str}CURRENT QUESTION:\n{user_message}" if historical_context_str else user_message
 
         # 5. Run the Agent and Stream Results
+        # --- DEBUG LOG ---
+        print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
+        logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         run_output: TeamRunOutput | None = None
         for chunk in agent.run(
             input=final_user_message,
@@ -134,7 +156,6 @@ def run_agent_and_stream(
             if not chunk or not hasattr(chunk, 'event'):
                 continue
 
-            # Capture the final, complete run output object when it arrives
             if isinstance(chunk, TeamRunOutput):
                 run_output = chunk
 
@@ -148,56 +169,9 @@ def run_agent_and_stream(
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
 
-        # 6. Finalize the Stream and Send Final Artifacts
-        final_response_payload = {"done": True, "id": message_id}
-        # --- CHANGE 2: Process final run_output for image artifacts ---
-        # This is the new, framework-compliant way to handle image data.
-        # We inspect the final run output, extract any images, and include them
-        # in the 'done' message payload for the frontend to process.
-        def collect_images_from_output(output) -> List[Image]:
-            collected: List[Image] = []
-            if not output:
-                return collected
-
-            visited: set[int] = set()
-
-            def _visit(run_segment):
-                if not run_segment:
-                    return
-                segment_id = id(run_segment)
-                if segment_id in visited:
-                    return
-                visited.add(segment_id)
-
-                segment_images = getattr(run_segment, 'images', None) or []
-                for image_obj in segment_images:
-                    if image_obj and getattr(image_obj, 'content', None):
-                        collected.append(image_obj)
-
-                member_runs = getattr(run_segment, 'member_responses', None) or []
-                for member in member_runs:
-                    _visit(member)
-
-            _visit(output)
-            return collected
-
-        collected_images: List[Image] = collect_images_from_output(run_output)
-        if collected_images:
-            image_artifacts: List[Dict[str, str]] = []
-            for index, img in enumerate(collected_images):
-                artifact_id = image_artifact_id if index == 0 else f"image-artifact-{uuid.uuid4()}"
-                image_artifacts.append({
-                    "artifactId": artifact_id,
-                    "content_base_64": base64.b64encode(img.content).decode('utf-8')
-                })
-                logger.info(f"Packaged image data for artifact ID: {artifact_id}")
-
-            if image_artifacts:
-                final_response_payload["images"] = image_artifacts
+        # 6. Finalize the Stream and Log Metrics
+        socketio.emit("response", {"done": True, "id": message_id}, room=sid)
         
-        socketio.emit("response", final_response_payload, room=sid)
-        
-        # 7. Log Metrics
         if run_output and run_output.metrics and (run_output.metrics.input_tokens > 0 or run_output.metrics.output_tokens > 0):
             supabase_client.from_('request_logs').insert({
                 'user_id': user_id,

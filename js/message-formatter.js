@@ -1,4 +1,4 @@
-// js/message-formatter.js (Updated for Frontend-Driven UI)
+// js/message-formatter.js (Enhanced for inline artifact rendering)
 
 import { artifactHandler } from './artifact-handler.js';
 
@@ -33,14 +33,18 @@ class MessageFormatter {
         });
 
         const artifactRenderer = {
-            // --- CHANGE START ---
-            // The logic for handling `language === 'image'` has been removed from this live renderer.
-            // The backend will no longer send this markdown block for new messages.
-            // The frontend (`chat.js`) will now be responsible for injecting the button after receiving the image data.
             code: (code, language) => {
+                if (language === 'image') {
+                    const artifactId = code.trim();
+                    artifactHandler.createArtifact(artifactId, 'image');
+                    return `<button class="artifact-reference" data-artifact-id="${artifactId}">
+                        <i class="fas fa-image"></i>
+                        View Generated Image
+                    </button>`;
+                }
+
                 if (language === 'mermaid') {
                     const artifactId = artifactHandler.createArtifact(code, 'mermaid');
-                    // Note: The original logic to immediately show the mermaid artifact is preserved.
                     artifactHandler.showArtifact('mermaid', code, artifactId);
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <i class="fas fa-diagram-project"></i>
@@ -55,7 +59,6 @@ class MessageFormatter {
                     View ${validLanguage} Code Block
                 </button>`;
             },
-            // --- CHANGE END ---
             table: (header, body) => {
                 return `<div class="table-container"><table class="formatted-table"><thead>${header}</thead><tbody>${body}</tbody></table></div>`;
             }
@@ -74,10 +77,6 @@ class MessageFormatter {
 
     buildInlineRenderer() {
         const renderer = new marked.Renderer();
-        
-        // --- NO CHANGE HERE ---
-        // This renderer is for historical chat logs. We keep the 'image' logic
-        // to handle old messages that may have the image markdown stored in the database.
         renderer.code = (code, language = 'plaintext') => {
             if (language === 'image') {
                 return '<div class="inline-artifact-placeholder">Image preview unavailable for saved sessions.</div>';
@@ -98,7 +97,6 @@ class MessageFormatter {
         return renderer;
     }
 
-    // ... (The rest of the file remains unchanged and is omitted for brevity) ...
     renderCodeInline(code, language) {
         const sanitizedCode = DOMPurify.sanitize(code, { USE_PROFILES: { html: false } });
         return `<pre class="inline-artifact-code"><code class="language-${language}">${sanitizedCode}</code></pre>`;

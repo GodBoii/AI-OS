@@ -14,7 +14,12 @@ from celery_app import celery_app as celery
 # pre-configured. They will be linked to the Flask app in the factory.
 
 # SocketIO: Uninitialized, will be configured in the factory.
-socketio = SocketIO(cors_allowed_origins="*", async_mode="eventlet")
+# Increased max_http_buffer_size to handle large image payloads (up to 10MB)
+socketio = SocketIO(
+    cors_allowed_origins="*", 
+    async_mode="eventlet",
+    max_http_buffer_size=10 * 1024 * 1024  # 10MB limit
+)
 
 # OAuth: Uninitialized, will be configured in the factory.
 oauth = OAuth()

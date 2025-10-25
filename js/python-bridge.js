@@ -78,7 +78,8 @@ class PythonBridge {
                 reconnectionAttempts: Infinity,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
-                timeout: config.backend.connectionTimeout
+                timeout: config.backend.connectionTimeout,
+                maxHttpBufferSize: 10 * 1024 * 1024  // 10MB limit to match server
             });
             const connectionTimeout = setTimeout(() => {
                 console.error('Socket.IO connection timeout');

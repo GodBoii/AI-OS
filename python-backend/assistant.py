@@ -1,4 +1,4 @@
-# python-backend/assistant.py (Final, Refactored for Agno v2.x Direct Multimodal Output)
+# python-backend/assistant.py (Final, Corrected Version for Agno v2.0.7 - Path B)
 
 import os
 import base64
@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any, Union
 
 # Agno Core Imports
 from agno.agent import Agent
-from agno.team import Team
+from agno.team import Team  # <-- Use the standard Team class
 from agno.media import Image
 from agno.tools import tool
 
@@ -37,10 +37,15 @@ from browser_tools import BrowserTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
 
+# --- MODIFICATION START: Import the new ImageTools toolkit ---
+from image_tools import ImageTools
+# --- MODIFICATION END ---
+
 # Other Imports
 from supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
+
 
 def get_llm_os(
     user_id: Optional[str] = None,
@@ -58,22 +63,24 @@ def get_llm_os(
     enable_google_drive: bool = False,
     enable_browser: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
-    # --- CHANGE 1: Removed `custom_tool_config` parameter ---
-    # This parameter was only needed for the obsolete image generation workaround.
-) -> Team:
+    custom_tool_config: Optional[Dict[str, Any]] = None,
+) -> Team:  # <-- CRITICAL CHANGE: Return the standard Team object
     """
     Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
     """
-    direct_tools: List[Toolkit] = []
+    direct_tools: List[Union[Toolkit, callable]] = []
 
     db_url_full = os.getenv("DATABASE_URL")
     if not db_url_full:
         raise ValueError("DATABASE_URL environment variable is not set.")
     db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
 
+    # This PostgresDb object is now the single source of truth for persistence.
+    # The Team will use it automatically to save runs and memories to Supabase.
     db = PostgresDb(
         db_url=db_url_sqlalchemy,
         db_schema="public"
+
     )
 
     if enable_github and user_id:
@@ -93,8 +100,10 @@ def get_llm_os(
     if enable_supabase and user_id:
         direct_tools.append(SupabaseTools(user_id=user_id))
 
-    # --- CHANGE 2: The entire old `generate_image` tool function has been deleted. ---
-    # It is replaced by the `artist_agent` defined below.
+    # --- MODIFICATION START: Instantiate and add the new ImageTools toolkit ---
+    if custom_tool_config:
+        direct_tools.append(ImageTools(custom_tool_config=custom_tool_config))
+    # --- MODIFICATION END ---
 
     # This section for building the planner's context remains unchanged and is a good design pattern.
     available_resources = {
@@ -112,8 +121,9 @@ def get_llm_os(
         available_resources["direct_tools"].append("GoogleSearchTools - Web search capabilities")
     if enable_browser:
         available_resources["direct_tools"].append("BrowserTools - Browser automation and interaction")
-    # --- CHANGE 3: Updated available resources to reflect the new agent ---
-    available_resources["specialist_agents"].append("artist_agent - AI image generation")
+    # --- MODIFICATION START: Update planner resources ---
+    available_resources["direct_tools"].append("ImageTools - AI image generation")
+    # --- MODIFICATION END ---
     if enable_vercel:
         available_resources["direct_tools"].append("VercelTools - Vercel project and deployment operations")
     if enable_supabase:
@@ -140,7 +150,7 @@ def get_llm_os(
         planner = Agent(
             name="planner",
             role="Strategic planning agent that creates execution plans for complex multi-step tasks",
-            model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
+            model=Groq(id="deepseek-r1-distill-llama-70b"),
             instructions=[
                 "You are the Strategic Planner for Aetheria AI. Your role is to analyze complex queries and create clear, actionable execution plans.",
                 "", "ACCESS: You receive queries from session_state['turn_context']",
@@ -158,7 +168,7 @@ def get_llm_os(
                 "• Example format:",
                 "  Step 1: Search for latest research papers → World_Agent (ArXiv) → Get 5 recent papers",
                 "  Step 2: Analyze findings → Direct analysis → Synthesize key insights",
-                "  Step 3: Generate visualization → artist_agent → Create infographic",
+                "  Step 3: Generate visualization → ImageTools → Create infographic",
                 "", "WHEN TO CREATE PLANS:",
                 "• Multi-step workflows requiring different tools",
                 "• Tasks needing coordination between agents",
@@ -177,7 +187,7 @@ def get_llm_os(
     if coding_assistant:
         dev_team = Team(
             name="dev_team",
-            model=Gemini(id="gemini-2.5-flash-preview-09-2025"),
+            model=Gemini(id="gemini-2.5-flash"),
             members=[],
             tools=[SandboxTools(session_info=session_info)] if session_info else [],
             instructions=[
@@ -196,7 +206,7 @@ def get_llm_os(
         world_ai = Agent(
             name="World_Agent",
             role="Universal knowledge and research agent with access to world information.",
-            model=Gemini(id="gemini-2.5-flash-lite-preview-09-2025"),
+            model=Gemini(id="gemini-2.5-flash-lite-preview-06-17"),
             tools=[YFinanceTools(),WikipediaTools(),HackerNewsTools(),ArxivTools(),WebsiteTools(),Crawl4aiTools(max_length=None)],
             instructions=[
                 "You are the World Agent with comprehensive access to global information sources.",
@@ -224,50 +234,53 @@ def get_llm_os(
             debug_mode=debug_mode,
         )
         main_team_members.append(world_ai)
-        
-    # --- CHANGE 4: Define the new, framework-native artist agent ---
-    artist_agent = Agent(
-        name="artist_agent",
-        model=Gemini(
-            id="gemini-2.0-flash-exp-image-generation",
-            response_modalities=["Text", "Image"],
-        ),
-        debug_mode=debug_mode,
-    )
-    main_team_members.append(artist_agent)
-
 
     aetheria_instructions = [
-        "You are Aetheria AI, the world's most advanced AI. You lead a team of specialist agents. Your primary goal is to provide direct, clear, and valuable responses to the user.",
-        "Access context via session_state['turn_context'].",
-
-        "\n--- CORE WORKFLOW ---\n"
-        "1.  **ASSESS COMPLEXITY:** If the user's request is complex or requires multiple steps/agents, delegate to the `planner`  agent first. Otherwise, handle it directly.",
-        "2.  **EXECUTE:** Based on the assessment or the planner's output, delegate tasks to the appropriate specialist agent or use your own tools.",
-        "3.  **SYNTHESIZE & RESPOND:** Compile the results from your team and present a final, cohesive answer to the user. Your response should be from you, Aetheria AI, not a summary of your agents' work.",
-
-        "\n--- ROUTING GUIDE ---\n"
-        "•   **Coding/Terminal/Files:** Delegate to `dev_team` .",
-        "•   **Web Research/Data Extraction:** Delegate to `World_Agent` .",
-        "•   **Image Generation/Drawing:** Delegate to `artist_agent` .",
-        "•   **Browser Interaction:** Use `browser_tools` .",
-        "•   **Vercel/Supabase Management:** Use `VercelTools`  or `SupabaseTools` .",
-        "•   **Simple Web Search:** Use `GoogleSearchTools` .",
-
-        "\n--- RESPONSE STYLE ---\n"
-        "•   Be direct, confident, and conversational.",
-        "•   Do not explain your internal processes (e.g., 'I will now delegate...'). Just present the final result.",
-        "•   Focus on user value.",
+        "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via session_state['turn_context'].",
+        "", "COMPLEXITY ASSESSMENT - First determine:",
+        "• Is this a simple, single-step query? → Handle directly",
+        "• Is this a complex, multi-step task? → Delegate to planner first",
+        "• Does it require multiple tools/agents? → Delegate to planner first",
+        "", "WORKFLOW FOR COMPLEX TASKS:",
+        "1. If query is complex or multi-step → Send to 'planner' agent",
+        "2. Receive execution plan from planner",
+        "3. Execute plan step-by-step using specified agents/tools",
+        "4. Compile results and deliver final response",
+        "", "ROUTING GUIDE FOR SIMPLE TASKS:",
+        "• Coding/Terminal/Files/Testing → dev_team (has sandbox tools)",
+        "• Web research/Data extraction → World_Agent",
+        "• Image generation → ImageTools",
+        "• Browser interaction/Visual inspection → browser_tools, Start by using browser_tools.get_status() to ensure connection",
+        "• Vercel project management (listing projects, deployments) → VercelTools",
+        "• Simple searches → GoogleSearchTools",
+        "• Supabase organization and project management -> SupabaseTools",
+        "", "DECISION LOGIC:",
+        "- Need to SEE and INTERACT with webpage → use browser_tools",
+        "- Need to CODE/RUN commands → delegate to dev_team",
+        "", "EXECUTION PRINCIPLES:",
+        "• Follow planner's steps precisely when executing complex tasks",
+        "• Maintain context between steps",
+        "• If a step fails, adapt and continue or request new plan",
+        "• Compile intermediate results for final synthesis",
+        "", "RESPONSE STYLE:",
+        "• Deliver results as if you personally completed the task",
+        "• Use personalized responses when user data is available",
+        "• Provide direct, clear answers without explaining internal processes",
+        "• Don't use phrases like 'based on my knowledge', 'depending on information', 'I will now', etc.",
+        "• Focus on user value, not system operations",
+        "• Keep responses natural and conversational",
     ]
 
+    # --- CRITICAL CHANGE: Instantiate the standard Team class ---
+    # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-2.5-flash-preview-09-2025"),
+        model=Gemini(id="gemini-2.5-flash"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
         user_id=user_id,
-        db=db,
+        db=db,  # This now controls persistence
         enable_agentic_memory=use_memory,
         enable_user_memories=use_memory,
         enable_session_summaries=use_memory,
@@ -282,7 +295,7 @@ def get_llm_os(
         read_team_history=True,
         add_history_to_context=True,
         num_history_runs=40,
-        store_events=True,
+        store_events=True, # This is crucial for saving the full history
         markdown=True,
         add_datetime_to_context=True,
         debug_mode=debug_mode,

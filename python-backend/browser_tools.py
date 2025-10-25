@@ -23,7 +23,7 @@ class BrowserTools(Toolkit):
     request/response handling, making it safe for multi-worker environments.
     """
 
-    def __init__(self, sid: str, socketio, redis_client: Redis):
+    def __init__(self, sid: str, socketio, redis_client: Redis, **kwargs):
         """
         Initializes the BrowserTools toolkit.
 
