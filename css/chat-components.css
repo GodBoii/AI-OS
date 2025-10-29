@@ -70,35 +70,43 @@
 .send-btn.sending {
     pointer-events: none;
     background-color: var(--accent-color);
+    position: relative;
+    overflow: hidden;
 }
 
+/* Smooth icon fade out */
 .send-btn.sending i {
     opacity: 0;
     transform: scale(0);
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Simple centered dot indicator */
 .send-btn.sending::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 18px;
-    height: 18px;
-    margin: -9px 0 0 -9px;
-    border: 2.5px solid rgba(255, 255, 255, 0.25);
-    border-top-color: #ffffff;
+    top: 49%;
+    left: 49%;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%) scale(0);
+    background-color: #ffffff;
     border-radius: 50%;
-    animation: spinLoader 0.7s linear infinite;
+    opacity: 0;
+    animation: fadeInDot 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     z-index: 10;
 }
 
-@keyframes spinLoader {
+@keyframes fadeInDot {
     0% {
-        transform: rotate(0deg);
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0);
     }
+
     100% {
-        transform: rotate(360deg);
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
     }
 }
 
@@ -197,6 +205,7 @@
         transform: translateY(10px);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -205,12 +214,10 @@
 
 /* --- Loading States --- */
 .loading-shimmer {
-    background: linear-gradient(
-        90deg,
-        var(--elevated-bg) 0%,
-        var(--border-color) 50%,
-        var(--elevated-bg) 100%
-    );
+    background: linear-gradient(90deg,
+            var(--elevated-bg) 0%,
+            var(--border-color) 50%,
+            var(--elevated-bg) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
 }
@@ -219,6 +226,7 @@
     0% {
         background-position: -200% 0;
     }
+
     100% {
         background-position: 200% 0;
     }
@@ -483,7 +491,7 @@
     .tooltip::before {
         max-width: 160px;
     }
-    
+
     .add-btn,
     .send-btn,
     .attach-btn,
@@ -493,7 +501,7 @@
         height: 36px;
         font-size: 0.9rem;
     }
-    
+
     .send-btn.sending::before {
         width: 16px;
         height: 16px;
@@ -505,7 +513,9 @@
 /* --- Reduced Motion Support for Send Button --- */
 @media (prefers-reduced-motion: reduce) {
     .send-btn.sending::before {
-        animation: spinLoader 1.5s linear infinite;
+        animation: none;
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
     }
 }
 
@@ -515,9 +525,12 @@
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
     }
+
     50% {
         opacity: 0.5;
     }
@@ -528,10 +541,13 @@
 }
 
 @keyframes bounce {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(-25%);
         animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
     }
+
     50% {
         transform: none;
         animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
