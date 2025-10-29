@@ -124,7 +124,7 @@ def on_send_message(data: str):
 
     except AuthApiError as e:
         logger.error(f"Invalid token for SID {sid}: {e.message}")
-        socketio.emit("error", {"message": "Your session has expired. Please log in again.", "reset": True}, room=sid)
+        socketio.emit("error", {"message": "Your session has expired. Please log in again."}, room=sid)
     except Exception as e:
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
-        socketio.emit("error", {"message": "AI service error. Please start a new chat.", "reset": True}, room=sid)
+        socketio.emit("error", {"message": "An error occurred. Your conversation is preserved. Please try again."}, room=sid)

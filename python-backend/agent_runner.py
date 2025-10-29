@@ -181,4 +181,4 @@ def run_agent_and_stream(
 
     except Exception as e:
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
-        socketio.emit("error", {"message": str(e), "reset": True}, room=sid)
+        socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=sid)

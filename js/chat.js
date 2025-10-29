@@ -345,6 +345,9 @@ function startNewConversation() {
     ongoingStreams = {};
     if (contextHandler) contextHandler.clearSelectedContext();
     if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
+    
+    // Clear error recovery flag
+    window.needsNewBackendSession = false;
 
     chatConfig = {
         memory: false, tasks: false,
@@ -598,8 +601,25 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-error', (error) => {
         console.error('Socket error:', error);
         try {
-            populateBotMessage({ content: error.message || 'An error occurred', id: Date.now().toString() });
-            showNotification(error.message || 'An error occurred. Please start a new chat.');
+            // Show error message in chat without clearing conversation
+            const chatMessages = document.getElementById('chat-messages');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'message message-error';
+            errorDiv.innerHTML = `
+                <div class="error-banner">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div class="error-text">
+                        <strong>Error:</strong> ${error.message || 'An error occurred'}
+                        <p>Your conversation is preserved. You can continue chatting.</p>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(errorDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            showNotification(error.message || 'An error occurred. Your conversation is preserved.');
+            
+            // Re-enable input so user can retry
             const inputElement = document.getElementById('floating-input');
             const sendBtn = document.getElementById('send-message');
             if (inputElement) inputElement.disabled = false;
@@ -607,9 +627,12 @@ function setupIpcListeners() {
                 sendBtn.disabled = false;
                 sendBtn.classList.remove('sending');
             }
-            if (error.reset) {
-                startNewConversation();
-            }
+            
+            // Mark that we need to start a new backend session on next message
+            window.needsNewBackendSession = true;
+            
+            // DON'T clear the conversation anymore
+            // if (error.reset) { startNewConversation(); }
         } catch (e) {
             console.error('Error handling socket error:', e);
         }
@@ -854,6 +877,43 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     }
 }
 
+/**
+ * Extracts conversation history from the DOM for error recovery
+ * @returns {string} Formatted conversation history
+ */
+function extractConversationHistory() {
+    const chatMessages = document.getElementById('chat-messages');
+    const messages = chatMessages.querySelectorAll('.message');
+    let history = '';
+    
+    messages.forEach(msg => {
+        // Skip error messages
+        if (msg.classList.contains('message-error')) return;
+        
+        if (msg.classList.contains('message-user')) {
+            // Extract user message text
+            const textDiv = msg.querySelector('.user-message-text');
+            if (textDiv) {
+                history += `User: ${textDiv.textContent.trim()}\n\n`;
+            }
+        } else if (msg.classList.contains('message-bot')) {
+            // Extract assistant message from main content (not logs)
+            const mainContent = msg.querySelector('.message-content .inner-content');
+            if (mainContent) {
+                // Get text content, stripping HTML but preserving structure
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = mainContent.innerHTML;
+                const text = tempDiv.textContent.trim();
+                if (text && text !== '(No final response content)') {
+                    history += `Assistant: ${text}\n\n`;
+                }
+            }
+        }
+    });
+    
+    return history;
+}
+
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');
     const message = floatingInput.value.trim();
@@ -886,6 +946,64 @@ async function handleSendMessage() {
         return;
     }
     
+    // Check if we need to create a new backend session (after error)
+    if (window.needsNewBackendSession) {
+        // Generate new conversation ID for backend
+        currentConversationId = self.crypto.randomUUID();
+        console.log(`Creating new backend session after error: ${currentConversationId}`);
+        
+        // Extract conversation history from DOM
+        const conversationHistory = extractConversationHistory();
+        
+        // Prepend history to current message
+        const messageWithHistory = conversationHistory 
+            ? `PREVIOUS CONVERSATION (Recovered after error):\n---\n${conversationHistory}---\n\nCURRENT MESSAGE:\n${message}`
+            : message;
+        
+        // Clear the flag
+        window.needsNewBackendSession = false;
+        
+        // Add user message to UI
+        let turnContextData = null;
+        if (selectedSessions.length > 0 || attachedFiles.length > 0) {
+            turnContextData = { sessions: selectedSessions, files: attachedFiles };
+        }
+        addUserMessage(message, turnContextData);
+
+        const messageId = Date.now().toString();
+        createBotMessagePlaceholder(messageId);
+
+        const contextSessionIds = selectedSessions.map(session => session.session_id);
+
+        const messageData = {
+            conversationId: currentConversationId,
+            message: messageWithHistory, // Send with history
+            id: messageId,
+            files: attachedFiles,
+            context_session_ids: contextSessionIds,
+            is_deepsearch: chatConfig.deepsearch,
+            accessToken: session.access_token,
+            config: { use_memory: chatConfig.memory, ...chatConfig.tools }
+        };
+
+        try {
+            ipcRenderer.send('send-message', messageData);
+        } catch (error) {
+            console.error('Error sending message:', error);
+            populateBotMessage({ content: 'Error sending message', id: messageId });
+            floatingInput.disabled = false;
+            sendMessageBtn.disabled = false;
+            sendMessageBtn.classList.remove('sending');
+        }
+
+        floatingInput.value = '';
+        floatingInput.style.height = 'auto';
+        fileAttachmentHandler.clearAttachedFiles();
+        contextHandler.clearSelectedContext();
+        return;
+    }
+    
+    // Normal flow (no error recovery needed)
     let turnContextData = null;
     if (selectedSessions.length > 0 || attachedFiles.length > 0) {
         turnContextData = { sessions: selectedSessions, files: attachedFiles };
@@ -896,23 +1014,18 @@ async function handleSendMessage() {
     const messageId = Date.now().toString();
     createBotMessagePlaceholder(messageId);
 
-    // --- FIX START: Send session IDs instead of full context string ---
-    // Extract just the session_ids from the selected sessions
     const contextSessionIds = selectedSessions.map(session => session.session_id);
 
-    // Add the new `context_session_ids` key to the payload
     const messageData = {
         conversationId: currentConversationId,
         message: message,
         id: messageId,
         files: attachedFiles,
-        context_session_ids: contextSessionIds, // New key with an array of IDs
+        context_session_ids: contextSessionIds,
         is_deepsearch: chatConfig.deepsearch,
         accessToken: session.access_token,
-        // The old 'context' key is now removed
         config: { use_memory: chatConfig.memory, ...chatConfig.tools }
     };
-    // --- FIX END ---
 
     try {
         ipcRenderer.send('send-message', messageData);
@@ -1194,6 +1307,41 @@ style.textContent = `
 .content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
 .inner-content { padding: 8px; }
+.message-error { margin: 16px 0; }
+.error-banner { 
+    display: flex; 
+    align-items: flex-start; 
+    gap: 12px; 
+    padding: 16px; 
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+.error-banner i { 
+    color: #ef4444; 
+    font-size: 20px; 
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.error-banner .error-text { 
+    flex: 1; 
+    color: var(--text-color);
+}
+.error-banner .error-text strong { 
+    color: #ef4444; 
+    display: block;
+    margin-bottom: 4px;
+}
+.error-banner .error-text p { 
+    margin: 4px 0 0 0; 
+    font-size: 0.9em; 
+    opacity: 0.8;
+}
+.dark-mode .error-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.08) 100%);
+    border-color: rgba(239, 68, 68, 0.4);
+}
 `;
 document.head.appendChild(style);
 
