@@ -74,19 +74,8 @@ class AuthService {
                 return { success: false, error: error.message };
             }
         
-            if (data.user) {
-                const { error: profileError } = await this.supabase
-                    .from('profiles')
-                    .insert({ 
-                        id: data.user.id,
-                        email: data.user.email,
-                        name: processedName 
-                    });
-        
-                if (profileError) {
-                    return { success: false, error: `User created, but profile could not be saved: ${profileError.message}` };
-                }
-            }
+            // Profile is now automatically created by database trigger
+            // No need to manually insert into profiles table
             
             return { success: true, data };
         

@@ -445,14 +445,24 @@ function setupIpcListeners() {
             }
 
             if (done || (!streaming && data.content)) {
-                document.getElementById('floating-input').disabled = false;
-                document.getElementById('send-message').disabled = false;
+                const inputElement = document.getElementById('floating-input');
+                const sendBtn = document.getElementById('send-message');
+                if (inputElement) inputElement.disabled = false;
+                if (sendBtn) {
+                    sendBtn.disabled = false;
+                    sendBtn.classList.remove('sending');
+                }
             }
         } catch (error) {
             console.error('Error handling response:', error);
             populateBotMessage({ content: 'Error processing response', id: data.id });
-            document.getElementById('floating-input').disabled = false;
-            document.getElementById('send-message').disabled = false;
+            const inputElement = document.getElementById('floating-input');
+            const sendBtn = document.getElementById('send-message');
+            if (inputElement) inputElement.disabled = false;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.classList.remove('sending');
+            }
         }
     });
 
@@ -590,8 +600,13 @@ function setupIpcListeners() {
         try {
             populateBotMessage({ content: error.message || 'An error occurred', id: Date.now().toString() });
             showNotification(error.message || 'An error occurred. Please start a new chat.');
-            if (document.getElementById('floating-input')) document.getElementById('floating-input').disabled = false;
-            if (document.getElementById('send-message')) document.getElementById('send-message').disabled = false;
+            const inputElement = document.getElementById('floating-input');
+            const sendBtn = document.getElementById('send-message');
+            if (inputElement) inputElement.disabled = false;
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.classList.remove('sending');
+            }
             if (error.reset) {
                 startNewConversation();
             }
@@ -851,12 +866,14 @@ async function handleSendMessage() {
 
     floatingInput.disabled = true;
     sendMessageBtn.disabled = true;
+    sendMessageBtn.classList.add('sending');
 
     const session = await window.electron.auth.getSession();
     if (!session || !session.access_token) {
         showNotification('You must be logged in to send a message.', 'error');
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
+        sendMessageBtn.classList.remove('sending');
         return;
     }
 
@@ -865,6 +882,7 @@ async function handleSendMessage() {
         ipcRenderer.send('restart-python-bridge');
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
+        sendMessageBtn.classList.remove('sending');
         return;
     }
     
@@ -903,6 +921,7 @@ async function handleSendMessage() {
         populateBotMessage({ content: 'Error sending message', id: messageId });
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
+        sendMessageBtn.classList.remove('sending');
     }
 
     floatingInput.value = '';
