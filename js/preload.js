@@ -1,6 +1,4 @@
-// preload.js (Complete, with the new setSession function exposed)
-
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -21,12 +19,14 @@ const validSendChannels = [
     'restart-python-bridge',
     'terminate-session',
     'deepsearch-request',
+    // Browse AI related channels
     'open-browse-ai-webview',
     'close-browse-ai-webview',
     'browse-ai-webview-navigate',
     'browse-ai-header-height',
     'browse-ai-send-message',
     'initialize-browser-agent',
+    // Auth related channels
     'handle-auth-redirect'
 ];
 
@@ -43,9 +43,10 @@ const validReceiveChannels = [
     'webview-content-captured',
     'window-state-changed',
     'sandbox-command-started',
-    'sandbox-command-update',
+    'sandbox-command-update',  // <-- ADD THIS
     'sandbox-command-finished',
-    'image_generated',
+
+    // Browse AI related channels
     'browse-ai-webview-created',
     'browse-ai-webview-closed',
     'browse-ai-webview-navigation-updated',
@@ -54,6 +55,7 @@ const validReceiveChannels = [
     'browse-ai-status',
     'browse-ai-interaction',
     'browse-ai-agent-initialized',
+    // Auth related events
     'auth-state-changed'
 ];
 
@@ -68,12 +70,7 @@ const validInvokeChannels = [
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld(
     "electron", {
-        // Exposes the ability to open external links in the user's default browser
-        shell: {
-            openExternal: (url) => shell.openExternal(url)
-        },
-        
-        // Exposes secure IPC communication channels
+        // IPC functions
         ipcRenderer: {
             send: (channel, data) => {
                 if (validSendChannels.includes(channel)) {
@@ -82,7 +79,7 @@ contextBridge.exposeInMainWorld(
             },
             on: (channel, func) => {
                 if (validReceiveChannels.includes(channel)) {
-                    // Deliberately strip event as it includes sender
+                    // Deliberately strip event as it includes sender 
                     ipcRenderer.on(channel, (event, ...args) => func(...args));
                 }
             },
@@ -99,8 +96,9 @@ contextBridge.exposeInMainWorld(
             }
         },
 
-        // Exposes file system utilities
+        // File system operations
         fs: {
+            // Synchronous operations
             existsSync: (path) => fs.existsSync(path),
             readFileSync: (path, options) => fs.readFileSync(path, options),
             writeFileSync: (path, data, options) => fs.writeFileSync(path, data, options),
@@ -116,6 +114,8 @@ contextBridge.exposeInMainWorld(
                     size: stat.size
                 };
             },
+
+            // Promise-based operations
             promises: {
                 readFile: async (path, options) => await fs.promises.readFile(path, options),
                 writeFile: async (path, data, options) => await fs.promises.writeFile(path, data, options),
@@ -134,7 +134,7 @@ contextBridge.exposeInMainWorld(
             }
         },
 
-        // Exposes path utilities
+        // Path operations
         path: {
             join: (...paths) => path.join(...paths),
             basename: (path, ext) => path.basename(path, ext),
@@ -144,28 +144,47 @@ contextBridge.exposeInMainWorld(
             isAbsolute: (path) => path.isAbsolute(path)
         },
 
-        // Exposes child process utilities
+        // Child process operations
         childProcess: {
             spawn: (command, args, options) => {
                 const childProcess = spawn(command, args, options);
+
+                // Return a simplified API that works across contextBridge
                 return {
                     pid: childProcess.pid,
-                    stdout: { on: (event, callback) => { if (event === 'data') { childProcess.stdout.on('data', (data) => callback(data.toString())); } } },
-                    stderr: { on: (event, callback) => { if (event === 'data') { childProcess.stderr.on('data', (data) => callback(data.toString())); } } },
-                    on: (event, callback) => { if (['close', 'exit', 'error'].includes(event)) { childProcess.on(event, callback); } },
+                    stdout: {
+                        on: (event, callback) => {
+                            if (event === 'data') {
+                                childProcess.stdout.on('data', (data) => {
+                                    callback(data.toString());
+                                });
+                            }
+                        }
+                    },
+                    stderr: {
+                        on: (event, callback) => {
+                            if (event === 'data') {
+                                childProcess.stderr.on('data', (data) => {
+                                    callback(data.toString());
+                                });
+                            }
+                        }
+                    },
+                    on: (event, callback) => {
+                        if (['close', 'exit', 'error'].includes(event)) {
+                            childProcess.on(event, callback);
+                        }
+                    },
                     kill: (signal) => childProcess.kill(signal)
                 };
             }
         },
 
-        // Exposes the full authentication service API
+        // Auth service
         auth: {
             init: async () => await authService.init(),
             signUp: async (email, password, name) => await authService.signUp(email, password, name),
             signIn: async (email, password) => await authService.signIn(email, password),
-            signInWithGoogle: async () => await authService.signInWithGoogle(),
-            // --- THIS IS THE NEW, CRITICAL LINE ---
-            setSession: async (accessToken, refreshToken) => await authService.setSession(accessToken, refreshToken),
             signOut: async () => await authService.signOut(),
             getCurrentUser: () => authService.getCurrentUser(),
             isAuthenticated: () => authService.isAuthenticated(),
