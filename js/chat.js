@@ -390,12 +390,32 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-connection-status', (data) => {
         connectionStatus = data.connected;
         if (data.connected) {
+            // Remove old connection error elements
             document.querySelectorAll('.connection-error').forEach(e => e.remove());
+            
+            // Clear connection notifications
+            if (window.NotificationService) {
+                window.NotificationService.removeConnectionNotifications();
+            }
         } else {
             let statusMessage = 'Connecting to server...';
-            if (data.error) statusMessage = `Connection error: ${data.error}`;
-            else if (data.reconnecting) statusMessage = `Reconnecting... (Attempt ${data.attempt}/${data.maxAttempts})`;
-            showConnectionError(statusMessage);
+            let showRetry = false;
+            
+            if (data.error) {
+                statusMessage = `Connection error: ${data.error}`;
+                showRetry = true;
+            } else if (data.reconnecting) {
+                statusMessage = `Reconnecting... (Attempt ${data.attempt}/${data.maxAttempts})`;
+            }
+            
+            // Use notification service for connection status
+            if (window.NotificationService) {
+                window.NotificationService.showConnection(statusMessage, showRetry);
+            } else {
+                // Fallback to old method
+                showConnectionError(statusMessage);
+            }
+            
             if (data.error) {
                 setTimeout(() => {
                     if (!connectionStatus) ipcRenderer.send('restart-python-bridge');
@@ -601,23 +621,17 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-error', (error) => {
         console.error('Socket error:', error);
         try {
-            // Show error message in chat without clearing conversation
-            const chatMessages = document.getElementById('chat-messages');
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'message message-error';
-            errorDiv.innerHTML = `
-                <div class="error-banner">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <div class="error-text">
-                        <strong>Error:</strong> ${error.message || 'An error occurred'}
-                        <p>Your conversation is preserved. You can continue chatting.</p>
-                    </div>
-                </div>
-            `;
-            chatMessages.appendChild(errorDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            showNotification(error.message || 'An error occurred. Your conversation is preserved.');
+            // Show error notification using the notification service
+            if (window.NotificationService) {
+                window.NotificationService.show(
+                    error.message || 'An error occurred. Your conversation is preserved. You can continue chatting.',
+                    'error',
+                    8000 // Show for 8 seconds
+                );
+            } else {
+                // Fallback if notification service not available
+                showNotification(error.message || 'An error occurred. Your conversation is preserved.');
+            }
             
             // Re-enable input so user can retry
             const inputElement = document.getElementById('floating-input');
@@ -1307,41 +1321,6 @@ style.textContent = `
 .content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
 .inner-content { padding: 8px; }
-.message-error { margin: 16px 0; }
-.error-banner { 
-    display: flex; 
-    align-items: flex-start; 
-    gap: 12px; 
-    padding: 16px; 
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
-}
-.error-banner i { 
-    color: #ef4444; 
-    font-size: 20px; 
-    margin-top: 2px;
-    flex-shrink: 0;
-}
-.error-banner .error-text { 
-    flex: 1; 
-    color: var(--text-color);
-}
-.error-banner .error-text strong { 
-    color: #ef4444; 
-    display: block;
-    margin-bottom: 4px;
-}
-.error-banner .error-text p { 
-    margin: 4px 0 0 0; 
-    font-size: 0.9em; 
-    opacity: 0.8;
-}
-.dark-mode .error-banner {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.08) 100%);
-    border-color: rgba(239, 68, 68, 0.4);
-}
 `;
 document.head.appendChild(style);
 
