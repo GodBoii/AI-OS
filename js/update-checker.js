@@ -6,7 +6,8 @@
 class UpdateChecker {
     constructor() {
         this.currentVersion = '1.1.0'; // Should match package.json
-        this.updateCheckUrl = 'https://raw.githubusercontent.com/GodBoii/AI-OS-website/main/version.json';
+        this.githubRepo = 'GodBoii/AI-OS-website'; // Repository where releases are published
+        this.updateCheckUrl = `https://api.github.com/repos/${this.githubRepo}/releases/latest`;
         this.checkInterval = 3600000; // Check every hour (in milliseconds)
         this.lastCheckTime = null;
     }
@@ -25,7 +26,7 @@ class UpdateChecker {
     }
 
     /**
-     * Check for updates from remote server
+     * Check for updates from GitHub Releases API
      */
     async checkForUpdates() {
         try {
@@ -34,6 +35,7 @@ class UpdateChecker {
             const response = await fetch(this.updateCheckUrl, {
                 cache: 'no-cache',
                 headers: {
+                    'Accept': 'application/vnd.github.v3+json',
                     'Cache-Control': 'no-cache'
                 }
             });
@@ -43,17 +45,97 @@ class UpdateChecker {
                 return;
             }
 
-            const data = await response.json();
-            const latestVersion = data.version;
+            const release = await response.json();
+            
+            // Extract version from tag_name (remove 'v' prefix if present)
+            const latestVersion = release.tag_name.replace(/^v/, '');
             
             if (this.isNewerVersion(latestVersion, this.currentVersion)) {
-                this.notifyUpdate(data);
+                // Transform GitHub release data to our format
+                const updateData = this.transformReleaseData(release, latestVersion);
+                this.notifyUpdate(updateData);
             } else {
                 console.log('App is up to date:', this.currentVersion);
             }
         } catch (error) {
             console.error('Error checking for updates:', error);
         }
+    }
+
+    /**
+     * Transform GitHub release data to our internal format
+     */
+    transformReleaseData(release, version) {
+        const downloads = {};
+        
+        // Parse assets to find platform-specific downloads
+        if (release.assets && release.assets.length > 0) {
+            release.assets.forEach(asset => {
+                const name = asset.name.toLowerCase();
+                
+                if (name.endsWith('.exe')) {
+                    downloads.windows = asset.browser_download_url;
+                } else if (name.endsWith('.appimage')) {
+                    downloads['linux-appimage'] = asset.browser_download_url;
+                } else if (name.endsWith('.deb')) {
+                    downloads['linux-deb'] = asset.browser_download_url;
+                } else if (name.endsWith('.rpm')) {
+                    downloads['linux-rpm'] = asset.browser_download_url;
+                } else if (name.endsWith('.dmg')) {
+                    downloads.mac = asset.browser_download_url;
+                }
+            });
+        }
+        
+        // Convert markdown release notes to HTML (basic conversion)
+        const releaseNotes = this.markdownToHtml(release.body || 'Bug fixes and improvements');
+        
+        return {
+            version: version,
+            releaseDate: release.published_at.split('T')[0],
+            downloadUrl: release.html_url,
+            downloads: downloads,
+            releaseNotes: releaseNotes,
+            critical: false, // Can be determined by checking release name/body for keywords
+            minVersion: '1.0.0'
+        };
+    }
+
+    /**
+     * Basic markdown to HTML conversion for release notes
+     */
+    markdownToHtml(markdown) {
+        if (!markdown) return 'Bug fixes and improvements';
+        
+        let html = markdown
+            // Headers
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            // Bold
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/__(.+?)__/g, '<strong>$1</strong>')
+            // Italic
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/_(.+?)_/g, '<em>$1</em>')
+            // Lists
+            .replace(/^\* (.+)$/gim, '<li>$1</li>')
+            .replace(/^- (.+)$/gim, '<li>$1</li>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+            // Line breaks
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/\n/g, '<br>');
+        
+        // Wrap lists
+        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        
+        // Wrap in paragraph if not already wrapped
+        if (!html.startsWith('<')) {
+            html = `<p>${html}</p>`;
+        }
+        
+        return html;
     }
 
     /**

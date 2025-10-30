@@ -212,5 +212,5 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = notificationService;
 }
 
-// Make available globally
-window.NotificationService = notificationService;
+// Make available globally (lowercase to match usage in update-checker.js)
+window.notificationService = notificationService;
