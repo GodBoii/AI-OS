@@ -10,6 +10,8 @@ class UpdateChecker {
         this.updateCheckUrl = `https://api.github.com/repos/${this.githubRepo}/releases/latest`;
         this.checkInterval = 3600000; // Check every hour (in milliseconds)
         this.lastCheckTime = null;
+        this.latestUpdateData = null; // Store latest update info
+        this.updateAvailable = false;
     }
 
     /**
@@ -22,14 +24,169 @@ class UpdateChecker {
         // Check periodically
         setInterval(() => this.checkForUpdates(), this.checkInterval);
         
+        // Setup UI event listeners
+        this.setupUIListeners();
+        
         console.log('Update checker initialized');
+    }
+
+    /**
+     * Setup UI event listeners for Updates tab
+     */
+    setupUIListeners() {
+        const checkBtn = document.getElementById('check-updates-btn');
+        const downloadBtn = document.getElementById('download-update-btn');
+        
+        if (checkBtn) {
+            checkBtn.addEventListener('click', () => this.manualCheck());
+        }
+        
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+                if (this.latestUpdateData) {
+                    const downloadUrl = this.getDownloadUrl(this.latestUpdateData);
+                    window.open(downloadUrl, '_blank');
+                }
+            });
+        }
+    }
+
+    /**
+     * Update the Updates tab UI
+     */
+    updateUI(status = 'checking') {
+        const icon = document.getElementById('update-icon');
+        const title = document.getElementById('update-status-title');
+        const message = document.getElementById('update-status-message');
+        const lastCheck = document.getElementById('last-check-time');
+        const currentVersionDisplay = document.getElementById('current-version-display');
+        const updateDetails = document.getElementById('update-details');
+        const downloadBtn = document.getElementById('download-update-btn');
+        const checkBtn = document.getElementById('check-updates-btn');
+
+        if (currentVersionDisplay) {
+            currentVersionDisplay.textContent = this.currentVersion;
+        }
+
+        if (lastCheck && this.lastCheckTime) {
+            const timeAgo = this.getTimeAgo(this.lastCheckTime);
+            lastCheck.textContent = timeAgo;
+        }
+
+        if (status === 'checking') {
+            if (icon) icon.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            if (title) title.textContent = 'Checking for updates...';
+            if (message) message.textContent = 'Please wait while we check for the latest version.';
+            if (updateDetails) updateDetails.classList.add('hidden');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
+            if (checkBtn) checkBtn.disabled = true;
+        } else if (status === 'up-to-date') {
+            if (icon) {
+                icon.innerHTML = '<i class="fas fa-check-circle"></i>';
+                icon.style.color = '#4caf50';
+            }
+            if (title) title.textContent = 'You\'re up to date!';
+            if (message) message.textContent = `You have the latest version of Aetheria AI (v${this.currentVersion}).`;
+            if (updateDetails) updateDetails.classList.add('hidden');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
+            if (checkBtn) checkBtn.disabled = false;
+        } else if (status === 'update-available') {
+            if (icon) {
+                icon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+                icon.style.color = '#ff9800';
+            }
+            if (title) title.textContent = 'Update Available!';
+            if (message) message.textContent = `Version ${this.latestUpdateData.version} is now available.`;
+            if (updateDetails) {
+                updateDetails.classList.remove('hidden');
+                this.populateUpdateDetails();
+            }
+            if (downloadBtn) downloadBtn.classList.remove('hidden');
+            if (checkBtn) checkBtn.disabled = false;
+        } else if (status === 'error') {
+            if (icon) {
+                icon.innerHTML = '<i class="fas fa-times-circle"></i>';
+                icon.style.color = '#f44336';
+            }
+            if (title) title.textContent = 'Check Failed';
+            if (message) message.textContent = 'Unable to check for updates. Please try again later.';
+            if (updateDetails) updateDetails.classList.add('hidden');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
+            if (checkBtn) checkBtn.disabled = false;
+        }
+    }
+
+    /**
+     * Populate update details in the UI
+     */
+    populateUpdateDetails() {
+        const versionNumber = document.getElementById('new-version-number');
+        const releaseNotes = document.getElementById('release-notes-content');
+        const downloadLinks = document.getElementById('download-links');
+
+        if (!this.latestUpdateData) return;
+
+        if (versionNumber) {
+            versionNumber.textContent = this.latestUpdateData.version;
+        }
+
+        if (releaseNotes) {
+            releaseNotes.innerHTML = this.latestUpdateData.releaseNotes;
+        }
+
+        if (downloadLinks && this.latestUpdateData.downloads) {
+            downloadLinks.innerHTML = '';
+            const platform = this.detectPlatform();
+            
+            const platformNames = {
+                'windows': { icon: '🪟', name: 'Windows' },
+                'linux-appimage': { icon: '🐧', name: 'Linux AppImage' },
+                'linux-deb': { icon: '🐧', name: 'Linux (Debian)' },
+                'linux-rpm': { icon: '🐧', name: 'Linux (RPM)' },
+                'mac': { icon: '🍎', name: 'macOS' }
+            };
+
+            Object.entries(this.latestUpdateData.downloads).forEach(([key, url]) => {
+                const info = platformNames[key] || { icon: '📦', name: key };
+                const isRecommended = (platform === 'windows' && key === 'windows') ||
+                                     (platform === 'linux' && key === 'linux-appimage') ||
+                                     (platform === 'mac' && key === 'mac');
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.className = 'download-link' + (isRecommended ? ' recommended' : '');
+                link.target = '_blank';
+                link.innerHTML = `
+                    <span class="platform-icon">${info.icon}</span>
+                    <span class="platform-name">${info.name}</span>
+                    ${isRecommended ? '<span class="recommended-badge">Recommended</span>' : ''}
+                `;
+                downloadLinks.appendChild(link);
+            });
+        }
+    }
+
+    /**
+     * Get time ago string
+     */
+    getTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        
+        if (seconds < 60) return 'Just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+        return `${Math.floor(seconds / 86400)} days ago`;
     }
 
     /**
      * Check for updates from GitHub Releases API
      */
-    async checkForUpdates() {
+    async checkForUpdates(silent = false) {
         try {
+            if (!silent) {
+                this.updateUI('checking');
+            }
+            
             this.lastCheckTime = new Date();
             
             const response = await fetch(this.updateCheckUrl, {
@@ -42,6 +199,9 @@ class UpdateChecker {
 
             if (!response.ok) {
                 console.warn('Failed to check for updates:', response.status);
+                if (!silent) {
+                    this.updateUI('error');
+                }
                 return;
             }
 
@@ -53,12 +213,31 @@ class UpdateChecker {
             if (this.isNewerVersion(latestVersion, this.currentVersion)) {
                 // Transform GitHub release data to our format
                 const updateData = this.transformReleaseData(release, latestVersion);
-                this.notifyUpdate(updateData);
+                this.latestUpdateData = updateData;
+                this.updateAvailable = true;
+                
+                if (!silent) {
+                    this.updateUI('update-available');
+                }
+                
+                // Show notification only on automatic checks (not manual)
+                if (silent) {
+                    this.notifyUpdate(updateData);
+                }
             } else {
+                this.updateAvailable = false;
+                this.latestUpdateData = null;
                 console.log('App is up to date:', this.currentVersion);
+                
+                if (!silent) {
+                    this.updateUI('up-to-date');
+                }
             }
         } catch (error) {
             console.error('Error checking for updates:', error);
+            if (!silent) {
+                this.updateUI('error');
+            }
         }
     }
 
@@ -201,42 +380,36 @@ class UpdateChecker {
      * Show update notification to user
      */
     notifyUpdate(updateData) {
-        const { version, releaseNotes, critical } = updateData;
+        const { version, critical } = updateData;
         const downloadUrl = this.getDownloadUrl(updateData);
         
-        // Create update notification
-        const notification = {
-            id: `update-${version}`,
-            type: critical ? 'error' : 'info',
-            title: critical ? '🚨 Critical Update Available' : '🎉 New Version Available',
-            message: `Version ${version} is now available. You're using ${this.currentVersion}.`,
-            persistent: true,
-            actions: [
-                {
-                    label: 'Download Now',
-                    callback: () => {
-                        window.open(downloadUrl, '_blank');
-                        this.dismissUpdateNotification(version);
-                    }
-                },
-                {
-                    label: 'View Changes',
-                    callback: () => {
-                        this.showReleaseNotes(releaseNotes, version, updateData);
-                    }
-                },
-                {
-                    label: 'Later',
-                    callback: () => {
-                        this.dismissUpdateNotification(version);
-                    }
-                }
-            ]
-        };
-
-        // Show notification using your existing notification system
+        // Check if we already notified about this version
+        const lastNotified = localStorage.getItem('lastNotifiedVersion');
+        if (lastNotified === version) {
+            return; // Don't spam notifications
+        }
+        
+        // Show simple notification
+        const message = `Version ${version} is now available! Click to view details.`;
+        const type = critical ? 'warning' : 'info';
+        
         if (window.notificationService) {
-            window.notificationService.show(notification);
+            const notifId = window.notificationService.show(message, type, 8000);
+            
+            // Add click handler to notification to open Updates tab
+            setTimeout(() => {
+                const notifElement = document.querySelector(`[data-notification-id="${notifId}"]`);
+                if (notifElement) {
+                    notifElement.style.cursor = 'pointer';
+                    notifElement.addEventListener('click', () => {
+                        // Open AIOS settings to Updates tab
+                        if (window.AIOS) {
+                            window.AIOS.showWindow();
+                            window.AIOS.switchTab('updates');
+                        }
+                    });
+                }
+            }, 100);
         } else {
             // Fallback to browser notification
             this.showBrowserNotification(version, downloadUrl);
@@ -338,14 +511,11 @@ class UpdateChecker {
      * Manual check for updates (triggered by user)
      */
     async manualCheck() {
-        const notification = window.notificationService?.show({
-            type: 'info',
-            title: 'Checking for updates...',
-            message: 'Please wait',
-            duration: 2000
-        });
+        if (window.notificationService) {
+            window.notificationService.show('Checking for updates...', 'info', 2000);
+        }
 
-        await this.checkForUpdates();
+        await this.checkForUpdates(false); // false = not silent, update UI
     }
 }
 

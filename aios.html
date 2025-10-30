@@ -25,6 +25,10 @@
                     <i class="fas fa-question-circle"></i>
                     <span>Support</span>
                 </button>
+                <button class="tab-btn" data-tab="updates">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Updates</span>
+                </button>
             </div>
 
             <div class="tab-content-area">
@@ -189,10 +193,9 @@
                 <div class="tab-content" id="about-tab">
                     <h3 class="tab-heading">About AIOS Desktop</h3>
                     <div class="about-content">
-                        <p class="version">Version 1.0.0</p>
+                        <p class="version">Version 1.1.2</p>
                         <p class="description">
-                            A modern desktop application for managing your account and preferences.
-                            Built with Electron for optimal performance and user experience.
+                            Aetheria AI-OS is a sophisticated personal AI Operating System that intelligently orchestrates specialized AI agents and integrations to handle complex, multi-step tasks through natural conversation.
                         </p>
                         <div class="about-links">
                             <a href="https://ai-os-website.vercel.app/privacy" class="link external-link" aria-label="Privacy Policy" data-external="true">Privacy Policy</a>
@@ -225,6 +228,44 @@
                             <button type="submit" class="submit-btn primary">Submit Feedback</button>
                         </div>
                     </form>
+                </div>
+
+                <div class="tab-content" id="updates-tab">
+                    <h3 class="tab-heading">Software Updates</h3>
+                    <div class="updates-content">
+                        <div class="update-status-card">
+                            <div class="update-icon" id="update-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="update-info">
+                                <h4 id="update-status-title">Checking for updates...</h4>
+                                <p id="update-status-message">Please wait while we check for the latest version.</p>
+                                <p class="current-version">Current Version: <span id="current-version-display">1.1.0</span></p>
+                                <p class="last-check">Last checked: <span id="last-check-time">Never</span></p>
+                            </div>
+                        </div>
+
+                        <div id="update-details" class="update-details hidden">
+                            <h4>What's New in v<span id="new-version-number"></span></h4>
+                            <div id="release-notes-content" class="release-notes"></div>
+                            
+                            <div class="download-options">
+                                <h5>Download Options:</h5>
+                                <div id="download-links" class="download-links-grid"></div>
+                            </div>
+                        </div>
+
+                        <div class="update-actions">
+                            <button class="btn-secondary" id="check-updates-btn">
+                                <i class="fas fa-sync-alt"></i>
+                                Check for Updates
+                            </button>
+                            <button class="btn-primary hidden" id="download-update-btn">
+                                <i class="fas fa-download"></i>
+                                Download Update
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

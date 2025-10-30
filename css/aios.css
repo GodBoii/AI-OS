@@ -708,3 +708,220 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     color: var(--danger-color);
     background-color: var(--danger-hover-bg);
 }
+/*
+ Updates Tab Styles */
+.updates-content {
+    padding: 20px;
+}
+
+.update-status-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 24px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.update-icon {
+    font-size: 48px;
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.update-icon i {
+    display: block;
+}
+
+.update-info {
+    flex: 1;
+}
+
+.update-info h4 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.update-info p {
+    margin: 4px 0;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.current-version,
+.last-check {
+    font-size: 13px;
+    margin-top: 12px;
+}
+
+.current-version span,
+.last-check span {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.update-details {
+    padding: 24px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.update-details.hidden {
+    display: none;
+}
+
+.update-details h4 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.update-details h5 {
+    margin: 20px 0 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.release-notes {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+.release-notes h2,
+.release-notes h3 {
+    margin: 16px 0 8px 0;
+    color: var(--text-color);
+}
+
+.release-notes ul {
+    margin: 8px 0;
+    padding-left: 24px;
+}
+
+.release-notes li {
+    margin: 4px 0;
+}
+
+.release-notes a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.release-notes a:hover {
+    text-decoration: underline;
+}
+
+.download-options {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.download-links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.download-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--hover-bg, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.download-link:hover {
+    background: var(--hover-bg-strong, rgba(255, 255, 255, 0.1));
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+.download-link.recommended {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-color-rgb, 0, 123, 255), 0.1);
+}
+
+.platform-icon {
+    font-size: 24px;
+}
+
+.platform-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.recommended-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+.update-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.update-actions button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.update-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.update-actions .btn-secondary {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.05));
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.update-actions .btn-secondary:hover:not(:disabled) {
+    background: var(--hover-bg-strong, rgba(255, 255, 255, 0.1));
+}
+
+.update-actions .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.update-actions .btn-primary:hover:not(:disabled) {
+    background: var(--primary-color-hover, #0056b3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.update-actions .btn-primary.hidden {
+    display: none;
+}
