@@ -343,7 +343,11 @@ function startNewConversation() {
     document.getElementById('send-message').disabled = false;
 
     ongoingStreams = {};
-    if (contextHandler) contextHandler.clearSelectedContext();
+    if (contextHandler) {
+        contextHandler.clearSelectedContext();
+        // Invalidate cache so next time context window opens, it shows the new conversation
+        contextHandler.invalidateCache();
+    }
     if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
 
     // Clear error recovery flag
@@ -1305,6 +1309,11 @@ function init() {
     };
     contextHandler = new ContextHandler();
     window.contextHandler = contextHandler;
+    
+    // Start background loading of sessions after a short delay
+    // This happens automatically without user interaction
+    contextHandler.preloadSessions();
+    
     shuffleMenuController = new ShuffleMenuController();
     shuffleMenuController.initialize();
     welcomeDisplay = new WelcomeDisplay();

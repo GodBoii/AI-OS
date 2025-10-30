@@ -49,13 +49,16 @@ def disconnect_integration():
 @api_bp.route('/sessions', methods=['GET'])
 def get_user_sessions():
     """
-    Retrieves the 50 most recent conversation sessions for the authenticated user.
+    Retrieves the 15 most recent conversation sessions for the authenticated user.
     """
     user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
         
-    response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(7).execute()
+    response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(15).execute()
+    
+    # Debug logging to help diagnose session count issues
+    logger.info(f"Sessions query for user {user.id}: requested 15, returned {len(response.data)}")
     
     return jsonify(response.data), 200
 

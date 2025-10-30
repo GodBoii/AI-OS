@@ -3,7 +3,13 @@
 class ContextHandler {
     constructor() {
         this.loadedSessions = []; 
-        this.selectedContextSessions = []; 
+        this.selectedContextSessions = [];
+        
+        // Background loading state management
+        this.loadingState = 'idle'; // 'idle' | 'loading' | 'loaded' | 'error'
+        this.loadError = null;
+        this.backgroundLoadTimer = null;
+        this.isWindowOpen = false;
         
         this.initializeElements();
         this.bindEvents();
@@ -34,14 +40,16 @@ class ContextHandler {
 
     bindEvents() {
         this.elements.contextBtn?.addEventListener('click', () => {
+            this.isWindowOpen = true;
             this.elements.contextWindow?.classList.remove('hidden');
-            this.loadSessions();
+            this.openContextWindow();
             
             if (window.floatingWindowManager) {
                 window.floatingWindowManager.onWindowOpen('context');
             }
         });
         this.elements.closeContextBtn?.addEventListener('click', () => {
+            this.isWindowOpen = false;
             this.elements.contextWindow?.classList.add('hidden');
             
             if (window.floatingWindowManager) {
@@ -50,7 +58,7 @@ class ContextHandler {
         });
         this.elements.syncBtn?.addEventListener('click', (e) => {
             e.preventDefault();
-            this.loadSessions();
+            this.forceRefreshSessions();
         });
 
         this.elements.sessionsContainer?.addEventListener('change', (e) => {
@@ -65,26 +73,137 @@ class ContextHandler {
         });
     }
 
-    async loadSessions() {
-        if (!this.elements.sessionsContainer) return;
-        this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Loading sessions...</div>';
-        const session = await window.electron.auth.getSession();
-        if (!session || !session.access_token) {
-            this.elements.sessionsContainer.innerHTML = '<div class="empty-state">Please log in to view chat history.</div>';
+    /**
+     * Start background loading of sessions (called after app initialization)
+     * This runs 2-3 seconds after app starts to avoid blocking initial load
+     */
+    preloadSessions() {
+        // Don't start if already loading or loaded
+        if (this.loadingState !== 'idle') {
             return;
         }
+
+        // Clear any existing timer
+        if (this.backgroundLoadTimer) {
+            clearTimeout(this.backgroundLoadTimer);
+        }
+
+        // Start loading after a short delay (2.5 seconds)
+        this.backgroundLoadTimer = setTimeout(() => {
+            this.loadSessionsInBackground();
+        }, 2500);
+    }
+
+    /**
+     * Load sessions in the background without showing UI
+     */
+    async loadSessionsInBackground() {
+        // Prevent duplicate loads
+        if (this.loadingState === 'loading' || this.loadingState === 'loaded') {
+            return;
+        }
+
+        this.loadingState = 'loading';
+        this.loadError = null;
+
+        console.log('[ContextHandler] Starting background session load...');
+
         try {
+            const session = await window.electron.auth.getSession();
+            if (!session || !session.access_token) {
+                console.log('[ContextHandler] No auth session, skipping background load');
+                this.loadingState = 'idle';
+                return;
+            }
+
             const response = await fetch('http://localhost:8765/api/sessions', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const sessions = await response.json();
             this.loadedSessions = sessions;
-            this.showSessionList(sessions);
+            this.loadingState = 'loaded';
+            
+            console.log(`[ContextHandler] Background load complete: ${sessions.length} sessions cached`);
+            console.log(`[ContextHandler] Session IDs:`, sessions.map(s => s.session_id.substring(0, 8)));
+
+            // If the window is currently open, update the display
+            if (this.isWindowOpen && this.elements.sessionsContainer) {
+                this.showSessionList(sessions);
+            }
+
         } catch (err) {
-            console.error('Error loading sessions:', err);
-            this.elements.sessionsContainer.innerHTML = `<div class="empty-state">Error loading sessions: ${err.message}</div>`;
+            console.error('[ContextHandler] Error in background load:', err);
+            this.loadError = err.message;
+            this.loadingState = 'error';
         }
+    }
+
+    /**
+     * Handle opening the context window - show cached data or loading state
+     */
+    openContextWindow() {
+        if (!this.elements.sessionsContainer) return;
+
+        switch (this.loadingState) {
+            case 'loaded':
+                // Data is already loaded - show it immediately!
+                console.log('[ContextHandler] Showing cached sessions');
+                this.showSessionList(this.loadedSessions);
+                break;
+
+            case 'loading':
+                // Currently loading in background - show loading message
+                console.log('[ContextHandler] Background load in progress...');
+                this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Loading sessions...</div>';
+                // Data will appear automatically when background load completes
+                break;
+
+            case 'error':
+                // Previous load failed - show error and retry button
+                this.elements.sessionsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p>Error loading sessions: ${this.loadError}</p>
+                        <button class="retry-load-btn" style="margin-top: 10px; padding: 8px 16px; cursor: pointer;">
+                            <i class="fas fa-sync-alt"></i> Retry
+                        </button>
+                    </div>
+                `;
+                const retryBtn = this.elements.sessionsContainer.querySelector('.retry-load-btn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', () => this.forceRefreshSessions());
+                }
+                break;
+
+            case 'idle':
+            default:
+                // Not loaded yet - start loading now
+                console.log('[ContextHandler] Starting immediate load...');
+                this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Loading sessions...</div>';
+                this.loadSessionsInBackground();
+                break;
+        }
+    }
+
+    /**
+     * Force refresh sessions (called by sync button or retry)
+     */
+    async forceRefreshSessions() {
+        if (!this.elements.sessionsContainer) return;
+
+        // Reset state to force reload
+        this.loadingState = 'idle';
+        this.loadError = null;
+
+        // Show loading indicator
+        this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Refreshing sessions...</div>';
+
+        // Start loading
+        await this.loadSessionsInBackground();
     }
 
     showSessionList(sessions) {
@@ -384,6 +503,27 @@ class ContextHandler {
     
     hideContextViewer() {
         if (this.elements.contextViewer) this.elements.contextViewer.classList.remove('visible');
+    }
+
+    /**
+     * Invalidate cache when a new conversation is created
+     * This ensures fresh data on next open
+     */
+    invalidateCache() {
+        console.log('[ContextHandler] Cache invalidated');
+        this.loadingState = 'idle';
+        this.loadedSessions = [];
+        this.loadError = null;
+    }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+        if (this.backgroundLoadTimer) {
+            clearTimeout(this.backgroundLoadTimer);
+            this.backgroundLoadTimer = null;
+        }
     }
 }
 export default ContextHandler;
