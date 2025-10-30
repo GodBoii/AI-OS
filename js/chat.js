@@ -69,7 +69,7 @@ class ShuffleMenuController {
         try {
             this.shuffleBtn = document.querySelector('[data-tool="shuffle"]');
             this.shuffleMenu = this.shuffleBtn?.querySelector('.shuffle-menu');
-            
+
             if (!this.shuffleBtn || !this.shuffleMenu) {
                 console.warn('Shuffle menu elements not found');
                 return;
@@ -87,16 +87,16 @@ class ShuffleMenuController {
         // Initialize checkbox states
         const aiOsCheckbox = document.getElementById('ai_os');
         const deepSearchCheckbox = document.getElementById('deep_search');
-        
+
         if (aiOsCheckbox) {
             const allToolsEnabledInitially = Object.values(chatConfig.tools).every(val => val === true);
             aiOsCheckbox.checked = allToolsEnabledInitially;
         }
-        
+
         if (deepSearchCheckbox) {
             deepSearchCheckbox.checked = chatConfig.deepsearch;
         }
-        
+
         // Update initial active states
         this.updateToolsActiveState();
     }
@@ -144,12 +144,12 @@ class ShuffleMenuController {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
-        
+
         this.shuffleMenu.classList.add('visible');
         this.shuffleBtn.classList.add('active');
         this.shuffleBtn.setAttribute('aria-expanded', 'true');
         this.isOpen = true;
-        
+
         // Set focus to first menu item for keyboard navigation using RAF for smooth transition
         this.animationFrame = requestAnimationFrame(() => {
             const firstItem = this.shuffleMenu.querySelector('.shuffle-item');
@@ -164,7 +164,7 @@ class ShuffleMenuController {
         this.shuffleBtn.classList.remove('active');
         this.shuffleBtn.setAttribute('aria-expanded', 'false');
         this.isOpen = false;
-        
+
         // Close any open submenus
         this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
             menu.classList.remove('visible');
@@ -185,7 +185,7 @@ class ShuffleMenuController {
             default:
                 console.warn('Unknown shuffle menu action:', action);
         }
-        
+
         // Close menu after action (except for tools which has submenu)
         if (action !== 'tools') {
             this.closeMenu();
@@ -202,7 +202,7 @@ class ShuffleMenuController {
         // For tools, we need to show the tools submenu
         const toolsItem = this.shuffleMenu.querySelector('[data-action="tools"]');
         const toolsSubmenu = toolsItem.querySelector('.tools-menu');
-        
+
         if (toolsSubmenu) {
             // Close any other open submenus first
             this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
@@ -210,9 +210,9 @@ class ShuffleMenuController {
                     menu.classList.remove('visible');
                 }
             });
-            
+
             toolsSubmenu.classList.toggle('visible');
-            
+
             // Set up tools submenu event handlers if not already done
             this.setupToolsSubmenu(toolsSubmenu);
         }
@@ -230,7 +230,7 @@ class ShuffleMenuController {
         // Handle checkbox changes in tools submenu
         const aiOsCheckbox = toolsSubmenu.querySelector('#ai_os');
         const deepSearchCheckbox = toolsSubmenu.querySelector('#deep_search');
-        
+
         if (aiOsCheckbox && !aiOsCheckbox.hasAttribute('data-shuffle-handler')) {
             aiOsCheckbox.setAttribute('data-shuffle-handler', 'true');
             aiOsCheckbox.addEventListener('change', (e) => {
@@ -267,7 +267,7 @@ class ShuffleMenuController {
         const aiOsCheckbox = document.getElementById('ai_os');
         const deepSearchCheckbox = document.getElementById('deep_search');
         const hasActiveTools = (aiOsCheckbox?.checked) || (deepSearchCheckbox?.checked);
-        
+
         this.updateItemActiveState('tools', hasActiveTools);
     }
 
@@ -334,18 +334,18 @@ function startNewConversation() {
     if (currentConversationId) {
         terminateSession(currentConversationId);
     }
-    
+
     currentConversationId = self.crypto.randomUUID();
     console.log(`Starting new conversation with ID: ${currentConversationId}`);
 
     document.getElementById('chat-messages').innerHTML = '';
     document.getElementById('floating-input').disabled = false;
     document.getElementById('send-message').disabled = false;
-    
+
     ongoingStreams = {};
     if (contextHandler) contextHandler.clearSelectedContext();
     if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
-    
+
     // Clear error recovery flag
     window.needsNewBackendSession = false;
 
@@ -356,26 +356,26 @@ function startNewConversation() {
     };
     const aiOsCheckbox = document.getElementById('ai_os');
     if (aiOsCheckbox) aiOsCheckbox.checked = true;
-    
+
     const deepSearchCheckbox = document.getElementById('deep_search');
     if (deepSearchCheckbox) deepSearchCheckbox.checked = false;
-    
+
     // Reset shuffle menu state
     if (shuffleMenuController) {
         shuffleMenuController.activeItems.clear();
         shuffleMenuController.closeMenu();
         shuffleMenuController.updateShuffleButtonState();
-        
+
         // Reset shuffle menu item active states
         const shuffleItems = document.querySelectorAll('.shuffle-item');
         shuffleItems.forEach(item => item.classList.remove('active'));
     }
-    
+
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-    
+
     // Dispatch custom event for welcome display
     document.dispatchEvent(new CustomEvent('conversationCleared'));
-    
+
     // Reset input container to centered position
     if (window.conversationStateManager) {
         console.log('Calling onConversationCleared to center input');
@@ -392,7 +392,7 @@ function setupIpcListeners() {
         if (data.connected) {
             // Remove old connection error elements
             document.querySelectorAll('.connection-error').forEach(e => e.remove());
-            
+
             // Clear connection notifications
             if (window.NotificationService) {
                 window.NotificationService.removeConnectionNotifications();
@@ -400,14 +400,14 @@ function setupIpcListeners() {
         } else {
             let statusMessage = 'Connecting to server...';
             let showRetry = false;
-            
+
             if (data.error) {
                 statusMessage = `Connection error: ${data.error}`;
                 showRetry = true;
             } else if (data.reconnecting) {
                 statusMessage = `Reconnecting... (Attempt ${data.attempt}/${data.maxAttempts})`;
             }
-            
+
             // Use notification service for connection status
             if (window.NotificationService) {
                 window.NotificationService.showConnection(statusMessage, showRetry);
@@ -415,7 +415,7 @@ function setupIpcListeners() {
                 // Fallback to old method
                 showConnectionError(statusMessage);
             }
-            
+
             if (data.error) {
                 setTimeout(() => {
                     if (!connectionStatus) ipcRenderer.send('restart-python-bridge');
@@ -431,28 +431,28 @@ function setupIpcListeners() {
 
             if (done && messageId && ongoingStreams[messageId]) {
                 const messageDiv = ongoingStreams[messageId];
-                
+
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
                     // OPTION B: Swap visibility - hide live steps, show summary
                     thinkingIndicator.classList.add('steps-done');
-                    
+
                     const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
                     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
-                    
+
                     if (liveStepsContainer) {
                         liveStepsContainer.classList.add('hidden');
                     }
-                    
+
                     if (reasoningSummary) {
                         reasoningSummary.classList.remove('hidden');
-                        
+
                         // Update the final summary text
                         const summaryText = reasoningSummary.querySelector('.summary-text');
                         if (summaryText) {
                             const logCount = messageDiv.querySelectorAll('.log-block').length;
                             const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
-                            
+
                             if (logCount === 0 && toolLogCount === 0) {
                                 summaryText.textContent = "Aetheria AI's Reasoning";
                             } else {
@@ -473,9 +473,17 @@ function setupIpcListeners() {
                     const innerContentDiv = block.querySelector('.inner-content');
                     if (finalContent && innerContentDiv) {
                         innerContentDiv.innerHTML = messageFormatter.format(finalContent);
+
+                        // Apply syntax highlighting to code blocks in final formatting
+                        innerContentDiv.querySelectorAll('pre code').forEach(codeBlock => {
+                            if (typeof hljs !== 'undefined' && !codeBlock.dataset.highlighted) {
+                                hljs.highlightElement(codeBlock);
+                                codeBlock.dataset.highlighted = 'true';
+                            }
+                        });
                     }
                 });
-                
+
                 messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
             }
@@ -546,7 +554,7 @@ function setupIpcListeners() {
                     <span class="tool-log-status completed">Completed</span>
                 `;
                 logsContainer.appendChild(logEntry);
-                
+
                 // OPTION B: Update the summary live when an image is generated
                 updateReasoningSummary(messageId);
             }
@@ -556,16 +564,16 @@ function setupIpcListeners() {
     ipcRenderer.on('agent-step', (data) => {
         const { id: messageId, type, name, agent_name, team_name, tool } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
-    
+
         const messageDiv = ongoingStreams[messageId];
         const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
         const ownerName = agent_name || team_name || 'Assistant';
         const stepId = `step-${messageId}-${ownerName}-${name}`;
-    
+
         const logsContainer = messageDiv.querySelector('.detailed-logs');
         const logEntryId = `log-entry-${stepId}`;
         let logEntry = logsContainer.querySelector(`#${logEntryId}`);
-    
+
         if (type === 'tool_start') {
             if (!logEntry) {
                 logEntry = document.createElement('div');
@@ -580,7 +588,7 @@ function setupIpcListeners() {
                     <span class="tool-log-status in-progress">In progress...</span>
                 `;
                 logsContainer.appendChild(logEntry);
-                
+
                 // OPTION B: Update the summary live when a tool starts
                 updateReasoningSummary(messageId);
             }
@@ -593,25 +601,25 @@ function setupIpcListeners() {
                     statusEl.classList.add('completed');
                 }
             }
-            
+
             if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base_64) {
                 if (artifactHandler) {
                     console.log("Detected browser tool output. Showing artifact.");
                     artifactHandler.showArtifact('browser_view', tool.tool_output);
                 }
             }
-            
+
             // OPTION B: Update the summary live when a tool completes
             updateReasoningSummary(messageId);
         }
-    
+
         const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
         if (!liveStepsContainer) return;
         let liveStepDiv = liveStepsContainer.querySelector(`#${stepId}`);
-    
+
         if (type === 'tool_start') {
             if (name === 'execute_in_sandbox') {
-                return; 
+                return;
             }
 
             if (!liveStepDiv) {
@@ -637,7 +645,7 @@ function setupIpcListeners() {
             artifactHandler.updateCommand(data.artifactId, data.command);
         }
     });
-    
+
     ipcRenderer.on('sandbox-command-finished', (data) => {
         if (artifactHandler) {
             artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
@@ -658,7 +666,7 @@ function setupIpcListeners() {
                 // Fallback if notification service not available
                 showNotification(error.message || 'An error occurred. Your conversation is preserved.');
             }
-            
+
             // Re-enable input so user can retry
             const inputElement = document.getElementById('floating-input');
             const sendBtn = document.getElementById('send-message');
@@ -667,10 +675,10 @@ function setupIpcListeners() {
                 sendBtn.disabled = false;
                 sendBtn.classList.remove('sending');
             }
-            
+
             // Mark that we need to start a new backend session on next message
             window.needsNewBackendSession = true;
-            
+
             // DON'T clear the conversation anymore
             // if (error.reset) { startNewConversation(); }
         } catch (e) {
@@ -733,10 +741,10 @@ function addUserMessage(message, turnContextData = null) {
     messageDiv.appendChild(userMessageContainer);
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
+
     // Dispatch custom event for welcome display
     document.dispatchEvent(new CustomEvent('messageAdded'));
-    
+
     // Notify conversation state manager that a message was added
     if (window.conversationStateManager) {
         console.log('Calling onMessageAdded to move input to bottom');
@@ -751,17 +759,17 @@ function addUserMessage(message, turnContextData = null) {
 function updateReasoningSummary(messageId) {
     const messageDiv = ongoingStreams[messageId];
     if (!messageDiv) return;
-    
+
     const reasoningSummary = messageDiv.querySelector('.reasoning-summary');
     if (!reasoningSummary) return;
-    
+
     const summaryText = reasoningSummary.querySelector('.summary-text');
     if (!summaryText) return;
-    
+
     // Count agents and tools from the detailed logs
     const logCount = messageDiv.querySelectorAll('.log-block').length;
     const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
-    
+
     if (logCount === 0 && toolLogCount === 0) {
         summaryText.textContent = "Reasoning: 0 agents, 0 tools";
     } else {
@@ -770,7 +778,7 @@ function updateReasoningSummary(messageId) {
         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
         summaryText.textContent = `Reasoning: ${parts.join(', ')}`;
     }
-    
+
     // Make the summary visible and clickable if there's any activity
     if (logCount > 0 || toolLogCount > 0) {
         reasoningSummary.classList.remove('hidden');
@@ -785,7 +793,7 @@ function createBotMessagePlaceholder(messageId) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message message-bot';
-    
+
     // OPTION B: Create thinking indicator with BOTH live steps AND hidden summary
     const thinkingIndicator = document.createElement('div');
     thinkingIndicator.className = 'thinking-indicator';
@@ -810,13 +818,13 @@ function createBotMessagePlaceholder(messageId) {
 
     chatMessages.appendChild(messageDiv);
     ongoingStreams[messageId] = messageDiv;
-    
+
     // Add click handler to the summary (even though it's hidden initially)
     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
     reasoningSummary.addEventListener('click', () => {
         messageDiv.classList.toggle('expanded');
     });
-    
+
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -831,7 +839,7 @@ function populateBotMessage(data) {
     const ownerName = agent_name || team_name;
     if (!ownerName || !content) return;
 
-    const targetContainer = is_log 
+    const targetContainer = is_log
         ? messageDiv.querySelector(`#logs-${messageId}`)
         : messageDiv.querySelector(`#main-content-${messageId}`);
 
@@ -848,7 +856,7 @@ function populateBotMessage(data) {
         contentBlock.id = contentBlockId;
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         contentBlock.dataset.owner = ownerName;
-        
+
         const header = document.createElement('div');
         header.className = 'content-block-header';
         header.textContent = ownerName.replace(/_/g, ' ');
@@ -859,18 +867,26 @@ function populateBotMessage(data) {
         contentBlock.appendChild(innerContent);
 
         targetContainer.appendChild(contentBlock);
-        
+
         // OPTION B: Update the summary when a new agent block is created (only for logs)
         if (is_log) {
             updateReasoningSummary(messageId);
         }
     }
-    
+
     const innerContentDiv = contentBlock.querySelector('.inner-content');
     if (innerContentDiv) {
         const streamId = `${messageId}-${ownerName}`;
         const formattedContent = messageFormatter.formatStreaming(content, streamId);
         innerContentDiv.innerHTML = formattedContent;
+
+        // Apply live syntax highlighting to code blocks during streaming
+        innerContentDiv.querySelectorAll('pre code:not([data-highlighted])').forEach(codeBlock => {
+            if (typeof hljs !== 'undefined') {
+                hljs.highlightElement(codeBlock);
+                codeBlock.dataset.highlighted = 'true';
+            }
+        });
     }
 }
 
@@ -930,7 +946,7 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     });
 
     // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---
-    
+
     // Create the summary text for the collapsible "Reasoning" header
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
     const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
@@ -981,11 +997,11 @@ function extractConversationHistory() {
     const chatMessages = document.getElementById('chat-messages');
     const messages = chatMessages.querySelectorAll('.message');
     let history = '';
-    
+
     messages.forEach(msg => {
         // Skip error messages
         if (msg.classList.contains('message-error')) return;
-        
+
         if (msg.classList.contains('message-user')) {
             // Extract user message text
             const textDiv = msg.querySelector('.user-message-text');
@@ -1006,7 +1022,7 @@ function extractConversationHistory() {
             }
         }
     });
-    
+
     return history;
 }
 
@@ -1041,24 +1057,24 @@ async function handleSendMessage() {
         sendMessageBtn.classList.remove('sending');
         return;
     }
-    
+
     // Check if we need to create a new backend session (after error)
     if (window.needsNewBackendSession) {
         // Generate new conversation ID for backend
         currentConversationId = self.crypto.randomUUID();
         console.log(`Creating new backend session after error: ${currentConversationId}`);
-        
+
         // Extract conversation history from DOM
         const conversationHistory = extractConversationHistory();
-        
+
         // Prepend history to current message
-        const messageWithHistory = conversationHistory 
+        const messageWithHistory = conversationHistory
             ? `PREVIOUS CONVERSATION (Recovered after error):\n---\n${conversationHistory}---\n\nCURRENT MESSAGE:\n${message}`
             : message;
-        
+
         // Clear the flag
         window.needsNewBackendSession = false;
-        
+
         // Add user message to UI
         let turnContextData = null;
         if (selectedSessions.length > 0 || attachedFiles.length > 0) {
@@ -1098,7 +1114,7 @@ async function handleSendMessage() {
         contextHandler.clearSelectedContext();
         return;
     }
-    
+
     // Normal flow (no error recovery needed)
     let turnContextData = null;
     if (selectedSessions.length > 0 || attachedFiles.length > 0) {
@@ -1157,7 +1173,7 @@ async function terminateSession(conversationIdToTerminate) {
 
 function initializeAutoExpandingTextarea() {
     const textarea = document.getElementById('floating-input');
-    textarea.addEventListener('input', function() {
+    textarea.addEventListener('input', function () {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
     });
@@ -1305,7 +1321,7 @@ function init() {
     shuffleMenuController.initialize();
     welcomeDisplay = new WelcomeDisplay();
     welcomeDisplay.initialize();
-    
+
     if (window.electron?.auth) {
         window.electron.auth.onAuthChange((user) => {
             if (welcomeDisplay) {
@@ -1323,7 +1339,7 @@ function init() {
         // Continue without floating window management
         window.floatingWindowManager = null;
     }
-    
+
     // Register floating windows with error handling
     setTimeout(() => {
         try {
@@ -1334,7 +1350,7 @@ function init() {
             } else {
                 console.warn('AIOS settings window element not found for registration');
             }
-            
+
             // Register tasks window
             const tasksWindow = document.getElementById('to-do-list-container');
             if (tasksWindow) {
@@ -1342,7 +1358,7 @@ function init() {
             } else {
                 console.warn('Tasks window element not found for registration');
             }
-            
+
             // Register context window
             const contextWindow = document.getElementById('context-window');
             if (contextWindow) {
@@ -1355,9 +1371,9 @@ function init() {
             // Continue without floating window management if registration fails
         }
     }, 100);
-    
 
-    
+
+
     // Initialize conversation state manager
     if (window.conversationStateManager) {
         window.conversationStateManager.init();
@@ -1369,7 +1385,7 @@ function init() {
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
-    
+
     elements.newChatBtn.addEventListener('click', startNewConversation);
 
     elements.messages.addEventListener('click', (e) => {

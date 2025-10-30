@@ -163,8 +163,19 @@ class MessageFormatter {
         const newTotalContent = this.pendingContent.get(streamId) + content;
         this.pendingContent.set(streamId, newTotalContent);
 
-        const sanitized = DOMPurify.sanitize(newTotalContent, { USE_PROFILES: { html: false } });
-        return sanitized.replace(/\n/g, '<br>');
+        // Apply live markdown formatting during streaming
+        try {
+            const rawHtml = marked.parse(newTotalContent);
+            return DOMPurify.sanitize(rawHtml, {
+                ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                ADD_ATTR: ['class', 'id', 'data-artifact-id']
+            });
+        } catch (error) {
+            // Fallback to basic formatting if markdown parsing fails during streaming
+            console.warn('Live formatting error, using fallback:', error);
+            const sanitized = DOMPurify.sanitize(newTotalContent, { USE_PROFILES: { html: false } });
+            return sanitized.replace(/\n/g, '<br>');
+        }
     }
 
     format(content, options = {}) {
