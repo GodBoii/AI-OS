@@ -35,7 +35,8 @@ const validReceiveChannels = [
     'socket-error',
     'socket-status',
     'socket-connection-status',
-    'agent-step', 
+    'agent-step',
+    'image_generated',  // CRITICAL FIX: Allow image_generated events from main process
     'webview-created',
     'webview-closed',
     'webview-navigation-updated',
@@ -43,7 +44,7 @@ const validReceiveChannels = [
     'webview-content-captured',
     'window-state-changed',
     'sandbox-command-started',
-    'sandbox-command-update',  // <-- ADD THIS
+    'sandbox-command-update',
     'sandbox-command-finished',
 
     // Browse AI related channels

@@ -59,44 +59,38 @@ class ArtifactHandler {
         });
     }
 
-    // --- MODIFICATION START: Centralized Logic for Finalizing Artifacts ---
     cachePendingImage(artifactId, base64Data) {
-        // --- DEBUG LOG ---
-        console.log(`%c[HANDLER] cachePendingImage called for artifactId: ${artifactId}`, "color: green; font-weight: bold;");
-        console.log(`%c[HANDLER] Current artifacts map state:`, "color: green;", new Map(this.artifacts));
+        if (!base64Data || base64Data.length === 0) {
+            console.error(`[HANDLER] Received empty base64 data for artifact ${artifactId}`);
+            return;
+        }
 
         // Check if a placeholder artifact already exists (text-first scenario)
         if (this.artifacts.has(artifactId)) {
             const artifact = this.artifacts.get(artifactId);
+            
             if (artifact && artifact.isPending) {
-                console.log(`%c[HANDLER] Found existing artifact for ID. isPending: ${artifact.isPending}`, "color: green;");
-                console.log(`%c[HANDLER] Finalizing pending artifact with ID: ${artifactId}`, "color: green; font-weight: bold;");
                 // Finalize the artifact by adding the content and updating its state
                 artifact.content = base64Data;
                 artifact.isPending = false;
-                
-                // CRITICAL FIX: The handler is now responsible for triggering the UI update.
-                // This ensures the viewer opens with the correct content as soon as it's available.
-                console.log(`%c[HANDLER] Artifact finalized. Calling showArtifact to update UI.`, "color: green;");
                 this.showArtifact('image', base64Data, artifactId);
+                return;
+            } else if (artifact && !artifact.isPending) {
                 return;
             }
         }
         
         // If no placeholder exists, cache it for later (data-first scenario)
-        console.log(`%c[HANDLER] No pending placeholder found. Caching image data in pendingImages.`, "color: orange;");
         this.pendingImages.set(artifactId, base64Data);
     }
-    // --- MODIFICATION END ---
 
-    // --- MODIFICATION START: Race-Condition-Proof Artifact Creation ---
     createArtifact(content, type, artifactId = null, viewMode = 'preview') {
         if (type === 'image') {
-            const imageId = content.trim(); // For images, 'content' is the ID from the formatter.
-            console.log(`%c[HANDLER] createArtifact called for image with ID: '${imageId}'`, "color: purple; font-weight: bold;");
+            const imageId = content.trim();
             
-            // If a complete artifact already exists, do nothing.
-            if (this.artifacts.has(imageId) && !this.artifacts.get(imageId).isPending) {
+            // If ANY artifact already exists (pending or complete), return immediately
+            // This prevents duplicate placeholder creation during streaming
+            if (this.artifacts.has(imageId)) {
                 return imageId;
             }
 
@@ -104,18 +98,15 @@ class ArtifactHandler {
             if (this.pendingImages.has(imageId)) {
                 const imageContent = this.pendingImages.get(imageId);
                 this.artifacts.set(imageId, { content: imageContent, type: 'image', isPending: false });
-                this.pendingImages.delete(imageId); // Clean up the cache
-                console.log(`%c[HANDLER] Data-First: Finalized image artifact from cache: ${imageId}`, "color: purple;");
+                this.pendingImages.delete(imageId);
                 return imageId;
             } 
             // Text-First Scenario: The text reference arrived first. Create a placeholder.
             else {
-                console.warn(`%c[HANDLER] Text-First: Creating placeholder for image artifact ID '${imageId}'. Waiting for data.`, "color: purple;");
                 this.artifacts.set(imageId, { content: null, type: 'image', isPending: true });
                 return imageId;
             }
         }
-        // --- MODIFICATION END ---
 
         // For all other artifact types (code, mermaid), the logic is simple.
         const id = artifactId || `artifact-${this.currentId++}`;
@@ -156,14 +147,11 @@ class ArtifactHandler {
                 titleEl.textContent = 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
-                // --- MODIFICATION START: Handle rendering a pending state ---
                 if (data === null) {
-                    // This happens if showArtifact is called on a pending placeholder
                     contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading image...</span></div>';
                 } else {
                     this.renderImage(data, contentDiv);
                 }
-                // --- MODIFICATION END ---
                 break;
 
             case 'mermaid':
@@ -609,15 +597,21 @@ class ArtifactHandler {
     reopenArtifact(artifactId) {
         const artifact = this.artifacts.get(artifactId);
         if (artifact && typeof artifact === 'object') {
-            console.log(`ArtifactHandler: Reopening artifact with ID: ${artifactId}`);
-            // --- MODIFICATION START: Handle reopening a pending artifact ---
-            // If the artifact is pending, its content will be null. Pass null to showArtifact
-            // to trigger the loading state. Otherwise, pass the actual content.
+            // If the artifact is pending, check if data arrived in pendingImages cache
+            if (artifact.isPending && this.pendingImages.has(artifactId)) {
+                const imageData = this.pendingImages.get(artifactId);
+                artifact.content = imageData;
+                artifact.isPending = false;
+                this.pendingImages.delete(artifactId);
+                this.showArtifact(artifact.type, imageData, artifactId);
+                return;
+            }
+            
+            // If the artifact is pending and no data available, show loading state
+            // Otherwise, pass the actual content
             this.showArtifact(artifact.type, artifact.isPending ? null : artifact.content, artifactId);
-            // --- MODIFICATION END ---
         } else {
-            console.error(`ArtifactHandler: FAILED to find valid artifact object for ID: ${artifactId}.`);
-            console.log('Current Artifacts Map:', this.artifacts);
+            console.error(`ArtifactHandler: Failed to find artifact with ID: ${artifactId}`);
         }
     }
 

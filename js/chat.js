@@ -515,27 +515,15 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('image_generated', (data) => {
-        console.log("%c[CHAT.JS] Received 'image_generated' event:", "color: blue; font-weight: bold;", data);
+        const { id: messageId, image_base64, artifactId } = data;
 
-        const { id: messageId, image_base64, agent_name, artifactId } = data;
-
-        // Check payload size for debugging
-        if (image_base64) {
-            const sizeInMB = (image_base64.length / 1024 / 1024).toFixed(2);
-            console.log(`%c[CHAT.JS] Image payload size: ${sizeInMB}MB`, "color: blue;");
+        // Filter events by message ID to ensure this client should process it
+        if (!ongoingStreams[messageId]) {
+            return;
         }
 
         if (artifactHandler && image_base64 && artifactId) {
-            console.log(`%c[CHAT.JS] ✓ All data present. Calling cachePendingImage for: ${artifactId}`, "color: green; font-weight: bold;");
             artifactHandler.cachePendingImage(artifactId, image_base64);
-        } else {
-            console.error("%c[CHAT.JS] ✗ Missing data in image_generated event!", "color: red; font-weight: bold;", {
-                artifactHandlerExists: !!artifactHandler,
-                hasBase64: !!image_base64,
-                base64Length: image_base64?.length || 0,
-                hasArtifactId: !!artifactId,
-                artifactId: artifactId
-            });
         }
 
         // Add log entry to reasoning dropdown
