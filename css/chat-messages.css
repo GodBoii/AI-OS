@@ -159,17 +159,26 @@
     color: var(--success-500);
 }
 
-.thinking-indicator.steps-done {
-    cursor: pointer;
+/* OPTION B: Reasoning summary that's hidden during execution */
+.reasoning-summary {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    width: 100%;
+    cursor: pointer;
+    transition: opacity 0.3s ease;
 }
 
-.thinking-indicator.steps-done:hover {
+.reasoning-summary:hover {
     background-color: transparent;
 }
 
+/* Hidden class for toggling visibility */
+.hidden {
+    display: none !important;
+}
+
+/* When steps are done, hide the live steps container */
 .thinking-indicator.steps-done .thinking-steps-container {
     display: none;
 }

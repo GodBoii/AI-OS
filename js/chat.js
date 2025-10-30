@@ -434,18 +434,35 @@ function setupIpcListeners() {
                 
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
+                    // OPTION B: Swap visibility - hide live steps, show summary
                     thinkingIndicator.classList.add('steps-done');
-                    const logCount = messageDiv.querySelectorAll('.log-block').length;
-                    const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
-                    let summaryText = "Aetheria AI's Reasoning";
-                    if (logCount > 0 || toolLogCount > 0) {
-                        const parts = [];
-                        if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
-                        if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
-                        summaryText = `Reasoning involved ${parts.join(' and ')}`;
+                    
+                    const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
+                    const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
+                    
+                    if (liveStepsContainer) {
+                        liveStepsContainer.classList.add('hidden');
                     }
-                    thinkingIndicator.innerHTML = `<span class="summary-text">${summaryText}</span><i class="fas fa-chevron-down summary-chevron"></i>`;
-                    thinkingIndicator.addEventListener('click', () => messageDiv.classList.toggle('expanded'));
+                    
+                    if (reasoningSummary) {
+                        reasoningSummary.classList.remove('hidden');
+                        
+                        // Update the final summary text
+                        const summaryText = reasoningSummary.querySelector('.summary-text');
+                        if (summaryText) {
+                            const logCount = messageDiv.querySelectorAll('.log-block').length;
+                            const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+                            
+                            if (logCount === 0 && toolLogCount === 0) {
+                                summaryText.textContent = "Aetheria AI's Reasoning";
+                            } else {
+                                const parts = [];
+                                if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
+                                if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
+                                summaryText.textContent = `Reasoning involved ${parts.join(' and ')}`;
+                            }
+                        }
+                    }
                 }
 
                 const contentBlocks = messageDiv.querySelectorAll('.content-block');
@@ -529,6 +546,9 @@ function setupIpcListeners() {
                     <span class="tool-log-status completed">Completed</span>
                 `;
                 logsContainer.appendChild(logEntry);
+                
+                // OPTION B: Update the summary live when an image is generated
+                updateReasoningSummary(messageId);
             }
         }
     });
@@ -560,6 +580,9 @@ function setupIpcListeners() {
                     <span class="tool-log-status in-progress">In progress...</span>
                 `;
                 logsContainer.appendChild(logEntry);
+                
+                // OPTION B: Update the summary live when a tool starts
+                updateReasoningSummary(messageId);
             }
         } else if (type === 'tool_end') {
             if (logEntry) {
@@ -577,6 +600,9 @@ function setupIpcListeners() {
                     artifactHandler.showArtifact('browser_view', tool.tool_output);
                 }
             }
+            
+            // OPTION B: Update the summary live when a tool completes
+            updateReasoningSummary(messageId);
         }
     
         const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
@@ -718,14 +744,58 @@ function addUserMessage(message, turnContextData = null) {
     }
 }
 
+/**
+ * Updates the reasoning summary text live as tools/agents are used
+ * This function is called every time a tool starts or an agent responds
+ */
+function updateReasoningSummary(messageId) {
+    const messageDiv = ongoingStreams[messageId];
+    if (!messageDiv) return;
+    
+    const reasoningSummary = messageDiv.querySelector('.reasoning-summary');
+    if (!reasoningSummary) return;
+    
+    const summaryText = reasoningSummary.querySelector('.summary-text');
+    if (!summaryText) return;
+    
+    // Count agents and tools from the detailed logs
+    const logCount = messageDiv.querySelectorAll('.log-block').length;
+    const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+    
+    if (logCount === 0 && toolLogCount === 0) {
+        summaryText.textContent = "Reasoning: 0 agents, 0 tools";
+    } else {
+        const parts = [];
+        if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
+        if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
+        summaryText.textContent = `Reasoning: ${parts.join(', ')}`;
+    }
+    
+    // Make the summary visible and clickable if there's any activity
+    if (logCount > 0 || toolLogCount > 0) {
+        reasoningSummary.classList.remove('hidden');
+        // Auto-expand the dropdown during execution so user can see live updates
+        if (!messageDiv.classList.contains('expanded')) {
+            messageDiv.classList.add('expanded');
+        }
+    }
+}
+
 function createBotMessagePlaceholder(messageId) {
     const chatMessages = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message message-bot';
     
+    // OPTION B: Create thinking indicator with BOTH live steps AND hidden summary
     const thinkingIndicator = document.createElement('div');
     thinkingIndicator.className = 'thinking-indicator';
-    thinkingIndicator.innerHTML = `<div class="thinking-steps-container"></div>`;
+    thinkingIndicator.innerHTML = `
+        <div class="thinking-steps-container"></div>
+        <div class="reasoning-summary hidden">
+            <span class="summary-text">Reasoning: 0 agents, 0 tools</span>
+            <i class="fas fa-chevron-down summary-chevron"></i>
+        </div>
+    `;
     messageDiv.appendChild(thinkingIndicator);
 
     const detailedLogsDiv = document.createElement('div');
@@ -740,6 +810,13 @@ function createBotMessagePlaceholder(messageId) {
 
     chatMessages.appendChild(messageDiv);
     ongoingStreams[messageId] = messageDiv;
+    
+    // Add click handler to the summary (even though it's hidden initially)
+    const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
+    reasoningSummary.addEventListener('click', () => {
+        messageDiv.classList.toggle('expanded');
+    });
+    
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
@@ -782,6 +859,11 @@ function populateBotMessage(data) {
         contentBlock.appendChild(innerContent);
 
         targetContainer.appendChild(contentBlock);
+        
+        // OPTION B: Update the summary when a new agent block is created (only for logs)
+        if (is_log) {
+            updateReasoningSummary(messageId);
+        }
     }
     
     const innerContentDiv = contentBlock.querySelector('.inner-content');
