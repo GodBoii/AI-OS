@@ -2,6 +2,7 @@
 
 import logging
 from flask import Flask
+from flask_cors import CORS
 
 # --- Local Module Imports ---
 import config
@@ -26,6 +27,22 @@ def create_app():
     Creates and configures the Flask application and its extensions.
     """
     app = Flask(__name__)
+    # Allow browser-based clients (PWA) to call the API during local testing
+    CORS(
+        app,
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                    "http://192.168.1.5:3000",
+                    "http://localhost:5500",
+                ]
+            }
+        },
+        supports_credentials=True,
+        allow_headers=["Authorization", "Content-Type"],
+    )
     app.secret_key = config.FLASK_SECRET_KEY
 
     # --- 1. Initialize Extensions ---
