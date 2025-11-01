@@ -113,8 +113,12 @@ def auth_callback(provider):
         supabase_client.from_('user_integrations').upsert(integration_data).execute()
         
         logger.info(f"Successfully saved {provider} integration for user {user_id}")
-        return f"<h1>Authentication Successful!</h1><p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>"
+        
+        # Redirect back to the frontend with success message
+        frontend_url = config.FRONTEND_URL
+        return redirect(f"{frontend_url}/?auth_success=true&provider={provider}")
 
     except Exception as e:
         logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
-        return "An error occurred during authentication. Please try again.", 500
+        frontend_url = config.FRONTEND_URL
+        return redirect(f"{frontend_url}/?auth_error=true&message=Authentication failed")
