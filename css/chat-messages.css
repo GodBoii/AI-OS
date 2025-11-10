@@ -6,7 +6,7 @@
     margin-bottom: 20px;
     max-width: var(--message-max-width);
     line-height: 1.6;
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     animation: messageIn var(--anim-normal) var(--easing-standard);
 }
 
@@ -98,7 +98,7 @@
 
 .message-bot .message-content {
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.6;
     color: var(--text-color);
     padding-top: 10px;

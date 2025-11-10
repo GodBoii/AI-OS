@@ -56,14 +56,19 @@
 
 .send-btn {
     background-color: var(--accent-color);
-    color: white;
+    color: var(--text-color);
     position: relative;
     overflow: hidden;
 }
 
 .send-btn:hover {
     background-color: var(--accent-hover);
-    color: white;
+    color: var(--text-color);
+}
+
+.dark-mode .send-btn,
+.dark-mode .send-btn:hover {
+    color: var(--neutral-950);
 }
 
 /* --- Send Button Loading State --- */
@@ -82,23 +87,24 @@
         transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Simple centered dot indicator */
+/* Centered upward-pointing triangle indicator */
 .send-btn.sending::before {
     content: '';
     position: absolute;
-    top: 49%;
-    left: 49%;
-    width: 14px;
-    height: 14px;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
     transform: translate(-50%, -50%) scale(0);
-    background-color: #ffffff;
-    border-radius: 50%;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 14px solid currentColor;
     opacity: 0;
-    animation: fadeInDot 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: fadeInTriangle 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     z-index: 10;
 }
 
-@keyframes fadeInDot {
+@keyframes fadeInTriangle {
     0% {
         opacity: 0;
         transform: translate(-50%, -50%) scale(0);
@@ -503,10 +509,9 @@
     }
 
     .send-btn.sending::before {
-        width: 16px;
-        height: 16px;
-        margin: -8px 0 0 -8px;
-        border-width: 2px;
+        border-left-width: 8px;
+        border-right-width: 8px;
+        border-bottom-width: 12px;
     }
 }
 

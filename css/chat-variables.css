@@ -18,51 +18,51 @@
 
 :root {
     /* Window & Background Colors */
-    --window-bg: #ffffff;
-    --taskbar-bg: #f8f9fa;
-    --elevated-bg: #ffffff;
-    --input-bg: #ffffff;
-    --hover-bg: #f1f5f9;
+    --window-bg: var(--window-bg, #ffffff);
+    --taskbar-bg: var(--taskbar-bg, rgba(250, 248, 240, 0.9));
+    --elevated-bg: var(--elevated-bg, #ffffff);
+    --input-bg: var(--input-bg, #ffffff);
+    --hover-bg: var(--hover-bg, rgba(17, 24, 39, 0.04));
     
     /* Text Colors */
-    --text-color: #1a1a1a;
-    --text-secondary: #666666;
-    --file-name-color: #1a1a1a;
+    --text-color: var(--text-color, #111827);
+    --text-secondary: var(--text-secondary, #4b5563);
+    --file-name-color: var(--text-color, #111827);
     
     /* Border & Divider Colors */
-    --border-color: #e2e8f0;
+    --border-color: var(--border-color, #eae0c8);
     
     /* Shadow Colors */
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    --shadow-color: rgba(17, 24, 39, 0.08);
+    --shadow-sm: var(--shadow-sm, 0 1px 2px rgba(17, 24, 39, 0.05));
+    --shadow-md: var(--shadow-md, 0 4px 12px rgba(17, 24, 39, 0.08));
+    --shadow-xl: var(--shadow-xl, 0 40px 65px rgba(17, 24, 39, 0.12));
     
     /* Accent & Interactive Colors */
-    --accent-color: #3b82f6;
-    --accent-hover: #2563eb;
-    --accent-color-rgb: 59, 130, 246;
-    --accent-muted: rgba(59, 130, 246, 0.1);
-    --icon-color: #64748b;
+    --accent-color: var(--accent-color, #374151);
+    --accent-hover: var(--accent-hover, #1f2937);
+    --accent-color-rgb: var(--accent-color-rgb, 55, 65, 81);
+    --accent-muted: var(--accent-muted, rgba(55, 65, 81, 0.12));
+    --icon-color: var(--icon-color, #6b7280);
     
     /* Link Colors */
-    --link-color: #3b82f6;
-    --link-hover: #2563eb;
+    --link-color: var(--accent-color, #374151);
+    --link-hover: var(--accent-hover, #1f2937);
     
     /* Code & Syntax Colors */
-    --code-bg: #f8fafc;
-    --code-header-bg: #f1f5f9;
-    --code-border: #e2e8f0;
-    --code-language-color: #64748b;
+    --code-bg: var(--code-bg, #f5f3eb);
+    --code-header-bg: var(--background-secondary, #f3efe3);
+    --code-border: var(--code-border, #eae0c8);
+    --code-language-color: var(--text-secondary, #4b5563);
     
     /* Table Colors */
-    --table-border: #e2e8f0;
-    --table-header-bg: #f8fafc;
-    --table-stripe-bg: #f9fafb;
+    --table-border: #eae0c8;
+    --table-header-bg: #f3efe3;
+    --table-stripe-bg: #f5f3eb;
     
     /* Message Colors */
-    --message-user-bg: #3b82f6;
-    --message-bot-bg: #f8fafc;
+    --message-user-bg: var(--message-user-bg, #1f2937);
+    --message-bot-bg: var(--message-bot-bg, #f5f3eb);
     
     /* Animation Variables */
     --anim-fast: 0.2s;
@@ -91,55 +91,54 @@
 /* Dark Mode Theme Overrides */
 .dark-mode {
     /* Window & Background Colors */
-    --window-bg: #1a1f2e;
-    --taskbar-bg: #1e293b;
-    --elevated-bg: #1e293b;
-    --input-bg: #1e293b;
-    --hover-bg: #243146;
+    --window-bg: rgba(36, 36, 36, 0.96);
+    --taskbar-bg: rgba(24, 24, 27, 0.92);
+    --elevated-bg: #242424;
+    --input-bg: #1f1f1f;
+    --hover-bg: rgba(243, 244, 246, 0.08);
     
     /* Text Colors */
-    --text-color: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --file-name-color: #e2e8f0;
+    --text-color: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --file-name-color: #f3f4f6;
     
     /* Border & Divider Colors */
-    --border-color: #334155;
+    --border-color: #3a3a3a;
     
     /* Shadow Colors */
     --shadow-color: rgba(0, 0, 0, 0.3);
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 40px 65px rgba(0, 0, 0, 0.55);
     
     /* Accent & Interactive Colors */
-    --accent-color: #3b82f6;
-    --accent-hover: #2563eb;
-    --accent-color-rgb: 59, 130, 246;
-    --accent-muted: rgba(59, 130, 246, 0.15);
-    --icon-color: #94a3b8;
+    --accent-color: #d1d5db;
+    --accent-hover: #f3f4f6;
+    --accent-color-rgb: 209, 213, 219;
+    --accent-muted: rgba(209, 213, 219, 0.14);
+    --icon-color: #9ca3af;
     
     /* Link Colors */
-    --link-color: #60a5fa;
-    --link-hover: #93c5fd;
+    --link-color: #d1d5db;
+    --link-hover: #f3f4f6;
     
     /* Code & Syntax Colors */
-    --code-bg: #1e293b;
-    --code-header-bg: #243146;
-    --code-border: #334155;
-    --code-language-color: #94a3b8;
+    --code-bg: #242424;
+    --code-header-bg: #2a2a2a;
+    --code-border: #333333;
+    --code-language-color: #9ca3af;
     
     /* Table Colors */
-    --table-border: #334155;
-    --table-header-bg: #1e293b;
-    --table-stripe-bg: #243146;
+    --table-border: #3a3a3a;
+    --table-header-bg: #242424;
+    --table-stripe-bg: #1f1f1f;
     
     /* Message Colors */
-    --message-user-bg: #3b82f6;
-    --message-bot-bg: #1e293b;
+    --message-user-bg: #e5e7eb;
+    --message-bot-bg: #242424;
     
     /* Animation Variables (same for both themes) */
     --anim-fast: 0.2s;
     --anim-normal: 0.3s;
     --anim-slow: 0.4s;
-    --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }

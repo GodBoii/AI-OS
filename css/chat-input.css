@@ -82,7 +82,7 @@
     color: var(--text-color);
     font-family: inherit;
     max-height: var(--input-max-height);
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     min-height: var(--input-min-height);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }

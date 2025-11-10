@@ -43,7 +43,7 @@
     font-weight: var(--font-semibold);
     font-size: var(--text-base);
     color: var(--text-color);
-    font-family: 'Orbitron', var(--font-sans);
+    font-family: var(--font-sans);
 }
 
 .artifact-controls {
@@ -167,7 +167,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 16px;
-    font-family: 'Orbitron', var(--font-sans);
+    font-family: var(--font-sans);
     line-height: 1.5;
     position: relative;
     padding-bottom: 64px; /* Space for zoom controls */

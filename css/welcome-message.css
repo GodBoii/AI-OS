@@ -58,17 +58,7 @@
     margin: 0;
     line-height: var(--leading-tight, 1.25);
     letter-spacing: var(--tracking-tight, -0.025em);
-    font-family: var(--font-sans);
-}
-
-/* Add a subtle gradient effect for the heading */
-.welcome-heading {
-    background: linear-gradient(135deg, var(--text-color) 0%, var(--accent-color) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    /* Fallback for browsers that don't support background-clip: text */
-    color: var(--text-color);
+    font-family: var(--font-welcome, Georgia, serif);
 }
 
 /* Fallback for browsers without gradient text support */

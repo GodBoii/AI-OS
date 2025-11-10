@@ -174,23 +174,23 @@
 }
 
 .notification-info {
-    border-left: 4px solid var(--accent-color, #3b82f6);
+    border-left: 4px solid var(--accent-color, #374151);
 }
 
 .notification-info .notification-icon {
-    color: var(--accent-color, #3b82f6);
+    color: var(--accent-color, #374151);
 }
 
 .notification-info .notification-progress {
-    background: var(--accent-color, #3b82f6);
+    background: var(--accent-color, #374151);
 }
 
 .notification-connection {
-    border-left: 4px solid #8b5cf6;
+    border-left: 4px solid var(--accent-hover, #1f2937);
 }
 
 .notification-connection .notification-icon {
-    color: #8b5cf6;
+    color: var(--accent-hover, #1f2937);
 }
 
 /* Retry Button */

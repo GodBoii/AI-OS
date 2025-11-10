@@ -9,7 +9,7 @@
     max-width: 90%;
     height: 600px;
     max-height: 90vh;
-    background-color: var(--window-bg);
+    background-color: var(--elevated-bg);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     z-index: 1000;
@@ -33,7 +33,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    background-color: var(--header-bg);
+    background-color: var(--background-secondary);
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -74,7 +74,7 @@
 /* Left Sidebar */
 .tabs-sidebar {
     width: 200px;
-    background-color: var(--sidebar-bg);
+    background-color: var(--background-secondary);
     border-right: 1px solid var(--border-color);
     padding: 20px 0;
 }
