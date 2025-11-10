@@ -32,8 +32,12 @@ def login_provider(provider):
     if not token:
         return "Authentication token is missing.", 400
     
-    # Store the user's JWT in the session to link the OAuth callback to the user
+    # Detect client type (electron or pwa)
+    client_type = request.args.get('client', 'pwa')
+    
+    # Store the user's JWT and client type in the session to link the OAuth callback to the user
     session['supabase_token'] = token
+    session['client_type'] = client_type
     
     redirect_uri = url_for('auth_bp.auth_callback', provider=provider, _external=True)
     
@@ -114,11 +118,30 @@ def auth_callback(provider):
         
         logger.info(f"Successfully saved {provider} integration for user {user_id}")
         
-        # Redirect back to the frontend with success message
-        frontend_url = config.FRONTEND_URL
-        return redirect(f"{frontend_url}/?auth_success=true&provider={provider}")
+        # Get client type from session
+        client_type = session.get('client_type', 'pwa')
+        
+        # Handle Electron client - redirect to deep link
+        if client_type == 'electron':
+            deep_link = f"aios://auth/callback?success=true&provider={provider}"
+            logger.info(f"Redirecting Electron client to deep link: {deep_link}")
+            return redirect(deep_link)
+        
+        # Handle PWA client - return simple success message
+        return f"<h1>Authentication Successful!</h1><p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>"
 
     except Exception as e:
         logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
-        frontend_url = config.FRONTEND_URL
-        return redirect(f"{frontend_url}/?auth_error=true&message=Authentication failed")
+        
+        # Get client type from session
+        client_type = session.get('client_type', 'pwa')
+        
+        # Handle Electron client - redirect to deep link with error
+        if client_type == 'electron':
+            error_message = str(e)
+            deep_link = f"aios://auth/callback?success=false&provider={provider}&error={error_message}"
+            logger.info(f"Redirecting Electron client to deep link with error: {deep_link}")
+            return redirect(deep_link)
+        
+        # Handle PWA client - return error message
+        return "An error occurred during authentication. Please try again.", 500

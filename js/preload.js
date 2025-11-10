@@ -57,7 +57,8 @@ const validReceiveChannels = [
     'browse-ai-interaction',
     'browse-ai-agent-initialized',
     // Auth related events
-    'auth-state-changed'
+    'auth-state-changed',
+    'oauth-integration-callback'
 ];
 
 const validInvokeChannels = [

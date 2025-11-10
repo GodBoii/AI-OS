@@ -213,6 +213,44 @@ function createWindow() {
                 console.error('linkWebView failed to load:', errorDescription);
                 mainWindow.webContents.send('webview-navigation-updated', { error: errorDescription });
             });
+            
+            // Listen for navigation to aios:// deep link (OAuth callback)
+            linkWebView.webContents.on('will-navigate', (event, navigationUrl) => {
+                console.log('linkWebView will-navigate:', navigationUrl);
+                
+                // Check if navigating to aios:// deep link
+                if (navigationUrl.startsWith('aios://auth/callback')) {
+                    event.preventDefault();
+                    console.log('OAuth callback detected, closing webview and processing deep link');
+                    
+                    // Parse the deep link URL
+                    try {
+                        const url = new URL(navigationUrl);
+                        const params = new URLSearchParams(url.search);
+                        const success = params.get('success') === 'true';
+                        const provider = params.get('provider');
+                        const error = params.get('error');
+                        
+                        // Close the webview
+                        if (linkWebView) {
+                            mainWindow.removeBrowserView(linkWebView);
+                            linkWebView.webContents.destroy();
+                            linkWebView = null;
+                            mainWindow.webContents.send('webview-closed');
+                        }
+                        
+                        // Send OAuth callback result to renderer
+                        mainWindow.webContents.send('oauth-integration-callback', {
+                            success: success,
+                            provider: provider,
+                            error: error
+                        });
+                        
+                    } catch (e) {
+                        console.error('Error parsing OAuth callback URL:', e);
+                    }
+                }
+            });
             linkWebView.webContents.loadURL(url).then(() => {
                 console.log('URL loaded successfully:', url);
                 mainWindow.webContents.send('webview-created', bounds);

@@ -115,6 +115,22 @@ class AIOS {
             }
         });
 
+        // Listen for OAuth integration callback from main process
+        window.electron.ipcRenderer.on('oauth-integration-callback', async (data) => {
+            console.log('[aios.js] Received OAuth integration callback:', data);
+            
+            if (data.success) {
+                this.showNotification(`Successfully connected to ${data.provider}!`, 'success');
+                // Refresh integration status
+                await this.checkIntegrationStatus();
+            } else {
+                this.showNotification(
+                    `Failed to connect: ${data.error || 'Unknown error'}`,
+                    'error'
+                );
+            }
+        });
+
         addClickHandler(this.elements.closeBtn, () => this.hideWindow());
 
         this.elements.tabs?.forEach(tab => {
@@ -301,7 +317,8 @@ class AIOS {
             authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
         } else {
             const backendUrl = 'https://aios-web.onrender.com';
-            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}`;
+            // Add client=electron parameter to identify Electron client
+            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}&client=electron`;
         }
         console.log(`Opening auth URL for ${provider}: ${authUrl}`);
         window.electron.ipcRenderer.send('open-webview', authUrl);
