@@ -65,6 +65,13 @@
     margin: 0 auto;
     padding: 20px 0;
     pointer-events: auto;
+    /* Hide scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.chat-messages::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Opera */
 }
 
 /* --- Context Active Indicator --- */

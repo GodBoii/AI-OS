@@ -97,18 +97,24 @@
 <div id="context-window" class="context-window hidden">
     <div class="context-header">
         <div class="header-left">
-            <h2>Chat Sessions</h2>
-            <button class="sync-context-btn" title="Refresh Sessions">
-                <i class="fas fa-sync-alt"></i>
-            </button>
+            <h2 id="context-header-title">Chats</h2>
         </div>
-        <div class="header-right">
-            <button class="close-context-btn">
-                <i class="fas fa-times"></i>
-            </button>
+        <div class="context-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="session-search" placeholder="Search your chats..." />
         </div>
     </div>
     <div class="context-content">
+    </div>
+</div>
+
+<!-- Session History Viewer (Center) -->
+<div id="session-history-viewer" class="session-history-viewer hidden">
+    <div class="session-history-header">
+        <h3 class="session-history-title"></h3>
+    </div>
+    <div class="session-history-content">
+        <!-- Session messages will be rendered here -->
     </div>
 </div>
 
@@ -139,41 +145,14 @@
     </div>
 </div>
 
-<template id="session-detail-template">
-    <div class="session-details-view">
-        <div class="session-header">
-            <button class="back-button">
-                <i class="fas fa-arrow-left"></i>
-                Back
-            </button>
-            <h3></h3>
-        </div>
-        <div class="conversation-history">
-            <div class="conversation-header">
-                <h3>Conversation History</h3>
-            </div>
-            <div class="conversation-messages">
-            </div>
-        </div>
-    </div>
-</template>
+
 
 <template id="session-item-template">
     <div class="session-item">
-        <div class="session-select">
-            <input type="checkbox" class="session-checkbox" />
-        </div>
         <div class="session-content">
             <h3></h3>
             <div class="session-meta">
-                <div class="meta-item">
-                    <i class="far fa-clock"></i>
-                    <span class="session-date"></span>
-                </div>
-                <div class="meta-item">
-                    <i class="far fa-comments"></i>
-                    <span class="message-count"></span>
-                </div>
+                <span class="session-date"></span>
             </div>
         </div>
     </div>

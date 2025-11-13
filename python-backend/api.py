@@ -1,14 +1,11 @@
 # python-backend/api.py
 
-import logging
 import uuid
 from flask import Blueprint, request, jsonify
 
 # Import the utility function from the factory (or a future utils module)
 from utils import get_user_from_token
 from supabase_client import supabase_client
-
-logger = logging.getLogger(__name__)
 
 # Create a Blueprint for API routes, with a URL prefix of /api
 api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
@@ -44,23 +41,6 @@ def disconnect_integration():
     supabase_client.from_('user_integrations').delete().match({'user_id': str(user.id), 'service': service}).execute()
     
     return jsonify({"message": "Disconnected"}), 200
-
-
-@api_bp.route('/sessions', methods=['GET'])
-def get_user_sessions():
-    """
-    Retrieves the 15 most recent conversation sessions for the authenticated user.
-    """
-    user, error = get_user_from_token(request)
-    if error:
-        return jsonify({"error": error[0]}), error[1]
-        
-    response = supabase_client.from_('agno_sessions').select('*').eq('user_id', str(user.id)).order('created_at', desc=True).limit(15).execute()
-    
-    # Debug logging to help diagnose session count issues
-    logger.info(f"Sessions query for user {user.id}: requested 15, returned {len(response.data)}")
-    
-    return jsonify(response.data), 200
 
 
 @api_bp.route('/generate-upload-url', methods=['POST'])

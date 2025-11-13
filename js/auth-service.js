@@ -140,11 +140,132 @@ class AuthService {
         }
     }
 
-    // --- THIS IS THE NEW, CRITICAL METHOD ---
     /**
-     * Manually sets the session from tokens received via deep link.
-     * This authoritatively establishes the session and prevents the SIGNED_OUT race condition.
+     * Fetch session titles only (lightweight) for displaying the session list
+     * This is optimized to fetch only metadata without heavy runs data
      */
+    async fetchSessionTitles(limit = 15, offset = 0) {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        // First, try to fetch from session_titles table (has proper sorting by session_created_at)
+        const { data: titlesData, error: titlesError } = await this.supabase
+            .from('session_titles')
+            .select('session_id, tittle, created_at, session_created_at')
+            .eq('user_id', userId)
+            .order('session_created_at', { ascending: false, nullsFirst: false })
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+        if (titlesError) {
+            console.error('Error fetching session titles:', titlesError);
+            throw new Error(titlesError.message || 'Failed to fetch session titles.');
+        }
+
+        // Get session IDs that have titles
+        const sessionIdsWithTitles = new Set((titlesData || []).map(t => t.session_id));
+
+        // Calculate remaining slots for sessions without titles
+        const remainingSlots = limit - (titlesData?.length || 0);
+
+        let sessionsWithoutTitles = [];
+        if (remainingSlots > 0) {
+            // Fetch sessions from agno_sessions that don't have titles yet
+            // Only fetch metadata (exclude heavy runs field)
+            const { data, error: sessionsError } = await this.supabase
+                .from('agno_sessions')
+                .select('session_id, user_id, created_at, session_type')
+                .eq('user_id', userId)
+                .not('session_id', 'in', `(${Array.from(sessionIdsWithTitles).join(',')})`)
+                .order('created_at', { ascending: false })
+                .range(0, remainingSlots - 1);
+
+            if (sessionsError) {
+                console.error('Error fetching sessions without titles:', sessionsError);
+            } else {
+                sessionsWithoutTitles = data || [];
+            }
+        }
+
+        // Combine both sources
+        const allSessions = [
+            ...(titlesData || []).map(t => ({
+                session_id: t.session_id,
+                session_title: t.tittle,
+                created_at: t.session_created_at || t.created_at,
+                has_title: true
+            })),
+            ...(sessionsWithoutTitles || []).map(s => ({
+                session_id: s.session_id,
+                session_title: null,
+                created_at: s.created_at,
+                has_title: false
+            }))
+        ];
+
+        // Sort by created_at (most recent first)
+        allSessions.sort((a, b) => b.created_at - a.created_at);
+        return allSessions;
+    }
+
+    /**
+     * Fetch full session data including runs for a specific session
+     * This is called when user clicks on a session to view details
+     */
+    async fetchSessionData(sessionId) {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        // Fetch full session data including runs
+        const { data: sessionData, error } = await this.supabase
+            .from('agno_sessions')
+            .select('*')
+            .eq('session_id', sessionId)
+            .eq('user_id', userId)
+            .single();
+
+        if (error) {
+            throw new Error(error.message || 'Failed to fetch session data.');
+        }
+
+        // Try to get title from session_titles table
+        const { data: titleData } = await this.supabase
+            .from('session_titles')
+            .select('tittle')
+            .eq('session_id', sessionId)
+            .eq('user_id', userId)
+            .single();
+
+        return {
+            ...sessionData,
+            session_title: titleData?.tittle || null
+        };
+    }
+
+    /**
+     * Legacy method - kept for backward compatibility
+     * Now uses the optimized fetchSessionTitles internally
+     */
+    async fetchUserSessions(limit = 15) {
+        return await this.fetchSessionTitles(limit);
+    }
+
     async setSession(accessToken, refreshToken) {
         try {
             const { data, error } = await this.supabase.auth.setSession({

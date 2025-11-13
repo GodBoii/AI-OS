@@ -127,16 +127,14 @@
 .thinking-indicator {
     position: relative;
     padding: 10px 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none;
     background: transparent;
     border-radius: 0;
     transition: all 0.3s ease;
 }
 
 .thinking-steps-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: none;
 }
 
 .thinking-step {
@@ -186,7 +184,66 @@
 .summary-text {
     font-weight: 500;
     font-size: 0.85rem;
+    position: relative;
+}
+
+/* Shimmer effect while streaming (before steps-done) */
+.thinking-indicator:not(.steps-done) .summary-text {
+    background: linear-gradient(
+        90deg,
+        #9ca3af 0%,
+        #9ca3af 40%,
+        #ffffff 50%,
+        #9ca3af 60%,
+        #9ca3af 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s linear infinite;
+    background-position: 200% center;
+}
+
+.dark-mode .thinking-indicator:not(.steps-done) .summary-text {
+    background: linear-gradient(
+        90deg,
+        #6b7280 0%,
+        #6b7280 40%,
+        #e5e7eb 50%,
+        #6b7280 60%,
+        #6b7280 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-position: 200% center;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% center;
+    }
+    100% {
+        background-position: -200% center;
+    }
+}
+
+/* Static text when response is complete */
+.thinking-indicator.steps-done .summary-text {
     color: var(--text-secondary);
+    background: none;
+    -webkit-text-fill-color: initial;
+}
+
+/* Fallback for browsers that don't support background-clip: text */
+@supports not (background-clip: text) or not (-webkit-background-clip: text) {
+    .thinking-indicator:not(.steps-done) .summary-text {
+        color: var(--text-secondary);
+        background: none;
+        -webkit-text-fill-color: initial;
+    }
 }
 
 .summary-chevron {
@@ -205,7 +262,7 @@
     transition: max-height 0.4s ease-in-out, opacity 0.3s ease, margin-top 0.4s ease, padding-top 0.4s ease;
     margin-top: 0;
     padding-top: 0;
-    border-top: 1px solid transparent;
+    border-top: none;
 }
 
 .message-bot.expanded .detailed-logs {
@@ -216,34 +273,38 @@
     margin-top: 10px;
     padding-top: 10px;
     border-top-color: var(--border-color);
+    /* Hide scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.message-bot.expanded .detailed-logs::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Opera */
 }
 
 .log-block {
-    margin-left: 10px;
-    border-left: 2px solid var(--accent-muted);
-    padding-left: 15px;
+    margin-left: 0;
+    border-left: none;
+    padding-left: 0;
     margin-bottom: 15px;
     animation: fadeIn var(--anim-slow) var(--easing-standard) forwards;
-}
-
-.dark-mode .log-block {
-    border-left-color: var(--neutral-700);
 }
 
 .tool-log-entry {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px;
+    padding: 8px 0;
     background-color: transparent;
     border-radius: 0;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     border: none;
     animation: fadeIn var(--anim-normal) var(--easing-standard) forwards;
 }
 
-.dark-mode .tool-log-entry {
-    background-color: transparent;
+.tool-log-entry .tool-log-icon {
+    font-size: 1rem;
+    color: var(--text-secondary);
 }
 
 .tool-log-icon {
@@ -258,9 +319,7 @@
 }
 
 .tool-log-owner {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    font-weight: 500;
+    display: none;
 }
 
 .tool-log-action {
@@ -269,30 +328,29 @@
 }
 
 .tool-log-status {
-    font-size: 0.8rem;
+    font-size: 0;
     font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 99px;
+    padding: 0;
+    border-radius: 50%;
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
 }
 
 .tool-log-status.in-progress {
-    color: var(--warning-700);
-    background-color: transparent;
+    background-color: #f59e0b;
 }
 
 .dark-mode .tool-log-status.in-progress {
-    color: var(--warning-100);
-    background-color: transparent;
+    background-color: #fbbf24;
 }
 
 .tool-log-status.completed {
-    color: var(--success-700);
-    background-color: transparent;
+    background-color: #10b981;
 }
 
 .dark-mode .tool-log-status.completed {
-    color: var(--success-100);
-    background-color: transparent;
+    background-color: #34d399;
 }
 
 /* ================================================================= */
@@ -375,12 +433,8 @@
 
 .turn-assistant-response .message-bot.expanded .detailed-logs {
     background-color: transparent;
-    padding: 12px;
-    margin: 0 -16px;
-    border-top-color: var(--border-color);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.dark-mode .turn-assistant-response .message-bot.expanded .detailed-logs {
-    background-color: transparent;
+    padding: 12px 0;
+    margin: 0;
+    border-top: none;
+    border-bottom: none;
 }

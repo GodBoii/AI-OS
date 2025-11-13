@@ -191,6 +191,9 @@ contextBridge.exposeInMainWorld(
             getCurrentUser: () => authService.getCurrentUser(),
             isAuthenticated: () => authService.isAuthenticated(),
             getSession: async () => await authService.getSession(),
+            fetchUserSessions: async (limit) => await authService.fetchUserSessions(limit),
+            fetchSessionTitles: async (limit) => await authService.fetchSessionTitles(limit),
+            fetchSessionData: async (sessionId) => await authService.fetchSessionData(sessionId),
             onAuthChange: (callback) => {
                 const wrappedCallback = (user) => callback(user);
                 return authService.onAuthChange(wrappedCallback);

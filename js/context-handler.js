@@ -11,6 +11,13 @@ class ContextHandler {
         this.backgroundLoadTimer = null;
         this.isWindowOpen = false;
         
+        // Infinite scroll state
+        this.currentOffset = 0;
+        this.initialLoadCount = 15;
+        this.loadMoreCount = 7;
+        this.hasMoreSessions = true;
+        this.isLoadingMore = false;
+        
         this.initializeElements();
         this.bindEvents();
     }
@@ -48,29 +55,121 @@ class ContextHandler {
                 window.floatingWindowManager.onWindowOpen('context');
             }
         });
-        this.elements.closeContextBtn?.addEventListener('click', () => {
-            this.isWindowOpen = false;
-            this.elements.contextWindow?.classList.add('hidden');
-            
-            if (window.floatingWindowManager) {
-                window.floatingWindowManager.onWindowClose('context');
-            }
-        });
-        this.elements.syncBtn?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.forceRefreshSessions();
-        });
 
-        this.elements.sessionsContainer?.addEventListener('change', (e) => {
-            if (e.target.matches('.session-checkbox')) {
-                const checkbox = e.target;
-                const sessionItem = checkbox.closest('.session-item');
-                if (sessionItem) {
-                    sessionItem.classList.toggle('selected', checkbox.checked);
+        // Title click to close (back button behavior)
+        const headerTitle = document.getElementById('context-header-title');
+        if (headerTitle) {
+            headerTitle.addEventListener('click', () => {
+                this.isWindowOpen = false;
+                this.elements.contextWindow?.classList.add('hidden');
+                
+                if (window.floatingWindowManager) {
+                    window.floatingWindowManager.onWindowClose('context');
                 }
-                this.updateSelectionUI();
+            });
+        }
+
+        // Title click to close history viewer
+        const historyTitle = document.querySelector('.session-history-title');
+        if (historyTitle) {
+            historyTitle.addEventListener('click', () => {
+                this.closeSessionHistoryViewer();
+            });
+        }
+
+        // Search functionality
+        const searchInput = document.getElementById('session-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.filterSessions(e.target.value);
+            });
+        }
+        
+        // Infinite scroll
+        if (this.elements.sessionsContainer) {
+            this.elements.sessionsContainer.addEventListener('scroll', () => {
+                this.handleScroll();
+            });
+        }
+    }
+    
+    handleScroll() {
+        if (!this.elements.sessionsContainer || this.isLoadingMore || !this.hasMoreSessions) {
+            return;
+        }
+        
+        const container = this.elements.sessionsContainer;
+        const scrollTop = container.scrollTop;
+        const scrollHeight = container.scrollHeight;
+        const clientHeight = container.clientHeight;
+        
+        // Load more when user is 200px from bottom
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            this.loadMoreSessions();
+        }
+    }
+    
+    async loadMoreSessions() {
+        if (this.isLoadingMore || !this.hasMoreSessions) return;
+        
+        this.isLoadingMore = true;
+        console.log('[ContextHandler] Loading more sessions...');
+        
+        try {
+            // Show loading indicator at bottom
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading-more-indicator';
+            loadingIndicator.innerHTML = '<div class="session-item-loading">Loading more...</div>';
+            this.elements.sessionsContainer.appendChild(loadingIndicator);
+            
+            const session = await window.electron.auth.getSession();
+            if (!session || !session.access_token) {
+                this.isLoadingMore = false;
+                loadingIndicator.remove();
+                return;
             }
-        });
+            
+            // Fetch next batch
+            const newSessions = await window.electron.auth.fetchSessionTitles(this.loadMoreCount, this.currentOffset + this.loadedSessions.length);
+            
+            // Remove loading indicator
+            loadingIndicator.remove();
+            
+            if (newSessions.length === 0) {
+                this.hasMoreSessions = false;
+                console.log('[ContextHandler] No more sessions to load');
+            } else {
+                // Append new sessions to existing list
+                this.loadedSessions = [...this.loadedSessions, ...newSessions];
+                
+                // Render only the new sessions
+                newSessions.forEach(sessionData => {
+                    this.elements.sessionsContainer.appendChild(this.createSessionItem(sessionData));
+                });
+                
+                console.log(`[ContextHandler] Loaded ${newSessions.length} more sessions`);
+            }
+            
+        } catch (error) {
+            console.error('[ContextHandler] Error loading more sessions:', error);
+        } finally {
+            this.isLoadingMore = false;
+        }
+    }
+    
+    closeSessionHistoryViewer() {
+        const historyViewer = document.getElementById('session-history-viewer');
+        const welcomeContainer = document.querySelector('.welcome-container');
+        const floatingInput = document.getElementById('floating-input-container');
+        const chatMessages = document.getElementById('chat-messages');
+        
+        // Hide history viewer
+        if (historyViewer) historyViewer.classList.add('hidden');
+        
+        // Show chat interface elements
+        if (welcomeContainer) welcomeContainer.style.display = '';
+        if (floatingInput) floatingInput.style.display = '';
+        if (chatMessages) chatMessages.style.display = '';
     }
 
     /**
@@ -96,6 +195,7 @@ class ContextHandler {
 
     /**
      * Load sessions in the background without showing UI
+     * Now optimized to fetch only titles first (lightweight)
      */
     async loadSessionsInBackground() {
         // Prevent duplicate loads
@@ -116,24 +216,21 @@ class ContextHandler {
                 return;
             }
 
-            const response = await fetch('http://localhost:8765/api/sessions', {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            if (!window.electron.auth.fetchSessionTitles) {
+                throw new Error('fetchSessionTitles helper is unavailable');
             }
 
-            const sessions = await response.json();
-            this.loadedSessions = sessions;
+            // Fetch only titles (lightweight) - no runs data
+            const sessionTitles = await window.electron.auth.fetchSessionTitles(15);
+            this.loadedSessions = sessionTitles;
             this.loadingState = 'loaded';
             
-            console.log(`[ContextHandler] Background load complete: ${sessions.length} sessions cached`);
-            console.log(`[ContextHandler] Session IDs:`, sessions.map(s => s.session_id.substring(0, 8)));
+            console.log(`[ContextHandler] Background load complete: ${sessionTitles.length} session titles cached`);
+            console.log(`[ContextHandler] Session IDs:`, sessionTitles.map(s => s.session_id.substring(0, 8)));
 
             // If the window is currently open, update the display
             if (this.isWindowOpen && this.elements.sessionsContainer) {
-                this.showSessionList(sessions);
+                this.showSessionList(sessionTitles);
             }
 
         } catch (err) {
@@ -157,9 +254,9 @@ class ContextHandler {
                 break;
 
             case 'loading':
-                // Currently loading in background - show loading message
+                // Currently loading in background - show skeleton
                 console.log('[ContextHandler] Background load in progress...');
-                this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Loading sessions...</div>';
+                this.showSkeletonLoading();
                 // Data will appear automatically when background load completes
                 break;
 
@@ -181,11 +278,29 @@ class ContextHandler {
 
             case 'idle':
             default:
-                // Not loaded yet - start loading now
+                // Not loaded yet - start loading now with skeleton
                 console.log('[ContextHandler] Starting immediate load...');
-                this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Loading sessions...</div>';
+                this.showSkeletonLoading();
                 this.loadSessionsInBackground();
                 break;
+        }
+    }
+    
+    showSkeletonLoading() {
+        if (!this.elements.sessionsContainer) return;
+        
+        this.elements.sessionsContainer.innerHTML = '';
+        this.elements.sessionsContainer.style.display = 'block';
+        
+        // Create 5 skeleton items
+        for (let i = 0; i < 5; i++) {
+            const skeleton = document.createElement('div');
+            skeleton.className = 'skeleton-session-item';
+            skeleton.innerHTML = `
+                <div class="skeleton-session-title"></div>
+                <div class="skeleton-session-meta"></div>
+            `;
+            this.elements.sessionsContainer.appendChild(skeleton);
         }
     }
 
@@ -198,9 +313,11 @@ class ContextHandler {
         // Reset state to force reload
         this.loadingState = 'idle';
         this.loadError = null;
+        this.currentOffset = 0;
+        this.hasMoreSessions = true;
 
-        // Show loading indicator
-        this.elements.sessionsContainer.innerHTML = '<div class="session-item-loading">Refreshing sessions...</div>';
+        // Show skeleton loading
+        this.showSkeletonLoading();
 
         // Start loading
         await this.loadSessionsInBackground();
@@ -208,7 +325,7 @@ class ContextHandler {
 
     showSessionList(sessions) {
         this.elements.sessionsContainer.innerHTML = '';
-        this.elements.sessionsContainer.style.display = 'grid';
+        this.elements.sessionsContainer.style.display = 'block';
         if (sessions.length === 0) {
             this.elements.sessionsContainer.innerHTML = '<div class="empty-state">No sessions found.</div>';
             return;
@@ -221,8 +338,9 @@ class ContextHandler {
     addSelectionHeader() {
         const selectionHeader = document.createElement('div');
         selectionHeader.className = 'selection-controls';
+        selectionHeader.style.display = 'none'; // Hidden by default
         selectionHeader.innerHTML = `
-            <div class="selection-actions hidden">
+            <div class="selection-actions">
                 <span class="selected-count">0 selected</span>
                 <button class="use-selected-btn">Use Selected</button>
                 <button class="clear-selection-btn">Clear</button>
@@ -240,72 +358,127 @@ class ContextHandler {
         const sessionItem = document.createElement('div');
         sessionItem.className = 'session-item';
         sessionItem.dataset.sessionId = session.session_id;
+        sessionItem.dataset.sessionTitle = session.session_title || '';
         
-        let sessionName = `Session ${session.session_id.substring(0, 8)}...`;
-        const runs = session.runs || [];
-        const topLevelRuns = runs.filter(run => !run.parent_run_id);
-        const messageCount = topLevelRuns.length;
+        // Use title from session_titles table if available
+        let sessionName = session.session_title?.trim();
+        if (sessionName) {
+            sessionName = sessionName.length > 60 ? sessionName.substring(0, 60) + '...' : sessionName;
+        }
 
-        if (topLevelRuns.length > 0 && topLevelRuns[0].input?.input_content) {
-            let title = topLevelRuns[0].input.input_content.split('\n')[0].trim();
-            if (title.length > 45) title = title.substring(0, 45) + '...';
-            if (title) sessionName = title;
+        // Fallback to session ID if no title
+        if (!sessionName) {
+            sessionName = `Session ${session.session_id.substring(0, 8)}...`;
         }
         
         const creationDate = new Date(session.created_at * 1000);
-        const formattedDate = creationDate.toLocaleDateString() + ' ' + creationDate.toLocaleTimeString();
+        const now = new Date();
+        const diffMs = now - creationDate;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        let formattedDate;
+        if (diffDays === 0) {
+            formattedDate = 'Today';
+        } else if (diffDays === 1) {
+            formattedDate = 'Yesterday';
+        } else if (diffDays < 7) {
+            formattedDate = `${diffDays} days ago`;
+        } else {
+            formattedDate = creationDate.toLocaleDateString();
+        }
 
-        sessionItem.innerHTML = this.getSessionItemHTML(session, sessionName, formattedDate, messageCount);
+        sessionItem.innerHTML = this.getSessionItemHTML(session, sessionName, formattedDate);
         
-        const contentArea = sessionItem.querySelector('.session-content');
+        // Single click opens details, double click selects
+        let clickCount = 0;
+        let clickTimer = null;
         
-        contentArea.onclick = (e) => {
-            if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'label') {
-                this.showSessionDetails(session.session_id);
+        sessionItem.addEventListener('click', (e) => {
+            clickCount++;
+            
+            if (clickCount === 1) {
+                clickTimer = setTimeout(() => {
+                    // Single click - open details
+                    this.showSessionDetails(session.session_id);
+                    clickCount = 0;
+                }, 250);
+            } else if (clickCount === 2) {
+                // Double click - toggle selection
+                clearTimeout(clickTimer);
+                this.toggleSessionSelection(sessionItem);
+                clickCount = 0;
             }
-        };
+        });
         
         return sessionItem;
     }
     
-    getSessionItemHTML(session, sessionName, formattedDate, messageCount) {
-        const checkboxId = `session-check-${session.session_id}`;
+    getSessionItemHTML(session, sessionName, formattedDate) {
         return `
-            <div class="session-select">
-                <input type="checkbox" class="session-checkbox" id="${checkboxId}" />
-                <label for="${checkboxId}" class="checkbox-label"><i class="fas fa-check"></i></label>
-            </div>
             <div class="session-content">
                 <h3>${sessionName}</h3>
                 <div class="session-meta">
-                    <div class="meta-item">
-                        <i class="far fa-clock"></i>
-                        <span>${formattedDate}</span>
-                    </div>
-                    <div class="meta-item">
-                        <i class="far fa-comments"></i>
-                        <span>${messageCount} turns</span>
-                    </div>
+                    <span class="session-date">${formattedDate}</span>
                 </div>
             </div>
         `;
+    }
+    
+    toggleSessionSelection(sessionItem) {
+        const isSelected = sessionItem.classList.contains('selected');
+        
+        if (isSelected) {
+            sessionItem.classList.remove('selected');
+        } else {
+            sessionItem.classList.add('selected');
+        }
+        
+        this.updateSelectionUI();
+    }
+    
+    filterSessions(searchTerm) {
+        const sessionItems = this.elements.sessionsContainer?.querySelectorAll('.session-item');
+        const term = searchTerm.toLowerCase().trim();
+        
+        sessionItems?.forEach(item => {
+            const title = item.dataset.sessionTitle?.toLowerCase() || '';
+            const sessionId = item.dataset.sessionId?.toLowerCase() || '';
+            
+            if (title.includes(term) || sessionId.includes(term) || term === '') {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
     }
 
     initializeSelectionControls() {
         const useSelectedBtn = this.elements.sessionsContainer.querySelector('.use-selected-btn');
         const clearBtn = this.elements.sessionsContainer.querySelector('.clear-selection-btn');
         if (useSelectedBtn) {
-            useSelectedBtn.addEventListener('click', () => {
-                const selectedData = this.getSelectedSessionsData();
-                if (selectedData.length > 0) {
-                    this.selectedContextSessions = selectedData;
-                    this.elements.contextWindow.classList.add('hidden');
-                    this.updateContextIndicator();
-                    this.showNotification(`${selectedData.length} sessions selected as context`, 'info');
-                    
-                    if (window.floatingWindowManager) {
-                        window.floatingWindowManager.onWindowClose('context');
+            useSelectedBtn.addEventListener('click', async () => {
+                // Show loading state
+                useSelectedBtn.disabled = true;
+                useSelectedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+                
+                try {
+                    const selectedData = await this.getSelectedSessionsData();
+                    if (selectedData.length > 0) {
+                        this.selectedContextSessions = selectedData;
+                        this.elements.contextWindow.classList.add('hidden');
+                        this.updateContextIndicator();
+                        this.showNotification(`${selectedData.length} sessions selected as context`, 'info');
+                        
+                        if (window.floatingWindowManager) {
+                            window.floatingWindowManager.onWindowClose('context');
+                        }
                     }
+                } catch (error) {
+                    console.error('Error loading selected sessions:', error);
+                    this.showNotification('Failed to load selected sessions', 'error');
+                } finally {
+                    useSelectedBtn.disabled = false;
+                    useSelectedBtn.innerHTML = 'Use Selected';
                 }
             });
         }
@@ -313,99 +486,161 @@ class ContextHandler {
     }
 
     updateSelectionUI() {
-        const selectionActions = this.elements.sessionsContainer.querySelector('.selection-actions');
-        if (!selectionActions) return;
-        const selectedCount = this.elements.sessionsContainer.querySelectorAll('.session-checkbox:checked').length;
-        selectionActions.classList.toggle('hidden', selectedCount === 0);
+        const selectionControls = this.elements.sessionsContainer?.querySelector('.selection-controls');
+        if (!selectionControls) return;
+        
+        const selectedCount = this.elements.sessionsContainer.querySelectorAll('.session-item.selected').length;
+        
         if (selectedCount > 0) {
-            selectionActions.querySelector('.selected-count').textContent = `${selectedCount} selected`;
+            selectionControls.style.display = 'block';
+            selectionControls.querySelector('.selected-count').textContent = `${selectedCount} selected`;
+        } else {
+            selectionControls.style.display = 'none';
         }
     }
 
-    // --- FIX START: This function now returns the full session object ---
-    getSelectedSessionsData() {
+    /**
+     * Get selected sessions data - now fetches full data on-demand
+     */
+    async getSelectedSessionsData() {
         const selectedIds = new Set();
-        this.elements.sessionsContainer.querySelectorAll('.session-checkbox:checked').forEach(checkbox => {
-            selectedIds.add(checkbox.closest('.session-item').dataset.sessionId);
+        this.elements.sessionsContainer.querySelectorAll('.session-item.selected').forEach(item => {
+            selectedIds.add(item.dataset.sessionId);
         });
-        // Return the full session object for selected sessions, not just the interactions.
-        return this.loadedSessions.filter(session => selectedIds.has(session.session_id));
-    }
-    // --- FIX END ---
-
-    showSessionDetails(sessionId) {
-        const session = this.loadedSessions.find(s => s.session_id === sessionId);
-        if (!session) {
-            this.showNotification('Could not find session details.', 'error');
-            return;
-        }
-        const template = document.getElementById('session-detail-template');
-        if (!template) return console.error("Session detail template not found!");
-
-        const view = template.content.cloneNode(true);
-        const sessionNameEl = view.querySelector('h3');
-        const messagesContainer = view.querySelector('.conversation-messages');
-        messagesContainer.innerHTML = '';
-
-        const runs = session.runs || [];
-
-        if (runs.length === 0) {
-            messagesContainer.innerHTML = '<div class="message-entry">No messages in this session.</div>';
-            this.elements.sessionsContainer.innerHTML = '';
-            this.elements.sessionsContainer.style.display = 'block';
-            this.elements.sessionsContainer.appendChild(view);
-            return;
+        
+        // Fetch full session data for selected sessions
+        const selectedSessions = [];
+        for (const sessionId of selectedIds) {
+            try {
+                const fullSession = await window.electron.auth.fetchSessionData(sessionId);
+                if (fullSession) {
+                    selectedSessions.push(fullSession);
+                }
+            } catch (error) {
+                console.error(`Failed to fetch session ${sessionId}:`, error);
+            }
         }
         
-        const topLevelRuns = runs.filter(run => !run.parent_run_id);
+        return selectedSessions;
+    }
 
-        sessionNameEl.textContent = topLevelRuns[0]?.input?.input_content.substring(0, 45) + '...' || `Session ${sessionId.substring(0, 8)}`;
-
-        for (const run of topLevelRuns) {
-            const turnContainer = document.createElement('div');
-            turnContainer.className = 'conversation-turn';
-
-            if (run.input?.input_content) {
-                const userMessageDiv = document.createElement('div');
-                userMessageDiv.className = 'turn-user-message';
-                const messageText = document.createElement('div');
-                messageText.className = 'message-text';
-                messageText.textContent = run.input.input_content;
-
-                userMessageDiv.innerHTML = `<div class="message-label">User</div>`;
-                userMessageDiv.appendChild(messageText);
-                turnContainer.appendChild(userMessageDiv);
+    async showSessionDetails(sessionId) {
+        try {
+            // Get the center viewer
+            const historyViewer = document.getElementById('session-history-viewer');
+            const historyTitle = historyViewer.querySelector('.session-history-title');
+            const historyContent = historyViewer.querySelector('.session-history-content');
+            
+            if (!historyViewer || !historyTitle || !historyContent) {
+                console.error("Session history viewer elements not found!");
+                return;
+            }
+            
+            // Show skeleton loading immediately
+            historyTitle.textContent = 'Loading...';
+            historyContent.innerHTML = '';
+            
+            const skeletonContainer = document.createElement('div');
+            skeletonContainer.className = 'skeleton-history-loading';
+            
+            // Create 3 skeleton messages
+            for (let i = 0; i < 3; i++) {
+                const skeletonMsg = document.createElement('div');
+                skeletonMsg.className = 'skeleton-message';
+                skeletonMsg.innerHTML = `
+                    <div class="skeleton-message-line"></div>
+                    <div class="skeleton-message-line"></div>
+                    <div class="skeleton-message-line"></div>
+                `;
+                skeletonContainer.appendChild(skeletonMsg);
+            }
+            
+            historyContent.appendChild(skeletonContainer);
+            
+            // Hide chat interface and show viewer
+            const welcomeContainer = document.querySelector('.welcome-container');
+            const floatingInput = document.getElementById('floating-input-container');
+            const chatMessages = document.getElementById('chat-messages');
+            
+            if (welcomeContainer) welcomeContainer.style.display = 'none';
+            if (floatingInput) floatingInput.style.display = 'none';
+            if (chatMessages) chatMessages.style.display = 'none';
+            
+            historyViewer.classList.remove('hidden');
+            
+            // Fetch full session data including runs
+            const session = await window.electron.auth.fetchSessionData(sessionId);
+            
+            if (!session) {
+                this.showNotification('Could not find session details.', 'error');
+                this.closeSessionHistoryViewer();
+                return;
             }
 
-            const assistantResponseDiv = document.createElement('div');
-            assistantResponseDiv.className = 'turn-assistant-response';
+            const runs = session.runs || [];
+            const topLevelRuns = runs.filter(run => !run.parent_run_id);
+
+            // Use title from session_titles table, or fallback to first user input
+            let displayTitle = session.session_title;
+            if (!displayTitle && topLevelRuns.length > 0 && topLevelRuns[0]?.input?.input_content) {
+                displayTitle = topLevelRuns[0].input.input_content.split('\n')[0].trim();
+            }
             
-            if (window.renderTurnFromEvents) {
-                window.renderTurnFromEvents(assistantResponseDiv, run, { inlineArtifacts: true, replaying: true });
+            if (displayTitle) {
+                const trimmed = displayTitle.trim();
+                historyTitle.textContent = trimmed.length > 60 ? `${trimmed.substring(0, 60)}...` : trimmed;
             } else {
-                const fallbackText = document.createElement('div');
-                fallbackText.className = 'message-text';
-                fallbackText.textContent = run.content || '(Could not render detailed response)';
-                assistantResponseDiv.innerHTML = `<div class="message-label">Assistant</div>`;
-                assistantResponseDiv.appendChild(fallbackText);
+                historyTitle.textContent = `Session ${sessionId.substring(0, 8)}`;
             }
 
-            turnContainer.appendChild(assistantResponseDiv);
-            
-            messagesContainer.appendChild(turnContainer);
-        }
+            // Clear and populate content
+            historyContent.innerHTML = '';
 
-        view.querySelector('.back-button').addEventListener('click', () => {
-            this.showSessionList(this.loadedSessions);
-        });
-        this.elements.sessionsContainer.innerHTML = '';
-        this.elements.sessionsContainer.style.display = 'block';
-        this.elements.sessionsContainer.appendChild(view);
+            if (topLevelRuns.length === 0) {
+                historyContent.innerHTML = '<div class="empty-state">No messages in this session.</div>';
+            } else {
+                for (const run of topLevelRuns) {
+                    const turnContainer = document.createElement('div');
+                    turnContainer.className = 'conversation-turn';
+
+                    if (run.input?.input_content) {
+                        const userMessageDiv = document.createElement('div');
+                        userMessageDiv.className = 'turn-user-message';
+                        const messageText = document.createElement('div');
+                        messageText.className = 'message-text';
+                        messageText.textContent = run.input.input_content;
+                        userMessageDiv.appendChild(messageText);
+                        turnContainer.appendChild(userMessageDiv);
+                    }
+
+                    const assistantResponseDiv = document.createElement('div');
+                    assistantResponseDiv.className = 'turn-assistant-response';
+                    
+                    if (window.renderTurnFromEvents) {
+                        window.renderTurnFromEvents(assistantResponseDiv, run, { inlineArtifacts: true, replaying: true });
+                    } else {
+                        const fallbackText = document.createElement('div');
+                        fallbackText.className = 'message-text';
+                        fallbackText.textContent = run.content || '(Could not render detailed response)';
+                        assistantResponseDiv.appendChild(fallbackText);
+                    }
+
+                    turnContainer.appendChild(assistantResponseDiv);
+                    historyContent.appendChild(turnContainer);
+                }
+            }
+
+        } catch (error) {
+            console.error('[ContextHandler] Error loading session details:', error);
+            this.showNotification('Failed to load session details: ' + error.message, 'error');
+            this.closeSessionHistoryViewer();
+        }
     }
 
     clearSelectedContext() {
-        this.elements.sessionsContainer?.querySelectorAll('.session-checkbox:checked').forEach(cb => cb.checked = false);
-        this.elements.sessionsContainer?.querySelectorAll('.session-item.selected').forEach(item => item.classList.remove('selected'));
+        this.elements.sessionsContainer?.querySelectorAll('.session-item.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
         this.selectedContextSessions = [];
         this.updateSelectionUI();
         this.updateContextIndicator();
@@ -450,9 +685,14 @@ class ContextHandler {
         const title = document.createElement('span');
         title.className = 'session-chip-title';
         
-        const topLevelRuns = (session.runs || []).filter(run => !run.parent_run_id);
-        const firstInteraction = topLevelRuns[0]?.input?.input_content || `Session ${index + 1}`;
-        title.textContent = firstInteraction.substring(0, 25) + (firstInteraction.length > 25 ? '...' : '');
+        // Use title from session_titles table, or fallback to first user input
+        let displayTitle = session.session_title;
+        if (!displayTitle) {
+            const topLevelRuns = (session.runs || []).filter(run => !run.parent_run_id);
+            displayTitle = topLevelRuns[0]?.input?.input_content || `Session ${index + 1}`;
+        }
+        
+        title.textContent = displayTitle.substring(0, 25) + (displayTitle.length > 25 ? '...' : '');
         
         const removeBtn = document.createElement('button');
         removeBtn.className = 'session-chip-remove';
@@ -514,6 +754,8 @@ class ContextHandler {
         this.loadingState = 'idle';
         this.loadedSessions = [];
         this.loadError = null;
+        this.currentOffset = 0;
+        this.hasMoreSessions = true;
     }
 
     /**

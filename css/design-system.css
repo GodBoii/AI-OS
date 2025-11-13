@@ -168,13 +168,17 @@
   --secondary-btn-hover: #dacfb4; 
 }
 
-/* Animation tokens */
+/* Animation tokens - Enhanced for fluid motion */
 :root {
-  --anim-fast: 220ms;
-  --anim-normal: 420ms;
-  --anim-slow: 700ms;
+  --anim-fast: 200ms;
+  --anim-normal: 350ms;
+  --anim-slow: 500ms;
+  --anim-slower: 700ms;
   --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --easing-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --easing-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --easing-fluid: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Dark Theme Variables */
@@ -748,3 +752,220 @@ textarea.input {
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 .inset-0 { top: 0; right: 0; bottom: 0; left: 0; } 
+
+/*
+ ================================================================= */
+/* GLOBAL FLUID ANIMATIONS                                          */
+/* ================================================================= */
+
+/* Smooth scrolling for entire app */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Add subtle transitions to all interactive elements */
+button,
+a,
+input,
+textarea,
+select {
+  transition: all var(--anim-normal) var(--easing-smooth);
+}
+
+/* Hover lift effect for cards and interactive containers */
+.card,
+.message-bubble,
+.task-item,
+.notification {
+  transition: all var(--anim-normal) var(--easing-smooth);
+}
+
+.card:hover,
+.task-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Button press animation */
+button:active {
+  transform: scale(0.97);
+}
+
+/* Link hover animation */
+a {
+  position: relative;
+  transition: color var(--anim-fast) var(--easing-smooth);
+}
+
+a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: currentColor;
+  transition: width var(--anim-normal) var(--easing-smooth);
+}
+
+a:hover::after {
+  width: 100%;
+}
+
+/* Fade in animation for dynamic content */
+.fade-in {
+  animation: fadeIn var(--anim-normal) var(--easing-smooth);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Slide up animation */
+.slide-up {
+  animation: slideUp var(--anim-normal) var(--easing-smooth);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scale in animation */
+.scale-in {
+  animation: scaleIn var(--anim-normal) var(--easing-spring);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Stagger animation for lists */
+.stagger-item {
+  animation: staggerFadeIn var(--anim-normal) var(--easing-smooth) backwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0ms; }
+.stagger-item:nth-child(2) { animation-delay: 50ms; }
+.stagger-item:nth-child(3) { animation-delay: 100ms; }
+.stagger-item:nth-child(4) { animation-delay: 150ms; }
+.stagger-item:nth-child(5) { animation-delay: 200ms; }
+.stagger-item:nth-child(6) { animation-delay: 250ms; }
+.stagger-item:nth-child(7) { animation-delay: 300ms; }
+.stagger-item:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse animation for notifications */
+.pulse {
+  animation: pulse 2s var(--easing-smooth) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+/* Bounce animation for success states */
+.bounce {
+  animation: bounce var(--anim-slow) var(--easing-bounce);
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Shake animation for errors */
+.shake {
+  animation: shake var(--anim-normal) var(--easing-standard);
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  75% {
+    transform: translateX(10px);
+  }
+}
+
+/* Smooth page transitions */
+.page-transition-enter {
+  animation: pageEnter var(--anim-slow) var(--easing-fluid);
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading spinner with smooth rotation */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Backdrop blur animation */
+.backdrop {
+  backdrop-filter: blur(0px);
+  transition: backdrop-filter var(--anim-slow) var(--easing-smooth);
+}
+
+.backdrop.active {
+  backdrop-filter: blur(8px);
+}

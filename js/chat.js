@@ -538,12 +538,11 @@ function setupIpcListeners() {
                 const logEntry = document.createElement('div');
                 logEntry.className = 'tool-log-entry';
                 logEntry.innerHTML = `
-                    <i class="fas fa-palette tool-log-icon"></i>
+                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
                     <div class="tool-log-details">
-                        <span class="tool-log-owner">${(agent_name || 'ImageTools').replace(/_/g, ' ')}</span>
                         <span class="tool-log-action"><strong>Generated an image</strong></span>
                     </div>
-                    <span class="tool-log-status completed">Completed</span>
+                    <span class="tool-log-status completed"></span>
                 `;
                 logsContainer.appendChild(logEntry);
 
@@ -572,12 +571,11 @@ function setupIpcListeners() {
                 logEntry.id = logEntryId;
                 logEntry.className = 'tool-log-entry';
                 logEntry.innerHTML = `
-                    <i class="fas fa-wrench tool-log-icon"></i>
+                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
                     <div class="tool-log-details">
-                        <span class="tool-log-owner">${ownerName}</span>
                         <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
                     </div>
-                    <span class="tool-log-status in-progress">In progress...</span>
+                    <span class="tool-log-status in-progress"></span>
                 `;
                 logsContainer.appendChild(logEntry);
 
@@ -588,7 +586,7 @@ function setupIpcListeners() {
             if (logEntry) {
                 const statusEl = logEntry.querySelector('.tool-log-status');
                 if (statusEl) {
-                    statusEl.textContent = 'Completed';
+                    statusEl.textContent = '';
                     statusEl.classList.remove('in-progress');
                     statusEl.classList.add('completed');
                 }
@@ -849,11 +847,6 @@ function populateBotMessage(data) {
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         contentBlock.dataset.owner = ownerName;
 
-        const header = document.createElement('div');
-        header.className = 'content-block-header';
-        header.textContent = ownerName.replace(/_/g, ' ');
-        contentBlock.appendChild(header);
-
         const innerContent = document.createElement('div');
         innerContent.className = 'inner-content';
         contentBlock.appendChild(innerContent);
@@ -915,12 +908,11 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
             const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
             toolLogsHtml += `
                 <div class="tool-log-entry">
-                    <i class="fas fa-wrench tool-log-icon"></i>
+                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
                     <div class="tool-log-details">
-                        <span class="tool-log-owner">${owner.replace(/_/g, ' ')}</span>
                         <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
                     </div>
-                    <span class="tool-log-status completed">Completed</span>
+                    <span class="tool-log-status completed"></span>
                 </div>`;
         }
 
@@ -930,7 +922,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
                 const formattedContent = messageFormatter.format(event.content, { inlineArtifacts });
                 subAgentBlocksHtml += `
                     <div class="content-block log-block">
-                        <div class="content-block-header">${owner.replace(/_/g, ' ')}</div>
                         <div class="inner-content">${formattedContent}</div>
                     </div>`;
             }
@@ -967,7 +958,6 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
             <div class="detailed-logs">${toolLogsHtml}${subAgentBlocksHtml}</div>
             <div class="message-content">
                 <div class="content-block">
-                    <div class="content-block-header">${mainAgentName.replace(/_/g, ' ')}</div>
                     <div class="inner-content">${messageFormatter.format(finalContent, { inlineArtifacts }) || '(No final response content)'}</div>
                 </div>
             </div>
@@ -1413,9 +1403,9 @@ style.textContent = `
 .error-message { color: var(--error-500); padding: 8px 12px; border-radius: 8px; background-color: var(--error-100); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .dark-mode .error-message { background-color: rgba(239, 68, 68, 0.2); }
 .status-message { color: var(--text-color); font-style: italic; opacity: 0.8; padding: 4px 8px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
-.content-block { margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-.content-block-header { background-color: var(--background-secondary); padding: 4px 8px; font-size: 0.8em; font-weight: bold; color: var(--text-muted); }
-.inner-content { padding: 8px; }
+.content-block { margin-bottom: 10px; border: none; border-radius: 0; overflow: visible; }
+.content-block-header { display: none; }
+.inner-content { padding: 0; }
 `;
 document.head.appendChild(style);
 
