@@ -129,41 +129,57 @@ class FileAttachmentHandler {
             const fileIndex = this.attachedFiles.length;
             const isMedia = file.type.startsWith('image/') || file.type.startsWith('audio/') || file.type.startsWith('video/') || file.type === 'application/pdf' || file.type.includes('document');
 
-            // --- FIX #2: Introduce the 'reading' status to prevent the race condition ---
+            // Generate unique file ID for tracking
+            const fileId = crypto.randomUUID();
+
+            // Create placeholder with 'archiving' status
             const placeholderFileObject = {
+                file_id: fileId,
                 name: file.name,
                 type: file.type,
+                size: file.size,
                 previewUrl: URL.createObjectURL(file),
-                status: isMedia ? 'uploading' : 'reading', // Use 'reading' for text files
+                status: 'archiving', // New status for dual-action
                 isMedia: isMedia,
                 isText: !isMedia,
+                relativePath: null,
+                path: null // Supabase path
             };
-            // --- END FIX #2 ---
 
             this.attachedFiles.push(placeholderFileObject);
             this.renderFilePreview();
 
-            if (isMedia) {
-                try {
+            try {
+                // STEP 1: Save to local archive (always, for all files)
+                console.log(`[FileArchive] Saving ${file.name} to local archive...`);
+                const archiveResult = await window.electron.fileArchive.saveFile(file);
+                this.attachedFiles[fileIndex].relativePath = archiveResult.relativePath;
+                console.log(`[FileArchive] Saved to: ${archiveResult.relativePath}`);
+
+                // STEP 2: Handle file-type specific processing
+                if (isMedia) {
+                    // Media files: Upload to Supabase
+                    this.attachedFiles[fileIndex].status = 'uploading';
+                    this.renderFilePreview();
+                    
                     const filePathInBucket = await this.uploadFileToSupabase(file);
                     this.attachedFiles[fileIndex].path = filePathInBucket;
                     this.attachedFiles[fileIndex].status = 'completed';
-                } catch (error) {
-                    console.error('Upload failed:', error);
-                    alert(`Upload failed for ${file.name}: ${error.message}`);
-                    this.attachedFiles[fileIndex].status = 'failed';
-                }
-            } else { // This block handles text files
-                try {
-                    // --- FIX #2 (continued): Read content first, THEN update status ---
+                } else {
+                    // Text files: Read content
+                    this.attachedFiles[fileIndex].status = 'reading';
+                    this.renderFilePreview();
+                    
                     const fileContent = await this.readFileAsText(file);
                     this.attachedFiles[fileIndex].content = fileContent;
-                    this.attachedFiles[fileIndex].status = 'completed'; // Update status only after success
-                    // --- END FIX #2 ---
-                } catch (error) {
-                    console.error('Error reading text file:', error);
-                    this.attachedFiles[fileIndex].status = 'failed';
+                    this.attachedFiles[fileIndex].status = 'completed';
                 }
+
+                console.log(`[FileArchive] File processing completed for ${file.name}`);
+            } catch (error) {
+                console.error(`[FileArchive] Error processing file ${file.name}:`, error);
+                alert(`Failed to process ${file.name}: ${error.message}`);
+                this.attachedFiles[fileIndex].status = 'failed';
             }
 
             this.renderFilePreview();

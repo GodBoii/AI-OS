@@ -213,7 +213,56 @@ class AuthService {
 
         // Sort by created_at (most recent first)
         allSessions.sort((a, b) => b.created_at - a.created_at);
+        
+        // PHASE 3: Check which sessions have attachments
+        if (allSessions.length > 0) {
+            const sessionIds = allSessions.map(s => s.session_id);
+            const { data: attachmentData, error: attachmentError } = await this.supabase
+                .from('attachment')
+                .select('session_id')
+                .in('session_id', sessionIds)
+                .eq('user_id', userId);
+
+            if (!attachmentError && attachmentData) {
+                const sessionsWithAttachments = new Set(attachmentData.map(a => a.session_id));
+                allSessions.forEach(session => {
+                    session.has_attachments = sessionsWithAttachments.has(session.session_id);
+                });
+            }
+        }
+        
         return allSessions;
+    }
+
+    /**
+     * Fetch attachment metadata for a specific session
+     * @param {string} sessionId - Session ID to fetch attachments for
+     * @returns {Promise<Array>} Array of attachment metadata objects
+     */
+    async fetchSessionAttachments(sessionId) {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        const { data, error } = await this.supabase
+            .from('attachment')
+            .select('metadata')
+            .eq('session_id', sessionId)
+            .eq('user_id', userId);
+
+        if (error) {
+            console.error('Error fetching session attachments:', error);
+            throw new Error(error.message || 'Failed to fetch attachments.');
+        }
+
+        return (data || []).map(row => row.metadata);
     }
 
     /**

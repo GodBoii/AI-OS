@@ -330,7 +330,18 @@ class ShuffleMenuController {
     }
 }
 
-function startNewConversation() {
+async function startNewConversation() {
+    // CRITICAL: Save any pending attachment metadata before terminating
+    if (window.pendingAttachmentMetadata) {
+        console.log('[AttachmentDB] Saving pending metadata before starting new conversation');
+        await persistAttachmentMetadata(
+            window.pendingAttachmentMetadata.sessionId,
+            window.pendingAttachmentMetadata.files,
+            window.pendingAttachmentMetadata.userId
+        );
+        window.pendingAttachmentMetadata = null;
+    }
+
     if (currentConversationId) {
         terminateSession(currentConversationId);
     }
@@ -428,7 +439,7 @@ function setupIpcListeners() {
         }
     });
 
-    ipcRenderer.on('chat-response', (data) => {
+    ipcRenderer.on('chat-response', async (data) => {
         try {
             if (!data) return;
             const { streaming = false, done = false, id: messageId } = data;
@@ -490,6 +501,18 @@ function setupIpcListeners() {
 
                 messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
+
+                // CORRECTED FLOW: Save attachment metadata AFTER AI response completes successfully
+                if (window.pendingAttachmentMetadata) {
+                    console.log('[AttachmentDB] AI response completed, now persisting attachment metadata');
+                    await persistAttachmentMetadata(
+                        window.pendingAttachmentMetadata.sessionId,
+                        window.pendingAttachmentMetadata.files,
+                        window.pendingAttachmentMetadata.userId
+                    );
+                    // Clear pending metadata
+                    window.pendingAttachmentMetadata = null;
+                }
             }
 
             if (data.content) {
@@ -668,6 +691,10 @@ function setupIpcListeners() {
 
             // Mark that we need to start a new backend session on next message
             window.needsNewBackendSession = true;
+
+            // Clear pending attachment metadata on error (won't be saved)
+            console.log('[AttachmentDB] Clearing pending metadata due to error');
+            window.pendingAttachmentMetadata = null;
 
             // DON'T clear the conversation anymore
             // if (error.reset) { startNewConversation(); }
@@ -1064,6 +1091,18 @@ async function handleSendMessage() {
         }
         addUserMessage(message, turnContextData);
 
+        // Store attachment metadata temporarily (will persist after AI response)
+        if (attachedFiles.length > 0) {
+            console.log(`[AttachmentDB] Storing ${attachedFiles.length} files metadata temporarily (error recovery flow)`);
+            window.pendingAttachmentMetadata = {
+                sessionId: currentConversationId,
+                files: attachedFiles,
+                userId: session.user.id
+            };
+        } else {
+            window.pendingAttachmentMetadata = null;
+        }
+
         const messageId = Date.now().toString();
         createBotMessagePlaceholder(messageId);
 
@@ -1105,6 +1144,19 @@ async function handleSendMessage() {
 
     addUserMessage(message, turnContextData);
 
+    // CORRECTED FLOW: Store attachment metadata temporarily, will persist after AI response
+    if (attachedFiles.length > 0) {
+        console.log(`[AttachmentDB] Storing ${attachedFiles.length} files metadata temporarily, will persist after AI response`);
+        window.pendingAttachmentMetadata = {
+            sessionId: currentConversationId,
+            files: attachedFiles,
+            userId: session.user.id
+        };
+    } else {
+        // Clear any pending metadata if no files attached
+        window.pendingAttachmentMetadata = null;
+    }
+
     const messageId = Date.now().toString();
     createBotMessagePlaceholder(messageId);
 
@@ -1129,6 +1181,8 @@ async function handleSendMessage() {
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
+        // Clear pending metadata on error
+        window.pendingAttachmentMetadata = null;
     }
 
     floatingInput.value = '';
@@ -1137,8 +1191,61 @@ async function handleSendMessage() {
     contextHandler.clearSelectedContext();
 }
 
+/**
+ * Persists attachment metadata to the Supabase attachment table
+ * @param {string} sessionId - Current conversation/session ID
+ * @param {Array} files - Array of file objects with metadata
+ * @param {string} userId - Current user ID
+ */
+async function persistAttachmentMetadata(sessionId, files, userId) {
+    try {
+        console.log(`[AttachmentDB] Persisting metadata for ${files.length} files to session ${sessionId}`);
+
+        // Prepare attachment records
+        const attachmentRecords = files.map(file => ({
+            session_id: sessionId,
+            user_id: userId,
+            metadata: {
+                file_id: file.file_id,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                relativePath: file.relativePath,
+                supabasePath: file.path || null,
+                isMedia: file.isMedia,
+                isText: file.isText
+            }
+        }));
+
+        // Insert into attachment table using exposed method
+        const { data, error } = await window.electron.auth.insertAttachments(attachmentRecords);
+
+        if (error) {
+            console.error('[AttachmentDB] Error inserting attachment metadata:', error);
+            // Don't throw - this is non-critical, message should still send
+        } else {
+            console.log(`[AttachmentDB] Successfully persisted ${files.length} attachment records`);
+        }
+    } catch (error) {
+        console.error('[AttachmentDB] Exception persisting attachment metadata:', error);
+        // Don't throw - this is non-critical
+    }
+}
+
 async function terminateSession(conversationIdToTerminate) {
     if (!conversationIdToTerminate) return;
+
+    // CRITICAL: Save pending attachments for this session before terminating
+    if (window.pendingAttachmentMetadata &&
+        window.pendingAttachmentMetadata.sessionId === conversationIdToTerminate) {
+        console.log('[AttachmentDB] Saving pending metadata before session termination');
+        await persistAttachmentMetadata(
+            window.pendingAttachmentMetadata.sessionId,
+            window.pendingAttachmentMetadata.files,
+            window.pendingAttachmentMetadata.userId
+        );
+        window.pendingAttachmentMetadata = null;
+    }
 
     console.log(`Requesting termination of conversation: ${conversationIdToTerminate}`);
     const session = await window.electron.auth.getSession();
@@ -1299,11 +1406,11 @@ function init() {
     };
     contextHandler = new ContextHandler();
     window.contextHandler = contextHandler;
-    
+
     // Start background loading of sessions after a short delay
     // This happens automatically without user interaction
     contextHandler.preloadSessions();
-    
+
     shuffleMenuController = new ShuffleMenuController();
     shuffleMenuController.initialize();
     welcomeDisplay = new WelcomeDisplay();
@@ -1368,6 +1475,10 @@ function init() {
     setupIpcListeners();
     initializeAutoExpandingTextarea();
     fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize);
+
+    // Expose fileAttachmentHandler globally for context re-use
+    window.fileAttachmentHandler = fileAttachmentHandler;
+
     window.unifiedPreviewHandler = new UnifiedPreviewHandler(contextHandler, fileAttachmentHandler);
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
@@ -1394,6 +1505,24 @@ function init() {
 
     // Expose the renderer function globally so context-handler.js can use it
     window.renderTurnFromEvents = renderTurnFromEvents;
+
+    // CRITICAL: Save pending attachments before window closes or app quits
+    window.addEventListener('beforeunload', async (event) => {
+        if (window.pendingAttachmentMetadata) {
+            console.log('[AttachmentDB] Saving pending metadata before window closes');
+            // Prevent window from closing immediately
+            event.preventDefault();
+            event.returnValue = '';
+
+            // Save metadata
+            await persistAttachmentMetadata(
+                window.pendingAttachmentMetadata.sessionId,
+                window.pendingAttachmentMetadata.files,
+                window.pendingAttachmentMetadata.userId
+            );
+            window.pendingAttachmentMetadata = null;
+        }
+    });
 
     startNewConversation();
 }

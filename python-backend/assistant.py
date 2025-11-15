@@ -55,7 +55,7 @@ def get_llm_os(
     Planner_Agent: bool = True,
     enable_supabase: bool = False,
     use_memory: bool = False,
-    debug_mode: bool = False,
+    debug_mode: bool = True,
     enable_github: bool = False,
     enable_vercel: bool = False,
     enable_google_email: bool = False,

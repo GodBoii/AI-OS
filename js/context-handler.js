@@ -414,9 +414,14 @@ class ContextHandler {
     }
     
     getSessionItemHTML(session, sessionName, formattedDate) {
+        // PHASE 3: Add attachment indicator if session has attachments
+        const attachmentIcon = session.has_attachments 
+            ? '<i class="fas fa-paperclip session-attachment-icon" title="Has attachments"></i>' 
+            : '';
+        
         return `
             <div class="session-content">
-                <h3>${sessionName}</h3>
+                <h3>${sessionName} ${attachmentIcon}</h3>
                 <div class="session-meta">
                     <span class="session-date">${formattedDate}</span>
                 </div>
@@ -465,6 +470,10 @@ class ContextHandler {
                     const selectedData = await this.getSelectedSessionsData();
                     if (selectedData.length > 0) {
                         this.selectedContextSessions = selectedData;
+                        
+                        // PHASE 4: Re-attach files from selected sessions
+                        await this.reattachSessionFiles(selectedData);
+                        
                         this.elements.contextWindow.classList.add('hidden');
                         this.updateContextIndicator();
                         this.showNotification(`${selectedData.length} sessions selected as context`, 'info');
@@ -596,8 +605,69 @@ class ContextHandler {
             // Clear and populate content
             historyContent.innerHTML = '';
 
+            // PHASE 3: Fetch and display attachments
+            try {
+                const attachments = await window.electron.auth.fetchSessionAttachments(sessionId);
+                if (attachments && attachments.length > 0) {
+                    const attachmentsSection = document.createElement('div');
+                    attachmentsSection.className = 'session-attachments-section';
+                    attachmentsSection.innerHTML = `
+                        <h4 class="attachments-header">
+                            <i class="fas fa-paperclip"></i> 
+                            Attachments (${attachments.length})
+                        </h4>
+                        <div class="attachments-list"></div>
+                    `;
+                    
+                    const attachmentsList = attachmentsSection.querySelector('.attachments-list');
+                    
+                    for (const attachment of attachments) {
+                        const attachmentItem = document.createElement('div');
+                        attachmentItem.className = 'attachment-item';
+                        
+                        // Check if file exists locally
+                        const fileExists = await window.electron.fileArchive.fileExists(attachment.relativePath);
+                        const statusIcon = fileExists 
+                            ? '<i class="fas fa-check-circle attachment-status-ok" title="Available locally"></i>'
+                            : '<i class="fas fa-exclamation-triangle attachment-status-missing" title="File not found locally"></i>';
+                        
+                        attachmentItem.innerHTML = `
+                            <i class="fas fa-file attachment-icon"></i>
+                            <div class="attachment-info">
+                                <span class="attachment-name">${attachment.name}</span>
+                                <span class="attachment-meta">${this.formatFileSize(attachment.size)}</span>
+                            </div>
+                            ${statusIcon}
+                            ${fileExists ? '<button class="open-attachment-btn" title="Open file"><i class="fas fa-external-link-alt"></i></button>' : ''}
+                        `;
+                        
+                        if (fileExists) {
+                            const openBtn = attachmentItem.querySelector('.open-attachment-btn');
+                            openBtn.addEventListener('click', async () => {
+                                try {
+                                    await window.electron.fileArchive.openFile(attachment.relativePath);
+                                } catch (error) {
+                                    console.error('Error opening file:', error);
+                                    this.showNotification('Could not open file', 'error');
+                                }
+                            });
+                        }
+                        
+                        attachmentsList.appendChild(attachmentItem);
+                    }
+                    
+                    historyContent.appendChild(attachmentsSection);
+                }
+            } catch (error) {
+                console.error('[ContextHandler] Error fetching attachments:', error);
+                // Non-critical, continue showing session
+            }
+
             if (topLevelRuns.length === 0) {
-                historyContent.innerHTML = '<div class="empty-state">No messages in this session.</div>';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.textContent = 'No messages in this session.';
+                historyContent.appendChild(emptyState);
             } else {
                 for (const run of topLevelRuns) {
                     const turnContainer = document.createElement('div');
@@ -635,6 +705,99 @@ class ContextHandler {
             this.showNotification('Failed to load session details: ' + error.message, 'error');
             this.closeSessionHistoryViewer();
         }
+    }
+
+    formatFileSize(bytes) {
+        if (!bytes || bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * PHASE 4: Re-attach files from selected sessions to current conversation
+     * @param {Array} sessions - Selected session data
+     */
+    async reattachSessionFiles(sessions) {
+        try {
+            console.log('[ContextHandler] Checking for attachments in selected sessions...');
+            
+            let totalFilesReattached = 0;
+            
+            for (const session of sessions) {
+                // Fetch attachments for this session
+                const attachments = await window.electron.auth.fetchSessionAttachments(session.session_id);
+                
+                if (!attachments || attachments.length === 0) {
+                    continue;
+                }
+                
+                console.log(`[ContextHandler] Found ${attachments.length} attachments in session ${session.session_id.substring(0, 8)}`);
+                
+                // Re-attach each file
+                for (const attachment of attachments) {
+                    try {
+                        // Check if file exists locally
+                        const fileExists = await window.electron.fileArchive.fileExists(attachment.relativePath);
+                        
+                        if (!fileExists) {
+                            console.warn(`[ContextHandler] File not found locally: ${attachment.name}`);
+                            continue;
+                        }
+                        
+                        // Read file from local storage
+                        const fileBuffer = await window.electron.fileArchive.readFile(attachment.relativePath);
+                        
+                        // Create a File object from the buffer
+                        const blob = new Blob([fileBuffer], { type: attachment.type });
+                        const file = new File([blob], attachment.name, { 
+                            type: attachment.type,
+                            lastModified: Date.now()
+                        });
+                        
+                        // Programmatically trigger file attachment handler
+                        if (window.fileAttachmentHandler) {
+                            console.log(`[ContextHandler] Re-attaching file: ${attachment.name}`);
+                            await this.programmaticallyAttachFile(file);
+                            totalFilesReattached++;
+                        }
+                        
+                    } catch (fileError) {
+                        console.error(`[ContextHandler] Error re-attaching file ${attachment.name}:`, fileError);
+                    }
+                }
+            }
+            
+            if (totalFilesReattached > 0) {
+                console.log(`[ContextHandler] Successfully re-attached ${totalFilesReattached} files from context sessions`);
+                this.showNotification(`Re-attached ${totalFilesReattached} file${totalFilesReattached > 1 ? 's' : ''} from selected sessions`, 'success');
+            }
+            
+        } catch (error) {
+            console.error('[ContextHandler] Error re-attaching session files:', error);
+            // Non-critical error, don't block context selection
+        }
+    }
+
+    /**
+     * Programmatically attach a file (simulates user file selection)
+     * @param {File} file - File object to attach
+     */
+    async programmaticallyAttachFile(file) {
+        if (!window.fileAttachmentHandler) {
+            throw new Error('FileAttachmentHandler not available');
+        }
+        
+        // Create a fake event object that mimics file input change event
+        const fakeEvent = {
+            target: {
+                files: [file]
+            }
+        };
+        
+        // Call the handler's file selection method
+        await window.fileAttachmentHandler.handleFileSelection(fakeEvent);
     }
 
     clearSelectedContext() {
@@ -734,7 +897,12 @@ class ContextHandler {
     }
 
     showNotification(message, type = 'info', duration = 5000) {
-        window.NotificationService.show(message, type, duration);
+        if (window.NotificationService) {
+            window.NotificationService.show(message, type, duration);
+        } else {
+            // Fallback to console if NotificationService not available
+            console.log(`[Notification ${type}]: ${message}`);
+        }
     }
 
     getSelectedSessions() {

@@ -1,0 +1,213 @@
+/* ============================================================================
+   ATTACHMENT SYSTEM STYLES
+   Styles for local file archive indicators and attachment display
+   ============================================================================ */
+
+/* Session attachment indicator (paperclip icon) */
+.session-attachment-icon {
+    margin-left: 8px;
+    color: var(--primary-500);
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* Session attachments section in history viewer */
+.session-attachments-section {
+    background: var(--surface-100);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.dark-mode .session-attachments-section {
+    background: var(--surface-200);
+}
+
+.attachments-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.attachments-header i {
+    color: var(--primary-500);
+}
+
+.attachments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Individual attachment item */
+.attachment-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--background-color);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.attachment-item:hover {
+    background: var(--surface-100);
+    border-color: var(--primary-300);
+}
+
+.dark-mode .attachment-item {
+    background: var(--surface-300);
+}
+
+.dark-mode .attachment-item:hover {
+    background: var(--surface-200);
+}
+
+.attachment-icon {
+    color: var(--text-secondary);
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.attachment-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.attachment-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.attachment-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Attachment status indicators */
+.attachment-status-ok {
+    color: var(--success-500);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.attachment-status-missing {
+    color: var(--warning-500);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* Open attachment button */
+.open-attachment-btn {
+    background: var(--primary-500);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.open-attachment-btn:hover {
+    background: var(--primary-600);
+    transform: translateY(-1px);
+}
+
+.open-attachment-btn:active {
+    transform: translateY(0);
+}
+
+.open-attachment-btn i {
+    font-size: 11px;
+}
+
+/* Archiving status in file chips */
+.file-chip.archiving {
+    opacity: 0.7;
+}
+
+.file-chip.archiving .file-chip-name {
+    font-style: italic;
+}
+
+/* Status text for archiving */
+.upload-status-text {
+    color: var(--primary-500);
+    font-style: italic;
+}
+
+/* Empty state for no attachments */
+.session-attachments-section .empty-state {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .attachment-item {
+        padding: 8px 10px;
+    }
+    
+    .attachment-name {
+        font-size: 12px;
+    }
+    
+    .attachment-meta {
+        font-size: 10px;
+    }
+    
+    .open-attachment-btn {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+}
+
+/* Animation for attachment items */
+@keyframes slideInAttachment {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.attachment-item {
+    animation: slideInAttachment 0.3s ease;
+}
+
+/* Tooltip for status icons */
+.attachment-status-ok:hover::after,
+.attachment-status-missing:hover::after {
+    content: attr(title);
+    position: absolute;
+    background: var(--surface-300);
+    color: var(--text-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-top: 25px;
+    margin-left: -50px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

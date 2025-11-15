@@ -194,9 +194,140 @@ contextBridge.exposeInMainWorld(
             fetchUserSessions: async (limit) => await authService.fetchUserSessions(limit),
             fetchSessionTitles: async (limit) => await authService.fetchSessionTitles(limit),
             fetchSessionData: async (sessionId) => await authService.fetchSessionData(sessionId),
+            fetchSessionAttachments: async (sessionId) => await authService.fetchSessionAttachments(sessionId),
             onAuthChange: (callback) => {
                 const wrappedCallback = (user) => callback(user);
                 return authService.onAuthChange(wrappedCallback);
+            },
+            // Expose Supabase client methods for attachment persistence
+            insertAttachments: async (records) => {
+                if (!authService.supabase) {
+                    throw new Error('Supabase client not initialized');
+                }
+                return await authService.supabase.from('attachment').insert(records);
+            }
+        },
+
+        // Local File Archive Service
+        fileArchive: {
+            /**
+             * Saves a file to the local archive and returns the relative path
+             * @param {File} file - Browser File object
+             * @returns {Promise<{relativePath: string, fullPath: string}>}
+             */
+            saveFile: async (file) => {
+                try {
+                    // Get userData path
+                    const userDataPath = await ipcRenderer.invoke('get-path', 'userData');
+                    if (!userDataPath) {
+                        throw new Error('Could not get userData path');
+                    }
+
+                    // Generate unique directory for this file
+                    const fileId = crypto.randomUUID();
+                    const archiveDir = path.join(userDataPath, 'attachments', fileId);
+                    
+                    // Create directory if it doesn't exist
+                    if (!fs.existsSync(archiveDir)) {
+                        fs.mkdirSync(archiveDir, { recursive: true });
+                    }
+
+                    // Full path for the file
+                    const fullPath = path.join(archiveDir, file.name);
+                    
+                    // Read file as ArrayBuffer and convert to Buffer
+                    const arrayBuffer = await file.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuffer);
+                    
+                    // Write file to disk
+                    await fs.promises.writeFile(fullPath, buffer);
+                    
+                    // Return relative path (from userData) and full path
+                    const relativePath = path.join('attachments', fileId, file.name);
+                    
+                    return { relativePath, fullPath };
+                } catch (error) {
+                    console.error('Error saving file to local archive:', error);
+                    throw error;
+                }
+            },
+
+            /**
+             * Resolves a relative path to a full absolute path
+             * @param {string} relativePath - Relative path from userData
+             * @returns {Promise<string>} Full absolute path
+             */
+            resolvePath: async (relativePath) => {
+                try {
+                    const userDataPath = await ipcRenderer.invoke('get-path', 'userData');
+                    if (!userDataPath) {
+                        throw new Error('Could not get userData path');
+                    }
+                    return path.join(userDataPath, relativePath);
+                } catch (error) {
+                    console.error('Error resolving path:', error);
+                    throw error;
+                }
+            },
+
+            /**
+             * Reads a file from the local archive
+             * @param {string} relativePath - Relative path from userData
+             * @returns {Promise<Buffer>} File contents as Buffer
+             */
+            readFile: async (relativePath) => {
+                try {
+                    const fullPath = await ipcRenderer.invoke('get-path', 'userData');
+                    if (!fullPath) {
+                        throw new Error('Could not get userData path');
+                    }
+                    const filePath = path.join(fullPath, relativePath);
+                    return await fs.promises.readFile(filePath);
+                } catch (error) {
+                    console.error('Error reading file from archive:', error);
+                    throw error;
+                }
+            },
+
+            /**
+             * Checks if a file exists in the local archive
+             * @param {string} relativePath - Relative path from userData
+             * @returns {Promise<boolean>}
+             */
+            fileExists: async (relativePath) => {
+                try {
+                    const userDataPath = await ipcRenderer.invoke('get-path', 'userData');
+                    if (!userDataPath) {
+                        return false;
+                    }
+                    const filePath = path.join(userDataPath, relativePath);
+                    return fs.existsSync(filePath);
+                } catch (error) {
+                    console.error('Error checking file existence:', error);
+                    return false;
+                }
+            },
+
+            /**
+             * Opens a file with the system's default application
+             * @param {string} relativePath - Relative path from userData
+             * @returns {Promise<void>}
+             */
+            openFile: async (relativePath) => {
+                try {
+                    const userDataPath = await ipcRenderer.invoke('get-path', 'userData');
+                    if (!userDataPath) {
+                        throw new Error('Could not get userData path');
+                    }
+                    const filePath = path.join(userDataPath, relativePath);
+                    
+                    // Use shell.openPath via IPC
+                    const { shell } = require('electron');
+                    await shell.openPath(filePath);
+                } catch (error) {
+                    console.error('Error opening file:', error);
+                    throw error;
+                }
             }
         }
     }
