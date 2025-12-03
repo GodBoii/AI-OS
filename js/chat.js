@@ -1323,16 +1323,6 @@ class UnifiedPreviewHandler {
                 this.showViewer();
             }
         });
-        const tabs = this.viewer.querySelectorAll('.viewer-tab');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const tabId = tab.getAttribute('data-tab');
-                this.viewer.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-                this.viewer.querySelector(`#${tabId}-tab`).classList.add('active');
-            });
-        });
         this.updateContextIndicator();
     }
     showHistoricalContext(contextData) {
@@ -1341,37 +1331,84 @@ class UnifiedPreviewHandler {
         this.viewer.classList.add('visible');
     }
     showViewer() {
-        this.updateContextContent(this.contextHandler.getSelectedSessions());
-        this.updateFilesContent(this.fileAttachmentHandler.getAttachedFiles());
+        const sessions = this.contextHandler.getSelectedSessions();
+        const files = this.fileAttachmentHandler.getAttachedFiles();
+        
+        // Update both contents
+        this.updateContextContent(sessions);
+        this.updateFilesContent(files);
+        
+        // Show empty state if nothing is selected
+        const unifiedContent = this.viewer.querySelector('.unified-context-content');
+        if ((!sessions || sessions.length === 0) && (!files || files.length === 0)) {
+            unifiedContent.innerHTML = '<div class="empty-state"><i class="fas fa-inbox" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3;"></i><p>No context or files selected</p></div>';
+        }
+        
         this.viewer.classList.add('visible');
     }
     hideViewer() { this.viewer.classList.remove('visible'); }
     updateContextContent(sessions) {
         const contextContent = this.viewer.querySelector('.context-preview-content');
         if (!sessions?.length) {
-            contextContent.innerHTML = '<p class="empty-state">No context sessions selected</p>';
+            contextContent.innerHTML = '';
             return;
         }
-        contextContent.innerHTML = sessions.map((session, index) => `
+        
+        let html = sessions.map((session, index) => `
             <div class="session-block">
-                <div class="session-block-header"><h4>Session ${index + 1}</h4><button class="remove-session-btn" data-session-index="${index}" title="Remove Session"><i class="fas fa-times"></i></button></div>
-                ${session.interactions.map(int => `<div class="interaction"><div class="user-message"><strong>User:</strong> ${int.user_input}</div><div class="assistant-message"><strong>Assistant:</strong> ${int.llm_output}</div></div>`).join('')}
+                <div class="session-block-header">
+                    <h4>Session ${index + 1}</h4>
+                </div>
+                ${session.interactions && session.interactions.length > 0 
+                    ? session.interactions.map(int => `
+                        <div class="interaction">
+                            <div class="user-message"><strong>You:</strong> ${this.escapeHtml(int.user_input)}</div>
+                            <div class="assistant-message"><strong>Assistant:</strong> ${this.escapeHtml(int.llm_output)}</div>
+                        </div>`).join('')
+                    : '<div class="interaction"><p style="color: var(--text-secondary); margin: 0;">No interactions in this session</p></div>'
+                }
             </div>`).join('');
+        contextContent.innerHTML = html;
     }
+
     updateFilesContent(files) {
         const filesContent = this.viewer.querySelector('.files-preview-content');
         if (!files?.length) {
-            filesContent.innerHTML = '<p class="empty-state">No files attached</p>';
+            filesContent.innerHTML = '';
             return;
         }
-        filesContent.innerHTML = files.map((file, index) => `
-            <div class="file-preview-item">
-                <div class="file-preview-header-item">
-                    <div class="file-info"><i class="${this.fileAttachmentHandler.getFileIcon(file.name)} file-icon"></i><span class="file-name">${file.name}</span></div>
-                    <div class="file-actions"><button class="preview-toggle" title="Toggle Preview"><i class="fas fa-eye"></i></button><button class="remove-file" title="Remove File"><i class="fas fa-times"></i></button></div>
-                </div>
-                <div class="file-preview-content-item">${file.isMedia ? this.renderMediaPreview(file) : (file.content || "No preview available")}</div>
-            </div>`).join('');
+        
+        let html = '';
+        if (files.length > 0) {
+            html += '<div class="section-header"><i class="fas fa-paperclip"></i> Files</div>';
+            html += files.map((file, index) => `
+                <div class="file-preview-item">
+                    <div class="file-preview-header-item">
+                        <div class="file-info">
+                            <i class="${this.fileAttachmentHandler.getFileIcon(file.name)} file-icon"></i>
+                            <span class="file-name" title="${file.name}">${file.name}</span>
+                        </div>
+                        <div class="file-actions">
+                            <button class="preview-toggle" title="Toggle Preview" aria-label="Toggle file preview">
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <button class="remove-file" title="Remove File" aria-label="Remove file">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="file-preview-content-item">
+                        ${file.isMedia ? this.renderMediaPreview(file) : (file.content || "No preview available")}
+                    </div>
+                </div>`).join('');
+        }
+        filesContent.innerHTML = html;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     renderMediaPreview(file) {
         if (file.type.startsWith('image/')) return `<img src="${file.previewUrl}" alt="${file.name}" class="media-preview"><p class="file-path-info">File path: ${file.path || "Path not available"}</p>`;

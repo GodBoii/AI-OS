@@ -6,32 +6,33 @@ body {
     display: grid;
     place-items: center;
     background: var(--bg-color);
-    background-image: 
+    background-image:
         radial-gradient(circle at 25% 25%, rgba(var(--accent-color-rgb, 55, 65, 81), 0.06) 0%, transparent 42%),
         radial-gradient(circle at 75% 75%, rgba(var(--accent-color-rgb, 55, 65, 81), 0.06) 0%, transparent 42%);
     background-attachment: fixed;
 }
+
 .sidebar {
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 2.5%; 
-    min-width: 40px; 
+    width: 2.5%;
+    min-width: 40px;
     background-color: var(--bg-color);
     border-right: 1px solid var(--border-color);
     z-index: 1000;
     display: flex;
-    align-items: flex-start; 
-    justify-content: center; 
-    padding: 0.5rem 0; 
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.5rem 0;
     transition: all var(--anim-normal) var(--easing-standard);
 }
 
 .sidebar-icons {
     display: flex;
-    flex-direction: column; 
-    gap: 0.5rem; 
+    flex-direction: column;
+    gap: 0.5rem;
     align-items: center;
     background: transparent;
     border: none;
@@ -45,11 +46,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.25rem; 
-    height: 2.25rem; 
-    border-radius: 0.5rem; 
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
     color: var(--icon-color);
-    font-size: 1.1rem; 
+    font-size: 1.1rem;
     cursor: pointer;
     transition: transform var(--anim-fast) var(--easing-spring), color var(--anim-fast) var(--easing-standard), background-color var(--anim-fast) var(--easing-standard);
     background: transparent;
@@ -74,7 +75,8 @@ body {
 /* --- MODIFICATION: Hover-to-expand top control bar --- */
 .window-controls-area {
     position: fixed;
-    top: 0; /* Stick to very top */
+    top: 0;
+    /* Stick to very top */
     right: 0;
     z-index: 1001;
     display: flex;
@@ -368,6 +370,7 @@ body {
 .gap-2 {
     gap: 0.5rem;
 }
+
 .gap-4 {
     gap: 1rem;
 }
@@ -378,15 +381,19 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1em; /* For the default cog icon */
-    border-radius: 50%; /* Make the container a circle */
-    overflow: hidden; /* Hide anything that spills out */
+    font-size: 1.1em;
+    /* For the default cog icon */
+    border-radius: 50%;
+    /* Make the container a circle */
+    overflow: hidden;
+    /* Hide anything that spills out */
 }
 
 /* This styles the IMG tag for Google users */
 .user-avatar {
     width: 100%;
-    object-fit: cover; /* This is the magic property: scales image to fill space without distortion */
+    object-fit: cover;
+    /* This is the magic property: scales image to fill space without distortion */
 }
 
 /* This styles the DIV for email users (fallback) */

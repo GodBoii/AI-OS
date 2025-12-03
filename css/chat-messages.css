@@ -238,7 +238,7 @@
 }
 
 /* Fallback for browsers that don't support background-clip: text */
-@supports not (background-clip: text) or not (-webkit-background-clip: text) {
+@supports not (background-clip: text) {
     .thinking-indicator:not(.steps-done) .summary-text {
         color: var(--text-secondary);
         background: none;
@@ -437,4 +437,154 @@
     margin: 0;
     border-top: none;
     border-bottom: none;
+}
+
+/* 
+================================================================= */
+/* TABLE STYLING FOR LLM-GENERATED CONTENT                         */
+/* ================================================================= */
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    margin: 16px 0;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--message-bg);
+}
+
+.formatted-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.formatted-table thead {
+    background-color: var(--table-header-bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.formatted-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-color);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.formatted-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.formatted-table tbody tr:hover {
+    background-color: var(--table-stripe-bg);
+}
+
+.formatted-table tbody tr:nth-child(even) {
+    background-color: var(--table-stripe-bg);
+}
+
+.formatted-table tbody tr:nth-child(even):hover {
+    background-color: var(--hover-bg);
+}
+
+.formatted-table tbody td {
+    padding: 12px 16px;
+    color: var(--text-color);
+    word-break: break-word;
+    max-width: 400px;
+}
+
+.formatted-table tbody td:first-child {
+    font-weight: 500;
+}
+
+/* Code blocks within tables */
+.formatted-table code {
+    background-color: rgba(var(--accent-color-rgb), 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: var(--accent-color);
+}
+
+.dark-mode .formatted-table code {
+    background-color: rgba(var(--accent-color-rgb), 0.15);
+}
+
+/* Links within tables */
+.formatted-table a {
+    color: var(--accent-color);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.formatted-table a:hover {
+    border-bottom-color: var(--accent-color);
+}
+
+/* Responsive table for smaller screens */
+@media (max-width: 768px) {
+    .table-container {
+        margin: 12px 0;
+        border-radius: 6px;
+    }
+
+    .formatted-table {
+        font-size: 0.9rem;
+    }
+
+    .formatted-table thead th,
+    .formatted-table tbody td {
+        padding: 10px 12px;
+    }
+
+    .formatted-table tbody td {
+        max-width: 250px;
+    }
+}
+
+/* Table styling in reasoning dropdown */
+.detailed-logs .table-container {
+    margin: 12px 0;
+    border: 1px solid var(--border-color);
+}
+
+.detailed-logs .formatted-table thead th {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+}
+
+.detailed-logs .formatted-table tbody td {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+}
+
+/* Table styling in session history */
+.session-history-content .table-container {
+    margin: 12px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.session-history-content .formatted-table {
+    font-size: 0.95rem;
+}
+
+.session-history-content .formatted-table thead th {
+    padding: 12px 16px;
+    background-color: var(--table-header-bg);
+    font-weight: 600;
+}
+
+.session-history-content .formatted-table tbody td {
+    padding: 12px 16px;
 }

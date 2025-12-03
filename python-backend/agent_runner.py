@@ -163,11 +163,29 @@ def run_agent_and_stream(
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
-                socketio.emit("response", {"content": chunk.content, "streaming": True, "id": message_id, "agent_name": owner_name, "is_log": not is_final}, room=sid)
+                # Include reasoning_content if present
+                reasoning_content = getattr(chunk, 'reasoning_content', None)
+                socketio.emit("response", {
+                    "content": chunk.content, 
+                    "streaming": True, 
+                    "id": message_id, 
+                    "agent_name": owner_name, 
+                    "is_log": not is_final,
+                    "reasoning_content": reasoning_content
+                }, room=sid)
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 socketio.emit("agent_step", {"type": "tool_start", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
+            # Handle reasoning events
+            elif chunk.event == TeamRunEvent.reasoning_step.value:
+                reasoning_step = getattr(chunk, 'reasoning_step', None)
+                if reasoning_step:
+                    socketio.emit("reasoning_step", {
+                        "id": message_id,
+                        "agent_name": owner_name,
+                        "step": str(reasoning_step)
+                    }, room=sid)
 
         # 6. Finalize the Stream and Log Metrics
         socketio.emit("response", {"done": True, "id": message_id}, room=sid)

@@ -5,25 +5,25 @@ class AIOS {
         this.initialized = false;
         this.currentTab = 'account'; // Default tab is now 'account'
         this.elements = {};
-        this.userDataPath = null; 
-        this.userData = null; 
-        this.authService = null; 
+        this.userDataPath = null;
+        this.userData = null;
+        this.authService = null;
     }
 
     async init() {
         if (this.initialized) return;
 
         await this._initializePaths();
-        
+
         try {
             this.authService = window.electron.auth;
             await this.authService.init();
         } catch (error) {
             console.error('Failed to initialize auth service:', error);
         }
-        
+
         this.userData = await this.loadUserData();
-        
+
         this.cacheElements();
         this.setupEventListeners();
         this.loadSavedData();
@@ -35,7 +35,7 @@ class AIOS {
         try {
             const userDataPath = await window.electron.ipcRenderer.invoke('get-path', 'userData');
             this.userDataPath = window.electron.path.join(userDataPath, 'userData');
-            
+
             if (!window.electron.fs.existsSync(this.userDataPath)) {
                 window.electron.fs.mkdirSync(this.userDataPath, { recursive: true });
             }
@@ -56,7 +56,7 @@ class AIOS {
             closeBtn: document.getElementById('close-aios'),
             tabs: document.querySelectorAll('.tab-btn'),
             tabContents: document.querySelectorAll('.tab-content'),
-            
+
             // Support Form
             supportForm: document.getElementById('support-form'),
             subject: document.getElementById('subject'),
@@ -66,7 +66,7 @@ class AIOS {
             // Account Sections
             accountLoggedOut: document.getElementById('account-logged-out'),
             accountLoggedIn: document.getElementById('account-logged-in'),
-            
+
             // New User Identity Card Elements
             accountAvatar: document.getElementById('account-avatar'),
             accountUserName: document.getElementById('account-userName'),
@@ -118,7 +118,7 @@ class AIOS {
         // Listen for OAuth integration callback from main process
         window.electron.ipcRenderer.on('oauth-integration-callback', async (data) => {
             console.log('[aios.js] Received OAuth integration callback:', data);
-            
+
             if (data.success) {
                 this.showNotification(`Successfully connected to ${data.provider}!`, 'success');
                 // Refresh integration status
@@ -154,25 +154,25 @@ class AIOS {
             e.preventDefault();
             this.handleSupportSubmit();
         });
-        
+
         addClickHandler(this.elements.logoutBtn, () => this.handleLogout());
 
         this.elements.screenshot?.addEventListener('change', (e) => this.handleFileUpload(e));
-        
+
         this.elements.authTabs?.forEach(tab => {
             tab.addEventListener('click', () => this.switchAuthTab(tab.dataset.authTab));
         });
-        
+
         this.elements.loginForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleLogin();
         });
-        
+
         this.elements.signupForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleSignup();
         });
-        
+
         addClickHandler(this.elements.googleSignInBtn, () => this.handleGoogleSignIn());
 
         const integrationButtonHandler = (e) => {
@@ -182,7 +182,7 @@ class AIOS {
             if (action === 'connect') this.startAuthFlow(provider);
             else if (action === 'disconnect') this.disconnectIntegration(provider);
         };
-        
+
         addClickHandler(this.elements.connectGithubBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectGoogleBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
@@ -291,8 +291,8 @@ class AIOS {
                 this.elements.accountUserName.style.display = 'block';
             }
             if (this.elements.accountUserEmail) {
-                 this.elements.accountUserEmail.textContent = email;
-                 this.elements.accountUserEmail.style.display = 'block'; // Also show email below name
+                this.elements.accountUserEmail.textContent = email;
+                this.elements.accountUserEmail.style.display = 'block'; // Also show email below name
             }
         } else {
             if (this.elements.accountUserEmail) {
@@ -326,7 +326,7 @@ class AIOS {
 
     async disconnectIntegration(provider) {
         if (!confirm(`Are you sure you want to disconnect your ${provider} account?`)) return;
-        
+
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
             this.showNotification('Authentication error. Please log in again.', 'error');
@@ -439,8 +439,8 @@ class AIOS {
         };
         try {
             const feedbackPath = window.electron.path.join(this.userDataPath, 'feedback.json');
-            const feedbackHistory = window.electron.fs.existsSync(feedbackPath) 
-                ? JSON.parse(window.electron.fs.readFileSync(feedbackPath, 'utf8')) 
+            const feedbackHistory = window.electron.fs.existsSync(feedbackPath)
+                ? JSON.parse(window.electron.fs.readFileSync(feedbackPath, 'utf8'))
                 : [];
             feedbackHistory.push(formData);
             window.electron.fs.writeFileSync(feedbackPath, JSON.stringify(feedbackHistory, null, 2), 'utf8');
@@ -554,13 +554,13 @@ class AIOS {
         this.elements.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
         this.elements.tabContents.forEach(content => content.classList.toggle('active', content.id === `${tabName}-tab`));
         this.currentTab = tabName;
-        
+
         // If switching to integration tab, check integration status
         if (tabName === 'integration') {
             this.checkIntegrationStatus();
         }
     }
-    
+
     switchAuthTab(tabName) {
         this.elements.authTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.authTab === tabName));
         if (tabName === 'login') {
@@ -571,7 +571,7 @@ class AIOS {
             this.elements.signupForm.classList.add('active');
         }
     }
-    
+
     updateAuthUI() {
         const isAuthenticated = this.authService?.isAuthenticated() || false;
         if (this.elements.accountLoggedIn && this.elements.accountLoggedOut) {

@@ -16,13 +16,13 @@ class AuthService {
                 config.supabase.url,
                 config.supabase.anonKey
             );
-            
+
             const { data } = await this.supabase.auth.getSession();
             if (data.session) {
                 this.user = data.session.user;
                 this._notifyListeners();
             }
-            
+
             this.supabase.auth.onAuthStateChange((event, session) => {
                 console.log('Auth state changed:', event);
                 this.user = session?.user || null;
@@ -31,7 +31,7 @@ class AuthService {
                 }
                 this._notifyListeners();
             });
-            
+
             return true;
         } catch (error) {
             console.error('Failed to initialize auth service:', error);
@@ -69,16 +69,16 @@ class AuthService {
                     }
                 }
             });
-        
+
             if (error) {
                 return { success: false, error: error.message };
             }
-        
+
             // Profile is now automatically created by database trigger
             // No need to manually insert into profiles table
-            
+
             return { success: true, data };
-        
+
         } catch (error) {
             return { success: false, error: error.message };
         }
@@ -90,9 +90,9 @@ class AuthService {
                 email: email,
                 password: password
             });
-            
+
             if (error) throw error;
-            
+
             if (data.user) {
                 if (!data.user.user_metadata?.name) {
                     try {
@@ -101,7 +101,7 @@ class AuthService {
                             .select('name')
                             .eq('id', data.user.id)
                             .single();
-                            
+
                         if (profileData && profileData.name) {
                             data.user.user_metadata = data.user.user_metadata || {};
                             data.user.user_metadata.name = profileData.name;
@@ -113,7 +113,7 @@ class AuthService {
                     }
                 }
             }
-            
+
             return { success: true, data };
         } catch (error) {
             return { success: false, error: error.message };
@@ -125,7 +125,8 @@ class AuthService {
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: 'aios://auth-callback'
+                    redirectTo: 'aios://auth-callback',
+                    skipBrowserRedirect: true
                 }
             });
 
@@ -138,6 +139,37 @@ class AuthService {
             console.error('Google Sign-In URL generation error:', error);
             return { success: false, error: error.message };
         }
+    }
+
+    /**
+     * Extract title from runs array by getting first user message
+     * @param {Array} runs - The runs array from session data
+     * @returns {string|null} First 3-4 words from user's first message
+     */
+    extractTitleFromRuns(runs) {
+        if (!runs || !Array.isArray(runs) || runs.length === 0) {
+            return null;
+        }
+
+        // Find the first run with user input
+        const firstRun = runs.find(run => run.input && run.input.input_content);
+        
+        if (!firstRun || !firstRun.input || !firstRun.input.input_content) {
+            return null;
+        }
+
+        const userMessage = firstRun.input.input_content.trim();
+        
+        // Extract first 3-4 words
+        const words = userMessage.split(/\s+/).slice(0, 4);
+        let title = words.join(' ');
+        
+        // Truncate to 60 characters if needed
+        if (title.length > 60) {
+            title = title.substring(0, 60) + '...';
+        }
+        
+        return title || null;
     }
 
     /**
@@ -179,10 +211,10 @@ class AuthService {
         let sessionsWithoutTitles = [];
         if (remainingSlots > 0) {
             // Fetch sessions from agno_sessions that don't have titles yet
-            // Only fetch metadata (exclude heavy runs field)
+            // Fetch runs field to extract first user message as title
             const { data, error: sessionsError } = await this.supabase
                 .from('agno_sessions')
-                .select('session_id, user_id, created_at, session_type')
+                .select('session_id, user_id, created_at, session_type, runs')
                 .eq('user_id', userId)
                 .not('session_id', 'in', `(${Array.from(sessionIdsWithTitles).join(',')})`)
                 .order('created_at', { ascending: false })
@@ -205,7 +237,7 @@ class AuthService {
             })),
             ...(sessionsWithoutTitles || []).map(s => ({
                 session_id: s.session_id,
-                session_title: null,
+                session_title: this.extractTitleFromRuns(s.runs),
                 created_at: s.created_at,
                 has_title: false
             }))
@@ -213,7 +245,7 @@ class AuthService {
 
         // Sort by created_at (most recent first)
         allSessions.sort((a, b) => b.created_at - a.created_at);
-        
+
         // PHASE 3: Check which sessions have attachments
         if (allSessions.length > 0) {
             const sessionIds = allSessions.map(s => s.session_id);
@@ -230,7 +262,7 @@ class AuthService {
                 });
             }
         }
-        
+
         return allSessions;
     }
 

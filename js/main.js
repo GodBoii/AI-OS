@@ -4,11 +4,14 @@ const electron = require('electron');
 const { app, BrowserWindow, ipcMain, BrowserView, shell } = electron;
 const path = require('path');
 const PythonBridge = require('./python-bridge');
-const http = require('http');  
-const { EventEmitter } = require('events'); 
-const BrowserHandler = require('./browser-handler.js'); 
+const http = require('http');
+const { EventEmitter } = require('events');
+const BrowserHandler = require('./browser-handler.js');
 
 let mainWindow;
+
+// --- App Name Setup ---
+app.setName('Aetheria AI');
 
 // --- Protocol Registration ---
 // This tells the OS that our app can handle 'aios://' links.
@@ -59,7 +62,7 @@ if (!gotTheLock) {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
         console.log('[main.js] >>> "second-instance" event fired.');
         const deepLinkUrl = commandLine.find(arg => arg.startsWith('aios://'));
-        
+
         if (deepLinkUrl) {
             console.log('[main.js] >>> Deep link found in second instance arguments.');
             handleDeepLink(deepLinkUrl);
@@ -103,7 +106,7 @@ function createWindow() {
     const getAuthToken = async () => {
         try {
             const session = await mainWindow.webContents.executeJavaScript(
-                'window.electron.auth.getSession()', 
+                'window.electron.auth.getSession()',
                 true
             );
             return session ? session.access_token : null;
@@ -115,25 +118,25 @@ function createWindow() {
 
     const appDataPath = app.getPath('userData');
     browserHandler = new BrowserHandler(mainProcessEmitter, appDataPath, getAuthToken);
-    
+
     browserHandler.initialize();
-    
+
     pythonBridge.setBrowserController(browserHandler);
     pythonBridge.start().catch(error => {
         console.error('Python bridge error:', error.message);
         mainWindow.webContents.on('did-finish-load', () => {
-            mainWindow.webContents.send('socket-connection-status', { 
+            mainWindow.webContents.send('socket-connection-status', {
                 connected: false,
                 error: 'Failed to connect to Python backend: ' + error.message
             });
         });
-        
+
         setTimeout(() => {
             console.log('Attempting to reconnect to Python backend...');
             if (pythonBridge) {
                 pythonBridge.stop();
             }
-            pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter); 
+            pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter);
             pythonBridge.start().catch(err => {
                 console.error('Python bridge reconnection failed:', err.message);
             });
@@ -156,7 +159,7 @@ function createWindow() {
         pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter);
         pythonBridge.start().catch(error => {
             console.error('Failed to restart Python bridge:', error);
-            mainWindow.webContents.send('socket-connection-status', { 
+            mainWindow.webContents.send('socket-connection-status', {
                 connected: false,
                 error: 'Failed to connect to Python backend: ' + error.message
             });
@@ -213,16 +216,16 @@ function createWindow() {
                 console.error('linkWebView failed to load:', errorDescription);
                 mainWindow.webContents.send('webview-navigation-updated', { error: errorDescription });
             });
-            
+
             // Listen for navigation to aios:// deep link (OAuth callback)
             linkWebView.webContents.on('will-navigate', (event, navigationUrl) => {
                 console.log('linkWebView will-navigate:', navigationUrl);
-                
+
                 // Check if navigating to aios:// deep link
                 if (navigationUrl.startsWith('aios://auth/callback')) {
                     event.preventDefault();
                     console.log('OAuth callback detected, closing webview and processing deep link');
-                    
+
                     // Parse the deep link URL
                     try {
                         const url = new URL(navigationUrl);
@@ -230,7 +233,7 @@ function createWindow() {
                         const success = params.get('success') === 'true';
                         const provider = params.get('provider');
                         const error = params.get('error');
-                        
+
                         // Close the webview
                         if (linkWebView) {
                             mainWindow.removeBrowserView(linkWebView);
@@ -238,14 +241,14 @@ function createWindow() {
                             linkWebView = null;
                             mainWindow.webContents.send('webview-closed');
                         }
-                        
+
                         // Send OAuth callback result to renderer
                         mainWindow.webContents.send('oauth-integration-callback', {
                             success: success,
                             provider: provider,
                             error: error
                         });
-                        
+
                     } catch (e) {
                         console.error('Error parsing OAuth callback URL:', e);
                     }
