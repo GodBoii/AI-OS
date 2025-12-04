@@ -59,6 +59,7 @@
 }
 
 /* --- Mic Button Styles --- */
+
 .mic-btn {
     background-color: transparent;
     color: var(--icon-color);
@@ -70,9 +71,11 @@
 }
 
 .mic-btn.recording {
-    background-color: var(--accent-color);
-    color: white;
+    background-color: var(--mic-waveform-bg);
+    color: var(--mic-waveform-bar);
+    border: 1px solid var(--mic-waveform-border);
     animation: recordingPulse 2s ease-in-out infinite;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
 .mic-btn.recording:hover {
@@ -110,11 +113,15 @@
     gap: 3px;
     height: 100%;
     width: 100%;
+    background: var(--mic-waveform-bg);
+    border-radius: 10px;
+    border: 1px solid var(--mic-waveform-border);
+    padding: 6px;
 }
 
 .waveform-bar {
     width: 3px;
-    background: currentColor;
+    background: var(--mic-waveform-bar);
     border-radius: 2px;
     transition: height 0.1s ease-out;
     min-height: 20%;

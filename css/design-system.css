@@ -166,6 +166,9 @@
   --background-tertiary: #e7deca;
   --secondary-btn-bg: #e7deca;
   --secondary-btn-hover: #dacfb4; 
+  --mic-waveform-bg: #f6f1e6;
+  --mic-waveform-border: #2b2f37;
+  --mic-waveform-bar: #111827;
 }
 
 /* Animation tokens - Enhanced for fluid motion */
@@ -239,6 +242,9 @@
   --background-tertiary: #2a2a2a;
   --secondary-btn-bg: #333333;
   --secondary-btn-hover: #3f3f3f;
+  --mic-waveform-bg: #0f0f11;
+  --mic-waveform-border: #f6f0e4;
+  --mic-waveform-bar: #f8f9fb;
 
   /* Danger Colors Dark Mode */
   --danger-color: var(--error-500);
