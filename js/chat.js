@@ -38,6 +38,7 @@ let fileAttachmentHandler = null;
 let shuffleMenuController = null;
 let welcomeDisplay = null;
 let floatingWindowManager = null;
+let audioInputHandler = null;
 let connectionStatus = false;
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
@@ -331,6 +332,11 @@ class ShuffleMenuController {
 }
 
 async function startNewConversation() {
+    // Stop any ongoing audio recording
+    if (audioInputHandler && audioInputHandler.isRecording) {
+        audioInputHandler.stopRecording();
+    }
+    
     // CRITICAL: Save any pending attachment metadata before terminating
     if (window.pendingAttachmentMetadata) {
         console.log('[AttachmentDB] Saving pending metadata before starting new conversation');
@@ -1517,6 +1523,29 @@ function init() {
     window.fileAttachmentHandler = fileAttachmentHandler;
 
     window.unifiedPreviewHandler = new UnifiedPreviewHandler(contextHandler, fileAttachmentHandler);
+    
+    // Initialize audio input handler with model check
+    const micButton = document.getElementById('mic-button');
+    if (micButton && window.AudioInputHandler) {
+        audioInputHandler = new AudioInputHandler();
+        const initialized = audioInputHandler.initialize(micButton, elements.input);
+        
+        if (initialized) {
+            // Check if model is already available
+            audioInputHandler.checkModelAvailability().then(isAvailable => {
+                if (!isAvailable) {
+                    console.log('[Chat] Voice model not available, starting download...');
+                    // Download model in background
+                    audioInputHandler.downloadModel();
+                } else {
+                    console.log('[Chat] Voice model already available');
+                }
+            });
+        } else {
+            console.warn('Audio input handler could not be initialized');
+        }
+    }
+    
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });

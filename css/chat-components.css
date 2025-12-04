@@ -22,7 +22,8 @@
 .send-btn,
 .attach-btn,
 .tool-btn,
-.shuffle-btn {
+.shuffle-btn,
+.mic-btn {
     background-color: transparent;
     border: none;
     cursor: pointer;
@@ -35,13 +36,16 @@
     justify-content: center;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     font-size: 1rem;
+    position: relative;
+    overflow: visible;
 }
 
 .add-btn:hover,
 .send-btn:hover,
 .attach-btn:hover,
 .tool-btn:hover,
-.shuffle-btn:hover {
+.shuffle-btn:hover,
+.mic-btn:hover {
     color: var(--accent-color);
     background-color: var(--hover-bg);
     transform: translateY(-2px);
@@ -54,6 +58,91 @@
     color: #ffffff;
 }
 
+/* --- Mic Button Styles --- */
+.mic-btn {
+    background-color: transparent;
+    color: var(--icon-color);
+}
+
+.mic-btn:hover {
+    background-color: var(--hover-bg);
+    color: var(--accent-color);
+}
+
+.mic-btn.recording {
+    background-color: var(--accent-color);
+    color: white;
+    animation: recordingPulse 2s ease-in-out infinite;
+}
+
+.mic-btn.recording:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-2px);
+}
+
+.mic-btn.processing {
+    background-color: var(--warning-500);
+    color: white;
+    animation: processingPulse 1.5s ease-in-out infinite;
+}
+
+.mic-btn:disabled,
+.mic-btn.not-supported {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+@keyframes recordingPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(var(--accent-color-rgb, 99, 102, 241), 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(var(--accent-color-rgb, 99, 102, 241), 0);
+    }
+}
+
+/* --- Waveform Container --- */
+.waveform-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 100%;
+    width: 100%;
+}
+
+.waveform-bar {
+    width: 3px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: height 0.1s ease-out;
+    min-height: 20%;
+    max-height: 100%;
+}
+
+/* Asymmetrical bar heights for visual interest */
+.waveform-bar:nth-child(1) {
+    height: 40%;
+}
+
+.waveform-bar:nth-child(2) {
+    height: 70%;
+}
+
+.waveform-bar:nth-child(3) {
+    height: 50%;
+}
+
+.waveform-bar:nth-child(4) {
+    height: 80%;
+}
+
+.waveform-bar:nth-child(5) {
+    height: 60%;
+}
+
+/* --- Send Button Styles --- */
 .send-btn {
     background-color: var(--accent-color);
     color: var(--text-color);
@@ -502,7 +591,8 @@
     .send-btn,
     .attach-btn,
     .tool-btn,
-    .shuffle-btn {
+    .shuffle-btn,
+    .mic-btn {
         width: 36px;
         height: 36px;
         font-size: 0.9rem;
@@ -513,6 +603,11 @@
         border-right-width: 8px;
         border-bottom-width: 12px;
     }
+    
+    .waveform-bar {
+        width: 2px;
+        gap: 2px;
+    }
 }
 
 /* --- Reduced Motion Support for Send Button --- */
@@ -521,6 +616,15 @@
         animation: none;
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
+    }
+    
+    .mic-btn.recording {
+        animation: none;
+        box-shadow: 0 0 0 4px rgba(var(--accent-color-rgb, 99, 102, 241), 0.3);
+    }
+    
+    .mic-btn.processing {
+        animation: none;
     }
 }
 
