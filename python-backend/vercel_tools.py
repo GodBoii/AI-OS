@@ -21,11 +21,11 @@ class VercelTools(Toolkit):
         super().__init__(
             name="vercel_tools",
             tools=[
-                # Existing Read-Only Tools
+                # Read Tools
                 self.list_projects,
                 self.list_deployments,
                 self.get_project_details,
-                # --- START: New Expanded Tools ---
+                # Write/Action Tools
                 self.create_project,
                 self.delete_project,
                 self.list_environment_variables,
@@ -50,7 +50,6 @@ class VercelTools(Toolkit):
                 self.get_integration_configuration,
                 self.list_teams,
                 self.get_current_user,
-                # --- END: New Expanded Tools ---
             ],
         )
         self.user_id = user_id
@@ -88,7 +87,6 @@ class VercelTools(Toolkit):
     ) -> requests.Response:
         """
         A helper function to make authenticated requests to the Vercel API.
-        Now supports sending a JSON payload for POST/DELETE requests.
         """
         token = self._get_access_token()
         if not token:
@@ -114,7 +112,7 @@ class VercelTools(Toolkit):
         except Exception:
             return "N/A"
 
-    # --- Existing Tools (Unchanged) ---
+    # --- Read Tools ---
 
     def list_projects(self) -> str:
         """Lists all projects for the connected Vercel account, including their name and framework."""
@@ -147,10 +145,18 @@ class VercelTools(Toolkit):
             response = self._make_request("GET", f"v9/projects/{project_name}")
             project = response.json()
             domains = [alias['domain'] for alias in project.get('alias', [])]
+            
+            # Extract link details if available
+            link = project.get('link', {})
+            repo_info = "None"
+            if link.get('type') == 'github':
+                 repo_info = f"GitHub (Repo ID: {link.get('repoId')}, Path: {link.get('org')}/{link.get('repo')})"
+
             details = [
                 f"**Name**: {project.get('name')}", f"**ID**: `{project.get('id')}`",
                 f"**Framework**: {project.get('framework', 'N/A')}",
                 f"**Root Directory**: {project.get('rootDirectory', './') or './'}",
+                f"**Linked Repository**: {repo_info}",
                 f"**Domains**: " + (", ".join(domains) if domains else "None assigned."),
             ]
             return f"Details for project '{project_name}':\n" + "\n".join(details)
@@ -160,7 +166,7 @@ class VercelTools(Toolkit):
         except Exception as e:
             return f"An unexpected error occurred: {e}"
 
-    # --- START: New Expanded Tools ---
+    # --- Write/Action Tools ---
 
     def create_project(
         self,
@@ -168,40 +174,40 @@ class VercelTools(Toolkit):
         framework: Optional[str] = None,
         root_directory: Optional[str] = None,
         git_provider: Optional[str] = None,
-        git_repo_id: Optional[int] = None,
+        git_repo_id: Optional[str] = None,
         git_repo_path: Optional[str] = None,
         production_branch: Optional[str] = None,
         build_command: Optional[str] = None,
         output_directory: Optional[str] = None,
-        git_repository: Optional[Dict[str, Any]] = None,
         team_id: Optional[str] = None,
     ) -> str:
         """Creates a new Vercel project with optional Git and build configuration.
 
         Args:
             name: Project name in Vercel.
-            framework: Optional framework identifier recognized by Vercel.
-            root_directory: Path containing project sources.
-            git_provider: Git provider slug ("github", "gitlab", "bitbucket"). Defaults to "github" when repo info is supplied.
-            git_repo_id: Numeric repository ID (e.g., from GitHub API).
-            git_repo_path: "owner/name" path for the repository.
-            production_branch: Default production branch to deploy.
+            framework: Optional framework identifier recognized by Vercel (e.g., 'nextjs', 'create-react-app').
+            root_directory: Path containing project sources (defaults to root).
+            git_provider: Git provider slug ("github", "gitlab", "bitbucket"). Defaults to "github".
+            git_repo_id: Numeric repository ID (e.g., '123456'). Optional if repo path is provided.
+            git_repo_path: The full repository name (e.g., "owner/repo-name"). REQUIRED for git connection.
+            production_branch: Default production branch to deploy (e.g., "main" or "master").
             build_command: Optional custom build command.
             output_directory: Optional directory containing build artifacts.
-            git_repository: Full gitRepository dict; overrides individual git_* arguments when provided.
             team_id: Optional team scope.
         """
         if not name:
             return "Error: Project name is required."
 
         payload: Dict[str, Any] = {"name": name}
+        
         if framework:
             payload["framework"] = framework
         if root_directory:
             payload["rootDirectory"] = root_directory
-        if git_repository:
-            payload["gitRepository"] = git_repository
-        elif git_repo_id is not None and git_repo_path:
+        
+        # Handle Git Repository Connection
+        # The API requires the key 'repo' inside 'gitRepository', NOT 'repoPath'.
+        if git_repo_path:
             provider = (git_provider or "github").lower()
             valid_providers = {"github", "gitlab", "bitbucket"}
             if provider not in valid_providers:
@@ -209,14 +215,21 @@ class VercelTools(Toolkit):
 
             repo_config: Dict[str, Any] = {
                 "type": provider,
-                "repoId": git_repo_id,
-                "repoPath": git_repo_path,
+                "repo": git_repo_path, # CRITICAL FIX: 'repo' is the required key for the repo string (owner/name)
             }
+            
+            # repoId is optional but good for disambiguation if available
+            if git_repo_id:
+                repo_config["repoId"] = git_repo_id
+                
             if production_branch:
                 repo_config["productionBranch"] = production_branch
+                
             payload["gitRepository"] = repo_config
-        elif any(value is not None for value in (git_provider, git_repo_id, git_repo_path, production_branch)):
-            return "Error: git_repo_id and git_repo_path must both be provided to link a repository."
+            
+        elif git_repo_id:
+             return "Error: If providing git_repo_id, you must also provide git_repo_path (e.g., 'owner/repo')."
+
         if build_command:
             payload["buildCommand"] = build_command
         if output_directory:
@@ -275,7 +288,7 @@ class VercelTools(Toolkit):
         Args:
             project_id_or_name: The name or ID of the Vercel project.
             key: The name of the environment variable (e.g., 'DATABASE_URL').
-            value: The secret value of the variable.
+            value: The value of the variable.
             target: The environment to apply it to. Must be one of: 'production', 'preview', 'development'.
         """
         valid_targets = ['production', 'preview', 'development']
@@ -283,7 +296,9 @@ class VercelTools(Toolkit):
             return f"Error: Invalid target '{target}'. Must be one of {valid_targets}."
         
         try:
-            payload = {'key': key, 'value': value, 'type': 'secret', 'target': [target]}
+            # FIX: Changed type from 'secret' to 'encrypted' to allow passing raw string values.
+            # 'secret' type requires a pre-existing secret ID.
+            payload = {'key': key, 'value': value, 'type': 'encrypted', 'target': [target]}
             self._make_request("POST", f"v9/projects/{project_id_or_name}/env", json_payload=payload)
             return f"Successfully added environment variable '{key}' to project '{project_id_or_name}' for the '{target}' environment."
         except requests.HTTPError as e:
@@ -314,17 +329,44 @@ class VercelTools(Toolkit):
     ) -> str:
         """
         Triggers a new deployment for a project using the latest available Git commit.
-        This is useful for applying new environment variables or simply restarting the service.
+        This fetches the latest deployment to get the gitSource info, then triggers a new build.
         """
         valid_targets = {"production", "preview"}
         if target not in valid_targets:
             return f"Error: Invalid target '{target}'. Must be one of {sorted(valid_targets)}."
 
         try:
-            payload = {"name": project_name, "target": target}
+            # FIX: We cannot just send name/target. We must provide the gitSource.
+            # Step 1: Get the latest deployment to find the git details.
+            deployments_resp = self._make_request("GET", "v6/deployments", params={"appName": project_name, "limit": 1, "target": target})
+            deployments = deployments_resp.json().get("deployments", [])
+            
+            if not deployments:
+                return f"Error: No previous deployments found for '{project_name}'. Cannot re-deploy without Git source info. Please use 'create_deployment' with full git details."
+
+            latest_deploy = deployments[0]
+            meta = latest_deploy.get('meta', {})
+            
+            # Construct payload based on previous deployment metadata
+            payload = {
+                "name": project_name,
+                "target": target,
+                "gitSource": {
+                    "type": meta.get("githubRepoOwner") and "github" or "gitlab", # simplified inference
+                    "repoId": meta.get("githubRepoId"),
+                    "ref": meta.get("githubCommitRef"),
+                    "sha": meta.get("githubCommitSha")
+                }
+            }
+            
+            # If we couldn't infer git source from meta, fail gracefully
+            if not payload["gitSource"]["repoId"]:
+                 return "Error: Could not extract Git source details from the latest deployment. Please use 'create_deployment' explicitly."
+
             response = self._make_request("POST", "v13/deployments", json_payload=payload, team_id=team_id)
             deployment_info = response.json()
             return f"Successfully triggered a new deployment for '{project_name}'. View status at: {deployment_info.get('url')}"
+            
         except requests.HTTPError as e:
             if e.response.status_code == 404: return f"Error: Project '{project_name}' not found."
             return f"API error: {e.response.json().get('error', {}).get('message', 'Failed to trigger deployment.')}"
@@ -334,65 +376,49 @@ class VercelTools(Toolkit):
     def create_deployment(
         self,
         project_name: str,
+        git_repo_id: str,
         git_provider: str = "github",
         branch: Optional[str] = None,
         commit_sha: Optional[str] = None,
-        git_repo_id: Optional[int] = None,
-        git_repo_path: Optional[str] = None,
-        git_source: Optional[Dict[str, Any]] = None,
         target: str = "production",
         team_id: Optional[str] = None,
     ) -> str:
-        """Creates a fresh deployment optionally pinned to a Git repository, branch, or commit."""
+        """
+        Creates a fresh deployment pinned to a Git repository.
+        
+        Args:
+            project_name: The name of the project.
+            git_repo_id: The numeric ID of the repository (REQUIRED for deployments).
+            git_provider: "github", "gitlab", or "bitbucket".
+            branch: The branch to deploy (e.g., "main").
+            commit_sha: Optional commit SHA to pin.
+            target: "production" or "preview".
+        """
         valid_targets = {"production", "preview"}
         if target not in valid_targets:
             return f"Error: Invalid target '{target}'. Must be one of {sorted(valid_targets)}."
 
-        payload: Dict[str, Any] = {"name": project_name, "target": target}
+        if not git_repo_id:
+             return "Error: git_repo_id is REQUIRED for creating a deployment. Please use 'get_project_details' to find it if unknown."
 
-        if git_source is not None:
-            payload["gitSource"] = git_source
-        else:
-            git_provider = (git_provider or "github").lower()
-            using_git_source = any(
-                value is not None
-                for value in (git_repo_id, git_repo_path, branch, commit_sha)
-            )
+        git_provider = (git_provider or "github").lower()
+        valid_providers = {"github", "gitlab", "bitbucket"}
+        if git_provider not in valid_providers:
+            return f"Error: Unsupported git provider '{git_provider}'. Choose from {sorted(valid_providers)}."
 
-            if using_git_source:
-                valid_providers = {"github", "gitlab", "bitbucket"}
-                if git_provider not in valid_providers:
-                    return f"Error: Unsupported git provider '{git_provider}'. Choose from {sorted(valid_providers)}."
+        payload: Dict[str, Any] = {
+            "name": project_name, 
+            "target": target,
+            "gitSource": {
+                "type": git_provider,
+                "repoId": git_repo_id,
+            }
+        }
 
-                missing_fields = []
-                if git_repo_id is None:
-                    missing_fields.append("git_repo_id")
-                if not git_repo_path:
-                    missing_fields.append("git_repo_path")
-                if missing_fields:
-                    return (
-                        "Error: "
-                        + ", ".join(missing_fields)
-                        + " must be provided to link a repository for deployment."
-                    )
-
-                git_source_payload: Dict[str, Any] = {
-                    "type": git_provider,
-                    "repoId": git_repo_id,
-                    "repoPath": git_repo_path,
-                }
-                if branch:
-                    git_source_payload["ref"] = branch
-                if commit_sha:
-                    git_source_payload["sha"] = commit_sha
-
-                payload["gitSource"] = git_source_payload
-            else:
-                if branch or commit_sha:
-                    return (
-                        "Error: git_repo_id and git_repo_path must be provided when specifying "
-                        "branch or commit_sha for deployment."
-                    )
+        if branch:
+            payload["gitSource"]["ref"] = branch
+        if commit_sha:
+            payload["gitSource"]["sha"] = commit_sha
 
         try:
             response = self._make_request("POST", "v13/deployments", json_payload=payload, team_id=team_id)
@@ -532,6 +558,7 @@ class VercelTools(Toolkit):
 
     def update_deployment_check(
         self,
+        deployment_id: str,
         check_id: str,
         status: str,
         conclusion: Optional[str] = None,
@@ -543,9 +570,10 @@ class VercelTools(Toolkit):
             payload["conclusion"] = conclusion
 
         try:
+            # FIX: Correct endpoint is nested under v1/deployments
             response = self._make_request(
                 "PATCH",
-                f"v13/deployment-checks/{check_id}",
+                f"v1/deployments/{deployment_id}/checks/{check_id}",
                 json_payload=payload,
                 team_id=team_id,
             )
@@ -791,5 +819,3 @@ class VercelTools(Toolkit):
             return f"API error: {e.response.json().get('error', {}).get('message', 'Failed to fetch current user.')}"
         except Exception as e:
             return f"An unexpected error occurred: {e}"
-
-    # --- END: New Expanded Tools ---

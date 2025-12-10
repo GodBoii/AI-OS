@@ -16,6 +16,7 @@ from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
+from title_generator import generate_and_save_title
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,11 @@ def on_send_message(data: str):
 
         if not connection_manager_service.get_session(conversation_id):
             connection_manager_service.create_session(conversation_id, str(user.id), data.get("config", {}))
+            
+            # --- Title Generation for New Sessions ---
+            user_msg_content = data.get("message", "")
+            if user_msg_content:
+                eventlet.spawn(generate_and_save_title, conversation_id, str(user.id), user_msg_content)
 
         turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
         context_session_ids = data.get("context_session_ids", [])

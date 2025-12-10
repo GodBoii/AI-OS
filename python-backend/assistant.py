@@ -22,7 +22,7 @@ from agno.models.groq import Groq
 
 # Tool Imports
 from agno.tools import Toolkit
-from agno.tools.googlesearch import GoogleSearchTools
+from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.website import WebsiteTools
 from agno.tools.hackernews import HackerNewsTools
 from agno.tools.wikipedia import WikipediaTools
@@ -90,7 +90,7 @@ def get_llm_os(
         if enable_google_drive:
             direct_tools.append(GoogleDriveTools(user_id=user_id))
     if internet_search:
-        direct_tools.append(GoogleSearchTools(fixed_max_results=15))
+        direct_tools.append(DuckDuckGoTools())
     if enable_browser and browser_tools_config:
         direct_tools.append(BrowserTools(**browser_tools_config))
     if enable_vercel and user_id:
@@ -106,7 +106,7 @@ def get_llm_os(
         planner = Agent(
             name="planner",
             role="Omniscient planner who sees all dependencies before execution",
-            model=Groq(id="openai/gpt-oss-120b"),
+            model=Groq(id="groq/compound"),
             instructions=[
                 "<role>",
                 "You are the Omniscient Planner Agent in the Aetheria AI system. Your role is to analyze user requests and create execution plans using available tools. You DO NOT execute tasks - you only design the plan that Aetheria AI will execute.",
@@ -441,6 +441,7 @@ def get_llm_os(
                 "- Respect tool ordering: GitHub metadata → Vercel, Browser status → Browser actions",
                 "- Never skip prerequisite gathering steps",
                 "- Use Mermaid for technical diagrams, ImageTools for creative visuals",
+                "-Tell Aetheria ai what tools to use and whether to delegate any tasks to other agents",
             ],
             markdown=True,
             debug_mode=debug_mode,
@@ -450,9 +451,9 @@ def get_llm_os(
     if coding_assistant:
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="x-ai/grok-4.1-fast:free"),
+            model=OpenRouter(id="amazon/nova-2-lite-v1:free"),
             role="It can do Any code related task",
-            tools=[SandboxTools(session_info=session_info), SupabaseTools(user_id=user_id), VercelTools(user_id=user_id)] if session_info else [],
+            tools=[SandboxTools(session_info=session_info)],
             instructions=[
                 "Development team: Plan and execute code solutions using sandbox tools.",
                 "Access files from session_state['turn_context']['files'].",
@@ -469,7 +470,7 @@ def get_llm_os(
         world_ai = Agent(
             name="World_Agent",
             role="Universal knowledge and research agent with access to world information.",
-            model=OpenRouter(id="x-ai/grok-4.1-fast:free"),
+            model=Gemini(id="gemini-2.5-flash-lite"),
             tools=[WikipediaTools(),HackerNewsTools(),ArxivTools(),CustomApiTools(),YouTubeTools()],
             instructions=[
                 "You are the World Agent with comprehensive access to global information sources.",
@@ -511,6 +512,9 @@ def get_llm_os(
         "• Maintain context between steps",
         "• Never skip prerequisite checks specified in plan",
         "",
+        "DIRECT TOOLS(Tools only you can use):",
+        "• NEVER delegate tasks requiring these tools to other agents - you must execute them directly."
+        "• Handle all (Github, Vercel, Supabase, Browser Automation, Mails , Drive, image)"
         "Coding assistant has Sandbox",
         "", "RESPONSE STYLE:",
         "• Deliver results as if you personally completed the task",
@@ -526,7 +530,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-2.5-flash"),
+        model=Gemini(id="gemini-2.5-flash"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,

@@ -167,3 +167,4 @@ flower
 trafilatura
 youtube_transcript_api
 openai
+ddgs
