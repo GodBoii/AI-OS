@@ -9,16 +9,16 @@
     max-width: 92%;
     height: 700px;
     max-height: 92vh;
-    background-color: var(--elevated-bg);
+    background-color: #ffffff;
     border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
     z-index: 1000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: opacity var(--anim-slow) var(--easing-fluid), 
-                transform var(--anim-slow) var(--easing-fluid), 
-                visibility 0s 0s;
+    transition: opacity var(--anim-slow) var(--easing-fluid),
+        transform var(--anim-slow) var(--easing-fluid),
+        visibility 0s 0s;
     opacity: 1;
     visibility: visible;
     animation: modalSlideIn var(--anim-slow) var(--easing-fluid);
@@ -28,9 +28,9 @@
     opacity: 0;
     visibility: hidden;
     transform: translate(-50%, -50%) scale(0.92);
-    transition: opacity var(--anim-slow) var(--easing-fluid), 
-                transform var(--anim-slow) var(--easing-fluid), 
-                visibility 0s var(--anim-slow);
+    transition: opacity var(--anim-slow) var(--easing-fluid),
+        transform var(--anim-slow) var(--easing-fluid),
+        visibility 0s var(--anim-slow);
 }
 
 @keyframes modalSlideIn {
@@ -38,6 +38,7 @@
         opacity: 0;
         transform: translate(-50%, -48%) scale(0.92);
     }
+
     to {
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
@@ -173,6 +174,7 @@
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -658,24 +660,24 @@ button.secondary:hover {
         font-size: 20px;
         margin-bottom: 20px;
     }
-    
+
     /* Integration Tab Mobile Styles */
     .integration-description {
         padding: 0;
         font-size: 13px;
         margin-bottom: 20px;
     }
-    
+
     .integration-item {
         padding: 16px 0;
         flex-direction: row;
         gap: 12px;
     }
-    
+
     .integration-info {
         justify-content: flex-start;
     }
-    
+
     .connect-btn {
         width: auto;
         min-width: 100px;
@@ -712,7 +714,8 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
 /* User Identity Card Styles (Enhanced) */
 
 .dark-mode .user-identity-card .logout-button:hover {
-    background-color: rgba(239, 68, 68, 0.1); /* Red with alpha for dark mode */
+    background-color: rgba(239, 68, 68, 0.1);
+    /* Red with alpha for dark mode */
 }
 
 /* ================================================================= */
@@ -785,10 +788,19 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     align-items: center;
     gap: 16px;
     padding: 16px 20px;
-    border: 1px solid var(--border-color);
+    border: 1px solid #000000;
     border-radius: 12px;
-    background-color: var(--elevated-bg);
+    background-color: #F5F3EB;
     margin-bottom: 0;
+}
+
+.dark-mode .user-identity-card {
+    border: 1px solid var(--border-color);
+    background-color: var(--elevated-bg);
+}
+
+.dark-mode .window-header {
+    border-bottom: none !important;
 }
 
 .user-avatar-container {
@@ -796,7 +808,8 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     height: 48px;
     border-radius: 50%;
     overflow: hidden;
-    background-color: var(--active-bg); /* Fallback color */
+    background-color: var(--active-bg);
+    /* Fallback color */
     flex-shrink: 0;
 }
 
@@ -810,7 +823,8 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0; /* Prevents text from overflowing */
+    min-width: 0;
+    /* Prevents text from overflowing */
 }
 
 .user-name-display {
@@ -851,6 +865,7 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     color: var(--text-color);
     background-color: var(--hover-bg);
 }
+
 /*
  Updates Tab Styles */
 .updates-content {

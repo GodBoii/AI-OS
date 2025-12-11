@@ -97,9 +97,12 @@
 }
 
 @keyframes recordingPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 0 0 rgba(var(--accent-color-rgb, 99, 102, 241), 0.7);
     }
+
     50% {
         box-shadow: 0 0 0 8px rgba(var(--accent-color-rgb, 99, 102, 241), 0);
     }
@@ -151,20 +154,24 @@
 
 /* --- Send Button Styles --- */
 .send-btn {
-    background-color: var(--accent-color);
-    color: var(--text-color);
+    background-color: #374151;
+    color: #ffffff;
     position: relative;
     overflow: hidden;
 }
 
 .send-btn:hover {
-    background-color: var(--accent-hover);
-    color: var(--text-color);
+    background-color: #1f2937;
+    color: #ffffff;
 }
 
-.dark-mode .send-btn,
+.dark-mode .send-btn {
+    background-color: var(--accent-color);
+    color: #111827;
+}
+
 .dark-mode .send-btn:hover {
-    color: var(--neutral-950);
+    color: #000000;
 }
 
 /* --- Send Button Loading State --- */
@@ -610,7 +617,7 @@
         border-right-width: 8px;
         border-bottom-width: 12px;
     }
-    
+
     .waveform-bar {
         width: 2px;
         gap: 2px;
@@ -624,12 +631,12 @@
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
     }
-    
+
     .mic-btn.recording {
         animation: none;
         box-shadow: 0 0 0 4px rgba(var(--accent-color-rgb, 99, 102, 241), 0.3);
     }
-    
+
     .mic-btn.processing {
         animation: none;
     }

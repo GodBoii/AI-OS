@@ -250,11 +250,11 @@
 .file-chip.uploading,
 .file-chip.reading {
     position: relative;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.05);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
     animation: glassmorphPulse 2s ease-in-out infinite;
 }
 
@@ -384,7 +384,7 @@
 }
 
 .tool-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
 }
 
 .tool-item label {
@@ -438,12 +438,39 @@
     min-width: 200px;
     z-index: var(--z-dropdown-menu);
     transform: translateY(10px) scale(0.95);
+    transform: translateY(10px) scale(0.95);
     transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
     opacity: 0;
     visibility: hidden;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     will-change: opacity, transform;
+    color: #111827;
+    /* Explicit Black for Light Mode */
+    text-align: left;
+}
+
+/* Ensure icons and text inside inherit this black color in Light Mode by default */
+.shuffle-menu .shuffle-item {
+    color: #111827;
+}
+
+.shuffle-menu .shuffle-item i {
+    color: #4b5563;
+    /* distinct gray/black icon color */
+}
+
+/* Dark Mode Overrides for Shuffle Menu */
+.dark-mode .shuffle-menu {
+    color: var(--text-color);
+}
+
+.dark-mode .shuffle-menu .shuffle-item {
+    color: var(--text-color);
+}
+
+.dark-mode .shuffle-menu .shuffle-item i {
+    color: var(--icon-color);
 }
 
 .shuffle-menu.visible {
