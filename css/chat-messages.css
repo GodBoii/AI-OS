@@ -781,3 +781,166 @@
 .session-history-content .formatted-table tbody td {
     padding: 12px 16px;
 }
+
+/* ================================================================= */
+/* MERMAID DIAGRAM CONSTRAINTS IN SESSION HISTORY                  */
+/* ================================================================= */
+
+/* Prevent infinite height for mermaid diagrams in session history */
+.session-history-content .inline-mermaid-block {
+    max-height: 600px;
+    overflow: hidden;
+    position: relative;
+}
+
+.session-history-content .inline-mermaid-preview {
+    max-height: 600px;
+    overflow: auto;
+}
+
+.session-history-content .mermaid-pan-container {
+    max-height: 600px !important;
+    overflow: auto;
+}
+
+/* Ensure code blocks in session history are properly styled */
+.session-history-content .inline-artifact-code {
+    max-height: 500px;
+    overflow: auto;
+    margin: 12px 0;
+    border-radius: 8px;
+    background-color: var(--message-bg);
+    position: relative;
+}
+
+.session-history-content .inline-artifact-code code {
+    display: block;
+    padding: 16px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-color);
+}
+
+/* Ensure pre code blocks are visible and styled */
+.session-history-content pre {
+    max-height: 500px;
+    overflow: auto;
+    margin: 12px 0;
+    border-radius: 8px;
+    background-color: var(--message-bg);
+    border: 1px solid var(--border-color);
+    position: relative;
+}
+
+.session-history-content pre code {
+    display: block;
+    padding: 16px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Mermaid interactive controls in session history */
+.session-history-content .inline-mermaid-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--window-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Scrollbar styling for constrained containers */
+.session-history-content .mermaid-pan-container::-webkit-scrollbar,
+.session-history-content .inline-artifact-code::-webkit-scrollbar,
+.session-history-content pre::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.session-history-content .mermaid-pan-container::-webkit-scrollbar-track,
+.session-history-content .inline-artifact-code::-webkit-scrollbar-track,
+.session-history-content pre::-webkit-scrollbar-track {
+    background: var(--message-bg);
+}
+
+.session-history-content .mermaid-pan-container::-webkit-scrollbar-thumb,
+.session-history-content .inline-artifact-code::-webkit-scrollbar-thumb,
+.session-history-content pre::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.session-history-content .mermaid-pan-container::-webkit-scrollbar-thumb:hover,
+.session-history-content .inline-artifact-code::-webkit-scrollbar-thumb:hover,
+.session-history-content pre::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* ================================================================= */
+/* CODE BLOCK COPY BUTTON                                          */
+/* ================================================================= */
+
+.code-block-wrapper {
+    position: relative;
+}
+
+.code-copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    z-index: 10;
+    font-size: 14px;
+}
+
+.code-block-wrapper:hover .code-copy-btn {
+    opacity: 1;
+}
+
+.code-copy-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: var(--accent-color);
+    transform: scale(1.05);
+}
+
+.code-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.code-copy-btn.copied {
+    background: var(--success-500);
+    border-color: var(--success-500);
+}
+
+.code-copy-btn.copied i::before {
+    content: "\f00c"; /* checkmark icon */
+}
+
+.dark-mode .code-copy-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.dark-mode .code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: var(--accent-color);
+}
+
+/* Ensure copy button is visible in live chat messages too */
+.message-bot .code-block-wrapper:hover .code-copy-btn,
+.session-history-content .code-block-wrapper:hover .code-copy-btn {
+    opacity: 1;
+}

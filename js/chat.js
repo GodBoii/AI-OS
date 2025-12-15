@@ -502,6 +502,9 @@ function setupIpcListeners() {
                                 codeBlock.dataset.highlighted = 'true';
                             }
                         });
+
+                        // Add copy buttons to code blocks in live messages
+                        addCopyButtonsToCodeBlocks(innerContentDiv);
                     }
                 });
 
@@ -1158,7 +1161,72 @@ function populateBotMessage(data) {
                 codeBlock.dataset.highlighted = 'true';
             }
         });
+
+        // Add copy buttons to code blocks during streaming
+        addCopyButtonsToCodeBlocks(innerContentDiv);
     }
+}
+
+/**
+ * Adds copy buttons to code blocks that don't have them yet
+ * @param {HTMLElement} container - Container element to search for code blocks
+ */
+function addCopyButtonsToCodeBlocks(container) {
+    if (!container) return;
+
+    // Find all pre elements that don't already have a wrapper
+    container.querySelectorAll('pre:not(.inline-artifact-code):not(.inline-mermaid-source)').forEach(pre => {
+        // Skip if already wrapped
+        if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
+        
+        // Skip if it's inside a code-block-wrapper already
+        if (pre.closest('.code-block-wrapper')) return;
+
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+
+        // Create copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'code-copy-btn';
+        copyBtn.title = 'Copy code';
+        copyBtn.setAttribute('aria-label', 'Copy code');
+        copyBtn.innerHTML = '<i class="fi fi-tr-copy"></i>';
+
+        // Add click handler
+        copyBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            try {
+                const codeEl = pre.querySelector('code');
+                if (!codeEl) return;
+
+                const code = codeEl.textContent || codeEl.innerText || '';
+                await navigator.clipboard.writeText(code);
+
+                // Visual feedback
+                const icon = copyBtn.querySelector('i');
+                const originalClass = icon.className;
+
+                copyBtn.classList.add('copied');
+                icon.className = 'fi fi-tr-check';
+
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    icon.className = originalClass;
+                }, 2000);
+
+            } catch (error) {
+                console.error('Failed to copy code:', error);
+            }
+        });
+
+        // Wrap the pre element
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(copyBtn);
+        wrapper.appendChild(pre);
+    });
 }
 
 /**

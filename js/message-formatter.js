@@ -99,7 +99,14 @@ class MessageFormatter {
 
     renderCodeInline(code, language) {
         const sanitizedCode = DOMPurify.sanitize(code, { USE_PROFILES: { html: false } });
-        return `<pre class="inline-artifact-code"><code class="language-${language}">${sanitizedCode}</code></pre>`;
+        return `
+            <div class="code-block-wrapper">
+                <button class="code-copy-btn" title="Copy code" aria-label="Copy code">
+                    <i class="fi fi-tr-copy"></i>
+                </button>
+                <pre class="inline-artifact-code"><code class="language-${language}">${sanitizedCode}</code></pre>
+            </div>
+        `;
     }
 
     escapeHtml(text = '') {
@@ -193,19 +200,32 @@ class MessageFormatter {
 
         const rawHtml = marked.parse(content, { renderer: this.inlineRenderer });
         return DOMPurify.sanitize(rawHtml, {
-            ADD_TAGS: ['div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-            ADD_ATTR: ['class']
+            ADD_TAGS: ['div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'button', 'i'],
+            ADD_ATTR: ['class', 'title', 'aria-label', 'data-copy-setup']
         });
     }
 
     applyInlineEnhancements(root) {
         if (!root) return;
 
+        // Highlight all code blocks (both standalone and within mermaid source view)
         root.querySelectorAll('.inline-artifact-code code').forEach(codeEl => {
-            if (typeof hljs !== 'undefined') {
+            if (typeof hljs !== 'undefined' && !codeEl.dataset.highlighted) {
                 hljs.highlightElement(codeEl);
+                codeEl.dataset.highlighted = 'true';
             }
         });
+
+        // Also highlight any pre > code blocks that might not have the inline-artifact-code class
+        root.querySelectorAll('pre code:not([data-highlighted])').forEach(codeEl => {
+            if (typeof hljs !== 'undefined') {
+                hljs.highlightElement(codeEl);
+                codeEl.dataset.highlighted = 'true';
+            }
+        });
+
+        // Set up copy buttons for code blocks
+        this.setupCodeCopyButtons(root);
 
         const mermaidElements = [];
         root.querySelectorAll('.inline-artifact-mermaid:not(.inline-mermaid-interactive)').forEach(block => {
@@ -234,6 +254,49 @@ class MessageFormatter {
             mermaid.init(undefined, mermaidElements);
             mermaidElements.forEach(el => this.resetMermaidView(el));
         }
+    }
+
+    setupCodeCopyButtons(root) {
+        if (!root) return;
+
+        // Find all copy buttons that haven't been set up yet
+        root.querySelectorAll('.code-copy-btn:not([data-copy-setup])').forEach(btn => {
+            btn.dataset.copySetup = 'true';
+            
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                try {
+                    // Find the code element
+                    const wrapper = btn.closest('.code-block-wrapper');
+                    const codeEl = wrapper?.querySelector('code');
+                    
+                    if (!codeEl) return;
+                    
+                    // Get the text content
+                    const code = codeEl.textContent || codeEl.innerText || '';
+                    
+                    // Copy to clipboard
+                    await navigator.clipboard.writeText(code);
+                    
+                    // Visual feedback
+                    const icon = btn.querySelector('i');
+                    const originalClass = icon.className;
+                    
+                    btn.classList.add('copied');
+                    icon.className = 'fi fi-tr-check';
+                    
+                    setTimeout(() => {
+                        btn.classList.remove('copied');
+                        icon.className = originalClass;
+                    }, 2000);
+                    
+                } catch (error) {
+                    console.error('Failed to copy code:', error);
+                }
+            });
+        });
     }
 
     prepareInlineMermaidBlock(block) {
@@ -511,11 +574,18 @@ class MessageFormatter {
         svg.style.maxWidth = 'none';
         svg.style.maxHeight = 'none';
 
+        // Check if we're in session history context
+        const isInSessionHistory = entry.wrapper.closest('.session-history-content') !== null;
+        
+        // Apply reasonable max height constraint for session history to prevent infinite scrolling
+        const maxAllowedHeight = isInSessionHistory ? 600 : 10000;
+        
         const targetWidth = Math.max(entry.wrapper.clientWidth, viewBoxWidth);
-        const targetHeight = Math.max(entry.wrapper.clientHeight, viewBoxHeight);
+        const targetHeight = Math.min(Math.max(entry.wrapper.clientHeight, viewBoxHeight), maxAllowedHeight);
 
         entry.panContainer.style.minWidth = `${targetWidth}px`;
         entry.panContainer.style.minHeight = `${targetHeight}px`;
+        entry.panContainer.style.maxHeight = isInSessionHistory ? `${maxAllowedHeight}px` : 'none';
         entry.panContainer.style.padding = `${padding}px`;
     }
 
