@@ -278,11 +278,37 @@ app.on('open-url', (event, url) => {
 });
 
 const fs = require('fs').promises;
-ipcMain.handle('show-save-dialog', async (event, options) => { const { dialog } = require('electron'); return await dialog.showSaveDialog(mainWindow, options); });
+const { dialog } = require('electron');
+
+ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
 ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
 ipcMain.handle('get-path', (event, pathName) => { try { return app.getPath(pathName); } catch (error) { console.error(`Error getting path for ${pathName}:`, error); return null; } });
 ipcMain.handle('get-app-path', () => { return app.getAppPath(); });
 ipcMain.handle('resolve-app-resource', (event, ...segments) => { return path.join(app.getAppPath(), ...segments); });
+
+// Handle save file dialog for sharing AI responses
+ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) => {
+    try {
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: defaultPath,
+            filters: filters || [
+                { name: 'Text Files', extensions: ['txt'] },
+                { name: 'Markdown Files', extensions: ['md'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+
+        if (!result.canceled && result.filePath) {
+            await fs.writeFile(result.filePath, content, 'utf8');
+            event.reply('save-file-result', { success: true, filePath: result.filePath });
+        } else {
+            event.reply('save-file-result', { canceled: true });
+        }
+    } catch (error) {
+        console.error('Error saving file:', error);
+        event.reply('save-file-result', { success: false, error: error.message });
+    }
+});
 
 app.whenReady().then(createWindow);
 

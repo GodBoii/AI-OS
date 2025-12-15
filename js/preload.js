@@ -27,7 +27,9 @@ const validSendChannels = [
     'browse-ai-send-message',
     'initialize-browser-agent',
     // Auth related channels
-    'handle-auth-redirect'
+    'handle-auth-redirect',
+    // Share functionality
+    'save-file-dialog'
 ];
 
 const validReceiveChannels = [
@@ -58,7 +60,9 @@ const validReceiveChannels = [
     'browse-ai-agent-initialized',
     // Auth related events
     'auth-state-changed',
-    'oauth-integration-callback'
+    'oauth-integration-callback',
+    // Share functionality
+    'save-file-result'
 ];
 
 const validInvokeChannels = [
