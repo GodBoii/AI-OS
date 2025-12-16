@@ -590,51 +590,16 @@ class ToDoList {
                 taskDetails.appendChild(aiIndicator);
             }
 
-            // Show task work if available
+            // Show "View Work" button if task work is available
             if (task.task_work) {
-                const workContainer = document.createElement('div');
-                workContainer.classList.add('task-work-container');
-                workContainer.style.cssText = `
-                    margin-top: 12px;
-                    padding: 12px;
-                    background: #f8fafc;
-                    border-left: 3px solid #3b82f6;
-                    border-radius: 4px;
-                    max-height: 200px;
-                    overflow-y: auto;
-                `;
-                
-                const workHeader = document.createElement('div');
-                workHeader.style.cssText = 'font-weight: 600; color: #3b82f6; margin-bottom: 8px; font-size: 13px;';
-                workHeader.innerHTML = '<i class="fas fa-file-alt"></i> Deliverable:';
-                
-                const workContent = document.createElement('div');
-                workContent.classList.add('task-work-content');
-                workContent.style.cssText = 'font-size: 13px; line-height: 1.6; color: #334155; white-space: pre-wrap;';
-                workContent.textContent = task.task_work;
-                
-                const viewFullButton = document.createElement('button');
-                viewFullButton.classList.add('view-work-btn');
-                viewFullButton.innerHTML = '<i class="fas fa-expand"></i> View Full';
-                viewFullButton.style.cssText = `
-                    margin-top: 8px;
-                    padding: 4px 12px;
-                    background: #3b82f6;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 12px;
-                `;
-                viewFullButton.addEventListener('click', (e) => {
+                const viewWorkButton = document.createElement('button');
+                viewWorkButton.classList.add('view-work-btn');
+                viewWorkButton.innerHTML = '<i class="fas fa-file-alt"></i> View Work';
+                viewWorkButton.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showTaskWorkModal(task);
                 });
-                
-                workContainer.appendChild(workHeader);
-                workContainer.appendChild(workContent);
-                workContainer.appendChild(viewFullButton);
-                taskDetails.appendChild(workContainer);
+                taskDetails.appendChild(viewWorkButton);
             }
 
             const buttonContainer = document.createElement('div');

@@ -4,10 +4,10 @@
 .to-do-list-container {
     position: fixed;
     top: 5%;
-    left: 52.5%;
-    transform: translateX(-50%) scale(1); /* Default visible state */
-    width: 700px;
-    max-width: 90%;
+    left: 60px; /* Position on left side, accounting for sidebar */
+    transform: scale(1); /* Default visible state - no translateX needed */
+    width: 580px; /* Increased from 420px */
+    max-width: calc(50% - 80px); /* Increased from 40% */
     height: 82%;
     background-color: var(--elevated-bg);
     border-radius: 1rem;
@@ -26,7 +26,7 @@
 .to-do-list-container.hidden {
     opacity: 0;
     visibility: hidden;
-    transform: translateX(-50%) scale(0.95);
+    transform: translateX(-20px) scale(0.95); /* Slide out to left */
     /* Delay hiding visibility until after fade-out */
     transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s var(--anim-slow);
 }
@@ -34,7 +34,7 @@
 /* Header */
 .to-do-list-header {
     padding: 1rem;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: none; /* Removed border */
     background-color: var(--elevated-bg);
 }
 
@@ -64,7 +64,7 @@
 .to-do-list-input-area {
     display: flex;
     padding: 1rem;
-    border-top: 1px solid var(--border-color);
+    border-top: none; /* Removed border */
     background-color: var(--elevated-bg);
     justify-content: flex-end;
     position: relative;
@@ -441,6 +441,39 @@
     font-size: 0.75rem;
 }
 
+/* View Work Button */
+.view-work-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.view-work-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.view-work-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.view-work-btn i {
+    font-size: 0.875rem;
+}
+
 /* Task Priority Styles */
 #task-list li[data-priority="high"] {
     border-left: 3px solid var(--error-500);
@@ -571,5 +604,84 @@ label[for="task-name"]::after {
     
     .task-tag {
         padding: 0.125rem 0.375rem;
+    }
+}
+
+
+/* ================================================================= */
+/* LAYOUT SHIFTS WHEN TASK PANEL IS OPEN                            */
+/* ================================================================= */
+
+/*
+ * When the task panel is open (on the left), shift the chat container
+ * and floating input container to the right to avoid overlap.
+ * The body.tasks-panel-open class is added by renderer.js
+ */
+
+/* Shift chat container to the right when tasks panel is open */
+body.tasks-panel-open .chat-container {
+    left: calc(50% + 250px); /* Shift right by half the task panel width + gap (increased for wider panel) */
+    transition: left var(--anim-normal) var(--easing-standard), 
+                opacity var(--anim-fast) var(--easing-standard), 
+                transform var(--anim-fast) var(--easing-standard);
+}
+
+/* Shift floating input container to the right when tasks panel is open */
+body.tasks-panel-open .floating-input-container {
+    left: calc(50% + 250px); /* Match the chat container shift */
+    transition: left var(--anim-normal) var(--easing-standard),
+                all var(--anim-normal) var(--easing-standard);
+}
+
+/* Ensure smooth transition back when tasks panel closes */
+.chat-container {
+    transition: left var(--anim-normal) var(--easing-standard), 
+                opacity var(--anim-fast) var(--easing-standard), 
+                transform var(--anim-fast) var(--easing-standard);
+}
+
+.floating-input-container {
+    transition: left var(--anim-normal) var(--easing-standard),
+                all var(--anim-normal) var(--easing-standard);
+}
+
+/* Media query adjustments for smaller screens */
+@media (max-width: 1200px) {
+    .to-do-list-container {
+        width: 380px;
+        max-width: calc(45% - 60px);
+    }
+    
+    body.tasks-panel-open .chat-container,
+    body.tasks-panel-open .floating-input-container {
+        left: calc(50% + 200px);
+    }
+}
+
+@media (max-width: 992px) {
+    .to-do-list-container {
+        width: 320px;
+        max-width: calc(50% - 60px);
+    }
+    
+    body.tasks-panel-open .chat-container,
+    body.tasks-panel-open .floating-input-container {
+        left: calc(50% + 160px);
+    }
+}
+
+@media (max-width: 768px) {
+    /* On mobile, task panel takes full width and overlays */
+    .to-do-list-container {
+        left: 5%;
+        width: 90%;
+        max-width: 90%;
+        height: 80%;
+    }
+    
+    /* Don't shift chat on mobile - task panel overlays */
+    body.tasks-panel-open .chat-container,
+    body.tasks-panel-open .floating-input-container {
+        left: 50%;
     }
 }

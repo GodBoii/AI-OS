@@ -279,6 +279,8 @@ class UIManager {
 
     updateToDoListVisibility(isOpen) {
         document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
+        // Add body class to enable CSS-based layout shifts
+        document.body.classList.toggle('tasks-panel-open', isOpen);
         if (window.floatingWindowManager) {
             if (isOpen) window.floatingWindowManager.onWindowOpen('tasks');
             else window.floatingWindowManager.onWindowClose('tasks');
