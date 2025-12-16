@@ -108,59 +108,23 @@ class ToDoList {
     showTaskWorkModal(task) {
         // Create modal overlay
         const modal = document.createElement('div');
-        modal.classList.add('task-work-modal');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            padding: 20px;
-        `;
+        modal.classList.add('task-work-modal-overlay');
         
         // Create modal content
         const modalContent = document.createElement('div');
-        modalContent.style.cssText = `
-            background: white;
-            border-radius: 12px;
-            max-width: 800px;
-            width: 100%;
-            max-height: 80vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        `;
+        modalContent.classList.add('task-work-modal-content');
         
         // Header
         const header = document.createElement('div');
-        header.style.cssText = `
-            padding: 20px 24px;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        `;
+        header.classList.add('task-work-modal-header');
         
         const title = document.createElement('h3');
-        title.style.cssText = 'margin: 0; font-size: 18px; color: #1e293b;';
+        title.classList.add('task-work-modal-title');
         title.textContent = task.text;
         
         const closeBtn = document.createElement('button');
+        closeBtn.classList.add('task-work-modal-close');
         closeBtn.innerHTML = '<i class="fas fa-times"></i>';
-        closeBtn.style.cssText = `
-            background: none;
-            border: none;
-            font-size: 20px;
-            color: #64748b;
-            cursor: pointer;
-            padding: 4px 8px;
-        `;
         closeBtn.addEventListener('click', () => modal.remove());
         
         header.appendChild(title);
@@ -168,21 +132,27 @@ class ToDoList {
         
         // Body
         const body = document.createElement('div');
-        body.style.cssText = `
-            padding: 24px;
-            overflow-y: auto;
-            flex: 1;
-        `;
+        body.classList.add('task-work-modal-body');
         
         const workContent = document.createElement('div');
-        workContent.style.cssText = `
-            font-size: 14px;
-            line-height: 1.8;
-            color: #334155;
-            white-space: pre-wrap;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        `;
-        workContent.textContent = task.task_work;
+        workContent.classList.add('task-work-modal-text');
+        
+        // Format the task work content as markdown with INLINE rendering
+        // (not using artifact viewer)
+        const htmlContent = this.parseMarkdownInline(task.task_work);
+        workContent.innerHTML = htmlContent;
+        
+        // Initialize mermaid diagrams inline
+        this.initInlineMermaid(workContent);
+        
+        // Highlight code blocks if highlight.js is available
+        if (window.hljs) {
+            workContent.querySelectorAll('pre code').forEach((block) => {
+                if (!block.dataset.highlighted) {
+                    window.hljs.highlightElement(block);
+                }
+            });
+        }
         
         body.appendChild(workContent);
         
@@ -197,6 +167,109 @@ class ToDoList {
         });
         
         document.body.appendChild(modal);
+    }
+
+    parseMarkdownInline(content) {
+        // Parse markdown with inline code/mermaid rendering (no artifact viewer)
+        if (!window.marked) {
+            return this.formatPlainText(content);
+        }
+
+        try {
+            // Create a custom renderer for inline display
+            const inlineRenderer = {
+                code: (code, language = 'plaintext') => {
+                    const lang = language || 'plaintext';
+                    const escapedCode = this.escapeHtml(code);
+                    
+                    // Handle mermaid diagrams inline
+                    if (lang === 'mermaid') {
+                        return `
+                            <div class="task-work-mermaid-block">
+                                <div class="task-work-mermaid-diagram mermaid">${escapedCode}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // Handle image references (skip them in task work)
+                    if (lang === 'image') {
+                        return '<div class="task-work-image-placeholder"><i class="fas fa-image"></i> Image reference</div>';
+                    }
+                    
+                    // Regular code blocks - render inline with syntax highlighting
+                    const validLang = (window.hljs && window.hljs.getLanguage(lang)) ? lang : 'plaintext';
+                    return `
+                        <div class="task-work-code-block">
+                            <div class="task-work-code-header">
+                                <span class="task-work-code-lang">${validLang}</span>
+                                <button class="task-work-copy-btn" onclick="navigator.clipboard.writeText(this.closest('.task-work-code-block').querySelector('code').textContent)">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                            <pre><code class="language-${validLang}">${escapedCode}</code></pre>
+                        </div>
+                    `;
+                }
+            };
+
+            // Use marked with custom inline renderer
+            const markedInstance = new marked.Marked();
+            markedInstance.use({ renderer: inlineRenderer });
+            
+            const rawHtml = markedInstance.parse(content);
+            
+            // Sanitize if DOMPurify is available
+            if (window.DOMPurify) {
+                return window.DOMPurify.sanitize(rawHtml, {
+                    ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code'],
+                    ADD_ATTR: ['class', 'onclick']
+                });
+            }
+            
+            return rawHtml;
+        } catch (error) {
+            console.error('Error parsing markdown inline:', error);
+            return this.formatPlainText(content);
+        }
+    }
+
+    initInlineMermaid(container) {
+        // Initialize mermaid diagrams within the container
+        if (!window.mermaid) return;
+        
+        const mermaidBlocks = container.querySelectorAll('.task-work-mermaid-diagram');
+        if (mermaidBlocks.length === 0) return;
+        
+        try {
+            mermaidBlocks.forEach((block, index) => {
+                const id = `task-mermaid-${Date.now()}-${index}`;
+                block.id = id;
+            });
+            
+            window.mermaid.init(undefined, mermaidBlocks);
+        } catch (error) {
+            console.error('Error initializing mermaid in task work:', error);
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    formatPlainText(text) {
+        // Basic text formatting fallback
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/\n/g, '<br>')
+            .replace(/^(.+)$/, '<p>$1</p>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code>$1</code>');
     }
 
     async checkAndMigrate() {
@@ -590,20 +663,20 @@ class ToDoList {
                 taskDetails.appendChild(aiIndicator);
             }
 
-            // Show "View Work" button if task work is available
+            const buttonContainer = document.createElement('div');
+            buttonContainer.classList.add('button-container');
+
+            // Show "View Work" button if task work is available (add to button container)
             if (task.task_work) {
                 const viewWorkButton = document.createElement('button');
                 viewWorkButton.classList.add('view-work-btn');
-                viewWorkButton.innerHTML = '<i class="fas fa-file-alt"></i> View Work';
+                viewWorkButton.innerHTML = '<i class="fas fa-file-alt"></i><span>View Work</span>';
                 viewWorkButton.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showTaskWorkModal(task);
                 });
-                taskDetails.appendChild(viewWorkButton);
+                buttonContainer.appendChild(viewWorkButton);
             }
-
-            const buttonContainer = document.createElement('div');
-            buttonContainer.classList.add('button-container');
 
             const deleteButton = document.createElement('button');
             deleteButton.classList.add('delete-btn');
