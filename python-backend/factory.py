@@ -87,4 +87,9 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
 
+    # --- 6. Start Background Task Poller ---
+    from task_poller import start_task_poller
+    start_task_poller(poll_interval=60)  # Check every 60 seconds
+    logger.info("Task poller started (60s interval)")
+
     return app

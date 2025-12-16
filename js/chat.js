@@ -18,7 +18,6 @@ let currentConversationId = null;
 
 let chatConfig = {
     memory: false,
-    tasks: false,
     tools: {
         internet_search: true,
         coding_assistant: true,

@@ -269,6 +269,62 @@ function createWindow() {
     ipcMain.on('resize-webview', (event, bounds) => { if (linkWebView) { linkWebView.setBounds({ x: bounds.x + 10, y: bounds.y + 60, width: bounds.width - 20, height: bounds.height - 70 }); } });
     ipcMain.on('drag-webview', (event, { x, y }) => { if (linkWebView) { const currentBounds = linkWebView.getBounds(); linkWebView.setBounds({ x: x + 10, y: y + 60, width: currentBounds.width, height: currentBounds.height }); } });
     ipcMain.on('close-webview', () => { if (linkWebView) { mainWindow.removeBrowserView(linkWebView); linkWebView.webContents.destroy(); linkWebView = null; mainWindow.webContents.send('webview-closed'); } });
+    
+    // User context handlers - forward to backend via Socket.IO
+    ipcMain.on('save-user-context', async (event, data) => {
+        try {
+            const session = await mainWindow.webContents.executeJavaScript('window.electron.auth.getSession()', true);
+            if (!session || !session.access_token) {
+                mainWindow.webContents.send('user-context-saved', { success: false, error: 'Not authenticated' });
+                return;
+            }
+            
+            // Forward to backend via python bridge
+            if (pythonBridge && pythonBridge.socket && pythonBridge.socket.connected) {
+                pythonBridge.socket.emit('save-user-context', {
+                    accessToken: session.access_token,
+                    context: data.context
+                });
+                
+                // Listen for response
+                pythonBridge.socket.once('user-context-saved', (result) => {
+                    mainWindow.webContents.send('user-context-saved', result);
+                });
+            } else {
+                mainWindow.webContents.send('user-context-saved', { success: false, error: 'Backend not connected' });
+            }
+        } catch (error) {
+            console.error('Error saving user context:', error);
+            mainWindow.webContents.send('user-context-saved', { success: false, error: error.message });
+        }
+    });
+    
+    ipcMain.on('get-user-context', async (event) => {
+        try {
+            const session = await mainWindow.webContents.executeJavaScript('window.electron.auth.getSession()', true);
+            if (!session || !session.access_token) {
+                mainWindow.webContents.send('user-context-retrieved', { success: false, error: 'Not authenticated' });
+                return;
+            }
+            
+            // Forward to backend via python bridge
+            if (pythonBridge && pythonBridge.socket && pythonBridge.socket.connected) {
+                pythonBridge.socket.emit('get-user-context', {
+                    accessToken: session.access_token
+                });
+                
+                // Listen for response
+                pythonBridge.socket.once('user-context-retrieved', (result) => {
+                    mainWindow.webContents.send('user-context-retrieved', result);
+                });
+            } else {
+                mainWindow.webContents.send('user-context-retrieved', { success: false, error: 'Backend not connected' });
+            }
+        } catch (error) {
+            console.error('Error getting user context:', error);
+            mainWindow.webContents.send('user-context-retrieved', { success: false, error: error.message });
+        }
+    });
 }
 
 // --- macOS Deep Link Handler ---

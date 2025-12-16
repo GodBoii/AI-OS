@@ -421,6 +421,26 @@
     color: var(--accent-color);
 }
 
+/* AI Indicator */
+.ai-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: var(--text-xs);
+    padding: 0.25rem 0.5rem;
+    border-radius: 2rem;
+    background: linear-gradient(135deg, var(--accent-muted) 0%, rgba(139, 92, 246, 0.15) 100%);
+    color: var(--accent-color);
+    font-weight: var(--font-medium);
+    margin-top: 0.5rem;
+    border: 1px solid var(--accent-color);
+    opacity: 0.9;
+}
+
+.ai-indicator i {
+    font-size: 0.75rem;
+}
+
 /* Task Priority Styles */
 #task-list li[data-priority="high"] {
     border-left: 3px solid var(--error-500);

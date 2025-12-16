@@ -30,4 +30,5 @@ ENV PYTHONUNBUFFERED=1
 # CRITICAL FIX: Use the JSON array "exec" form for CMD.
 # This bypasses the shell and prevents any misinterpretation of quotes.
 # CMD now points directly to the instantiated app in `app.py`.
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "app:app"]
+# Added logging flags for better visibility
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

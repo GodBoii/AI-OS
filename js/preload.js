@@ -29,7 +29,10 @@ const validSendChannels = [
     // Auth related channels
     'handle-auth-redirect',
     // Share functionality
-    'save-file-dialog'
+    'save-file-dialog',
+    // User context channels
+    'save-user-context',
+    'get-user-context'
 ];
 
 const validReceiveChannels = [
@@ -62,7 +65,10 @@ const validReceiveChannels = [
     'auth-state-changed',
     'oauth-integration-callback',
     // Share functionality
-    'save-file-result'
+    'save-file-result',
+    // User context events
+    'user-context-saved',
+    'user-context-retrieved'
 ];
 
 const validInvokeChannels = [
@@ -262,6 +268,235 @@ contextBridge.exposeInMainWorld(
                 throw new Error('Supabase client not initialized');
             }
             return await authService.supabase.from('attachment').insert(records);
+        }
+    },
+
+    // Task Management Service
+    tasks: {
+        /**
+         * Create a new task in the database
+         * @param {Object} taskData - Task data (text, description, priority, deadline, tags)
+         * @returns {Promise<Object>} Created task with id
+         */
+        create: async (taskData) => {
+            if (!authService.supabase) {
+                throw new Error('Supabase client not initialized');
+            }
+            const session = await authService.getSession();
+            const userId = session?.user?.id;
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            const { data, error } = await authService.supabase
+                .from('tasks')
+                .insert([{
+                    user_id: userId,
+                    text: taskData.text,
+                    description: taskData.description || null,
+                    priority: taskData.priority || 'medium',
+                    status: taskData.status || 'pending',
+                    deadline: taskData.deadline || null,
+                    tags: taskData.tags || [],
+                    session_id: taskData.session_id || null,
+                    metadata: taskData.metadata || {}
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
+        /**
+         * List all tasks for the current user with optional filters
+         * @param {Object} filters - Optional filters (status, priority)
+         * @returns {Promise<Array>} Array of tasks
+         */
+        list: async (filters = {}) => {
+            if (!authService.supabase) {
+                throw new Error('Supabase client not initialized');
+            }
+            const session = await authService.getSession();
+            const userId = session?.user?.id;
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            let query = authService.supabase
+                .from('tasks')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
+
+            if (filters.status) {
+                query = query.eq('status', filters.status);
+            }
+            if (filters.priority) {
+                query = query.eq('priority', filters.priority);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        },
+
+        /**
+         * Update an existing task
+         * @param {string} taskId - Task UUID
+         * @param {Object} updates - Fields to update
+         * @returns {Promise<Object>} Updated task
+         */
+        update: async (taskId, updates) => {
+            if (!authService.supabase) {
+                throw new Error('Supabase client not initialized');
+            }
+            const session = await authService.getSession();
+            const userId = session?.user?.id;
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            const { data, error } = await authService.supabase
+                .from('tasks')
+                .update(updates)
+                .eq('id', taskId)
+                .eq('user_id', userId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
+        /**
+         * Delete a task
+         * @param {string} taskId - Task UUID
+         * @returns {Promise<boolean>} Success status
+         */
+        delete: async (taskId) => {
+            if (!authService.supabase) {
+                throw new Error('Supabase client not initialized');
+            }
+            const session = await authService.getSession();
+            const userId = session?.user?.id;
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            const { error } = await authService.supabase
+                .from('tasks')
+                .delete()
+                .eq('id', taskId)
+                .eq('user_id', userId);
+
+            if (error) throw error;
+            return true;
+        },
+
+        /**
+         * Subscribe to real-time task changes
+         * @param {Function} callback - Callback function for changes
+         * @returns {Object} Subscription object with unsubscribe method
+         */
+        subscribe: (callback) => {
+            if (!authService.supabase) {
+                throw new Error('Supabase client not initialized');
+            }
+
+            const session = authService.user;
+            const userId = session?.id;
+            if (!userId) {
+                throw new Error('User not authenticated');
+            }
+
+            const channel = authService.supabase
+                .channel('tasks_changes')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'tasks',
+                        filter: `user_id=eq.${userId}`
+                    },
+                    (payload) => {
+                        callback(payload);
+                    }
+                )
+                .subscribe();
+
+            return {
+                unsubscribe: () => {
+                    authService.supabase.removeChannel(channel);
+                }
+            };
+        }
+    },
+
+    // User Context Service
+    userContext: {
+        /**
+         * Save user context to agno_memories via backend
+         * @param {Object} contextData - User context data
+         * @returns {Promise<Object>} Result from backend
+         */
+        save: async (contextData) => {
+            return new Promise((resolve, reject) => {
+                const session = authService.user;
+                if (!session) {
+                    reject(new Error('User not authenticated'));
+                    return;
+                }
+
+                // Send via IPC to main process, which will forward to backend via Socket.IO
+                ipcRenderer.send('save-user-context', { context: contextData });
+
+                // Listen for response
+                const timeout = setTimeout(() => {
+                    ipcRenderer.removeAllListeners('user-context-saved');
+                    reject(new Error('Timeout saving user context'));
+                }, 10000);
+
+                ipcRenderer.once('user-context-saved', (result) => {
+                    clearTimeout(timeout);
+                    if (result.success) {
+                        resolve(result);
+                    } else {
+                        reject(new Error(result.error || 'Failed to save user context'));
+                    }
+                });
+            });
+        },
+
+        /**
+         * Get user context from agno_memories via backend
+         * @returns {Promise<Object>} User context data
+         */
+        get: async () => {
+            return new Promise((resolve, reject) => {
+                const session = authService.user;
+                if (!session) {
+                    reject(new Error('User not authenticated'));
+                    return;
+                }
+
+                ipcRenderer.send('get-user-context');
+
+                const timeout = setTimeout(() => {
+                    ipcRenderer.removeAllListeners('user-context-retrieved');
+                    reject(new Error('Timeout getting user context'));
+                }, 10000);
+
+                ipcRenderer.once('user-context-retrieved', (result) => {
+                    clearTimeout(timeout);
+                    if (result.success) {
+                        resolve(result.context);
+                    } else {
+                        reject(new Error(result.error || 'Failed to get user context'));
+                    }
+                });
+            });
         }
     },
 

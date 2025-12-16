@@ -137,6 +137,11 @@ class PythonBridge {
             this.mainWindow.webContents.send('image_generated', data);
         });
 
+        this.socket.on('task_execution_status', (data) => {
+            console.log('PythonBridge: Received task_execution_status:', data);
+            this.mainWindow.webContents.send('task_execution_status', data);
+        });
+
         // FIX: This handler now correctly forwards the command to the browserController instance.
         this.socket.on('browser-command', (commandPayload) => {
             console.log('PythonBridge: Received browser-command from server:', commandPayload.action);
