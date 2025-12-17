@@ -45,6 +45,10 @@ class ToDoList {
         this.setupEventListeners();
         this.setupSocketListeners();
         
+        // Wait for app to be fully loaded and authenticated before loading tasks
+        // This prevents race conditions where auth hasn't completed yet
+        await this.waitForAppReady();
+        
         // Check if migration is needed
         await this.checkAndMigrate();
         
@@ -54,6 +58,42 @@ class ToDoList {
         
         // Subscribe to real-time updates
         this.subscribeToChanges();
+    }
+
+    async waitForAppReady() {
+        /**
+         * Wait for the application to be fully loaded and authenticated.
+         * This adds a delay to ensure:
+         * 1. Authentication is complete
+         * 2. Database connection is established
+         * 3. All services are initialized
+         * 
+         * Uses exponential backoff to check if electron.tasks API is available
+         */
+        const maxAttempts = 30; // 30 attempts
+        const initialDelay = 500; // Start with 500ms
+        let attempt = 0;
+        
+        while (attempt < maxAttempts) {
+            try {
+                // Check if electron.tasks API is available (indicates app is ready)
+                if (window.electron?.tasks && typeof window.electron.tasks.list === 'function') {
+                    // Additional safety delay to ensure database is fully connected
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return;
+                }
+            } catch (error) {
+                // Continue waiting
+            }
+            
+            // Exponential backoff: increase delay with each attempt
+            const delay = initialDelay * Math.pow(1.2, attempt);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            attempt++;
+        }
+        
+        // If we get here, log a warning but continue anyway
+        console.warn('App readiness check timed out after 30 attempts, proceeding anyway');
     }
 
     setupSocketListeners() {

@@ -2,6 +2,7 @@
 """
 Dedicated Task Management Agent for Aetheria AI
 Handles conversational task management AND autonomous task execution
+With Aetheria Tool Bridge for complex queries (internet, email, drive, research)
 """
 
 import logging
@@ -10,6 +11,7 @@ from agno.agent import Agent
 from agno.models.groq import Groq
 from task_tools import TaskTools
 from user_context_tools import UserContextTools
+from aetheria_tool_bridge import AetheriaToolBridge
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,15 @@ def get_task_agent(
     task_tools = TaskTools(user_id=user_id)
     user_context_tools = UserContextTools(user_id=user_id)
     
+    # Initialize Aetheria Tool Bridge for complex queries
+    # This allows Task Agent to delegate to Aetheria for internet, email, drive, research
+    task_context = {"task_id": task_id} if task_id else {}
+    aetheria_bridge = AetheriaToolBridge(
+        user_id=user_id,
+        task_context=task_context,
+        debug_mode=debug_mode
+    )
+    
     # Base instructions for all modes
     base_instructions = [
         "You are the Task Manager agent with dual capabilities:",
@@ -65,8 +76,17 @@ def get_task_agent(
             "• get_user_context() → understand user preferences and goals",
             f"• get_task('{task_id}') → retrieve full task details",
             "",
-            "STEP 2 - GENERATE DELIVERABLE:",
-            "Based on task description, create appropriate content:",
+            "STEP 2 - GATHER INFORMATION (if needed):",
+            "Use Aetheria Bridge for complex queries requiring external data:",
+            "",
+            "🔍 Internet Search: search_internet(query) - Search web for information",
+            "📚 Research: research_topic(topic, sources, depth) - Wikipedia, ArXiv, HackerNews, YouTube",
+            "📧 Email Access: access_email(action, query) - Read, search, or send emails",
+            "📁 Drive Access: access_drive(action, query) - Search, read, or create files",
+            "🤖 General Delegation: delegate_to_aetheria(query) - Any complex query",
+            "",
+            "STEP 3 - GENERATE DELIVERABLE:",
+            "Based on task description and gathered information, create appropriate content:",
             "",
             "📝 Reports/Documents: Executive summary, analysis, recommendations",
             "📊 Analysis: Research findings, data insights, strategic recommendations",
@@ -79,12 +99,13 @@ def get_task_agent(
             "• Comprehensive with clear sections and headings",
             "• Actionable and practical content",
             "• Minimum 200 words for substantial deliverables",
+            "• Include data from Aetheria Bridge when relevant",
             "",
-            "STEP 3 - SAVE WORK (MANDATORY):",
+            "STEP 4 - SAVE WORK (MANDATORY):",
             f"• save_task_work(task_id='{task_id}', work_output=<your_generated_content>)",
             "• Work must be complete before proceeding",
             "",
-            "STEP 4 - MARK COMPLETE (MANDATORY):",
+            "STEP 5 - MARK COMPLETE (MANDATORY):",
             f"• mark_task_complete(task_id='{task_id}')",
             "• Only after save_task_work succeeds",
             "",
@@ -98,9 +119,17 @@ def get_task_agent(
             "✅ DO: Generate substantial, useful content",
             "✅ DO: Save work BEFORE marking complete",
             "✅ DO: Use user context for personalization",
+            "✅ DO: Use Aetheria Bridge for internet/email/drive/research tasks",
             "❌ DON'T: Skip save_task_work()",
             "❌ DON'T: Generate placeholder content",
             "❌ DON'T: Ask questions or wait for input",
+            "",
+            "AETHERIA BRIDGE USAGE:",
+            "When task requires external data (internet, email, drive, research):",
+            "1. Identify what information is needed",
+            "2. Call appropriate Aetheria Bridge method",
+            "3. Use the response to enhance your deliverable",
+            "4. Continue with save_task_work() and mark_task_complete()",
             "",
             "BEGIN EXECUTION NOW.",
         ]
@@ -111,17 +140,27 @@ def get_task_agent(
             "💬 CONVERSATIONAL MODE",
             "═══════════════════════════════════════════════════════════════════",
             "",
-            "CAPABILITIES:",
+            "CORE CAPABILITIES (TaskTools):",
             "• Create, read, update, delete tasks",
             "• Extract task details from natural language",
             "• Organize tasks with priorities, deadlines, tags",
             "• Provide task summaries and status updates",
+            "",
+            "EXTENDED CAPABILITIES (Aetheria Bridge):",
+            "When tasks require external data, use Aetheria Bridge:",
+            "• search_internet(query) - Search web for information",
+            "• research_topic(topic) - Wikipedia, ArXiv, HackerNews, YouTube",
+            "• access_email(action, query) - Read, search emails",
+            "• access_drive(action, query) - Search, read Drive files",
+            "• delegate_to_aetheria(query) - Any complex query",
             "",
             "NATURAL LANGUAGE PATTERNS:",
             "• 'Remind me to...' / 'Add task...' → create_task()",
             "• 'What tasks...' / 'Show my tasks' → list_tasks()",
             "• 'Mark X as done' → search + mark_task_complete()",
             "• 'Delete task...' → search + delete_task()",
+            "• 'Research X for my task' → research_topic() + create_task()",
+            "• 'Check my emails about...' → access_email('search', query)",
             "",
             "PRIORITY LEVELS:",
             "• high: Urgent, time-sensitive",
@@ -144,13 +183,19 @@ def get_task_agent(
             "• Access session_state['turn_context'] for conversation context",
             "• Use get_user_context() for personalization",
             "• Check existing tasks to avoid duplicates",
+            "",
+            "WHEN TO USE AETHERIA BRIDGE:",
+            "• Task requires internet research → search_internet() or research_topic()",
+            "• Task involves email content → access_email()",
+            "• Task needs Drive file data → access_drive()",
+            "• Complex query beyond task management → delegate_to_aetheria()",
         ]
     
     task_agent = Agent(
         name="Task_Manager",
-        role="Unified task management and execution specialist",
+        role="Unified task management and execution specialist with Aetheria AI delegation",
         model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
-        tools=[task_tools, user_context_tools],
+        tools=[task_tools, user_context_tools, aetheria_bridge],
         instructions=instructions,
         markdown=True,
         debug_mode=debug_mode,

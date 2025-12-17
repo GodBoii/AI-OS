@@ -39,7 +39,6 @@ from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
 from image_tools import ImageTools
 from agno.tools.youtube import YouTubeTools
-from task_agent import get_task_agent
 
 # Other Imports
 from supabase_client import supabase_client
@@ -62,7 +61,6 @@ def get_llm_os(
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
     enable_browser: bool = False,
-    enable_tasks: bool = True,  # Task agent always enabled by default
     browser_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
 ) -> Team:
@@ -229,21 +227,7 @@ def get_llm_os(
                 "  </logic>",
                 "</scenario>",
                 "",
-                "<scenario name=\"task_management\">",
-                "  <trigger>create task, add task, remind me, to-do, what tasks, show tasks, mark done, complete task</trigger>",
-                "  <logic>",
-                "    Create task → Task_Manager.create_task()",
-                "    List tasks → Task_Manager.list_tasks()",
-                "    Update task → Task_Manager.update_task()",
-                "    Complete task → Task_Manager.mark_task_complete()",
-                "    Delete task → Task_Manager.delete_task()",
-                "    Search tasks → Task_Manager.search_tasks()",
-                "    ",
-                "    Note: Task_Manager extracts deadlines, priorities from natural language",
-                "    Note: Always delegate ALL task operations to Task_Manager agent",
-                "  </logic>",
-                "</scenario>",
-                "",
+
                 "<scenario name=\"api_integration\">",
                 "  <trigger>call API, fetch from endpoint, webhook, REST</trigger>",
                 "  <logic>",
@@ -374,23 +358,7 @@ def get_llm_os(
                 "  </methods>",
                 "</tool>",
                 "",
-                "<tool name=\"Task_Manager\" note=\"Dedicated task management agent\">",
-                "  <methods>",
-                "    <method name=\"create_task(text, description?, priority?, deadline?, tags?, session_id?)\" ",
-                "            use=\"Create new task from user request\" ",
-                "            note=\"Extracts task details from natural language\" />",
-                "    <method name=\"list_tasks(status?, priority?, limit?)\" ",
-                "            use=\"List user's tasks with optional filtering\" ",
-                "            note=\"status: pending|in_progress|completed|cancelled\" />",
-                "    <method name=\"get_task(task_id)\" use=\"Get detailed task information\" />",
-                "    <method name=\"update_task(task_id, text?, description?, priority?, status?, deadline?, tags?)\" ",
-                "            use=\"Update existing task\" />",
-                "    <method name=\"delete_task(task_id)\" use=\"Delete task permanently\" />",
-                "    <method name=\"mark_task_complete(task_id)\" use=\"Mark task as completed\" />",
-                "    <method name=\"search_tasks(query, limit?)\" use=\"Search tasks by text content\" />",
-                "  </methods>",
-                "</tool>",
-                "",
+
                 "</tools>",
                 "",
                 "---",
@@ -531,15 +499,6 @@ def get_llm_os(
             debug_mode=debug_mode,
         )
         main_team_members.append(world_ai)
-    
-    # Task Agent - Always enabled for task management capabilities
-    if enable_tasks and user_id:
-        task_manager = get_task_agent(
-            user_id=user_id,
-            session_info=session_info,
-            debug_mode=debug_mode
-        )
-        main_team_members.append(task_manager)
 
     aetheria_instructions = [
         "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via session_state['turn_context'].",
@@ -561,7 +520,7 @@ def get_llm_os(
         "Coding assistant has Sandbox",
         "",
         "AGENT DELEGATION:",
-        "• Task-related requests → Delegate to 'Task_Manager' agent",
+        "• Task-related requests → Delegate to 'Task_Manager' agent (background autonomous execution)",
         "• Task operations: create, list, update, delete, search, mark complete",
         "• Task_Manager handles all task CRUD operations and natural language task management",
         "",

@@ -19,12 +19,12 @@ class TaskPoller:
     Background service that polls for pending tasks and executes them autonomously.
     """
     
-    def __init__(self, poll_interval: int = 60):
+    def __init__(self, poll_interval: int = 43200):
         """
         Initialize the task poller.
         
         Args:
-            poll_interval: Seconds between each poll (default: 60)
+            poll_interval: Seconds between each poll (default: 43200 = 12 hours)
         """
         self.poll_interval = poll_interval
         self.running = False
@@ -152,12 +152,12 @@ class TaskPoller:
 _task_poller_instance = None
 
 
-def get_task_poller(poll_interval: int = 60) -> TaskPoller:
+def get_task_poller(poll_interval: int = 43200) -> TaskPoller:
     """
     Get or create the global task poller instance.
     
     Args:
-        poll_interval: Seconds between polls
+        poll_interval: Seconds between polls (default: 43200 = 12 hours)
     
     Returns:
         TaskPoller instance
@@ -168,12 +168,12 @@ def get_task_poller(poll_interval: int = 60) -> TaskPoller:
     return _task_poller_instance
 
 
-def start_task_poller(poll_interval: int = 60):
+def start_task_poller(poll_interval: int = 43200):
     """
     Start the global task poller.
     
     Args:
-        poll_interval: Seconds between polls (default: 60)
+        poll_interval: Seconds between polls (default: 43200 = 12 hours)
     """
     poller = get_task_poller(poll_interval)
     poller.start()
