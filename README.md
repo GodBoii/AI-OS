@@ -1,541 +1,215 @@
-# Aetheria AI-OS
+# AI-OS (Aetheria AI)
 
-> An advanced, production-ready AI desktop assistant built with Electron and Python, featuring a hierarchical multi-agent system powered by the Agno framework
+**Aetheria AI** (AI-OS) is an advanced, agentic desktop operating system designed to bridge the gap between Large Language Models (LLMs) and real-world execution. Unlike standard chatbots, AI-OS acts as a **system operator**—capable of browsing the web, managing files, executing code in secure sandboxes, and interacting with third-party services like GitHub, Google Drive, and Vercel.
 
-Aetheria AI-OS is a sophisticated personal AI Operating System that intelligently orchestrates specialized AI agents and integrations to handle complex, multi-step tasks through natural conversation.
-
----
-
-## 🌟 Key Features
-
-### 🤖 Hierarchical Multi-Agent Architecture
-
-Built on **Agno v2.0.7**, Aetheria employs a strategic planner that coordinates specialized agents:
-
-- **Planner Agent** - Analyzes complex queries and creates execution plans using DeepSeek R1
-- **Development Team** - Handles coding, testing, and sandbox execution with Gemini 2.5 Flash
-- **World Agent** - Accesses Wikipedia, ArXiv, HackerNews, YFinance, and web crawling
-- **Main Orchestrator (Aetheria AI)** - Routes tasks and synthesizes results using Gemini 2.5 Flash
-
-### 🔧 Comprehensive Integration Ecosystem
-
-| Integration | Capabilities |
-|-------------|-------------|
-| **GitHub** | Repository management, file operations, PR/issue handling, branch management, multi-file commits |
-| **Google Gmail** | Read, send, search, reply to emails, manage labels |
-| **Google Drive** | Search, read, create, share files and documents |
-| **Vercel** | Project management, deployments, environment variables, domains, teams |
-| **Supabase** | Organization and project management, storage buckets, edge functions |
-| **Browser Automation** | Visual web interaction with Playwright-powered browser control |
-| **Image Generation** | AI-powered image creation using Gemini 2.0 Flash |
-
-### 🏃‍♂️ Advanced Capabilities
-
-- **🔒 Stateful Docker Sandbox** - Secure, isolated code execution environment with persistent state across commands
-- **🧠 Session-Based Memory** - Manual context selection from previous conversations for continuity
-- **🔐 Supabase Authentication** - Secure user accounts with OAuth2 flows for GitHub, Google, Vercel, and Supabase
-- **🎨 Artifact Viewer** - Dedicated viewer for code, diagrams (Mermaid), images, and browser screenshots
-- **📁 Multimodal Support** - Process text, images, audio, video, PDFs, and documents
-- **⚡ Real-Time Communication** - WebSocket-based streaming with Redis Pub/Sub for scalability
-- **📊 Interactive Diagrams** - Pan, zoom, and interact with Mermaid diagrams
-- **🌐 Visual Browser Control** - See and interact with web pages through the AI
+Designed for developers and power users, it features a **local-first philosophy** with a **Neo-Brutalist** aesthetic, ensuring both performance and style.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗 High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          ELECTRON DESKTOP APP                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │
-│  │   Chat UI    │  │  Artifact    │  │   Settings   │  │    Tasks    │ │
-│  │   (HTML/CSS/ │  │   Viewer     │  │   (AIOS)     │  │   Manager   │ │
-│  │   JavaScript)│  │              │  │              │  │             │ │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘ │
-│         │                  │                  │                  │        │
-│         └──────────────────┴──────────────────┴──────────────────┘        │
-│                                    │                                      │
-│                              IPC (Secure)                                 │
-│                                    │                                      │
-│  ┌─────────────────────────────────▼────────────────────────────────┐   │
-│  │              ELECTRON MAIN PROCESS (Node.js)                      │   │
-│  │  • Window Management  • Deep Link Handler  • Python Bridge        │   │
-│  └─────────────────────────────────┬────────────────────────────────┘   │
-└────────────────────────────────────┼──────────────────────────────────────┘
-                                     │
-                            WebSocket (Socket.IO)
-                                     │
-┌────────────────────────────────────▼──────────────────────────────────────┐
-│                       PYTHON BACKEND (Flask + Gunicorn)                   │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │                    AETHERIA AI ORCHESTRATOR                        │  │
-│  │                      (Gemini 2.5 Flash)                            │  │
-│  │                                                                    │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │  │
-│  │  │   Planner    │  │  Dev Team    │  │ World Agent  │           │  │
-│  │  │  (DeepSeek)  │  │  (Gemini)    │  │  (Gemini)    │           │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘           │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-│                                                                           │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │                         TOOL ECOSYSTEM                           │    │
-│  │  • GitHubTools        • GoogleEmailTools    • GoogleDriveTools  │    │
-│  │  • VercelTools        • SupabaseTools       • BrowserTools      │    │
-│  │  • SandboxTools       • ImageTools          • WebCrawler        │    │
-│  │  • GoogleSearch       • Wikipedia           • ArXiv             │    │
-│  │  • HackerNews         • YFinance                                │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-└───────────────────────────────────┬───────────────────────────────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    │               │               │
-         ┌──────────▼─────┐  ┌─────▼──────┐  ┌────▼─────────┐
-         │  Redis Pub/Sub │  │  Supabase  │  │   Sandbox    │
-         │  (Messaging)   │  │  (Auth/DB) │  │   Manager    │
-         └────────────────┘  └────────────┘  └──────────────┘
-                                                     │
-                                              ┌──────▼──────┐
-                                              │   Docker    │
-                                              │  Containers │
-                                              └─────────────┘
+The system is built on a decoupled, event-driven architecture that separates the user interface from the intelligence layer. This ensures the frontend remains responsive while the backend handles heavy computation and long-running tasks.
+
+```mermaid
+graph TD
+    subgraph Frontend ["🖥️ Frontend (Electron)"]
+        UI[User Interface]
+        SocketClient[Socket.IO Client]
+    end
+
+    subgraph Backend ["🧠 Backend (Python)"]
+        Flask[Flask Server]
+        AgentRunner[Agent Runner]
+        Tools[Tool Manager]
+    end
+
+    subgraph Infrastructure ["⚙️ Infrastructure (Docker)"]
+        Redis[(Redis Cache/Queue)]
+        Sandbox[Docker Sandbox]
+        SandboxMgr[Sandbox Manager]
+    end
+
+    subgraph External ["☁️ External Services"]
+        Supabase[(Supabase DB)]
+        LLM[LLM APIs (OpenAI/Groq)]
+    end
+
+    UI -->|Events| SocketClient
+    SocketClient <-->|Socket.IO| Flask
+    Flask -->|Tasks| AgentRunner
+    AgentRunner -->|Queries| LLM
+    AgentRunner -->|State| Supabase
+    AgentRunner -->|Queue| Redis
+    AgentRunner -->|Uses| Tools
+    Tools -->|Execute Code| SandboxMgr
+    SandboxMgr -->|Run| Sandbox
 ```
 
-### Component Breakdown
+### Core Components
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Frontend** | Electron, HTML5, CSS3, Vanilla JS | Desktop UI, chat interface, artifact viewer, file handling |
-| **Main Process** | Node.js, Electron IPC | Window management, deep link handling, Python bridge |
-| **Backend API** | Flask, Socket.IO, Gunicorn + Eventlet | WebSocket server, agent orchestration, tool execution |
-| **AI Framework** | Agno 2.0.7 | Multi-agent coordination, memory management, tool integration |
-| **LLM Models** | Gemini 2.5 Flash, DeepSeek R1, Groq | Strategic planning, code generation, research |
-| **Message Broker** | Redis Pub/Sub | Scalable real-time communication for browser tools |
-| **Database** | Supabase (PostgreSQL) | User auth, session storage, integration tokens, run history |
-| **Code Execution** | Docker + FastAPI Sandbox Manager | Isolated, secure command execution environment |
-| **Storage** | Supabase Storage | Media uploads (images, audio, video, documents) |
+1.  **Frontend (Electron + React/Vanilla JS)**
+    *   **Role**: The user interface and visual presentation layer.
+    *   **Tech Stack**: Electron, Vanilla JS/HTML/CSS (no heavy framework bloat), Supabase Client, Socket.IO Client.
+    *   **Design**: Custom Neo-Brutalist design system with high-contrast visuals and "God Mode" aesthetics.
+    *   **Responsibility**: Captures user input, renders real-time AI streaming responses, handles voice input, and displays tool execution statuses.
 
----
+2.  **Backend (Python + Flask)**
+    *   **Role**: The "Brain" and orchestrator.
+    *   **Tech Stack**: Python 3.11, Flask, Flask-SocketIO, Gunicorn, Eventlet.
+    *   **Responsibility**: Manages AI agents, routes requests, handles authentication, and maintains persistent connections with the frontend.
 
-## 🛠️ Technology Stack
+3.  **Agentic Layer (Agno Framework)**
+    *   **Role**: The intelligence engine.
+    *   **Tech Stack**: Agno (v2.0.5), Phidata, LLM APIs (OpenAI, Gemini, Groq).
+    *   **Responsibility**:
+        *   Parses user intent.
+        *   Selects appropriate tools (Browser, FileSystem, Shell).
+        *   Manages memory and session context.
 
-### Frontend Technologies
-- **Electron 37.2.6** - Cross-platform desktop framework
-- **Vanilla JavaScript (ES6+)** - No framework dependencies
-- **Marked.js** - Markdown rendering
-- **Highlight.js** - Syntax highlighting
-- **Mermaid.js** - Diagram rendering with pan/zoom
-- **DOMPurify** - XSS protection
-- **Socket.IO Client** - Real-time communication
+4.  **Tooling & Sandbox**
+    *   **Role**: The "Hands" of the system.
+    *   **Secure Sandbox**: A Dockerized Ubuntu environment (`Dockerfile.sandbox`) where the AI executes generated code safely, isolated from the host OS.
+    *   **Native Tools**: A suite of Python modules (`browser_tools.py`, `github_tools.py`) that allow the AI to interact with the outside world.
 
-### Backend Technologies
-- **Python 3.11** - Core backend language
-- **Flask 3.1.0** - Web framework
-- **Flask-SocketIO 5.5.1** - WebSocket support
-- **Gunicorn + Eventlet** - Production WSGI server
-- **Agno 2.0.7** - AI agent framework
-- **Redis 5.0.1** - Pub/Sub messaging
-- **Celery 5.3.6** - Background task processing
-- **Playwright** - Browser automation
-- **FastAPI** - Sandbox manager API
-- **Docker SDK** - Container management
-
-### AI & ML
-- **Google Gemini 2.5 Flash** - Main orchestrator and dev team
-- **Google Gemini 2.0 Flash (Image Gen)** - Image generation
-- **DeepSeek R1 Distill (Groq)** - Strategic planning
-- **Gemini 2.5 Flash Lite** - World agent research
-
-### Database & Storage
-- **Supabase** - Backend-as-a-Service
-- **PostgreSQL** - Relational database
-- **Supabase Auth** - OAuth2 authentication
-- **Supabase Storage** - File storage
-
-### DevOps & Deployment
-- **Docker & Docker Compose** - Containerization
-- **Gunicorn** - Production server
-- **Redis** - Caching and messaging
-- **Flower** - Celery monitoring
+5.  **Data & State**
+    *   **Database**: Supabase (PostgreSQL) for user data, sessions, and chat history.
+    *   **Queue/Cache**: Redis (via Docker) for task queues (Celery) and caching.
+    *   **Background Workers**: Celery workers handle long-running deep research or scrape tasks.
 
 ---
 
-## 🚀 Getting Started
+## 🔄 Execution Flow
+
+When a user submits a request (e.g., *"Clone this repo and analyze the README"*):
+
+1.  **Input**: The Frontend sends the message via **Socket.IO** to the Backend (`sockets.py`).
+2.  **Orchestration**: The `agent_runner.py` receives the event and initializes the Agno Agent with the user's session context.
+3.  **Reasoning**: The Agent analyzes the request and decides to use the `GithubTool` and `FileSystemTool`.
+4.  **Execution Options**:
+    *   **Direct**: Standard API calls (e.g., searching Google) happen within the backend process.
+    *   **Sandboxed**: If code execution is needed, the backend instructs the **Docker Sandbox** to run the script and captures the `stdout`/`stderr`.
+5.  **Response**: The Agent streams the thought process and final response back to the Frontend via WebSocket chunks.
+6.  **Rendering**: The Frontend parses the markdown, renders code blocks with `highlight.js`, and updates the chat UI.
+
+---
+
+## 🛠 Component Breakdown
+
+### Backend (`/python-backend`)
+*   `app.py`: Application entry point and factory.
+*   `assistant.py`: Defines the core AI assistant logic and tool binding.
+*   `*_tools.py`: Specialized modules for capabilities (Browser, GitHub, Vercel, etc.).
+*   `celery_app.py`: Configuration for background task processing.
+*   `sandbox_manager/`: Logic for managing Docker containers.
+
+### Frontend (`/`)
+*   `main.js`: Electron main process configuration.
+*   `js/`: Client-side logic for socket handling, UI updates, and Supabase interaction.
+*   `css/`: Custom styling (Neo-Brutalist theme).
+
+### Infrastructure (`/`)
+*   `docker-compose.yml`: Orchestrates Redis, Sandbox, and other services.
+*   `Dockerfile`: Builds the production backend image.
+
+---
+
+## 🚀 Setup & Installation
 
 ### Prerequisites
+*   **Docker Desktop** (Required for Redis and Sandbox)
+*   **Python 3.11+**
+*   **Node.js 18+**
+*   **Supabase Account**
 
-Ensure you have the following installed:
-
-- **Node.js** v18+ and npm
-- **Python** 3.11+
-- **Docker** and Docker Compose (for production deployment)
-- **Redis** (or use Docker)
-- **Supabase Account** (free tier works)
-
-### API Keys Required
-
-- **OpenAI API Key** (optional, for OpenAI models)
-- **Groq API Key** (for DeepSeek R1)
-- **Google AI API Key** (for Gemini models)
-- **GitHub OAuth App** (for GitHub integration)
-- **Google Cloud OAuth** (for Gmail/Drive)
-- **Vercel OAuth** (optional, for Vercel integration)
-- **Supabase OAuth** (optional, for Supabase integration)
-
----
-
-## 📦 Installation
-
-### 1. Clone the Repository
-
+### 1. Repository Setup
 ```bash
-git clone https://github.com/your-username/aetheria-ai-os.git
-cd aetheria-ai-os
+git clone https://github.com/GodBoii/AI-OS.git
+cd AI-OS
 ```
 
-### 2. Backend Setup
+### 2. Environment Configuration
+Create a `.env` file in `python-backend/` (and root if needed) with the following content:
 
-#### Create Python Virtual Environment
+```ini
+# Core
+FLASK_SECRET_KEY=your_secure_random_key
+DATABASE_URL=your_supabase_postgres_url
+REDIS_URL=redis://localhost:6379/0
+SANDBOX_API_URL=http://localhost:8000 # If running sandbox separately
 
+# LLM Providers (At least one required)
+OPENAI_API_KEY=sk-...
+GROQ_API_KEY=...
+GOOGLE_API_KEY=...
+
+# Optional Integrations
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+SUPABASE_URL=...
+SUPABASE_KEY=...
+```
+
+### 3. Backend Setup
 ```bash
 cd python-backend
 python -m venv venv
-
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
+# Windows
+.\venv\Scripts\activate
+# Mac/Linux
 source venv/bin/activate
-```
 
-#### Install Python Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-#### Configure Environment Variables
+### 4. Infrastructure (Docker)
+You have two options: run everything in Docker, or run services in Docker and code locally.
 
-Create a `.env` file in `python-backend/`:
-
-```env
-# === AI Model API Keys ===
-OPENAI_API_KEY=sk-your-openai-key
-GROQ_API_KEY=your-groq-key
-GOOGLE_API_KEY=your-google-ai-key
-ANTHROPIC_API_KEY=your-anthropic-key  # Optional
-MISTRAL_API_KEY=your-mistral-key      # Optional
-
-# === Supabase Configuration ===
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
-DATABASE_URL=postgresql+psycopg2://postgres:password@host:5432/postgres
-
-# === Redis Configuration ===
-REDIS_URL=redis://localhost:6379/0
-
-# === Celery Configuration ===
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-
-# === Sandbox Manager ===
-SANDBOX_API_URL=http://localhost:8000
-
-# === OAuth Credentials ===
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-
-VERCEL_CLIENT_ID=your-vercel-client-id          # Optional
-VERCEL_CLIENT_SECRET=your-vercel-client-secret  # Optional
-
-SUPABASE_CLIENT_ID=your-supabase-client-id          # Optional
-SUPABASE_CLIENT_SECRET=your-supabase-client-secret  # Optional
-
-# === Flask Configuration ===
-FLASK_SECRET_KEY=your-strong-random-secret-key
-DEBUG=false
-LOG_LEVEL=INFO
-```
-
-### 3. Supabase Database Setup
-
-1. Create a new Supabase project at [supabase.com](https://supabase.com)
-2. Navigate to **SQL Editor**
-3. Run the schema from `supabase.md` (if available) or create tables:
-   - `profiles` - User profiles
-   - `user_integrations` - OAuth tokens
-   - `agno_sessions` - Conversation sessions
-   - `agno_runs` - Agent run history
-   - `request_logs` - Token usage tracking
-
-4. Enable **Storage** bucket named `media-uploads` for file uploads
-
-5. Configure **Authentication Providers**:
-   - Enable Email/Password
-   - Enable Google OAuth
-   - Enable GitHub OAuth
-   - Set redirect URLs to `aios://auth-callback`
-
-### 4. Frontend Setup
-
+**Option A: Full Docker Deployment (Recommended)**
 ```bash
-# From project root
-npm install
+docker-compose up --build
 ```
+This starts the Backend, Redis, Flower (Task Monitor), and Sandbox Manager automatically. The API will be available at `http://localhost:8765`.
 
-Update `js/config.js` with your backend URL:
-
-```javascript
-const config = {
-    backend: {
-        url: 'http://localhost:8765',  // Your backend URL
-        maxReconnectAttempts: 50,
-        reconnectDelay: 20000,
-        connectionTimeout: 20000
-    },
-    supabase: {
-        url: 'https://your-project.supabase.co',
-        anonKey: 'your-anon-key'
-    }
-};
-```
-
----
-
-## ▶️ Running the Application
-
-### Development Mode (Local)
-
-#### Terminal 1: Start Redis (if not using Docker)
-
+**Option B: Hybrid (Local Code / Docker Services)**
+Use this if you are actively editing the Python code.
 ```bash
-redis-server
+# Start infrastructure only
+docker-compose up -d redis sandbox-manager
 ```
 
-#### Terminal 2: Start Sandbox Manager
+### 5. Running the Application (Hybrid Mode)
 
+**Terminal 1: Backend**
 ```bash
-cd sandbox_manager
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-#### Terminal 3: Start Python Backend
-
-```bash
-cd python-backend
-source venv/bin/activate  # or venv\Scripts\activate on Windows
+# Inside python-backend/
 python app.py
 ```
 
-#### Terminal 4: Start Electron App
-
+**Terminal 2: Frontend (Electron)**
 ```bash
+# Root directory
+npm install
 npm start
 ```
 
-### Production Mode (Docker)
+---
 
-See [DOCKER.md](DOCKER.md) for complete Docker deployment instructions.
+## 🧠 Design Principles
 
-```bash
-# Build and start all services
-docker-compose up --build -d
-
-# View logs
-docker-compose logs -f
-
-# Stop all services
-docker-compose down
-```
+1.  **Security by Design**: Arbitrary code execution is strictly limited to the **Docker Sandbox**. The AI cannot accidentally delete files on your host machine unless explicitly allowed via specific tools.
+2.  **Stateless Intelligence, Stateful Context**: The backend is designed to be stateless (Flask), but sessions are persisted in Supabase to allow long-term memory across restarts.
+3.  **Real-Time Feedback**: Users should never guess if the AI is stuck. Thinking states, tool usage, and errors are streamed instantly via WebSockets.
+4.  **Aesthetics Matter**: A tool you use all day should look good. The UI focuses on high readability and strong visual hierarchy.
 
 ---
 
-## 🎯 Usage Guide
+## ⚠️ Limitations & Future Roadmap
 
-### Basic Chat
-
-1. **Start a Conversation**: Type your message in the input field
-2. **Attach Files**: Click the paperclip icon to upload images, documents, PDFs
-3. **Select Context**: Click the context icon to include previous conversations
-4. **View Reasoning**: Expand the "Reasoning" section to see agent steps and tool usage
-
-### Advanced Features
-
-#### Code Execution
-
-```
-"Create a Python script that analyzes CSV data and generates a plot"
-```
-
-The dev team will:
-1. Create the script in the sandbox
-2. Execute it
-3. Show you the output and any generated files
-
-#### Web Research
-
-```
-"Find the latest research papers on quantum computing from ArXiv"
-```
-
-The World Agent will:
-1. Search ArXiv
-2. Summarize findings
-3. Provide links to papers
-
-#### GitHub Operations
-
-```
-"Create a new branch called 'feature/auth' in my repo 'myapp' and add a login.py file"
-```
-
-GitHub Tools will:
-1. Create the branch
-2. Commit the file
-3. Confirm the operation
-
-#### Image Generation
-
-```
-"Generate an image of a futuristic city at sunset"
-```
-
-Image Tools will:
-1. Generate the image using Gemini 2.0
-2. Display it in the artifact viewer
-3. Allow you to download it
-
-#### Browser Automation
-
-```
-"Go to example.com and click the login button"
-```
-
-Browser Tools will:
-1. Navigate to the URL
-2. Take a screenshot
-3. Identify interactive elements
-4. Perform the click action
-5. Show you the result
-
-### Artifact Viewer
-
-The artifact viewer displays:
-- **Code blocks** with syntax highlighting
-- **Mermaid diagrams** with pan/zoom controls
-- **Generated images** in full resolution
-- **Browser screenshots** with element annotations
-
-Click any artifact reference in the chat to reopen it.
+*   **Sandboxing**: Currently relies on local Docker. Future versions may support remote execution environments (e.g., E2B).
+*   **Context Window**: Limited by the underlying LLM provider. Large file analysis is handled via RAG (Retrieval-Augmented Generation) but has upper bounds.
+*   **Vision**: Multimodal capabilities are dependent on the model (e.g., GPT-4o or Gemini 1.5 Pro).
+*   **Platform**: Primarily tested on Windows. Mac/Linux support is theoretical via Electron/Docker but may need minor path adjustments.
 
 ---
 
-## 🔧 Configuration
-
-### Agent Configuration
-
-Edit `python-backend/assistant.py` to customize:
-- Model selection (Gemini, GPT-4, Claude, etc.)
-- Agent instructions and behavior
-- Tool availability
-- Memory settings
-
-### Tool Toggles
-
-Users can enable/disable tools via the shuffle menu:
-- **AI-OS Mode**: All tools enabled (default)
-- **Deep Search Mode**: Research-focused tools only
-- **Memory**: Enable conversation memory
-- **Tasks**: Task management integration
-
----
-
-## 🐳 Docker Deployment
-
-For production deployment with Docker, see the comprehensive [DOCKER.md](DOCKER.md) guide which covers:
-
-- Multi-service orchestration (Web, Redis, Celery, Flower, Sandbox Manager)
-- Environment configuration
-- Security best practices
-- Monitoring and logging
-- Troubleshooting
-- Production optimizations
-
-Quick start:
-
-```bash
-docker-compose up --build -d
-```
-
-Access services:
-- **Web App**: http://localhost:8765
-- **Flower (Celery Monitor)**: http://localhost:5555
-- **Sandbox Manager**: http://localhost:8000
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes
-4. Test thoroughly
-5. Commit with clear messages: `git commit -m 'Add amazing feature'`
-6. Push to your fork: `git push origin feature/amazing-feature`
-7. Open a Pull Request
-
-### Code Style
-
-- **Python**: Follow PEP 8, use type hints
-- **JavaScript**: Use ES6+, consistent naming
-- **Comments**: Document complex logic
-- **Tests**: Add tests for new features
-
-### Areas for Contribution
-
-- New tool integrations (Slack, Discord, etc.)
-- Additional AI model support
-- UI/UX improvements
-- Documentation enhancements
-- Bug fixes and optimizations
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **[Agno Framework](https://github.com/agno-ai/agno)** - Powerful multi-agent AI framework
-- **[Electron](https://www.electronjs.org/)** - Cross-platform desktop apps
-- **[Flask](https://flask.palletsprojects.com/)** - Python web framework
-- **[Supabase](https://supabase.com/)** - Open-source Firebase alternative
-- **[Google Gemini](https://deepmind.google/technologies/gemini/)** - Advanced AI models
-- **[DeepSeek](https://www.deepseek.com/)** - Reasoning-focused AI models
-
----
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-username/aetheria-ai-os/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/aetheria-ai-os/discussions)
-- **Email**: support@aetheria-ai.com
-
----
-
-<div align="center">
-
-**[⭐ Star this repo](https://github.com/your-username/aetheria-ai-os)** • **[🐛 Report Bug](https://github.com/your-username/aetheria-ai-os/issues)** • **[💡 Request Feature](https://github.com/your-username/aetheria-ai-os/issues)**
-
-Made with ❤️ by the Aetheria AI Team
-
-</div>
+*Documentation auto-generated by **Antigravity** based on codebase analysis.*
