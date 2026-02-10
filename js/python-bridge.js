@@ -210,6 +210,10 @@ class PythonBridge {
             return;
         }
         try {
+            // Inject device type for Electron app to identify as desktop/computer
+            if (typeof message === 'object' && message !== null) {
+                message.deviceType = 'desktop';
+            }
             this.socket.emit('send_message', JSON.stringify(message));
         } catch (error) {
             console.error('Error sending message:', error);
