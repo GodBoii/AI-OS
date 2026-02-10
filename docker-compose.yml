@@ -47,9 +47,10 @@ services:
       dockerfile: sandbox_manager/Dockerfile
     container_name: aios-sandbox-manager
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
 
 volumes:
   redis_data:
