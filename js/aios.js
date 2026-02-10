@@ -316,7 +316,7 @@ class AIOS {
         if (provider === 'vercel') {
             authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
         } else {
-            const backendUrl = 'https://aios-web.onrender.com';
+            const backendUrl = 'https://api.pawsitivestrides.store';
             // Add client=electron parameter to identify Electron client
             authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}&client=electron`;
         }
@@ -333,7 +333,7 @@ class AIOS {
             return;
         }
         try {
-            const response = await fetch('https://aios-web.onrender.com/api/integrations/disconnect', {
+            const response = await fetch('https://api.pawsitivestrides.store/api/integrations/disconnect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
                 body: JSON.stringify({ service: provider })
@@ -357,7 +357,7 @@ class AIOS {
             return;
         }
         try {
-            const response = await fetch('https://aios-web.onrender.com/api/integrations', {
+            const response = await fetch('https://api.pawsitivestrides.store/api/integrations', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch integration status');
