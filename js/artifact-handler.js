@@ -84,7 +84,7 @@ class ArtifactHandler {
         this.pendingImages.set(artifactId, base64Data);
     }
 
-    createArtifact(content, type, artifactId = null, viewMode = 'preview') {
+    createArtifact(content, type, artifactId = null, options = {}) {
         if (type === 'image') {
             const imageId = content.trim();
             
@@ -110,15 +110,18 @@ class ArtifactHandler {
 
         // For all other artifact types (code, mermaid), the logic is simple.
         const id = artifactId || `artifact-${this.currentId++}`;
-        const artifactData = { content, type };
-        if (type === 'mermaid') {
-            artifactData.viewMode = viewMode;
-        }
+        const artifactData = {
+            content,
+            type,
+            viewMode: options.viewMode || options.defaultView || (type === 'mermaid' ? 'preview' : 'source'),
+            title: options.title || null,
+            language: options.language || (type === 'mermaid' ? 'mermaid' : 'plaintext')
+        };
         this.artifacts.set(id, artifactData);
         return id;
     }
 
-    showArtifact(type, data, artifactId = null) {
+    showArtifact(type, data, artifactId = null, options = {}) {
         const container = document.getElementById('artifact-container');
         const contentDiv = container.querySelector('.artifact-content');
         const titleEl = container.querySelector('.artifact-title');
@@ -144,7 +147,7 @@ class ArtifactHandler {
                 break;
 
             case 'image':
-                titleEl.textContent = 'Image Viewer';
+                titleEl.textContent = options.title || 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
                 if (data === null) {
@@ -155,31 +158,54 @@ class ArtifactHandler {
                 break;
 
             case 'mermaid':
-                titleEl.textContent = 'Diagram Viewer';
+                titleEl.textContent = options.title || 'Diagram Viewer';
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
                 if (viewToggle) {
                     viewToggle.classList.remove('hidden');
                 }
                 const existingArtifact = currentArtifactId ? this.artifacts.get(currentArtifactId) : null;
-                const viewMode = existingArtifact && existingArtifact.viewMode ? existingArtifact.viewMode : 'preview';
+                const viewMode = options.defaultView || (existingArtifact && existingArtifact.viewMode ? existingArtifact.viewMode : 'preview');
                 this.currentViewMode = viewMode;
                 this.updateViewToggleButtons(viewMode);
                 this.renderMermaidView(data, contentDiv, viewMode);
                 if (!currentArtifactId) {
-                    currentArtifactId = this.createArtifact(data, type, null, viewMode);
+                    currentArtifactId = this.createArtifact(data, type, null, {
+                        viewMode,
+                        title: options.title || null,
+                        language: 'mermaid'
+                    });
                 } else {
                     this.updateArtifactViewMode(currentArtifactId, viewMode);
                 }
                 break;
 
             default: // Handles code blocks
-                titleEl.textContent = 'Code Viewer';
+                titleEl.textContent = options.title || 'Code Viewer';
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
-                this.renderCode(data, type, contentDiv);
+                const language = options.language || this.inferLanguageFromType(type);
+                const viewModeForCode = this.resolveInitialCodeViewMode(language, options.defaultView);
+                const shouldShowToggle = this.supportsPreviewMode(language);
+                if (shouldShowToggle && viewToggle) {
+                    viewToggle.classList.remove('hidden');
+                }
+                this.currentViewMode = viewModeForCode;
+                this.updateViewToggleButtons(viewModeForCode);
+                this.renderTextArtifactView(data, language, contentDiv, viewModeForCode);
                 if (!currentArtifactId) {
-                    currentArtifactId = this.createArtifact(data, type);
+                    currentArtifactId = this.createArtifact(data, type, null, {
+                        viewMode: viewModeForCode,
+                        title: options.title || null,
+                        language
+                    });
+                } else {
+                    const existing = this.artifacts.get(currentArtifactId);
+                    if (existing) {
+                        existing.title = options.title || existing.title || null;
+                        existing.language = language;
+                        existing.viewMode = viewModeForCode;
+                    }
                 }
                 break;
         }
@@ -201,7 +227,7 @@ class ArtifactHandler {
 
     updateArtifactViewMode(artifactId, viewMode) {
         const artifact = this.artifacts.get(artifactId);
-        if (artifact && artifact.type === 'mermaid') {
+        if (artifact && (artifact.type === 'mermaid' || artifact.type === 'code')) {
             artifact.viewMode = viewMode;
         }
     }
@@ -223,13 +249,25 @@ class ArtifactHandler {
         }
 
         const artifact = this.artifacts.get(activeId);
-        if (!artifact || artifact.type !== 'mermaid') {
+        if (!artifact) {
+            return;
+        }
+
+        if (artifact.type !== 'mermaid' && artifact.type !== 'code') {
+            return;
+        }
+
+        if (artifact.type === 'code' && !this.supportsPreviewMode(artifact.language || 'plaintext')) {
             return;
         }
 
         this.updateArtifactViewMode(activeId, mode);
         contentDiv.innerHTML = '';
-        this.renderMermaidView(artifact.content, contentDiv, mode);
+        if (artifact.type === 'mermaid') {
+            this.renderMermaidView(artifact.content, contentDiv, mode);
+        } else {
+            this.renderTextArtifactView(artifact.content, artifact.language || 'plaintext', contentDiv, mode);
+        }
     }
 
     updateViewToggleButtons(mode) {
@@ -280,7 +318,9 @@ class ArtifactHandler {
         container.innerHTML = '';
         const img = document.createElement('img');
         img.className = 'generated-image-artifact';
-        img.src = `data:image/png;base64,${base64Data}`;
+        img.src = typeof base64Data === 'string' && base64Data.startsWith('data:')
+            ? base64Data
+            : `data:image/png;base64,${base64Data}`;
         img.alt = 'Generated Image';
         container.appendChild(img);
     }
@@ -574,14 +614,90 @@ class ArtifactHandler {
         panContainer.style.padding = `${padding}px`;
     }
 
+    inferLanguageFromType(type) {
+        if (!type || type === 'code') {
+            return 'plaintext';
+        }
+        return String(type).toLowerCase();
+    }
+
+    supportsPreviewMode(language) {
+        return ['markdown', 'html', 'mermaid'].includes((language || '').toLowerCase());
+    }
+
+    resolveInitialCodeViewMode(language, requestedMode = null) {
+        if (requestedMode === 'source' || requestedMode === 'preview') {
+            return requestedMode;
+        }
+        return this.supportsPreviewMode(language) ? 'preview' : 'source';
+    }
+
+    renderTextArtifactView(content, language, container, mode = 'source') {
+        const normalizedLanguage = (language || 'plaintext').toLowerCase();
+
+        if (mode === 'source') {
+            this.renderCode(content, normalizedLanguage, container);
+            return;
+        }
+
+        if (normalizedLanguage === 'markdown') {
+            this.renderMarkdownPreview(content, container);
+            return;
+        }
+
+        if (normalizedLanguage === 'html') {
+            this.renderHtmlPreview(content, container);
+            return;
+        }
+
+        if (normalizedLanguage === 'mermaid') {
+            this.renderMermaidPreview(content, container);
+            return;
+        }
+
+        this.renderCode(content, normalizedLanguage, container);
+    }
+
+    renderMarkdownPreview(content, container) {
+        const preview = document.createElement('div');
+        preview.className = 'artifact-markdown-preview';
+        const rawHtml = window.marked ? window.marked.parse(content || '') : `<pre>${this.escapeHtml(content || '')}</pre>`;
+        const sanitizedHtml = window.DOMPurify
+            ? window.DOMPurify.sanitize(rawHtml)
+            : rawHtml;
+        preview.innerHTML = sanitizedHtml;
+        container.appendChild(preview);
+    }
+
+    renderHtmlPreview(content, container) {
+        const previewFrame = document.createElement('iframe');
+        previewFrame.className = 'artifact-html-preview';
+        previewFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        previewFrame.setAttribute('title', 'HTML preview');
+        const safeHtml = window.DOMPurify
+            ? window.DOMPurify.sanitize(content || '', { WHOLE_DOCUMENT: true })
+            : (content || '');
+        previewFrame.srcdoc = safeHtml;
+        container.appendChild(previewFrame);
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     renderCode(content, language, container) {
         const pre = document.createElement('pre');
+        pre.className = 'artifact-code';
         const code = document.createElement('code');
         code.className = `language-${language}`;
         code.textContent = content;
         pre.appendChild(code);
         container.appendChild(pre);
-        hljs.highlightElement(code);
+        if (window.hljs) {
+            window.hljs.highlightElement(code);
+        }
     }
 
     hideArtifact() {
@@ -603,13 +719,21 @@ class ArtifactHandler {
                 artifact.content = imageData;
                 artifact.isPending = false;
                 this.pendingImages.delete(artifactId);
-                this.showArtifact(artifact.type, imageData, artifactId);
+                this.showArtifact(artifact.type, imageData, artifactId, {
+                    title: artifact.title,
+                    language: artifact.language,
+                    defaultView: artifact.viewMode
+                });
                 return;
             }
             
             // If the artifact is pending and no data available, show loading state
             // Otherwise, pass the actual content
-            this.showArtifact(artifact.type, artifact.isPending ? null : artifact.content, artifactId);
+            this.showArtifact(artifact.type, artifact.isPending ? null : artifact.content, artifactId, {
+                title: artifact.title,
+                language: artifact.language,
+                defaultView: artifact.viewMode
+            });
         } else {
             console.error(`ArtifactHandler: Failed to find artifact with ID: ${artifactId}`);
         }
@@ -623,7 +747,7 @@ class ArtifactHandler {
         const activeId = container.dataset.activeArtifactId;
         if (activeId && this.artifacts.has(activeId)) {
             const artifact = this.artifacts.get(activeId);
-            if (artifact.type === 'mermaid') {
+            if (artifact.type === 'mermaid' || artifact.type === 'code') {
                 content = artifact.content;
             }
         }
@@ -660,10 +784,15 @@ class ArtifactHandler {
         const activeId = container.dataset.activeArtifactId;
         if (activeId && this.artifacts.has(activeId)) {
             const artifact = this.artifacts.get(activeId);
-            if (artifact.type === 'mermaid') {
+            if (artifact.type === 'mermaid' || artifact.type === 'code') {
                 content = artifact.content;
-                extension = '.mmd';
-                suggestedName = 'diagram';
+                extension = artifact.type === 'mermaid'
+                    ? '.mmd'
+                    : this.getFileExtension(artifact.language || 'plaintext');
+                const safeTitle = (artifact.title || '').trim();
+                suggestedName = safeTitle
+                    ? safeTitle.replace(/[\\/:*?"<>|]+/g, '_')
+                    : (artifact.type === 'mermaid' ? 'diagram' : 'code');
             }
         }
 
