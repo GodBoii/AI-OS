@@ -8,6 +8,7 @@ import ConversationStateManager from './conversation-state-manager.js';
 import FloatingWindowManager from './floating-window-manager.js';
 // Directly import the artifactHandler singleton to make the dependency explicit.
 import { artifactHandler } from './artifact-handler.js';
+import sessionContentViewer from './session-content-viewer.js';
 
 // Use the exposed electron APIs instead of direct requires
 const fs = window.electron?.fs?.promises;
@@ -17,7 +18,7 @@ const ipcRenderer = window.electron?.ipcRenderer;
 let currentConversationId = null;
 
 let chatConfig = {
-    memory: false,
+    memory: true,
     tools: {
         internet_search: true,
         coding_assistant: true,
@@ -99,6 +100,11 @@ class ShuffleMenuController {
 
         // Update initial active states
         this.updateToolsActiveState();
+
+        // Sync memory initial state
+        if (chatConfig.memory) {
+            this.updateItemActiveState('memory', true);
+        }
     }
 
     bindEvents() {
@@ -335,7 +341,7 @@ async function startNewConversation() {
     if (audioInputHandler && audioInputHandler.isRecording) {
         audioInputHandler.stopRecording();
     }
-    
+
     // CRITICAL: Save any pending attachment metadata before terminating
     if (window.pendingAttachmentMetadata) {
         console.log('[AttachmentDB] Saving pending metadata before starting new conversation');
@@ -366,11 +372,14 @@ async function startNewConversation() {
     }
     if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
 
+    // Hide content button for new conversation
+    hideContentButton();
+
     // Clear error recovery flag
     window.needsNewBackendSession = false;
 
     chatConfig = {
-        memory: false, tasks: false,
+        memory: true, tasks: false,
         tools: { internet_search: true, Planner_Agent: true, coding_assistant: true, World_Agent: true, enable_vercel: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
         deepsearch: false
     };
@@ -389,6 +398,11 @@ async function startNewConversation() {
         // Reset shuffle menu item active states
         const shuffleItems = document.querySelectorAll('.shuffle-item');
         shuffleItems.forEach(item => item.classList.remove('active'));
+
+        // Re-enable memory if it's on by default
+        if (chatConfig.memory) {
+            shuffleMenuController.updateItemActiveState('memory', true);
+        }
     }
 
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
@@ -524,6 +538,9 @@ function setupIpcListeners() {
                     // Clear pending metadata
                     window.pendingAttachmentMetadata = null;
                 }
+
+                // Check if session has content to show button
+                checkAndShowContentButton();
             }
 
             if (data.content) {
@@ -674,6 +691,8 @@ function setupIpcListeners() {
         if (artifactHandler) {
             artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
         }
+        // Check if session has content to show button
+        checkAndShowContentButton();
     });
 
     ipcRenderer.on('socket-error', (error) => {
@@ -925,7 +944,7 @@ function showShareModal(content) {
     overlay.querySelectorAll('.share-option').forEach(option => {
         option.addEventListener('click', async () => {
             const action = option.dataset.action;
-            
+
             try {
                 if (action === 'copy') {
                     await navigator.clipboard.writeText(content);
@@ -935,7 +954,7 @@ function showShareModal(content) {
                     const extension = action === 'save-txt' ? 'txt' : 'md';
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
                     const filename = `ai-response-${timestamp}.${extension}`;
-                    
+
                     // Use Electron's save dialog
                     if (window.electron && window.electron.ipcRenderer) {
                         window.electron.ipcRenderer.send('save-file-dialog', {
@@ -946,7 +965,7 @@ function showShareModal(content) {
                                 { name: 'All Files', extensions: ['*'] }
                             ]
                         });
-                        
+
                         // Listen for save result (one-time listener)
                         const handleSaveResult = (result) => {
                             if (result.success) {
@@ -961,7 +980,7 @@ function showShareModal(content) {
                                 console.warn('Could not remove listener:', e);
                             }
                         };
-                        
+
                         window.electron.ipcRenderer.on('save-file-result', handleSaveResult);
                         closeModal();
                     } else {
@@ -1177,7 +1196,7 @@ function addCopyButtonsToCodeBlocks(container) {
     container.querySelectorAll('pre:not(.inline-artifact-code):not(.inline-mermaid-source)').forEach(pre => {
         // Skip if already wrapped
         if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
-        
+
         // Skip if it's inside a code-block-wrapper already
         if (pre.closest('.code-block-wrapper')) return;
 
@@ -1507,6 +1526,12 @@ async function handleSendMessage() {
 
     try {
         ipcRenderer.send('send-message', messageData);
+
+        // Check if session has content after sending (files will be registered by backend)
+        if (attachedFiles.length > 0) {
+            // Delay check slightly to allow backend to register
+            setTimeout(() => checkAndShowContentButton(), 1000);
+        }
     } catch (error) {
         console.error('Error sending message:', error);
         populateBotMessage({ content: 'Error sending message', id: messageId });
@@ -1671,17 +1696,17 @@ class UnifiedPreviewHandler {
     showViewer() {
         const sessions = this.contextHandler.getSelectedSessions();
         const files = this.fileAttachmentHandler.getAttachedFiles();
-        
+
         // Update both contents
         this.updateContextContent(sessions);
         this.updateFilesContent(files);
-        
+
         // Show empty state if nothing is selected
         const unifiedContent = this.viewer.querySelector('.unified-context-content');
         if ((!sessions || sessions.length === 0) && (!files || files.length === 0)) {
             unifiedContent.innerHTML = '<div class="empty-state"><i class="fas fa-inbox" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.3;"></i><p>No context or files selected</p></div>';
         }
-        
+
         this.viewer.classList.add('visible');
     }
     hideViewer() { this.viewer.classList.remove('visible'); }
@@ -1691,20 +1716,20 @@ class UnifiedPreviewHandler {
             contextContent.innerHTML = '';
             return;
         }
-        
+
         let html = sessions.map((session, index) => `
             <div class="session-block">
                 <div class="session-block-header">
                     <h4>Session ${index + 1}</h4>
                 </div>
-                ${session.interactions && session.interactions.length > 0 
-                    ? session.interactions.map(int => `
+                ${session.interactions && session.interactions.length > 0
+                ? session.interactions.map(int => `
                         <div class="interaction">
                             <div class="user-message"><strong>You:</strong> ${this.escapeHtml(int.user_input)}</div>
                             <div class="assistant-message"><strong>Assistant:</strong> ${this.escapeHtml(int.llm_output)}</div>
                         </div>`).join('')
-                    : '<div class="interaction"><p style="color: var(--text-secondary); margin: 0;">No interactions in this session</p></div>'
-                }
+                : '<div class="interaction"><p style="color: var(--text-secondary); margin: 0;">No interactions in this session</p></div>'
+            }
             </div>`).join('');
         contextContent.innerHTML = html;
     }
@@ -1715,7 +1740,7 @@ class UnifiedPreviewHandler {
             filesContent.innerHTML = '';
             return;
         }
-        
+
         let html = '';
         if (files.length > 0) {
             html += '<div class="section-header"><i class="fas fa-paperclip"></i> Files</div>';
@@ -1766,6 +1791,98 @@ class UnifiedPreviewHandler {
                 badge.classList.remove('visible');
             }
         }
+    }
+}
+
+/**
+ * Sets up the View Content button click handler
+ */
+function setupViewContentButton() {
+    const viewContentBtn = document.getElementById('view-content-btn');
+    if (!viewContentBtn) {
+        console.warn('[Chat] View content button not found');
+        return;
+    }
+
+    viewContentBtn.addEventListener('click', () => {
+        if (!currentConversationId || !window.sessionContentViewer) {
+            return;
+        }
+
+        if (window.sessionContentViewer.isVisible()) {
+            window.sessionContentViewer.hide();
+        } else {
+            window.sessionContentViewer.show(currentConversationId);
+        }
+    });
+
+    console.log('[Chat] View content button setup complete');
+}
+
+/**
+ * Checks if current session has content and shows/hides the View Content button
+ */
+async function checkAndShowContentButton() {
+    if (!currentConversationId) {
+        hideContentButton();
+        return;
+    }
+
+    try {
+        const session = await window.electron.auth.getSession();
+        if (!session || !session.access_token) {
+            hideContentButton();
+            return;
+        }
+
+        // Fetch content count from backend
+        const response = await fetch(`http://localhost:8765/api/sessions/${currentConversationId}/content`, {
+            headers: {
+                'Authorization': `Bearer ${session.access_token}`
+            }
+        });
+
+        if (!response.ok) {
+            console.warn('[Chat] Failed to fetch content count:', response.status);
+            hideContentButton();
+            return;
+        }
+
+        const data = await response.json();
+        const count = data.count || 0;
+
+        console.log('[Chat] Content count for session:', count);
+
+        if (count > 0) {
+            showContentButton();
+        } else {
+            hideContentButton();
+        }
+    } catch (error) {
+        console.error('[Chat] Error checking content:', error);
+        hideContentButton();
+    }
+}
+
+/**
+ * Shows the View Content button
+ */
+function showContentButton() {
+    const viewContentBtn = document.getElementById('view-content-btn');
+
+    if (viewContentBtn) {
+        viewContentBtn.classList.remove('hidden');
+    }
+}
+
+/**
+ * Hides the View Content button
+ */
+function hideContentButton() {
+    const viewContentBtn = document.getElementById('view-content-btn');
+
+    if (viewContentBtn) {
+        viewContentBtn.classList.add('hidden');
     }
 }
 
@@ -1855,13 +1972,18 @@ function init() {
     window.fileAttachmentHandler = fileAttachmentHandler;
 
     window.unifiedPreviewHandler = new UnifiedPreviewHandler(contextHandler, fileAttachmentHandler);
-    
+
+    // Initialize session content viewer
+    window.sessionContentViewer = sessionContentViewer;
+    setupViewContentButton();
+    console.log('[Chat] Session content viewer initialized');
+
     // Initialize audio input handler with model check
     const micButton = document.getElementById('mic-button');
     if (micButton && window.AudioInputHandler) {
         audioInputHandler = new AudioInputHandler();
         const initialized = audioInputHandler.initialize(micButton, elements.input);
-        
+
         if (initialized) {
             // Check if model is already available
             audioInputHandler.checkModelAvailability().then(isAvailable => {
@@ -1877,7 +1999,7 @@ function init() {
             console.warn('Audio input handler could not be initialized');
         }
     }
-    
+
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
