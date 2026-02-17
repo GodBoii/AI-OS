@@ -97,14 +97,14 @@ def run_agent_and_stream(
         logger.info(f"[AGENT_RUNNER] Created realtime_tool_config with keys: {list(realtime_tool_config.keys())}")
 
         # 2. Initialize the Agent
-        # --- MODIFICATION START: Pass the new, complete config dictionary ---
-        # Both BrowserTools and ImageTools now receive the same complete set of
-        # dependencies, ensuring they are initialized correctly.
+        # --- MODIFICATION START: Pass session_id and message_id for persistence ---
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
             browser_tools_config=realtime_tool_config,
-            custom_tool_config=realtime_tool_config, # Pass the complete config to ImageTools
+            custom_tool_config=realtime_tool_config,
+            session_id=conversation_id,  # NEW: For persistence
+            message_id=message_id,  # NEW: For persistence
             **session_data['config']
         )
         # --- MODIFICATION END ---
@@ -121,6 +121,7 @@ def run_agent_and_stream(
             historical_context_str = "CONTEXT FROM PREVIOUS CHATS:\n---\n"
             for session_id in context_session_ids:
                 try:
+                    # Fetch conversation runs
                     response = supabase_client.from_('agno_sessions').select('runs').eq('session_id', session_id).single().execute()
                     if response.data and response.data.get('runs'):
                         runs = response.data['runs']
@@ -130,6 +131,29 @@ def run_agent_and_stream(
                             assistant_output = run.get('content', '')
                             if user_input:
                                 historical_context_str += f"User: {user_input}\nAssistant: {assistant_output}\n---\n"
+                    
+                    # Fetch file metadata from session_content
+                    content_response = supabase_client.from_('session_content').select(
+                        'content_type, reference_id, metadata'
+                    ).eq('session_id', session_id).eq('user_id', user_id).execute()
+                    
+                    if content_response.data and len(content_response.data) > 0:
+                        files_context = []
+                        for item in content_response.data:
+                            content_type = item.get('content_type', '')
+                            metadata = item.get('metadata', {}) or {}
+                            
+                            if content_type == 'artifact':
+                                filename = metadata.get('filename', 'Unknown file')
+                                files_context.append(f"[Generated file: {filename}]")
+                            elif content_type == 'upload':
+                                filename = metadata.get('filename', 'Unknown file')
+                                mime_type = metadata.get('mime_type', '')
+                                files_context.append(f"[Attached file: {filename} ({mime_type})]")
+                        
+                        if files_context:
+                            historical_context_str += f"Files in this conversation:\n{chr(10).join(files_context)}\n---\n"
+                            
                 except Exception as e:
                     logger.error(f"Failed to fetch or process context for session_id {session_id}: {e}")
             historical_context_str += "\n"
