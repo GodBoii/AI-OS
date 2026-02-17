@@ -1,26 +1,19 @@
 # python-backend/app.py
 import os
-import logging
 import sys
+import logging
 from factory import create_app
 from extensions import socketio
+from logging_config import setup_logging
 
-# Configure logging for production
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-# Set specific loggers
-logging.getLogger('task_poller').setLevel(logging.INFO)
-logging.getLogger('task_executor').setLevel(logging.INFO)
-logging.getLogger('task_agent').setLevel(logging.INFO)
-
+# Configure clean, professional logging
+setup_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.info("🚀 Starting AI-OS Backend Application")
+
+logger.info("🚀 Starting Aetheria AI Backend Application")
+logger.info("📱 Environment: PROD (Docker)")
+logger.info("----------------------------------------------------------------")
+
 
 # Create the application instance using the factory
 app = create_app()
