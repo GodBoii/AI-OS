@@ -143,24 +143,7 @@
 }
 
 /* --- Reduced Motion Support --- */
-@media (prefers-reduced-motion: reduce) {
-    .welcome-container {
-        transition: opacity 0.1s ease;
-    }
-
-    .welcome-content {
-        animation: none;
-    }
-
-    @keyframes welcomeFadeIn {
-
-        0%,
-        100% {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-}
+/* Reduced motion preference removed to force animations */
 
 /* --- Dark Mode Adjustments --- */
 .dark-mode .welcome-heading {
