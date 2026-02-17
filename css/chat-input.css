@@ -655,44 +655,4 @@
 }
 
 /* --- Reduced Motion Support --- */
-@media (prefers-reduced-motion: reduce) {
-
-    .upload-status-text,
-    .file-chip.uploading,
-    .file-chip.reading,
-    .file-preview-item.uploading,
-    .file-preview-item.reading {
-        animation: none;
-    }
-
-    .upload-status-text {
-        background: var(--accent-color);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .file-chip.uploading,
-    .file-chip.reading {
-        background: rgba(255, 255, 255, 0.2);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-        transform: scale(1);
-    }
-
-    .dark-mode .file-chip.uploading,
-    .dark-mode .file-chip.reading {
-        background: rgba(0, 0, 0, 0.3);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    }
-
-    .file-preview-item.uploading,
-    .file-preview-item.reading {
-        background: rgba(255, 255, 255, 0.1);
-        transform: scale(1);
-    }
-
-    .dark-mode .file-preview-item.uploading,
-    .dark-mode .file-preview-item.reading {
-        background: rgba(0, 0, 0, 0.2);
-    }
-}
+/* Reduced motion preference removed to force animations */
