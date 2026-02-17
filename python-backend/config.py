@@ -7,10 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Core Application Configuration ---
-REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+REDIS_URL = os.getenv('REDIS_URL')
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 SANDBOX_API_URL = os.getenv("SANDBOX_API_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # --- LLM Provider Keys (Handled automatically by Agno, listed here for clarity) ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
