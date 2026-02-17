@@ -5,7 +5,7 @@ const config = {
     // Backend connection settings
     backend: {
         // URL for the Python backend running in Docker
-        url: 'https://api.pawsitivestrides.store', //http://localhost:8765 //https://aios-web.onrender.com
+        url: 'http://localhost:8765', //https://api.pawsitivestrides.store //https://aios-web.onrender.com
 
         // Maximum number of reconnection attempts
         maxReconnectAttempts: 50,
