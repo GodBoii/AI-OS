@@ -30,6 +30,44 @@ def set_dependencies(manager: ConnectionManager, redis_client: Redis):
     connection_manager_service = manager
     redis_client_instance = redis_client
     logger.info("Dependencies (ConnectionManager, RedisClient) injected into sockets module.")
+    
+    # Start browser screenshot listener
+    if redis_client_instance:
+        eventlet.spawn(listen_for_browser_screenshots)
+
+
+def listen_for_browser_screenshots():
+    """Listen for browser screenshot events from Redis and forward to frontend."""
+    if not redis_client_instance:
+        logger.error("[Browser Screenshot] Redis client not available")
+        return
+    
+    try:
+        pubsub = redis_client_instance.pubsub()
+        pubsub.psubscribe('browser-screenshot:*')
+        logger.info("[Browser Screenshot] Listener started, subscribed to browser-screenshot:*")
+        
+        for message in pubsub.listen():
+            if message['type'] == 'pmessage':
+                try:
+                    data = json.loads(message['data'])
+                    session_id = message['channel'].decode('utf-8').split(':')[1]
+                    
+                    logger.info(f"[Browser Screenshot] Received event for session {session_id}: {data.get('action')}")
+                    
+                    # Find socket ID for this session
+                    # We need to get the sid from the connection manager
+                    # For now, we'll broadcast to all connected clients with the session_id in the payload
+                    # The frontend will filter by session_id
+                    
+                    socketio.emit('browser_screenshot', data)
+                    logger.info(f"[Browser Screenshot] Emitted to frontend: {data.get('action')}")
+                    
+                except Exception as e:
+                    logger.error(f"[Browser Screenshot] Error processing message: {e}")
+                    
+    except Exception as e:
+        logger.error(f"[Browser Screenshot] Listener error: {e}\n{traceback.format_exc()}")
 
 
 # ==============================================================================
@@ -170,7 +208,14 @@ def on_send_message(data: str):
             return socketio.emit("status", {"message": f"Session {conversation_id} terminated"}, room=sid)
 
         if not connection_manager_service.get_session(conversation_id):
-            connection_manager_service.create_session(conversation_id, str(user.id), data.get("config", {}))
+            # Extract device type from request
+            device_type = data.get("deviceType", "web")  # Default to 'web' if not provided
+            connection_manager_service.create_session(
+                conversation_id, 
+                str(user.id), 
+                data.get("config", {}),
+                device_type=device_type  # Pass device type
+            )
             
             # --- Title Generation for New Sessions ---
             user_msg_content = data.get("message", "")
@@ -182,6 +227,33 @@ def on_send_message(data: str):
         turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
+        
+        # Register user-uploaded files in session_content for persistence
+        files = data.get("files", [])
+        if files:
+            try:
+                from sandbox_persistence import get_persistence_service
+                persistence_service = get_persistence_service()
+                
+                for file_data in files:
+                    # Only register files that have a path (uploaded to Supabase)
+                    if file_data.get('path'):
+                        persistence_service.register_content(
+                            session_id=conversation_id,
+                            user_id=str(user.id),
+                            content_type='upload',
+                            reference_id=str(uuid.uuid4()),  # Generate unique ID for upload
+                            message_id=message_id,
+                            metadata={
+                                'filename': file_data.get('name', 'unknown'),
+                                'mime_type': file_data.get('type', 'application/octet-stream'),
+                                'path': file_data.get('path'),
+                                'is_text': file_data.get('isText', False)
+                            }
+                        )
+                logger.info(f"Registered {len(files)} user uploads for session {conversation_id}")
+            except Exception as e:
+                logger.warning(f"Failed to register user uploads: {e}")
         
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         
@@ -206,5 +278,83 @@ def on_send_message(data: str):
         logger.error(f"Invalid token for SID {sid}: {e.message}")
         socketio.emit("error", {"message": "Your session has expired. Please log in again."}, room=sid)
     except Exception as e:
+        import sys
+        print(f"DEBUG: Error in message handler: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
         socketio.emit("error", {"message": "An error occurred. Your conversation is preserved. Please try again."}, room=sid)
+
+@socketio.on("assistant_message")
+def on_assistant_message(data: str):
+    """
+    Dedicated message handler for the Android Assistant.
+    Does NOT require an access_token. Uses 'android_assistant' as user_id.
+    """
+    sid = request.sid
+    if not connection_manager_service or not redis_client_instance:
+        logger.error("Services not initialized. Cannot handle assistant message.")
+        return
+
+    try:
+        # Data might be a JSON string or dict depending on client implementation
+        if isinstance(data, str):
+            data = json.loads(data)
+            
+        logger.info(f"[Assistant Socket] Received message: {data}")
+        
+        user_message = data.get("message", "")
+        conversation_id = data.get("conversationId")
+        
+        # Helper to treat session_id as conversation_id if missing
+        if not conversation_id and data.get("session_id"):
+            conversation_id = data.get("session_id")
+
+        if not conversation_id:
+            # Generate one if missing, though client should provide it
+            conversation_id = str(uuid.uuid4())
+            logger.info(f"[Assistant Socket] Generated new conversation ID: {conversation_id}")
+
+        if not user_message:
+            return socketio.emit("assistant_error", {"message": "Message is required"}, room=sid)
+
+        # Fixed User ID for assistant
+        user_id = "android_assistant"
+
+        # Create session if not exists
+        if not connection_manager_service.get_session(conversation_id):
+            connection_manager_service.create_session(
+                conversation_id, 
+                user_id, 
+                data.get("config", {
+                    "internet_search": True,
+                    "coding_assistant": True, 
+                    "Planner_Agent": True
+                }),
+                device_type='mobile'  # Assistant is always mobile
+            )
+            
+        turn_data = {"user_message": user_message, "files": []}
+        message_id = data.get("id") or str(uuid.uuid4())
+        
+        # Assistant doesn't support browser tools yet, but we pass empty config or basic
+        browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
+        
+        # Reuse the existing agent runner
+        eventlet.spawn(
+            run_agent_and_stream,
+            sid,
+            conversation_id,
+            message_id,
+            turn_data,
+            browser_tools_config,
+            [], # No context session ids
+            connection_manager_service,
+            redis_client_instance
+        )
+        logger.info(f"[Assistant Socket] Spawned agent for {conversation_id}")
+
+    except Exception as e:
+        logger.error(f"[Assistant Socket] Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        socketio.emit("assistant_error", {"message": "I encountered an error processing your request."}, room=sid)
