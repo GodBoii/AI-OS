@@ -21,7 +21,7 @@
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--anim-normal) var(--easing-standard),
-                visibility 0s var(--anim-normal);
+        visibility 0s var(--anim-normal);
 }
 
 .file-preview-modal.visible {
@@ -187,14 +187,12 @@
     font-size: 1rem;
     font-weight: 600;
     animation: textShimmer 2.5s ease-in-out infinite;
-    background: linear-gradient(
-        90deg,
-        var(--accent-color) 0%,
-        rgba(var(--accent-color-rgb), 0.7) 25%,
-        var(--accent-color) 50%,
-        rgba(var(--accent-color-rgb), 0.7) 75%,
-        var(--accent-color) 100%
-    );
+    background: linear-gradient(90deg,
+            var(--accent-color) 0%,
+            rgba(var(--accent-color-rgb), 0.7) 25%,
+            var(--accent-color) 50%,
+            rgba(var(--accent-color-rgb), 0.7) 75%,
+            var(--accent-color) 100%);
     background-size: 200% 100%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -310,27 +308,27 @@
         max-height: 95vh;
         margin: 10px;
     }
-    
+
     .file-preview-modal-header {
         padding: 16px 20px;
     }
-    
+
     .file-info {
         gap: 12px;
     }
-    
+
     .file-icon {
         font-size: 1.3rem;
     }
-    
+
     .file-name {
         font-size: 1.1rem;
     }
-    
+
     .file-content-preview {
         padding: 20px;
     }
-    
+
     .file-text-content {
         padding: 16px;
         font-size: 0.85rem;
@@ -345,11 +343,11 @@
         border-radius: 0;
         margin: 0;
     }
-    
+
     .file-preview-modal-header {
         border-radius: 0;
     }
-    
+
     .file-content-preview {
         padding: 16px;
     }
@@ -388,11 +386,14 @@
 
 /* --- Glassmorphism Animations --- */
 @keyframes glassmorphPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         background: rgba(255, 255, 255, 0.05);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     }
+
     50% {
         transform: scale(1.02);
         background: rgba(255, 255, 255, 0.1);
@@ -401,11 +402,14 @@
 }
 
 @keyframes glassmorphPulseDark {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         background: rgba(0, 0, 0, 0.15);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
     }
+
     50% {
         transform: scale(1.02);
         background: rgba(0, 0, 0, 0.25);
@@ -417,42 +421,14 @@
     0% {
         background-position: -200% 0;
     }
+
     100% {
         background-position: 200% 0;
     }
 }
 
 /* --- Reduced Motion Support --- */
-@media (prefers-reduced-motion: reduce) {
-    .file-preview-modal,
-    .file-preview-modal-content {
-        transition: opacity 0.1s ease;
-    }
-    
-    .file-preview-modal.visible .file-preview-modal-content {
-        transform: scale(1);
-    }
-    
-    .loading-content::before,
-    .upload-status-text {
-        animation: none;
-    }
-    
-    .loading-content::before {
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .dark-mode .loading-content::before {
-        background: rgba(0, 0, 0, 0.2);
-    }
-    
-    .upload-status-text {
-        background: var(--accent-color);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-}
+/* Reduced motion preference removed to force animations */
 
 /* ================================================================= */
 /* SESSION PREVIEW MODAL                                           */
@@ -472,7 +448,7 @@
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--anim-normal) var(--easing-standard),
-                visibility 0s var(--anim-normal);
+        visibility 0s var(--anim-normal);
 }
 
 .session-preview-modal.visible {
@@ -696,27 +672,27 @@
         max-height: 95vh;
         margin: 10px;
     }
-    
+
     .session-preview-modal-header {
         padding: 16px 20px;
     }
-    
+
     .session-info {
         gap: 12px;
     }
-    
+
     .session-icon {
         font-size: 1.3rem;
     }
-    
+
     .session-title {
         font-size: 1.1rem;
     }
-    
+
     .session-content-preview {
         padding: 20px;
     }
-    
+
     .message-preview {
         padding: 12px 16px;
     }
@@ -730,19 +706,19 @@
         border-radius: 0;
         margin: 0;
     }
-    
+
     .session-preview-modal-header {
         border-radius: 0;
     }
-    
+
     .session-content-preview {
         padding: 16px;
     }
-    
+
     .messages-header {
         padding: 12px 16px;
     }
-    
+
     .message-preview {
         padding: 12px 16px;
     }
