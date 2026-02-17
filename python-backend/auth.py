@@ -32,12 +32,8 @@ def login_provider(provider):
     if not token:
         return "Authentication token is missing.", 400
     
-    # Detect client type (electron or pwa)
-    client_type = request.args.get('client', 'pwa')
-    
-    # Store the user's JWT and client type in the session to link the OAuth callback to the user
+    # Store the user's JWT in the session to link the OAuth callback to the user
     session['supabase_token'] = token
-    session['client_type'] = client_type
     
     redirect_uri = url_for('auth_bp.auth_callback', provider=provider, _external=True)
     
@@ -115,33 +111,129 @@ def auth_callback(provider):
         integration_data = {k: v for k, v in integration_data.items() if v is not None}
         
         supabase_client.from_('user_integrations').upsert(integration_data).execute()
+        logger.info(f"Supabase: Saved {provider} integration")
         
-        logger.info(f"Successfully saved {provider} integration for user {user_id}")
-        
-        # Get client type from session
-        client_type = session.get('client_type', 'pwa')
-        
-        # Handle Electron client - redirect to deep link
-        if client_type == 'electron':
-            deep_link = f"aios://auth/callback?success=true&provider={provider}"
-            logger.info(f"Redirecting Electron client to deep link: {deep_link}")
-            return redirect(deep_link)
-        
-        # Handle PWA client - return simple success message
-        return f"<h1>Authentication Successful!</h1><p>You have successfully connected your {provider.capitalize()} account. You can now close this window.</p>"
+        # Return a success page that notifies the parent window and closes
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                }}
+                .success-icon {{
+                    font-size: 4rem;
+                    margin-bottom: 1rem;
+                }}
+                h1 {{
+                    margin: 0 0 0.5rem 0;
+                    font-size: 1.5rem;
+                }}
+                p {{
+                    margin: 0;
+                    opacity: 0.9;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="success-icon">✓</div>
+                <h1>Authentication Successful!</h1>
+                <p>You have successfully connected your {provider.capitalize()} account.</p>
+                <p>This window will close automatically...</p>
+            </div>
+            <script>
+                // Notify parent window of success
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'oauth-callback',
+                        success: true,
+                        provider: '{provider}'
+                    }}, '{config.FRONTEND_URL}');
+                }}
+                // Close window after 1.5 seconds
+                setTimeout(function() {{
+                    window.close();
+                }}, 1500);
+            </script>
+        </body>
+        </html>
+        """
 
     except Exception as e:
-        logger.error(f"Error in {provider} auth callback: {e}\n{traceback.format_exc()}")
+        logger.error(f"{provider} auth error: {str(e)}")
+        error_message = str(e)
         
-        # Get client type from session
-        client_type = session.get('client_type', 'pwa')
-        
-        # Handle Electron client - redirect to deep link with error
-        if client_type == 'electron':
-            error_message = str(e)
-            deep_link = f"aios://auth/callback?success=false&provider={provider}&error={error_message}"
-            logger.info(f"Redirecting Electron client to deep link with error: {deep_link}")
-            return redirect(deep_link)
-        
-        # Handle PWA client - return error message
-        return "An error occurred during authentication. Please try again.", 500
+        # Return an error page that notifies the parent window and closes
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Failed</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                }}
+                .error-icon {{
+                    font-size: 4rem;
+                    margin-bottom: 1rem;
+                }}
+                h1 {{
+                    margin: 0 0 0.5rem 0;
+                    font-size: 1.5rem;
+                }}
+                p {{
+                    margin: 0.5rem 0;
+                    opacity: 0.9;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="error-icon">✗</div>
+                <h1>Authentication Failed</h1>
+                <p>An error occurred during authentication.</p>
+                <p>This window will close automatically...</p>
+            </div>
+            <script>
+                // Notify parent window of error
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: 'oauth-callback',
+                        success: false,
+                        provider: '{provider}',
+                        error: 'Authentication failed'
+                    }}, '{config.FRONTEND_URL}');
+                }}
+                // Close window after 2 seconds
+                setTimeout(function() {{
+                    window.close();
+                }}, 2000);
+            </script>
+        </body>
+        </html>
+        """
