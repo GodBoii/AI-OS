@@ -438,14 +438,7 @@ body {
 }
 
 /* Respect user motion preferences */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* Reduced motion preference removed to force animations */
 
 /* Common Component Styles */
 

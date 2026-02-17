@@ -625,22 +625,7 @@
 }
 
 /* --- Reduced Motion Support for Send Button --- */
-@media (prefers-reduced-motion: reduce) {
-    .send-btn.sending::before {
-        animation: none;
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
-
-    .mic-btn.recording {
-        animation: none;
-        box-shadow: 0 0 0 4px rgba(var(--accent-color-rgb, 99, 102, 241), 0.3);
-    }
-
-    .mic-btn.processing {
-        animation: none;
-    }
-}
+/* Reduced motion preference removed to force animations */
 
 /* --- Animation Utilities --- */
 .animate-pulse {
