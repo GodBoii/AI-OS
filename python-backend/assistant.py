@@ -28,10 +28,12 @@ from agno.tools.hackernews import HackerNewsTools
 from agno.tools.wikipedia import WikipediaTools
 from agno.tools.arxiv import ArxivTools
 from sandbox_tools import SandboxTools
+from sandbox_persistence import get_persistence_service
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
 from browser_tools import BrowserTools
+from browser_tools_server import ServerBrowserTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
 from agno.tools.api import CustomApiTools
@@ -63,6 +65,8 @@ def get_llm_os(
     enable_browser: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,  # NEW: For persistence
+    message_id: Optional[str] = None,  # NEW: For persistence
 ) -> Team:
     """
     Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
@@ -92,7 +96,24 @@ def get_llm_os(
     if internet_search:
         direct_tools.append(DuckDuckGoTools())
     if enable_browser and browser_tools_config:
-        direct_tools.append(BrowserTools(**browser_tools_config))
+        # CRITICAL: Select browser tool based on device type from session
+        device_type = session_info.get('device_type', 'web') if session_info else 'web'
+        
+        if device_type == 'desktop':
+            # Desktop (Electron): Use client-side browser automation
+            logger.info(f"[Browser Tool] Using CLIENT-SIDE browser for desktop (session: {session_id})")
+            direct_tools.append(BrowserTools(**browser_tools_config))
+        else:
+            # Mobile/Web: Use server-side browser automation
+            logger.info(f"[Browser Tool] Using SERVER-SIDE browser for {device_type} (session: {session_id})")
+            direct_tools.append(ServerBrowserTools(
+                session_id=session_id,
+                user_id=user_id,
+                socketio=browser_tools_config.get('socketio'),
+                sid=browser_tools_config.get('sid'),
+                redis_client=browser_tools_config.get('redis_client'),
+                message_id=message_id
+            ))
     if enable_vercel and user_id:
         direct_tools.append(VercelTools(user_id=user_id))
     if enable_supabase and user_id:
@@ -451,11 +472,26 @@ def get_llm_os(
         main_team_members.append(planner)
 
     if coding_assistant:
+        # Initialize persistence service for sandbox tools
+        persistence_service = get_persistence_service()
+        
+        # Extract socketio and sid from browser_tools_config if available
+        socketio_instance = browser_tools_config.get('socketio') if browser_tools_config else None
+        sid = browser_tools_config.get('sid') if browser_tools_config else None
+        
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="amazon/nova-2-lite-v1:free"),
+            model=OpenRouter(id="arcee-ai/trinity-large-preview:free"),
             role="It can do Any code related task",
-            tools=[SandboxTools(session_info=session_info)],
+            tools=[SandboxTools(
+                session_info=session_info,
+                persistence_service=persistence_service,
+                user_id=user_id,
+                session_id=session_id,
+                message_id=message_id,
+                socketio=socketio_instance,
+                sid=sid
+            )],
             instructions=[
                 "Development team: Plan and execute code solutions using sandbox tools.",
                 "Access files from session_state['turn_context']['files'].",
@@ -538,7 +574,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-2.5-flash"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=Groq(id="moonshotai/kimi-k2-instruct-0905"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
