@@ -5,6 +5,9 @@ class SessionContentViewer {
     constructor() {
         this.currentSessionId = null;
         this.content = [];
+        this.contentCache = new Map(); // Cache for session content
+        this.cacheTimestamps = new Map(); // Track when cache was created
+        this.cacheExpiry = 5 * 60 * 1000; // 5 minutes cache expiry
         this.init();
     }
 
@@ -19,14 +22,25 @@ class SessionContentViewer {
                 <div class="session-content-header">
                     <div class="session-content-heading">
                         <h3>Content</h3>
-                        <label for="session-content-type" class="sr-only">Content type</label>
-                        <select id="session-content-type" class="content-type-select" aria-label="Choose content type">
-                            <option value="files">Files</option>
-                            <option value="terminal">Terminal</option>
-                        </select>
                     </div>
-                    <button class="close-session-content-btn" aria-label="Close">
-                        <i class="fas fa-times"></i>
+                    <div class="session-content-actions">
+                        <button class="refresh-content-btn" aria-label="Refresh content" title="Refresh content">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button class="close-session-content-btn" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="session-content-tabs">
+                    <button class="content-tab-btn active" data-tab="files">
+                        <i class="fas fa-file"></i>
+                        <span>Files</span>
+                    </button>
+                    <button class="content-tab-btn" data-tab="terminal">
+                        <i class="fas fa-terminal"></i>
+                        <span>Terminal</span>
                     </button>
                 </div>
 
@@ -74,6 +88,35 @@ class SessionContentViewer {
             this.hide();
         });
 
+        // Refresh button
+        const refreshBtn = modal.querySelector('.refresh-content-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                if (!this.currentSessionId) return;
+                
+                // Add spinning animation
+                const icon = refreshBtn.querySelector('i');
+                icon.classList.add('fa-spin');
+                refreshBtn.disabled = true;
+                
+                // Force refresh from API
+                await this.loadContent(this.currentSessionId, true);
+                
+                // Remove spinning animation
+                icon.classList.remove('fa-spin');
+                refreshBtn.disabled = false;
+            });
+        }
+
+        // Tab buttons
+        const tabButtons = modal.querySelectorAll('.content-tab-btn');
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                this.switchTab(tabName);
+            });
+        });
+
         // Click outside panel to close
         document.addEventListener('mousedown', (e) => {
             if (modal.classList.contains('hidden')) return;
@@ -83,14 +126,6 @@ class SessionContentViewer {
                 this.hide();
             }
         });
-
-        // Dropdown switching
-        const contentTypeSelect = modal.querySelector('#session-content-type');
-        if (contentTypeSelect) {
-            contentTypeSelect.addEventListener('change', (event) => {
-                this.switchTab(event.target.value);
-            });
-        }
 
         // Escape key to close
         document.addEventListener('keydown', (e) => {
@@ -108,11 +143,11 @@ class SessionContentViewer {
 
     switchTab(tabName) {
         const modal = document.getElementById('session-content-modal');
-        const select = modal.querySelector('#session-content-type');
 
-        if (select && select.value !== tabName) {
-            select.value = tabName;
-        }
+        // Update tab buttons
+        modal.querySelectorAll('.content-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
 
         // Update panels
         modal.querySelectorAll('.content-tab-panel').forEach(panel => {
@@ -120,7 +155,7 @@ class SessionContentViewer {
         });
     }
 
-    async show(sessionId) {
+    async show(sessionId, forceRefresh = false) {
         console.log('[SessionContentViewer] Opening for session:', sessionId);
         this.currentSessionId = sessionId;
 
@@ -129,8 +164,8 @@ class SessionContentViewer {
         this.positionNearTrigger();
         this.switchTab('files');
 
-        // Load content
-        await this.loadContent(sessionId);
+        // Load content (will use cache if available)
+        await this.loadContent(sessionId, forceRefresh);
     }
 
     isVisible() {
@@ -164,11 +199,35 @@ class SessionContentViewer {
         modal.style.transform = 'none';
     }
 
-    async loadContent(sessionId) {
+    async loadContent(sessionId, forceRefresh = false) {
         console.log('[SessionContentViewer] Loading content for session:', sessionId);
 
         const filesPanel = document.getElementById('files-panel');
         const terminalPanel = document.getElementById('terminal-panel');
+
+        // Check cache first
+        const cachedData = this.getCachedContent(sessionId);
+        if (cachedData && !forceRefresh) {
+            console.log('[SessionContentViewer] Using cached content');
+            this.content = cachedData;
+
+            // Hide loading states
+            filesPanel.querySelector('.content-loading').classList.add('hidden');
+            terminalPanel.querySelector('.content-loading').classList.add('hidden');
+
+            // Separate content by type
+            const artifacts = this.content.filter(c => c.content_type === 'artifact');
+            const uploads = this.content.filter(c => c.content_type === 'upload');
+            const executions = this.content.filter(c => c.content_type === 'execution');
+
+            // Combine artifacts and uploads for Files tab
+            const files = [...artifacts, ...uploads];
+
+            // Render content immediately from cache (renderFiles/renderTerminal will clear lists)
+            this.renderFiles(files, filesPanel);
+            this.renderTerminal(executions, terminalPanel);
+            return;
+        }
 
         // Show loading states
         filesPanel.querySelector('.content-loading').classList.remove('hidden');
@@ -187,6 +246,7 @@ class SessionContentViewer {
             }
 
             // Fetch content from backend
+            console.log('[SessionContentViewer] Fetching from API...');
             const response = await fetch(`http://localhost:8765/api/sessions/${sessionId}/content`, {
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
@@ -200,7 +260,10 @@ class SessionContentViewer {
             const data = await response.json();
             this.content = data.content || [];
 
-            console.log('[SessionContentViewer] Loaded content:', this.content);
+            // Cache the content
+            this.cacheContent(sessionId, this.content);
+
+            console.log('[SessionContentViewer] Loaded and cached content:', this.content.length, 'items');
 
             // Separate content by type
             const artifacts = this.content.filter(c => c.content_type === 'artifact');
@@ -228,12 +291,61 @@ class SessionContentViewer {
         }
     }
 
+    /**
+     * Cache content for a session
+     */
+    cacheContent(sessionId, content) {
+        this.contentCache.set(sessionId, content);
+        this.cacheTimestamps.set(sessionId, Date.now());
+        console.log('[SessionContentViewer] Cached content for session:', sessionId);
+    }
+
+    /**
+     * Get cached content if available and not expired
+     */
+    getCachedContent(sessionId) {
+        if (!this.contentCache.has(sessionId)) {
+            return null;
+        }
+
+        const timestamp = this.cacheTimestamps.get(sessionId);
+        const age = Date.now() - timestamp;
+
+        if (age > this.cacheExpiry) {
+            console.log('[SessionContentViewer] Cache expired for session:', sessionId);
+            this.contentCache.delete(sessionId);
+            this.cacheTimestamps.delete(sessionId);
+            return null;
+        }
+
+        return this.contentCache.get(sessionId);
+    }
+
+    /**
+     * Invalidate cache for a session (call when new content is added)
+     */
+    invalidateCache(sessionId) {
+        if (sessionId) {
+            this.contentCache.delete(sessionId);
+            this.cacheTimestamps.delete(sessionId);
+            console.log('[SessionContentViewer] Invalidated cache for session:', sessionId);
+        } else {
+            // Clear all cache
+            this.contentCache.clear();
+            this.cacheTimestamps.clear();
+            console.log('[SessionContentViewer] Cleared all cache');
+        }
+    }
+
     renderFiles(files, panel) {
         const loading = panel.querySelector('.content-loading');
         const empty = panel.querySelector('.content-empty');
         const list = panel.querySelector('.content-list');
 
         loading.classList.add('hidden');
+
+        // Clear existing items to prevent duplicates
+        list.innerHTML = '';
 
         if (files.length === 0) {
             empty.classList.remove('hidden');
@@ -254,6 +366,9 @@ class SessionContentViewer {
         const list = panel.querySelector('.content-list');
 
         loading.classList.add('hidden');
+
+        // Clear existing items to prevent duplicates
+        list.innerHTML = '';
 
         if (executions.length === 0) {
             empty.classList.remove('hidden');
@@ -276,6 +391,13 @@ class SessionContentViewer {
         const filename = metadata.filename || 'Unknown file';
         const size = this.formatFileSize(metadata.size || 0);
         const type = file.content_type === 'artifact' ? 'Generated' : 'Uploaded';
+
+        // Get file extension and type
+        const ext = filename.split('.').pop().toLowerCase();
+        const fileType = this.getFileType(ext);
+        
+        // Add file type as data attribute for styling
+        item.setAttribute('data-file-type', fileType);
 
         // Get file icon
         const icon = this.getFileIcon(filename);
@@ -528,11 +650,15 @@ class SessionContentViewer {
         const ext = filename.split('.').pop().toLowerCase();
         const iconMap = {
             'js': 'fab fa-js-square',
+            'jsx': 'fab fa-react',
+            'ts': 'fab fa-js-square',
+            'tsx': 'fab fa-react',
             'py': 'fab fa-python',
             'html': 'fab fa-html5',
             'css': 'fab fa-css3-alt',
             'json': 'fas fa-code',
             'md': 'fab fa-markdown',
+            'markdown': 'fab fa-markdown',
             'txt': 'fas fa-file-alt',
             'pdf': 'fas fa-file-pdf',
             'doc': 'fas fa-file-word',
@@ -550,6 +676,39 @@ class SessionContentViewer {
             'avi': 'fas fa-file-video'
         };
         return iconMap[ext] || 'fas fa-file';
+    }
+
+    getFileType(ext) {
+        // Map extensions to file type categories for styling
+        const typeMap = {
+            'js': 'js',
+            'jsx': 'jsx',
+            'ts': 'ts',
+            'tsx': 'tsx',
+            'py': 'py',
+            'html': 'html',
+            'css': 'css',
+            'json': 'json',
+            'md': 'md',
+            'markdown': 'markdown',
+            'txt': 'txt',
+            'pdf': 'pdf',
+            'doc': 'doc',
+            'docx': 'docx',
+            'xls': 'xls',
+            'xlsx': 'xlsx',
+            'jpg': 'image',
+            'jpeg': 'image',
+            'png': 'image',
+            'gif': 'image',
+            'svg': 'image',
+            'webp': 'image',
+            'mp3': 'audio',
+            'wav': 'audio',
+            'mp4': 'video',
+            'avi': 'video'
+        };
+        return typeMap[ext] || 'default';
     }
 
     detectLanguage(filename) {
