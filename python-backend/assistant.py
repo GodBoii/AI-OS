@@ -34,8 +34,15 @@ from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
+from computer_tools import ComputerTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
+from composio_tools import (
+    ComposioGoogleSheetsTools,
+    ComposioWhatsAppTools,
+    has_active_google_sheets_connection,
+    has_active_whatsapp_connection,
+)
 from agno.tools.api import CustomApiTools
 from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
@@ -62,8 +69,12 @@ def get_llm_os(
     enable_vercel: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
+    enable_composio_google_sheets: bool = False,
+    enable_composio_whatsapp: bool = False,
     enable_browser: bool = False,
+    enable_computer_control: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
+    computer_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
     session_id: Optional[str] = None,  # NEW: For persistence
     message_id: Optional[str] = None,  # NEW: For persistence
@@ -114,10 +125,21 @@ def get_llm_os(
                 redis_client=browser_tools_config.get('redis_client'),
                 message_id=message_id
             ))
+    
     if enable_vercel and user_id:
         direct_tools.append(VercelTools(user_id=user_id))
     if enable_supabase and user_id:
         direct_tools.append(SupabaseTools(user_id=user_id))
+    if enable_composio_google_sheets and user_id and os.getenv("COMPOSIO_API_KEY"):
+        if has_active_google_sheets_connection(user_id=user_id):
+            direct_tools.append(ComposioGoogleSheetsTools(user_id=user_id))
+        else:
+            logger.info("Composio Google Sheets not active for user %s. Toolkit not injected.", user_id)
+    if enable_composio_whatsapp and user_id and os.getenv("COMPOSIO_API_KEY"):
+        if has_active_whatsapp_connection(user_id=user_id):
+            direct_tools.append(ComposioWhatsAppTools(user_id=user_id))
+        else:
+            logger.info("Composio WhatsApp not active for user %s. Toolkit not injected.", user_id)
     if custom_tool_config:
         direct_tools.append(ImageTools(custom_tool_config=custom_tool_config))
 
@@ -217,6 +239,24 @@ def get_llm_os(
                 "    2. Process/analyze content",
                 "    3. GoogleDriveTools.create_file → get file_id",
                 "    4. Write content (requires additional step)",
+                "  </logic>",
+                "</scenario>",
+                "",
+                "<scenario name=\"composio_google_sheets\">",
+                "  <trigger>google sheet, spreadsheet, rows, columns, tabular data</trigger>",
+                "  <logic>",
+                "    ALWAYS FIRST: composio_google_sheets_tools.list_google_sheets_actions()",
+                "    THEN: composio_google_sheets_tools.execute_google_sheets_action(tool_slug, arguments_json)",
+                "    RULE: tool_slug MUST match one of the listed action slugs exactly",
+                "  </logic>",
+                "</scenario>",
+                "",
+                "<scenario name=\"composio_whatsapp\">",
+                "  <trigger>whatsapp, send message, whatsapp automation</trigger>",
+                "  <logic>",
+                "    ALWAYS FIRST: composio_whatsapp_tools.list_whatsapp_actions()",
+                "    THEN: composio_whatsapp_tools.execute_whatsapp_action(tool_slug, arguments_json)",
+                "    RULE: tool_slug MUST match one of the listed action slugs exactly",
                 "  </logic>",
                 "</scenario>",
                 "",
@@ -350,6 +390,22 @@ def get_llm_os(
                 "    <method name=\"create_file(name, folder_id?, mime_type='application/vnd.google-apps.document')\" returns=\"file_id, web_view_link\" />",
                 "    <method name=\"manage_file(file_id, new_name?, add_parent_folder_id?, remove_parent_folder_id?)\" note=\"rename/move\" />",
                 "    <method name=\"share_file(file_id, email_address, role='reader')\" note=\"role: reader|commenter|writer\" />",
+                "  </methods>",
+                "</tool>",
+                "",
+                "<tool name=\"composio_google_sheets_tools\">",
+                "  <methods>",
+                "    <method name=\"list_google_sheets_actions()\" critical=\"MUST call before execute\" />",
+                "    <method name=\"execute_google_sheets_action(tool_slug, arguments_json='{}')\" ",
+                "            prereq=\"tool_slug must come from previous list_google_sheets_actions() output\" />",
+                "  </methods>",
+                "</tool>",
+                "",
+                "<tool name=\"composio_whatsapp_tools\">",
+                "  <methods>",
+                "    <method name=\"list_whatsapp_actions()\" critical=\"MUST call before execute\" />",
+                "    <method name=\"execute_whatsapp_action(tool_slug, arguments_json='{}')\" ",
+                "            prereq=\"tool_slug must come from previous list_whatsapp_actions() output\" />",
                 "  </methods>",
                 "</tool>",
                 "",
@@ -536,6 +592,108 @@ def get_llm_os(
         )
         main_team_members.append(world_ai)
 
+    # NEW: Computer Agent - Handles all desktop computer control operations
+    if enable_computer_control and computer_tools_config:
+        device_type = session_info.get('device_type', 'web') if session_info else 'web'
+        
+        if device_type == 'desktop':
+            logger.info(f"[Computer Agent] Enabling Computer Agent for desktop (session: {session_id})")
+            
+            computer_agent = Agent(
+                name="Computer_Agent",
+                role="Desktop computer control specialist with full system access",
+                model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
+                tools=[ComputerTools(**computer_tools_config)],
+                instructions=[
+                    "You are the Computer Agent with complete control over the desktop computer.",
+                    "Access context from session_state['turn_context'] for queries.",
+                    "",
+                    "CAPABILITIES:",
+                    "You have 32 tools organized into 5 categories:",
+                    "",
+                    "1. PERMISSION & STATUS (2 tools):",
+                    "   • get_status() - Check if computer control is enabled",
+                    "   • request_permission() - Enable computer control (MUST call first)",
+                    "",
+                    "2. PERCEPTION - How you see the computer (5 tools):",
+                    "   • take_screenshot() - Capture screen for vision analysis",
+                    "   • get_active_window() - Get current window info",
+                    "   • get_cursor_position() - Get mouse coordinates",
+                    "   • read_clipboard() - Read clipboard contents",
+                    "   • ocr_screen() - Extract text from screen",
+                    "",
+                    "3. INTERACTION - How you control the computer (6 tools):",
+                    "   • move_mouse(x, y, smooth) - Move cursor",
+                    "   • click_mouse(button, double, x, y) - Click mouse",
+                    "   • type_text(text) - Type text",
+                    "   • press_hotkey(keys) - Press key combinations",
+                    "   • scroll(direction, amount) - Scroll wheel",
+                    "   • drag_drop(from_x, from_y, to_x, to_y) - Drag and drop",
+                    "",
+                    "4. WINDOW MANAGEMENT (6 tools):",
+                    "   • list_windows() - List all open windows",
+                    "   • focus_window(window_id, title) - Focus window",
+                    "   • resize_window(window_id, width, height) - Resize",
+                    "   • minimize_window(window_id) - Minimize",
+                    "   • maximize_window(window_id) - Maximize",
+                    "   • close_window(window_id) - Close window",
+                    "",
+                    "5. SYSTEM CONTROL (11 tools):",
+                    "   • run_command(command, timeout) - Execute shell command",
+                    "   • list_files(directory) - List directory contents",
+                    "   • read_file(file_path, encoding) - Read file",
+                    "   • write_file(file_path, content, encoding) - Write file",
+                    "   • delete_file(file_path) - Delete file/directory",
+                    "   • create_directory(directory_path) - Create directory",
+                    "   • open_application(app_name) - Open app",
+                    "   • close_application(app_name) - Close app",
+                    "   • get_volume() - Get system volume",
+                    "   • set_volume(volume, mute) - Set volume/mute",
+                    "   • get_system_info() - Get system information",
+                    "",
+                    "WORKFLOW - The Agentic Loop:",
+                    "1. OBSERVE - Take screenshot, get active window, check cursor position",
+                    "2. REASON - Analyze what you see using vision model",
+                    "3. ACT - Execute mouse clicks, keyboard input, or system commands",
+                    "4. VERIFY - Take another screenshot to confirm action completed",
+                    "",
+                    "CRITICAL RULES:",
+                    "• ALWAYS call request_permission() before first use",
+                    "• ALWAYS take screenshot before clicking (to get coordinates)",
+                    "• Use vision model to analyze screenshots and find UI elements",
+                    "• Verify actions completed by taking another screenshot",
+                    "• For file operations, use absolute paths",
+                    "• For commands, validate they're safe (no rm -rf /, format, etc.)",
+                    "• When clicking, provide x,y coordinates from vision analysis",
+                    "",
+                    "VISION-BASED INTERACTION:",
+                    "When user asks to click something:",
+                    "1. take_screenshot() → Get current screen",
+                    "2. Analyze screenshot with vision model → Find element coordinates",
+                    "3. click_mouse(x=coord_x, y=coord_y) → Click at coordinates",
+                    "4. take_screenshot() → Verify action completed",
+                    "",
+                    "PLATFORM-SPECIFIC NOTES:",
+                    "• Windows: Use PowerShell commands, app names like 'notepad', 'chrome'",
+                    "• macOS: Use bash/AppleScript, app names like 'Safari', 'TextEdit'",
+                    "• Linux: Use bash commands, app names vary by distro",
+                    "",
+                    "OUTPUT STYLE:",
+                    "• Describe what you're doing in natural language",
+                    "• Report results clearly and concisely",
+                    "• If action fails, explain why and suggest alternatives",
+                    "• Keep responses focused on the task",
+                    "",
+                    "SAFETY:",
+                    "• Dangerous commands are automatically blocked",
+                    "• Always confirm destructive operations with user",
+                    "• Respect system boundaries and user privacy",
+                ],
+                markdown=True,
+                debug_mode=debug_mode,
+            )
+            main_team_members.append(computer_agent)
+
     aetheria_instructions = [
         "Aetheria AI: Most Advanced AI system in the world providing personalized, direct responses. Access context via session_state['turn_context'].",
         "WORKFLOW:",
@@ -550,15 +708,16 @@ def get_llm_os(
         "• Maintain context between steps",
         "• Never skip prerequisite checks specified in plan",
         "",
-        "DIRECT TOOLS(Tools only you can use):",
-        "• NEVER delegate tasks requiring these tools to other agents - you must execute them directly."
-        "• Handle all (Github, Vercel, Supabase, Browser Automation, Mails , Drive, image)"
-        "Coding assistant has Sandbox",
+        "DIRECT TOOLS (Tools only you can use):",
+        "• NEVER delegate tasks requiring these tools to other agents - you must execute them directly.",
+        "• Handle all (Github, Vercel, Supabase, Browser Automation, Mails, Drive, image, Google Sheets and WhatsApp via Composio when enabled)",
         "",
         "AGENT DELEGATION:",
-        "• Task-related requests → Delegate to 'Task_Manager' agent (background autonomous execution)",
+        "• Coding tasks → Delegate to 'dev_team' agent (has Sandbox)",
+        "• Research/knowledge queries → Delegate to 'World_Agent' agent",
+        "• Computer control tasks → Delegate to 'Computer_Agent' agent (desktop only)",
+        "• Task management → Delegate to 'Task_Manager' agent (background autonomous execution)",
         "• Task operations: create, list, update, delete, search, mark complete",
-        "• Task_Manager handles all task CRUD operations and natural language task management",
         "",
         "RESPONSE STYLE:",
         "• Deliver results as if you personally completed the task",

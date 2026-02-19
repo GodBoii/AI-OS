@@ -11,6 +11,7 @@ from extensions import socketio
 from assistant import get_llm_os
 from supabase_client import supabase_client
 from session_service import ConnectionManager
+import config
 
 # --- Agno Framework Imports ---
 from agno.media import Image, Audio, Video, File
@@ -64,6 +65,7 @@ def run_agent_and_stream(
     message_id: str,
     turn_data: dict,
     browser_tools_config: dict, # This is now only used to extract socketio and redis_client
+    computer_tools_config: dict, # NEW: Computer control tools config
     context_session_ids: List[str],
     connection_manager: ConnectionManager,
     redis_client: Redis
@@ -98,14 +100,25 @@ def run_agent_and_stream(
 
         # 2. Initialize the Agent
         # --- MODIFICATION START: Pass session_id and message_id for persistence ---
+        session_config = dict(session_data.get("config", {}))
+        session_config.setdefault(
+            "enable_composio_google_sheets",
+            config.COMPOSIO_ENABLE_GOOGLE_SHEETS,
+        )
+        session_config.setdefault(
+            "enable_composio_whatsapp",
+            config.COMPOSIO_ENABLE_WHATSAPP,
+        )
+
         agent = get_llm_os(
             user_id=user_id,
             session_info=session_data,
             browser_tools_config=realtime_tool_config,
+            computer_tools_config=realtime_tool_config,  # NEW: Pass computer tools config
             custom_tool_config=realtime_tool_config,
             session_id=conversation_id,  # NEW: For persistence
             message_id=message_id,  # NEW: For persistence
-            **session_data['config']
+            **session_config
         )
         # --- MODIFICATION END ---
 
