@@ -7,6 +7,7 @@ class PythonBridge {
         this.mainWindow = mainWindow;
         this.eventEmitter = eventEmitter;
         this.browserController = null; // <-- FIX: To hold a reference to the browser controller
+        this.computerController = null; // NEW: To hold a reference to the computer control handler
         this.socket = null;
         this.initialized = false;
         this.reconnectAttempts = 0;
@@ -22,6 +23,14 @@ class PythonBridge {
      */
     setBrowserController(controller) {
         this.browserController = controller;
+    }
+
+    /**
+     * NEW: Adds the function to link the computer control handler.
+     * @param {ComputerControlHandler} controller - The instance of the computer control handler.
+     */
+    setComputerController(controller) {
+        this.computerController = controller;
     }
 
     async start() {
@@ -63,6 +72,12 @@ class PythonBridge {
         this.eventEmitter.on('browser-command-result', (resultPayload) => {
             console.log('PythonBridge: Received browser-command-result from BrowserHandler:', resultPayload.request_id);
             this.sendBrowserResult(resultPayload);
+        });
+
+        // NEW: Listen for computer control command results
+        this.eventEmitter.on('computer-command-result', (resultPayload) => {
+            console.log('PythonBridge: Received computer-command-result from ComputerControlHandler:', resultPayload.request_id);
+            this.sendComputerResult(resultPayload);
         });
     }
 
@@ -153,6 +168,17 @@ class PythonBridge {
                 console.error('PythonBridge: BrowserController is not linked. Cannot handle browser command.');
             }
         });
+
+        // NEW: Handler for computer control commands
+        this.socket.on('computer-command', (commandPayload) => {
+            console.log('PythonBridge: Received computer-command from server:', commandPayload.action);
+            if (this.computerController) {
+                console.log('PythonBridge: Emitting execute-computer-command to ComputerControlHandler');
+                this.eventEmitter.emit('execute-computer-command', commandPayload);
+            } else {
+                console.error('PythonBridge: ComputerController is not linked. Cannot handle computer command.');
+            }
+        });
     }
 
     /**
@@ -165,6 +191,19 @@ class PythonBridge {
             this.socket.emit('browser-command-result', resultPayload);
         } else {
             console.error('PythonBridge: Cannot send browser result, socket not connected.');
+        }
+    }
+
+    /**
+     * NEW: This method is called by the ComputerControlHandler to send results back to the server.
+     * @param {object} resultPayload - The payload containing the request_id and result.
+     */
+    sendComputerResult(resultPayload) {
+        if (this.socket && this.socket.connected) {
+            console.log('PythonBridge: Relaying computer command result to server:', resultPayload.request_id);
+            this.socket.emit('computer-command-result', resultPayload);
+        } else {
+            console.error('PythonBridge: Cannot send computer result, socket not connected.');
         }
     }
 
