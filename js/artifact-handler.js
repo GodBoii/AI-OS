@@ -7,6 +7,8 @@ class ArtifactHandler {
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
+        this.backendBaseUrl = 'http://localhost:8765';
+        this.deployInProgress = false;
         this.init();
     }
 
@@ -34,6 +36,9 @@ class ArtifactHandler {
                         <button class="download-artifact-btn" title="Download">
                             <i class="fas fa-download"></i>
                         </button>
+                        <button class="deploy-artifact-btn" title="Deploy HTML Site">
+                            <i class="fas fa-rocket"></i>
+                        </button>
                         <button class="close-artifact-btn">
                             <i class="fas fa-times"></i>
                         </button>
@@ -48,6 +53,7 @@ class ArtifactHandler {
         container.querySelector('.close-artifact-btn').addEventListener('click', () => this.hideArtifact());
         container.querySelector('.copy-artifact-btn').addEventListener('click', () => this.copyArtifactContent());
         container.querySelector('.download-artifact-btn').addEventListener('click', () => this.downloadArtifact());
+        container.querySelector('.deploy-artifact-btn').addEventListener('click', () => this.deployCurrentArtifact());
 
         this.viewToggleContainer = container.querySelector('.artifact-view-toggle');
         this.viewToggleButtons = Array.from(this.viewToggleContainer.querySelectorAll('.view-toggle-btn'));
@@ -115,7 +121,7 @@ class ArtifactHandler {
             type,
             viewMode: options.viewMode || options.defaultView || (type === 'mermaid' ? 'preview' : 'source'),
             title: options.title || null,
-            language: options.language || (type === 'mermaid' ? 'mermaid' : 'plaintext')
+            language: options.language || (type === 'mermaid' ? 'mermaid' : (type && type !== 'code' ? String(type).toLowerCase() : 'plaintext'))
         };
         this.artifacts.set(id, artifactData);
         return id;
@@ -127,6 +133,7 @@ class ArtifactHandler {
         const titleEl = container.querySelector('.artifact-title');
         const copyBtn = container.querySelector('.copy-artifact-btn');
         const downloadBtn = container.querySelector('.download-artifact-btn');
+        const deployBtn = container.querySelector('.deploy-artifact-btn');
         const viewToggle = container.querySelector('.artifact-view-toggle');
 
         contentDiv.innerHTML = '';
@@ -141,6 +148,7 @@ class ArtifactHandler {
                 titleEl.textContent = 'Interactive Browser';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'none';
+                deployBtn.style.display = 'none';
                 this.renderBrowserView(data);
                 currentArtifactId = this.browserArtifactId;
                 this.artifacts.set(currentArtifactId, { content: data, type });
@@ -150,6 +158,7 @@ class ArtifactHandler {
                 titleEl.textContent = options.title || 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
+                deployBtn.style.display = 'none';
                 if (data === null) {
                     contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading image...</span></div>';
                 } else {
@@ -161,6 +170,7 @@ class ArtifactHandler {
                 titleEl.textContent = options.title || 'Diagram Viewer';
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
+                deployBtn.style.display = 'none';
                 if (viewToggle) {
                     viewToggle.classList.remove('hidden');
                 }
@@ -185,6 +195,7 @@ class ArtifactHandler {
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
                 const language = options.language || this.inferLanguageFromType(type);
+                deployBtn.style.display = this.isDeployableLanguage(language) ? 'inline-flex' : 'none';
                 const viewModeForCode = this.resolveInitialCodeViewMode(language, options.defaultView);
                 const shouldShowToggle = this.supportsPreviewMode(language);
                 if (shouldShowToggle && viewToggle) {
@@ -625,6 +636,10 @@ class ArtifactHandler {
         return ['markdown', 'html', 'mermaid'].includes((language || '').toLowerCase());
     }
 
+    isDeployableLanguage(language) {
+        return (language || '').toLowerCase() === 'html';
+    }
+
     resolveInitialCodeViewMode(language, requestedMode = null) {
         if (requestedMode === 'source' || requestedMode === 'preview') {
             return requestedMode;
@@ -880,6 +895,130 @@ class ArtifactHandler {
         }, 3000);
     }
 
+    getActiveArtifact() {
+        const container = document.getElementById('artifact-container');
+        const activeId = container?.dataset?.activeArtifactId;
+        if (!activeId) return null;
+        return this.artifacts.get(activeId) || null;
+    }
+
+    isHtmlContent(content) {
+        const text = String(content || '').trim().toLowerCase();
+        if (!text) return false;
+        return (
+            text.startsWith('<!doctype html') ||
+            text.includes('<html') ||
+            text.includes('<body') ||
+            text.includes('<head')
+        );
+    }
+
+    slugify(input) {
+        const base = String(input || 'site')
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, '-')
+            .replace(/-{2,}/g, '-')
+            .replace(/^-+|-+$/g, '');
+        const root = base || 'site';
+        const suffix = Math.random().toString(36).slice(2, 8);
+        return `${root}-${suffix}`.slice(0, 50);
+    }
+
+    async deployApi(path, token, body = null, method = 'POST') {
+        const response = await fetch(`${this.backendBaseUrl}${path}`, {
+            method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                ...(body ? { 'Content-Type': 'application/json' } : {})
+            },
+            ...(body ? { body: JSON.stringify(body) } : {})
+        });
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (_err) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            const reason = payload?.error || payload?.message || `HTTP ${response.status}`;
+            throw new Error(reason);
+        }
+        return payload;
+    }
+
+    async deployCurrentArtifact() {
+        if (this.deployInProgress) {
+            this.showNotification('Deploy already in progress', 'info');
+            return;
+        }
+
+        const artifact = this.getActiveArtifact();
+        if (!artifact) {
+            this.showNotification('No active artifact selected', 'error');
+            return;
+        }
+
+        const language = String(artifact.language || artifact.type || '').toLowerCase();
+        const html = String(artifact.content || '');
+        if (!(language === 'html' || this.isHtmlContent(html))) {
+            this.showNotification('Only HTML artifact deploy is enabled in this phase', 'error');
+            return;
+        }
+
+        const session = await window.electron.auth.getSession();
+        if (!session || !session.access_token) {
+            this.showNotification('Please sign in before deploying', 'error');
+            return;
+        }
+
+        const siteId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `site-${Date.now()}`;
+        const slugSource = artifact.title || 'generated-site';
+        const slug = this.slugify(slugSource);
+
+        this.deployInProgress = true;
+        this.showNotification('Deploy started...', 'info');
+
+        try {
+            await this.deployApi('/api/deploy/site/init', session.access_token, {
+                site_id: siteId,
+                project_name: artifact.title || 'Generated Site',
+                slug
+            });
+
+            await this.deployApi('/api/deploy/assign-subdomain', session.access_token, { site_id: siteId });
+
+            const upload = await this.deployApi('/api/deploy/upload-site', session.access_token, {
+                site_id: siteId,
+                files: [
+                    {
+                        path: 'index.html',
+                        content: html,
+                        content_type: 'text/html'
+                    }
+                ]
+            });
+
+            const activated = await this.deployApi('/api/deploy/activate', session.access_token, {
+                site_id: siteId,
+                deployment_id: upload.deployment_id
+            });
+
+            const liveUrl = activated?.url || `https://${slug}.pawsitivestrides.store`;
+            this.showNotification(`Deployed: ${liveUrl}`, 'success');
+
+            if (window.electron?.shell?.openExternal) {
+                window.electron.shell.openExternal(liveUrl);
+            }
+        } catch (error) {
+            console.error('Deploy failed:', error);
+            this.showNotification(`Deploy failed: ${error.message}`, 'error');
+        } finally {
+            this.deployInProgress = false;
+        }
+    }
+
     // --- Sandbox methods are unchanged ---
     showTerminal(artifactId) {
         const container = document.getElementById('artifact-container');
@@ -888,6 +1027,7 @@ class ArtifactHandler {
         container.querySelector('.artifact-title').textContent = 'Sandbox Terminal';
         container.querySelector('.copy-artifact-btn').style.display = 'none';
         container.querySelector('.download-artifact-btn').style.display = 'none';
+        container.querySelector('.deploy-artifact-btn').style.display = 'none';
 
         contentDiv.innerHTML = `
             <div class="terminal-output">

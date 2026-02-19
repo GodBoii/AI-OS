@@ -27,7 +27,8 @@ let chatConfig = {
         enable_google_email: true,
         Planner_Agent: true,
         enable_vercel: true,
-        enable_google_drive: true
+        enable_google_drive: true,
+        computer_control: true  // NEW: Computer control enabled by default (desktop only)
     },
     deepsearch: false
 };
@@ -375,6 +376,11 @@ async function startNewConversation() {
     // Hide content button for new conversation
     hideContentButton();
 
+    // Invalidate session content cache
+    if (window.sessionContentViewer) {
+        window.sessionContentViewer.invalidateCache(currentConversationId);
+    }
+
     // Clear error recovery flag
     window.needsNewBackendSession = false;
 
@@ -691,6 +697,12 @@ function setupIpcListeners() {
         if (artifactHandler) {
             artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
         }
+        
+        // Invalidate cache when new execution content is added
+        if (window.sessionContentViewer && currentConversationId) {
+            window.sessionContentViewer.invalidateCache(currentConversationId);
+        }
+        
         // Check if session has content to show button
         checkAndShowContentButton();
     });
@@ -1582,6 +1594,11 @@ async function persistAttachmentMetadata(sessionId, files, userId) {
             // Don't throw - this is non-critical, message should still send
         } else {
             console.log(`[AttachmentDB] Successfully persisted ${files.length} attachment records`);
+            
+            // Invalidate cache when new attachment content is added
+            if (window.sessionContentViewer && sessionId) {
+                window.sessionContentViewer.invalidateCache(sessionId);
+            }
         }
     } catch (error) {
         console.error('[AttachmentDB] Exception persisting attachment metadata:', error);
@@ -1829,6 +1846,20 @@ async function checkAndShowContentButton() {
     }
 
     try {
+        // Check if sessionContentViewer has cached data for this session
+        if (window.sessionContentViewer) {
+            const cachedContent = window.sessionContentViewer.getCachedContent(currentConversationId);
+            if (cachedContent) {
+                console.log('[Chat] Using cached content count:', cachedContent.length);
+                if (cachedContent.length > 0) {
+                    showContentButton();
+                } else {
+                    hideContentButton();
+                }
+                return;
+            }
+        }
+
         const session = await window.electron.auth.getSession();
         if (!session || !session.access_token) {
             hideContentButton();
@@ -1850,6 +1881,11 @@ async function checkAndShowContentButton() {
 
         const data = await response.json();
         const count = data.count || 0;
+
+        // Cache the content in sessionContentViewer
+        if (window.sessionContentViewer && data.content) {
+            window.sessionContentViewer.cacheContent(currentConversationId, data.content);
+        }
 
         console.log('[Chat] Content count for session:', count);
 
