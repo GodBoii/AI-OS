@@ -89,6 +89,7 @@
 
 .copy-artifact-btn,
 .download-artifact-btn,
+.deploy-artifact-btn,
 .close-artifact-btn {
     background: none;
     border: none;
@@ -105,6 +106,7 @@
 
 .copy-artifact-btn:hover,
 .download-artifact-btn:hover,
+.deploy-artifact-btn:hover,
 .close-artifact-btn:hover {
     background-color: var(--hover-bg);
     color: var(--text-color);
