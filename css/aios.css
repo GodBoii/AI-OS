@@ -544,6 +544,14 @@ button.secondary:hover {
     fill: #ffffff;
 }
 
+.integration-info .google-sheets-icon {
+    fill: #0F9D58;
+}
+
+.integration-info .whatsapp-icon {
+    fill: #25D366;
+}
+
 .integration-info span {
     font-size: 15px;
     font-weight: 400;
