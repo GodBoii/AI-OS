@@ -8,6 +8,7 @@ class AIOS {
         this.userDataPath = null;
         this.userData = null;
         this.authService = null;
+        this.backendBaseUrl = 'http://localhost:8765';
     }
 
     async init() {
@@ -92,6 +93,8 @@ class AIOS {
             connectGoogleBtn: document.getElementById('connect-google-btn'),
             connectVercelBtn: document.getElementById('connect-vercel-btn'),
             connectSupabaseBtn: document.getElementById('connect-supabase-btn'),
+            connectGoogleSheetsBtn: document.getElementById('connect-google-sheets-btn'),
+            connectWhatsappBtn: document.getElementById('connect-whatsapp-btn'),
         };
     }
 
@@ -187,6 +190,8 @@ class AIOS {
         addClickHandler(this.elements.connectGoogleBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
+        addClickHandler(this.elements.connectGoogleSheetsBtn, integrationButtonHandler);
+        addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
@@ -303,25 +308,65 @@ class AIOS {
     }
 
     async startAuthFlow(provider) {
-        if (!this.authService) {
-            this.showNotification('Authentication service not available.', 'error');
-            return;
+        try {
+            if (!this.authService) {
+                this.showNotification('Authentication service not available.', 'error');
+                return;
+            }
+            const session = await this.authService.getSession();
+            if (!session || !session.access_token) {
+                this.showNotification('You must be logged in to connect an integration.', 'error');
+                return;
+            }
+            let authUrl;
+            if (provider === 'vercel') {
+                authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
+            } else if (provider === 'composio_google_sheets') {
+                const callbackUrl = 'aios://auth/callback?provider=composio_google_sheets';
+                const encodedCallbackUrl = encodeURIComponent(callbackUrl);
+                const response = await fetch(`${this.backendBaseUrl}/api/composio/connect-url?toolkit=GOOGLESHEETS&callback_url=${encodedCallbackUrl}`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Failed to generate Composio connect URL');
+                }
+                const redirectUrl = payload.redirect_url;
+                if (!redirectUrl) {
+                    throw new Error('Composio did not return a redirect URL.');
+                }
+                await window.electron.shell.openExternal(redirectUrl);
+                this.showNotification('Opened Google Sheets connection flow. Complete auth in browser.', 'success');
+                setTimeout(() => this.checkIntegrationStatus(), 2500);
+                return;
+            } else if (provider === 'composio_whatsapp') {
+                const callbackUrl = 'aios://auth/callback?provider=composio_whatsapp';
+                const encodedCallbackUrl = encodeURIComponent(callbackUrl);
+                const response = await fetch(`${this.backendBaseUrl}/api/composio/connect-url?toolkit=WHATSAPP&callback_url=${encodedCallbackUrl}`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Failed to generate Composio WhatsApp connect URL');
+                }
+                const redirectUrl = payload.redirect_url;
+                if (!redirectUrl) {
+                    throw new Error('Composio did not return a redirect URL.');
+                }
+                await window.electron.shell.openExternal(redirectUrl);
+                this.showNotification('Opened WhatsApp connection flow. Complete auth in browser.', 'success');
+                setTimeout(() => this.checkIntegrationStatus(), 2500);
+                return;
+            } else {
+                // Add client=electron parameter to identify Electron client
+                authUrl = `${this.backendBaseUrl}/login/${provider}?token=${session.access_token}&client=electron`;
+            }
+            console.log(`Opening auth URL for ${provider}: ${authUrl}`);
+            window.electron.ipcRenderer.send('open-webview', authUrl);
+        } catch (error) {
+            console.error(`Error starting auth flow for ${provider}:`, error);
+            this.showNotification(error.message || 'Failed to start integration flow', 'error');
         }
-        const session = await this.authService.getSession();
-        if (!session || !session.access_token) {
-            this.showNotification('You must be logged in to connect an integration.', 'error');
-            return;
-        }
-        let authUrl;
-        if (provider === 'vercel') {
-            authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
-        } else {
-            const backendUrl = 'http://localhost:8765';
-            // Add client=electron parameter to identify Electron client
-            authUrl = `${backendUrl}/login/${provider}?token=${session.access_token}&client=electron`;
-        }
-        console.log(`Opening auth URL for ${provider}: ${authUrl}`);
-        window.electron.ipcRenderer.send('open-webview', authUrl);
     }
 
     async disconnectIntegration(provider) {
@@ -333,11 +378,26 @@ class AIOS {
             return;
         }
         try {
-            const response = await fetch('http://localhost:8765/api/integrations/disconnect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-                body: JSON.stringify({ service: provider })
-            });
+            let response;
+            if (provider === 'composio_google_sheets') {
+                response = await fetch(`${this.backendBaseUrl}/api/composio/disconnect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ toolkit: 'GOOGLESHEETS' })
+                });
+            } else if (provider === 'composio_whatsapp') {
+                response = await fetch(`${this.backendBaseUrl}/api/composio/disconnect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ toolkit: 'WHATSAPP' })
+                });
+            } else {
+                response = await fetch(`${this.backendBaseUrl}/api/integrations/disconnect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ service: provider })
+                });
+            }
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to disconnect');
@@ -353,25 +413,53 @@ class AIOS {
     async checkIntegrationStatus() {
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
-            ['github', 'google', 'vercel', 'supabase'].forEach(p => this.updateIntegrationButton(p, false));
+            ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
             return;
         }
         try {
-            const response = await fetch('http://localhost:8765/api/integrations', {
+            const response = await fetch(`${this.backendBaseUrl}/api/integrations`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch integration status');
             const data = await response.json();
             const connected = new Set(data.integrations);
             ['github', 'google', 'vercel', 'supabase'].forEach(p => this.updateIntegrationButton(p, connected.has(p)));
+
+            const composioStatusResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=GOOGLESHEETS`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (composioStatusResponse.ok) {
+                const composioStatusData = await composioStatusResponse.json();
+                this.updateIntegrationButton('composio_google_sheets', !!composioStatusData.connected);
+            } else {
+                this.updateIntegrationButton('composio_google_sheets', false);
+            }
+
+            const whatsappStatusResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=WHATSAPP`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (whatsappStatusResponse.ok) {
+                const whatsappStatusData = await whatsappStatusResponse.json();
+                this.updateIntegrationButton('composio_whatsapp', !!whatsappStatusData.connected);
+            } else {
+                this.updateIntegrationButton('composio_whatsapp', false);
+            }
         } catch (error) {
             console.error('Error checking integration status:', error);
-            ['github', 'google', 'vercel', 'supabase'].forEach(p => this.updateIntegrationButton(p, false));
+            ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
         }
     }
 
     updateIntegrationButton(provider, isConnected) {
-        const button = this.elements[`connect${provider.charAt(0).toUpperCase() + provider.slice(1)}Btn`];
+        const providerToElementKey = {
+            github: 'connectGithubBtn',
+            google: 'connectGoogleBtn',
+            vercel: 'connectVercelBtn',
+            supabase: 'connectSupabaseBtn',
+            composio_google_sheets: 'connectGoogleSheetsBtn',
+            composio_whatsapp: 'connectWhatsappBtn'
+        };
+        const button = this.elements[providerToElementKey[provider]];
         if (!button) return;
         const textSpan = button.querySelector('.btn-text');
         const connectIcon = button.querySelector('.icon-connect');
@@ -581,7 +669,7 @@ class AIOS {
         if (isAuthenticated) {
             this.checkIntegrationStatus();
         } else {
-            ['github', 'google', 'vercel', 'supabase'].forEach(p => this.updateIntegrationButton(p, false));
+            ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
         }
     }
 
@@ -596,7 +684,11 @@ class AIOS {
     }
 
     showNotification(message, type = 'success') {
-        window.NotificationService.show(message, type);
+        if (window.NotificationService && typeof window.NotificationService.show === 'function') {
+            window.NotificationService.show(message, type);
+            return;
+        }
+        console.log(`[${type}] ${message}`);
     }
 }
 

@@ -7,6 +7,7 @@ const PythonBridge = require('./python-bridge');
 const http = require('http');
 const { EventEmitter } = require('events');
 const BrowserHandler = require('./browser-handler.js');
+const ComputerControlHandler = require('./computer-control-handler.js');
 
 let mainWindow;
 
@@ -25,6 +26,7 @@ if (process.defaultApp) {
 
 let pythonBridge;
 let browserHandler;
+let computerControlHandler;
 let linkWebView = null;
 
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
@@ -43,6 +45,28 @@ function handleDeepLink(url) {
         mainWindow.restore();
     }
     mainWindow.focus();
+
+    // Handle integration callback deep links (e.g. Composio).
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'aios:' && parsed.hostname === 'auth' && parsed.pathname === '/callback') {
+            const params = parsed.searchParams;
+            const provider = params.get('provider') || 'unknown';
+            const error = params.get('error') || params.get('error_description');
+            const successParam = params.get('success');
+            const success = successParam ? successParam === 'true' : !error;
+
+            console.log('[main.js] >>> Emitting oauth-integration-callback from deep link.');
+            mainWindow.webContents.send('oauth-integration-callback', {
+                success,
+                provider,
+                error: error || null,
+            });
+            return;
+        }
+    } catch (err) {
+        console.error('[main.js] >>> Failed to parse deep link URL:', err);
+    }
 
     console.log('[main.js] >>> Forwarding "auth-state-changed" IPC message to the renderer process.');
     // We send the raw URL. The Supabase client in the renderer will handle it.
@@ -122,6 +146,12 @@ function createWindow() {
     browserHandler.initialize();
 
     pythonBridge.setBrowserController(browserHandler);
+    
+    // Initialize Computer Control Handler
+    computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken);
+    computerControlHandler.initialize();
+    pythonBridge.setComputerController(computerControlHandler);
+    
     pythonBridge.start().catch(error => {
         console.error('Python bridge error:', error.message);
         mainWindow.webContents.on('did-finish-load', () => {
