@@ -637,7 +637,7 @@ body.tasks-panel-open .chat-container {
 
 /* Shift floating input container to the right when tasks panel is open */
 body.tasks-panel-open .floating-input-container {
-    left: calc(50% + 250px); /* Match the chat container shift */
+    left: calc(50% + 280px); /* Match the chat container shift */
     transition: left var(--anim-normal) var(--easing-standard),
                 all var(--anim-normal) var(--easing-standard);
 }
@@ -663,7 +663,7 @@ body.tasks-panel-open .floating-input-container {
     
     body.tasks-panel-open .chat-container,
     body.tasks-panel-open .floating-input-container {
-        left: calc(50% + 200px);
+        left: calc(50% + 220px);
     }
 }
 
@@ -675,7 +675,7 @@ body.tasks-panel-open .floating-input-container {
     
     body.tasks-panel-open .chat-container,
     body.tasks-panel-open .floating-input-container {
-        left: calc(50% + 160px);
+        left: calc(50% + 180px);
     }
 }
 

@@ -80,8 +80,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    padding: 16px 16px 12px 16px;
+    /* Removed border-bottom */
 }
 
 .session-content-heading {
@@ -93,37 +93,18 @@
 
 .session-content-header h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: var(--text-color, #e0e0e0);
 }
 
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    border: 0;
+.session-content-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.content-type-select {
-    background: var(--elevated-bg, rgba(255, 255, 255, 0.05));
-    color: var(--text-color, #e0e0e0);
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-    border-radius: 8px;
-    padding: 4px 28px 4px 10px;
-    font-size: 0.83rem;
-    cursor: pointer;
-}
-
-.content-type-select:focus {
-    outline: none;
-    border-color: var(--accent-color, #6366f1);
-}
-
+.refresh-content-btn,
 .close-session-content-btn {
     background: transparent;
     border: none;
@@ -137,13 +118,65 @@
     justify-content: center;
 }
 
+.refresh-content-btn:hover,
 .close-session-content-btn:hover {
     background: var(--hover-bg, rgba(255, 255, 255, 0.05));
     color: var(--text-color, #e0e0e0);
 }
 
+.refresh-content-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.refresh-content-btn i,
 .close-session-content-btn i {
     font-size: 1rem;
+}
+
+/* Tab Navigation */
+.session-content-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 12px 12px 12px;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.content-tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary, #a0a0a0);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.content-tab-btn i {
+    font-size: 0.875rem;
+}
+
+.content-tab-btn:hover {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.content-tab-btn.active {
+    background: #fef3c7;
+    color: #1f2937;
+}
+
+.content-tab-btn.active:hover {
+    background: #fde68a;
+    color: #1f2937;
 }
 
 /* Body */
@@ -151,17 +184,39 @@
     flex: 1;
     overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .content-tab-panel {
     display: none;
     height: 100%;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 14px 16px;
 }
 
 .content-tab-panel.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Custom Scrollbar */
+.content-tab-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.content-tab-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.content-tab-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.content-tab-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 /* Loading State */
@@ -236,20 +291,96 @@
 }
 
 .content-item-icon {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     border-radius: 10px;
-    background: var(--accent-color, #6366f1);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1rem;
+    font-size: 1.05rem;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Different icon colors for different file types */
+.file-item[data-file-type="js"] .content-item-icon,
+.file-item[data-file-type="jsx"] .content-item-icon,
+.file-item[data-file-type="ts"] .content-item-icon,
+.file-item[data-file-type="tsx"] .content-item-icon {
+    background: linear-gradient(135deg, #f7df1e 0%, #f0db4f 100%);
+    color: #323330;
+    box-shadow: 0 2px 8px rgba(247, 223, 30, 0.3);
+}
+
+.file-item[data-file-type="py"] .content-item-icon {
+    background: linear-gradient(135deg, #3776ab 0%, #ffd343 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(55, 118, 171, 0.3);
+}
+
+.file-item[data-file-type="html"] .content-item-icon {
+    background: linear-gradient(135deg, #e34c26 0%, #f06529 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(227, 76, 38, 0.3);
+}
+
+.file-item[data-file-type="css"] .content-item-icon {
+    background: linear-gradient(135deg, #264de4 0%, #2965f1 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(38, 77, 228, 0.3);
+}
+
+.file-item[data-file-type="json"] .content-item-icon {
+    background: linear-gradient(135deg, #292929 0%, #5a5a5a 100%);
+    color: #f7df1e;
+    box-shadow: 0 2px 8px rgba(41, 41, 41, 0.3);
+}
+
+.file-item[data-file-type="md"] .content-item-icon,
+.file-item[data-file-type="markdown"] .content-item-icon {
+    background: linear-gradient(135deg, #083fa1 0%, #0969da 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(8, 63, 161, 0.3);
+}
+
+.file-item[data-file-type="txt"] .content-item-icon {
+    background: linear-gradient(135deg, #6c757d 0%, #868e96 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+}
+
+.file-item[data-file-type="pdf"] .content-item-icon {
+    background: linear-gradient(135deg, #f40f02 0%, #ff4136 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(244, 15, 2, 0.3);
+}
+
+.file-item[data-file-type="image"] .content-item-icon {
+    background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.file-item[data-file-type="doc"] .content-item-icon,
+.file-item[data-file-type="docx"] .content-item-icon {
+    background: linear-gradient(135deg, #2b579a 0%, #185abd 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(43, 87, 154, 0.3);
+}
+
+.file-item[data-file-type="xls"] .content-item-icon,
+.file-item[data-file-type="xlsx"] .content-item-icon {
+    background: linear-gradient(135deg, #217346 0%, #33a357 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(33, 115, 70, 0.3);
 }
 
 .terminal-item .content-item-icon {
-    background: var(--success-color, #10b981);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .content-item-info {
