@@ -36,7 +36,11 @@ def create_app():
         return response
 
     # --- 1. Initialize Extensions ---
-    socketio.init_app(app, message_queue=config.REDIS_URL)
+    # Flask 3.x + some Flask-SocketIO builds can error when SocketIO tries to
+    # assign to request context session. We don't rely on Flask session in
+    # socket handlers (token auth is used), so disable SocketIO session
+    # management explicitly.
+    socketio.init_app(app, message_queue=config.REDIS_URL, manage_session=False)
     oauth.init_app(app)
     
     # --- 2. Instantiate Services ---

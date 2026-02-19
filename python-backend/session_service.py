@@ -59,7 +59,8 @@ class ConnectionManager:
         # Ensure a default set of tools is enabled for a new session
         agent_config.update({
             'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
-            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True
+            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True,
+            'enable_computer_control': True  # NEW: Enable computer control by default for desktop
         })
         
         session_data = {
