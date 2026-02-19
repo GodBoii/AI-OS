@@ -181,6 +181,31 @@ def handle_browser_command_result(data: Dict[str, Any]):
         logger.warning("Received browser command result with no request_id.")
 
 
+@socketio.on('computer-command-result')
+def handle_computer_command_result(data: Dict[str, Any]):
+    """
+    Receives a computer control result from the client and PUBLISHES it to the
+    corresponding Redis channel, waking up the waiting agent tool.
+    """
+    if not redis_client_instance:
+        logger.error("Redis client not initialized. Cannot handle computer command result.")
+        return
+
+    request_id = data.get('request_id')
+    result_payload = data.get('result', {})
+
+    if request_id:
+        response_channel = f"computer-response:{request_id}"
+        try:
+            redis_client_instance.publish(response_channel, json.dumps(result_payload))
+            logger.info(f"Published computer result for request_id {request_id} to Redis channel {response_channel}")
+        except Exception as e:
+            logger.error(f"Failed to publish computer result to Redis for {request_id}: {e}")
+    else:
+        logger.warning("Received computer command result with no request_id.")
+
+
+
 @socketio.on("send_message")
 def on_send_message(data: str):
     """The main message handler for incoming chat messages."""
@@ -256,10 +281,11 @@ def on_send_message(data: str):
                 logger.warning(f"Failed to register user uploads: {e}")
         
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
+        computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         
         # --- FIX APPLIED HERE ---
         # The obsolete `custom_tool_config` variable and its corresponding argument
-        # in the spawn call have been removed to match the new 8-argument signature
+        # in the spawn call have been removed to match the new 9-argument signature
         # of `run_agent_and_stream`.
         eventlet.spawn(
             run_agent_and_stream,
@@ -268,6 +294,7 @@ def on_send_message(data: str):
             message_id,
             turn_data,
             browser_tools_config,
+            computer_tools_config,
             context_session_ids,
             connection_manager_service,
             redis_client_instance
@@ -338,6 +365,7 @@ def on_assistant_message(data: str):
         
         # Assistant doesn't support browser tools yet, but we pass empty config or basic
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
+        computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         
         # Reuse the existing agent runner
         eventlet.spawn(
@@ -347,6 +375,7 @@ def on_assistant_message(data: str):
             message_id,
             turn_data,
             browser_tools_config,
+            computer_tools_config,
             [], # No context session ids
             connection_manager_service,
             redis_client_instance
