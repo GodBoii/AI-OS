@@ -32,6 +32,23 @@ VERCEL_CLIENT_SECRET = os.getenv("VERCEL_CLIENT_SECRET")
 SUPABASE_CLIENT_ID = os.getenv("SUPABASE_CLIENT_ID")
 SUPABASE_CLIENT_SECRET = os.getenv("SUPABASE_CLIENT_SECRET")
 
+# --- Composio Configuration (Optional) ---
+COMPOSIO_API_KEY = os.getenv("COMPOSIO_API_KEY")
+COMPOSIO_PROJECT_ID = os.getenv("COMPOSIO_PROJECT_ID")
+COMPOSIO_BASE_URL = os.getenv("COMPOSIO_BASE_URL") or "https://backend.composio.dev/api/v3"
+COMPOSIO_GOOGLESHEETS_AUTH_CONFIG_ID = os.getenv("COMPOSIO_GOOGLESHEETS_AUTH_CONFIG_ID")
+COMPOSIO_WHATSAPP_AUTH_CONFIG_ID = os.getenv("COMPOSIO_WHATSAPP_AUTH_CONFIG_ID")
+COMPOSIO_ENABLE_GOOGLE_SHEETS = os.getenv("COMPOSIO_ENABLE_GOOGLE_SHEETS", "false").lower() == "true"
+COMPOSIO_ENABLE_WHATSAPP = os.getenv("COMPOSIO_ENABLE_WHATSAPP", "false").lower() == "true"
+
+# --- Deploy Platform Configuration (AI app hosting) ---
+DEPLOY_DOMAIN = os.getenv("DEPLOY_DOMAIN")
+R2_SITES_BUCKET = os.getenv("R2_SITES_BUCKET")
+TURSO_API_TOKEN = os.getenv("TURSO_API_TOKEN")
+TURSO_ORG_SLUG = os.getenv("TURSO_ORG_SLUG")
+TURSO_GROUP = os.getenv("TURSO_GROUP")
+DEPLOY_SECRET_KEY = os.getenv("DEPLOY_SECRET_KEY")
+
 # --- Celery Configuration ---
 CELERY_CONFIG = {
     'broker_url': REDIS_URL,

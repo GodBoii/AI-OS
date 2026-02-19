@@ -8,11 +8,36 @@ from flask import Blueprint, request, jsonify
 # Import the utility function from the factory (or a future utils module)
 from utils import get_user_from_token
 from supabase_client import supabase_client
+import config
+from composio_client import ComposioApiError, ComposioClient
+from deploy_platform import (
+    activate_deployment,
+    assign_subdomain,
+    create_or_get_site,
+    ensure_deploy_tables,
+    get_site_db_credentials,
+    preflight_check,
+    provision_turso_database,
+    upload_site_files,
+    upsert_site_manifest,
+)
 
 logger = logging.getLogger(__name__)
 
 # Create a Blueprint for API routes, with a URL prefix of /api
 api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
+
+
+def _resolve_auth_config_id(toolkit_slug: str, request_auth_config_id: str | None) -> str | None:
+    if request_auth_config_id:
+        return request_auth_config_id
+
+    normalized = (toolkit_slug or "").upper()
+    if normalized == "GOOGLESHEETS":
+        return config.COMPOSIO_GOOGLESHEETS_AUTH_CONFIG_ID
+    if normalized == "WHATSAPP":
+        return config.COMPOSIO_WHATSAPP_AUTH_CONFIG_ID
+    return None
 
 
 @api_bp.route('/integrations', methods=['GET'])
@@ -45,6 +70,155 @@ def disconnect_integration():
     supabase_client.from_('user_integrations').delete().match({'user_id': str(user.id), 'service': service}).execute()
     
     return jsonify({"message": "Disconnected"}), 200
+
+
+@api_bp.route('/composio/status', methods=['GET'])
+def composio_status():
+    """
+    Returns Composio connection status for the authenticated user and toolkit.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    toolkit = request.args.get('toolkit', 'GOOGLESHEETS').upper()
+    try:
+        client = ComposioClient()
+        accounts = client.list_connected_accounts(user_id=str(user.id), toolkit_slug=toolkit)
+        connected = any(str(a.get("status", "")).upper() == "ACTIVE" for a in accounts)
+        active_account = next((a for a in accounts if str(a.get("status", "")).upper() == "ACTIVE"), None)
+        return jsonify({
+            "toolkit": toolkit,
+            "connected": connected,
+            "active_connected_account_id": active_account.get("id") if active_account else None,
+            "accounts": [
+                {
+                    "id": a.get("id"),
+                    "status": a.get("status"),
+                    "toolkit_slug": ((a.get("toolkit") or {}).get("slug") if isinstance(a.get("toolkit"), dict) else None),
+                }
+                for a in accounts
+            ],
+        }), 200
+    except ComposioApiError as exc:
+        return jsonify({"error": str(exc)}), 502
+    except Exception as exc:
+        logger.error("Unexpected Composio status error: %s", exc, exc_info=True)
+        return jsonify({"error": "Failed to get Composio status"}), 500
+
+
+@api_bp.route('/composio/disconnect', methods=['POST'])
+def composio_disconnect():
+    """
+    Disconnects Composio connected account(s) for a toolkit.
+    If connected_account_id is provided, disconnects only that account.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    toolkit = (body.get('toolkit') or 'GOOGLESHEETS').upper()
+    connected_account_id = body.get('connected_account_id')
+
+    try:
+        client = ComposioClient()
+        deleted_ids = []
+
+        if connected_account_id:
+            client.delete_connected_account(connected_account_id)
+            deleted_ids.append(connected_account_id)
+        else:
+            accounts = client.list_connected_accounts(user_id=str(user.id), toolkit_slug=toolkit)
+            for account in accounts:
+                account_id = account.get("id")
+                if account_id:
+                    client.delete_connected_account(account_id)
+                    deleted_ids.append(account_id)
+
+        return jsonify({
+            "toolkit": toolkit,
+            "disconnected_count": len(deleted_ids),
+            "disconnected_connected_account_ids": deleted_ids,
+        }), 200
+    except ComposioApiError as exc:
+        return jsonify({"error": str(exc)}), 502
+    except Exception as exc:
+        logger.error("Unexpected Composio disconnect error: %s", exc, exc_info=True)
+        return jsonify({"error": "Failed to disconnect Composio account"}), 500
+
+
+@api_bp.route('/composio/connect-url', methods=['GET', 'POST'])
+def composio_connect_url():
+    """
+    Generates a Composio connected-account link for the authenticated user.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json if request.method == 'POST' and request.is_json else {}
+    toolkit = (request.args.get('toolkit') or (body or {}).get('toolkit') or 'GOOGLESHEETS').upper()
+    callback_url = request.args.get('callback_url') or (body or {}).get('callback_url') or config.FRONTEND_URL
+    request_auth_config_id = request.args.get('auth_config_id') or (body or {}).get('auth_config_id')
+    auth_config_id = _resolve_auth_config_id(toolkit, request_auth_config_id)
+    if not auth_config_id:
+        return jsonify({
+            "error": (
+                f"Auth config id is required for toolkit '{toolkit}'. "
+                f"Set COMPOSIO_{toolkit}_AUTH_CONFIG_ID in backend env or provide auth_config_id."
+            )
+        }), 400
+
+    try:
+        client = ComposioClient()
+        result = client.create_connected_account_link(
+            user_id=str(user.id),
+            auth_config_id=auth_config_id,
+            callback_url=callback_url,
+        )
+        redirect_url = (
+            result.get("redirect_url")
+            or result.get("redirectUrl")
+            or result.get("url")
+            or result.get("link")
+        )
+        return jsonify({
+            "toolkit": toolkit,
+            "auth_config_id": auth_config_id,
+            "callback_url": callback_url,
+            "redirect_url": redirect_url,
+            "raw": result,
+        }), 200
+    except ComposioApiError as exc:
+        return jsonify({"error": str(exc)}), 502
+    except Exception as exc:
+        logger.error("Unexpected Composio connect-url error: %s", exc, exc_info=True)
+        return jsonify({"error": "Failed to generate Composio connect url"}), 500
+
+
+@api_bp.route('/composio/tools', methods=['GET'])
+def composio_tools():
+    """
+    Lists available Composio tools for a toolkit.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    _ = user  # authenticated endpoint; user is currently not needed for listing
+    toolkit = request.args.get('toolkit', 'GOOGLESHEETS').upper()
+    important_only = request.args.get('important', 'true').lower() == 'true'
+
+    try:
+        client = ComposioClient()
+        tools = client.list_tools(toolkit_slug=toolkit, important_only=important_only)
+        return jsonify({"toolkit": toolkit, "count": len(tools), "tools": tools}), 200
+    except ComposioApiError as exc:
+        return jsonify({"error": str(exc)}), 502
+    except Exception as exc:
+        logger.error("Unexpected Composio tools error: %s", exc, exc_info=True)
+        return jsonify({"error": "Failed to list Composio tools"}), 500
 
 
 @api_bp.route('/generate-upload-url', methods=['POST'])
@@ -261,6 +435,212 @@ def health():
             "message": "Backend is running",
             "service": "aios-web"
         }), 200
+
+
+@api_bp.route('/deploy/preflight', methods=['GET'])
+def deploy_preflight():
+    """
+    Validate deploy platform prerequisites and initialize deploy tables.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+    _ = user
+
+    try:
+        ensure_deploy_tables()
+        result = preflight_check()
+        return jsonify(result), 200 if result.get("ok") else 503
+    except Exception as e:
+        logger.error(f"Deploy preflight error: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@api_bp.route('/deploy/site/init', methods=['POST'])
+def deploy_site_init():
+    """
+    Create (or return existing) site metadata record.
+    body: { site_id, project_name, slug }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    project_name = body.get("project_name", "Untitled")
+    slug = body.get("slug")
+    if not site_id or not slug:
+        return jsonify({"error": "site_id and slug are required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        site = create_or_get_site(
+            site_id=str(site_id),
+            user_id=str(user.id),
+            project_name=str(project_name),
+            slug=str(slug),
+        )
+        return jsonify({"ok": True, "site": site}), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/site/init failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to init site"}), 500
+
+
+@api_bp.route('/deploy/assign-subdomain', methods=['POST'])
+def deploy_assign_subdomain():
+    """
+    Assign and persist canonical hostname for a site.
+    body: { site_id }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    if not site_id:
+        return jsonify({"error": "site_id is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        result = assign_subdomain(site_id=str(site_id), user_id=str(user.id))
+        return jsonify({"ok": True, **result}), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/assign-subdomain failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to assign subdomain"}), 500
+
+
+@api_bp.route('/deploy/upload-site', methods=['POST'])
+def deploy_upload_site():
+    """
+    Upload built site files to R2.
+    body: { site_id, files: [{path, content_base64?, content?, content_type?}] }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    files = body.get("files", [])
+    if not site_id:
+        return jsonify({"error": "site_id is required"}), 400
+    if not isinstance(files, list) or not files:
+        return jsonify({"error": "files must be a non-empty array"}), 400
+
+    try:
+        ensure_deploy_tables()
+        result = upload_site_files(site_id=str(site_id), user_id=str(user.id), files=files)
+        return jsonify({
+            "ok": True,
+            "deployment_id": result.deployment_id,
+            "version": result.version,
+            "r2_prefix": result.r2_prefix,
+            "files_uploaded": result.files_uploaded,
+        }), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/upload-site failed: {e}", exc_info=True)
+        return jsonify({"error": f"failed to upload site files: {e}"}), 500
+
+
+@api_bp.route('/deploy/provision-database', methods=['POST'])
+def deploy_provision_database():
+    """
+    Create one Turso database per site and store encrypted credentials.
+    body: { site_id }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    if not site_id:
+        return jsonify({"error": "site_id is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        result = provision_turso_database(site_id=str(site_id), user_id=str(user.id))
+        return jsonify({"ok": True, **result}), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/provision-database failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to provision database"}), 500
+
+
+@api_bp.route('/deploy/get-db-credentials', methods=['POST'])
+def deploy_get_db_credentials():
+    """
+    Retrieve per-site credentials for internal deploy inject flow.
+    body: { site_id, include_admin?: bool }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    include_admin = bool(body.get("include_admin", False))
+    if not site_id:
+        return jsonify({"error": "site_id is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        creds = get_site_db_credentials(site_id=str(site_id), user_id=str(user.id), include_admin=include_admin)
+        return jsonify({"ok": True, "credentials": creds}), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/get-db-credentials failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to get credentials"}), 500
+
+
+@api_bp.route('/deploy/activate', methods=['POST'])
+def deploy_activate():
+    """
+    Activate a deployment and write slug manifest used by Worker routing.
+    body: { site_id, deployment_id }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    site_id = body.get("site_id")
+    deployment_id = body.get("deployment_id")
+    if not site_id or not deployment_id:
+        return jsonify({"error": "site_id and deployment_id are required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        manifest = upsert_site_manifest(site_id=str(site_id), user_id=str(user.id), deployment_id=str(deployment_id))
+        result = activate_deployment(site_id=str(site_id), user_id=str(user.id), deployment_id=str(deployment_id))
+        return jsonify({"ok": True, "manifest": manifest, **result}), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/activate failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to activate deployment"}), 500
     except Exception as e:
         logger.error(f"Error in health check: {e}")
         return jsonify({
