@@ -4,6 +4,8 @@ import uvicorn
 import docker
 import uuid
 import logging
+import os
+import base64
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -28,6 +30,12 @@ SANDBOX_IMAGE = "godboi/aios-sandbox:latest"
 
 class CommandRequest(BaseModel):
     command: str
+
+
+class FileWriteRequest(BaseModel):
+    filepath: str
+    content_base64: str
+    make_dirs: bool = True
 
 @app.post("/sessions")
 def create_session():
@@ -169,6 +177,63 @@ def get_file_content(sandbox_id: str, filepath: str):
     except Exception as e:
         logger.error(f"Error reading file from {container_name}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+
+
+@app.put("/sessions/{sandbox_id}/files/content")
+def put_file_content(sandbox_id: str, request: FileWriteRequest):
+    """
+    Write file content to a specific path inside sandbox.
+    Expects base64 content for binary-safe transfer.
+    """
+    container_name = f"sandbox-session-{sandbox_id}"
+    logger.info(f"Writing file in {container_name}: {request.filepath}")
+    try:
+        container = docker_client.containers.get(container_name)
+
+        if not request.filepath.startswith("/home/sandboxuser/"):
+            raise HTTPException(status_code=400, detail="filepath must be under /home/sandboxuser/")
+        if ".." in request.filepath.replace("\\", "/").split("/"):
+            raise HTTPException(status_code=400, detail="Invalid filepath")
+
+        file_bytes = base64.b64decode(request.content_base64.encode("utf-8")) if request.content_base64 else b""
+        dirpath = os.path.dirname(request.filepath)
+
+        if request.make_dirs and dirpath:
+            mkdir_cmd = ["/bin/bash", "-c", f"mkdir -p {dirpath}"]
+            mkdir_exit, mkdir_out = container.exec_run(cmd=mkdir_cmd)
+            if mkdir_exit != 0:
+                stderr = mkdir_out.decode("utf-8", errors="ignore") if mkdir_out else ""
+                raise HTTPException(status_code=500, detail=f"Failed to create directories: {stderr}")
+
+        archive_stream = _build_single_file_tar(request.filepath, file_bytes)
+        ok = container.put_archive(path="/", data=archive_stream)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to write file into container")
+
+        return {"ok": True, "filepath": request.filepath, "size": len(file_bytes)}
+    except docker.errors.NotFound:
+        logger.warning(f"Put file content failed: sandbox session {container_name} not found.")
+        raise HTTPException(status_code=404, detail="Sandbox session not found.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error writing file in {container_name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {e}")
+
+
+def _build_single_file_tar(filepath: str, file_bytes: bytes):
+    import io
+    import tarfile
+
+    tar_buffer = io.BytesIO()
+    arcname = filepath.lstrip("/")
+    with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+        info = tarfile.TarInfo(name=arcname)
+        info.size = len(file_bytes)
+        info.mode = 0o644
+        tar.addfile(info, io.BytesIO(file_bytes))
+    tar_buffer.seek(0)
+    return tar_buffer.read()
 
 @app.delete("/sessions/{sandbox_id}")
 def terminate_session(sandbox_id: str):
