@@ -17,6 +17,14 @@
                     <i class="fi fi-tr-layer-plus"></i>
                     <span>Integration</span>
                 </button>
+                <button class="tab-btn" data-tab="deployments">
+                    <i class="fa-solid fa-globe"></i>
+                    <span>Deployments</span>
+                </button>
+                <button class="tab-btn" data-tab="database">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Database</span>
+                </button>
                 <button class="tab-btn" data-tab="about">
                     <i class="fi fi-tr-information"></i>
                     <span>About</span>
@@ -218,6 +226,42 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="tab-content" id="deployments-tab">
+                    <h3 class="tab-heading">Deployments</h3>
+                    <div class="settings-section-header">
+                        <p class="integration-description">
+                            All deployed projects for your account. Use this list to identify the live site and deployment metadata.
+                        </p>
+                        <button class="btn-secondary" id="refresh-deployments-btn">
+                            <i class="fi fi-tr-refresh"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    <div id="deployments-empty" class="empty-state hidden">No deployments found.</div>
+                    <div id="deployments-list" class="settings-list"></div>
+                </div>
+
+                <div class="tab-content" id="database-tab">
+                    <h3 class="tab-heading">Database</h3>
+                    <div class="settings-section-header">
+                        <p class="integration-description">
+                            Site databases provisioned by deploy pipeline. Select a project to filter when multiple databases exist.
+                        </p>
+                        <button class="btn-secondary" id="refresh-databases-btn">
+                            <i class="fi fi-tr-refresh"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label for="database-project-filter">Project</label>
+                        <select id="database-project-filter" class="settings-select">
+                            <option value="all">All Projects</option>
+                        </select>
+                    </div>
+                    <div id="databases-empty" class="empty-state hidden">No databases found.</div>
+                    <div id="databases-list" class="settings-list"></div>
                 </div>
 
                 <div class="tab-content" id="about-tab">
