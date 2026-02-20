@@ -3,6 +3,8 @@
 import logging
 import uuid
 import requests
+from typing import Any, Optional
+from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify
 
 # Import the utility function from the factory (or a future utils module)
@@ -15,9 +17,14 @@ from deploy_platform import (
     assign_subdomain,
     create_or_get_site,
     ensure_deploy_tables,
+    get_site_runtime_db_credentials,
     get_site_db_credentials,
+    list_deployed_projects,
+    list_user_databases,
     preflight_check,
     provision_turso_database,
+    resolve_public_site_hostname,
+    resolve_site_ref,
     upload_site_files,
     upsert_site_manifest,
 )
@@ -38,6 +45,82 @@ def _resolve_auth_config_id(toolkit_slug: str, request_auth_config_id: str | Non
     if normalized == "WHATSAPP":
         return config.COMPOSIO_WHATSAPP_AUTH_CONFIG_ID
     return None
+
+
+def _extract_host_from_header(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        parsed = urlparse(value)
+    except Exception:
+        return None
+    host = (parsed.netloc or "").strip().lower()
+    if not host:
+        return None
+    if ":" in host:
+        host = host.split(":", 1)[0]
+    return host or None
+
+
+def _to_hrana_value(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {"type": "null"}
+    if isinstance(value, bool):
+        return {"type": "integer", "value": "1" if value else "0"}
+    if isinstance(value, int):
+        return {"type": "integer", "value": str(value)}
+    if isinstance(value, float):
+        return {"type": "float", "value": value}
+    if isinstance(value, (dict, list)):
+        import json
+        return {"type": "text", "value": json.dumps(value, ensure_ascii=True)}
+    return {"type": "text", "value": str(value)}
+
+
+def _execute_hrana_query(hostname: str, token: str, sql: str, params: Optional[list[Any]] = None) -> dict[str, Any]:
+    args = [_to_hrana_value(v) for v in (params or [])]
+    payload = {
+        "requests": [
+            {
+                "type": "execute",
+                "stmt": {
+                    "sql": sql,
+                    "args": args,
+                    "want_rows": True,
+                },
+            }
+        ]
+    }
+    response = requests.post(
+        f"https://{hostname}/v2/pipeline",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"Query failed: HTTP {response.status_code} {response.text}")
+
+    data = response.json() or {}
+    results = data.get("results") or []
+    if not results:
+        return {"raw": data}
+    result = results[0] or {}
+    if "error" in result:
+        raise RuntimeError(f"Query failed: {result['error']}")
+    return result.get("response", result)
+
+
+def _normalize_single_statement(sql: str) -> str:
+    cleaned = (sql or "").strip()
+    if not cleaned:
+        raise ValueError("sql is required")
+    cleaned = cleaned.rstrip(";").strip()
+    if ";" in cleaned:
+        raise ValueError("Only a single SQL statement is allowed per request")
+    return cleaned
 
 
 @api_bp.route('/integrations', methods=['GET'])
@@ -456,6 +539,46 @@ def deploy_preflight():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@api_bp.route('/deploy/projects', methods=['GET'])
+def deploy_projects():
+    """
+    List deployed projects for authenticated user.
+    Query params: limit (optional, default 20)
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        ensure_deploy_tables()
+        limit = request.args.get("limit", default=20, type=int)
+        projects = list_deployed_projects(user_id=str(user.id), limit=limit or 20)
+        return jsonify({"ok": True, "projects": projects}), 200
+    except Exception as e:
+        logger.error(f"deploy/projects failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load deployed projects"}), 500
+
+
+@api_bp.route('/deploy/databases', methods=['GET'])
+def deploy_databases():
+    """
+    List provisioned site databases for authenticated user.
+    Query params: limit (optional, default 50)
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        ensure_deploy_tables()
+        limit = request.args.get("limit", default=50, type=int)
+        databases = list_user_databases(user_id=str(user.id), limit=limit or 50)
+        return jsonify({"ok": True, "databases": databases}), 200
+    except Exception as e:
+        logger.error(f"deploy/databases failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load database list"}), 500
+
+
 @api_bp.route('/deploy/site/init', methods=['POST'])
 def deploy_site_init():
     """
@@ -611,6 +734,75 @@ def deploy_get_db_credentials():
     except Exception as e:
         logger.error(f"deploy/get-db-credentials failed: {e}", exc_info=True)
         return jsonify({"error": "failed to get credentials"}), 500
+
+
+@api_bp.route('/deploy/runtime/query', methods=['POST'])
+def deploy_runtime_query():
+    """
+    Runtime database query endpoint for deployed websites.
+
+    Modes:
+    - Authenticated (Authorization bearer token): resolves site_id/site_ref under user ownership.
+    - Anonymous (no auth): resolves site strictly from Origin/Referer hostname.
+
+    body: { sql, params?: [], site_id?: str, site_ref?: str }
+    """
+    body = request.json or {}
+    sql = body.get("sql")
+    params = body.get("params", [])
+    if not isinstance(params, list):
+        return jsonify({"ok": False, "error": "params must be an array"}), 400
+
+    try:
+        cleaned_sql = _normalize_single_statement(str(sql or ""))
+        ensure_deploy_tables()
+
+        auth_header = (request.headers.get("Authorization") or "").strip()
+        site_id = None
+        site_hostname = None
+
+        if auth_header.startswith("Bearer "):
+            user, error = get_user_from_token(request)
+            if error:
+                return jsonify({"ok": False, "error": error[0]}), error[1]
+            site_ref = body.get("site_id") or body.get("site_ref") or "default"
+            site = resolve_site_ref(user_id=str(user.id), site_ref=str(site_ref))
+            site_id = str(site["id"])
+            site_hostname = site.get("hostname")
+            creds = get_site_db_credentials(site_id=site_id, user_id=str(user.id), include_admin=False)
+        else:
+            origin_host = _extract_host_from_header(request.headers.get("Origin"))
+            referer_host = _extract_host_from_header(request.headers.get("Referer"))
+            host = origin_host or referer_host
+            if not host:
+                return jsonify({"ok": False, "error": "Origin or Referer header is required"}), 400
+
+            site = resolve_public_site_hostname(hostname=host)
+            site_id = str(site["id"])
+            site_hostname = site.get("hostname")
+            creds = get_site_runtime_db_credentials(site_id=site_id)
+
+        result = _execute_hrana_query(
+            hostname=creds["hostname"],
+            token=creds["rw_token"],
+            sql=cleaned_sql,
+            params=params,
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "site_id": site_id,
+                "hostname": site_hostname,
+                "result": result,
+            }
+        ), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except PermissionError as e:
+        return jsonify({"ok": False, "error": str(e)}), 403
+    except Exception as e:
+        logger.error(f"deploy/runtime/query failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "runtime database query failed"}), 500
 
 
 @api_bp.route('/deploy/activate', methods=['POST'])

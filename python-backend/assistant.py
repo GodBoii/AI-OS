@@ -37,6 +37,8 @@ from browser_tools_server import ServerBrowserTools
 from computer_tools import ComputerTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
+from database_tools import DatabaseTools
+from deployed_project_tools import DeployedProjectTools
 from composio_tools import (
     ComposioGoogleSheetsTools,
     ComposioWhatsAppTools,
@@ -534,12 +536,8 @@ def get_llm_os(
         # Extract socketio and sid from browser_tools_config if available
         socketio_instance = browser_tools_config.get('socketio') if browser_tools_config else None
         sid = browser_tools_config.get('sid') if browser_tools_config else None
-        
-        dev_team = Agent(
-            name="dev_team",
-            model=OpenRouter(id="arcee-ai/trinity-large-preview:free"),
-            role="It can do Any code related task",
-            tools=[SandboxTools(
+        dev_tools: List[Union[Toolkit, callable]] = [
+            SandboxTools(
                 session_info=session_info,
                 persistence_service=persistence_service,
                 user_id=user_id,
@@ -547,12 +545,31 @@ def get_llm_os(
                 message_id=message_id,
                 socketio=socketio_instance,
                 sid=sid
-            )],
+            )
+        ]
+        if user_id:
+            dev_tools.append(DeployedProjectTools(user_id=user_id))
+            dev_tools.append(DatabaseTools(user_id=user_id))
+        
+        dev_team = Agent(
+            name="dev_team",
+            model=OpenRouter(id="arcee-ai/trinity-large-preview:free"),
+            role="It can do Any code related task",
+            tools=dev_tools,
             instructions=[
-                "Development team: Plan and execute code solutions using sandbox tools.",
+                "Development team: Plan and execute code and data solutions using tools.",
                 "Access files from session_state['turn_context']['files'].",
                 "Workflow: 1) Analyze requirements 2) Plan solution 3) Implement code 4) Test & verify.",
                 "Use sandbox tools for file operations, code execution, terminal commands, testing.",
+                "Use database_tools for per-site database provisioning, queries, and migrations.",
+                "Use deployed_project_tools for deployed project discovery and file retrieval.",
+                "Before database or deployment actions, call get_deployed_projects() and select_project(site_id|slug|hostname|url|default) to resolve correct project context.",
+                "If a website is not deployed/live yet, do not implement runtime database integration code in website files.",
+                "For browser runtime database operations in deployed websites: NEVER call provider endpoints directly (for example api.turso.*) and NEVER embed DB tokens in frontend files.",
+                "For deployed website frontend code, call the platform runtime endpoint returned by get_db_credentials().credentials.runtime_query_endpoint with JSON { sql, params }.",
+                "Use parameterized SQL in frontend requests and keep all DB authentication server-side through the runtime endpoint.",
+                "For deployed-site modifications, first use copy_deployed_project(site_id, deployment_id?, target_directory), then edit files in that sandbox directory, then use redeploy_project(site_id, project_directory).",
+                "When user asks follow-up DB work, resolve and operate on the intended deployed project context before applying changes.",
                 "Output: Brief summary + working code + test results.",
                 "Keep responses focused and under 300 words unless complex implementation needed."
             ],
