@@ -9,6 +9,9 @@ class AIOS {
         this.userData = null;
         this.authService = null;
         this.backendBaseUrl = 'http://localhost:8765';
+        this.deploymentsCache = [];
+        this.databasesCache = [];
+        this.selectedDatabaseProject = 'all';
     }
 
     async init() {
@@ -95,6 +98,17 @@ class AIOS {
             connectSupabaseBtn: document.getElementById('connect-supabase-btn'),
             connectGoogleSheetsBtn: document.getElementById('connect-google-sheets-btn'),
             connectWhatsappBtn: document.getElementById('connect-whatsapp-btn'),
+
+            // Deployments Tab
+            refreshDeploymentsBtn: document.getElementById('refresh-deployments-btn'),
+            deploymentsList: document.getElementById('deployments-list'),
+            deploymentsEmpty: document.getElementById('deployments-empty'),
+
+            // Database Tab
+            refreshDatabasesBtn: document.getElementById('refresh-databases-btn'),
+            databasesList: document.getElementById('databases-list'),
+            databasesEmpty: document.getElementById('databases-empty'),
+            databaseProjectFilter: document.getElementById('database-project-filter'),
         };
     }
 
@@ -192,6 +206,12 @@ class AIOS {
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectGoogleSheetsBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
+        addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
+        addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadDatabases(true));
+        this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
+            this.selectedDatabaseProject = e.target.value || 'all';
+            this.renderDatabases(this.databasesCache);
+        });
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
@@ -205,6 +225,14 @@ class AIOS {
                         this.userData.account.name = user.user_metadata.name || user.user_metadata.full_name;
                     }
                     this.saveUserData();
+                    this.loadDeployments();
+                    this.loadDatabases();
+                } else {
+                    this.deploymentsCache = [];
+                    this.databasesCache = [];
+                    this.renderDeployments([]);
+                    this.populateDatabaseProjectFilter([]);
+                    this.renderDatabases([]);
                 }
             });
         }
@@ -479,6 +507,182 @@ class AIOS {
         }
     }
 
+    async _getAccessToken() {
+        const session = await this.authService?.getSession();
+        return session?.access_token || null;
+    }
+
+    _safeText(value, fallback = '-') {
+        if (value === null || value === undefined) return fallback;
+        const text = String(value).trim();
+        return text.length ? text : fallback;
+    }
+
+    _formatDate(value) {
+        if (!value) return '-';
+        try {
+            return new Date(value).toLocaleString();
+        } catch (e) {
+            return String(value);
+        }
+    }
+
+    async loadDeployments(showNotification = false) {
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.deploymentsCache = [];
+                this.renderDeployments([]);
+                return;
+            }
+
+            const response = await fetch(`${this.backendBaseUrl}/api/deploy/projects?limit=100`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to load deployments');
+            }
+
+            this.deploymentsCache = Array.isArray(payload.projects) ? payload.projects : [];
+            this.renderDeployments(this.deploymentsCache);
+            if (showNotification) this.showNotification('Deployments refreshed', 'success');
+        } catch (error) {
+            console.error('Error loading deployments:', error);
+            this.renderDeployments([]);
+            if (showNotification) this.showNotification(error.message || 'Failed to load deployments', 'error');
+        }
+    }
+
+    async loadDatabases(showNotification = false) {
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.databasesCache = [];
+                this.populateDatabaseProjectFilter([]);
+                this.renderDatabases([]);
+                return;
+            }
+
+            const response = await fetch(`${this.backendBaseUrl}/api/deploy/databases?limit=200`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to load databases');
+            }
+
+            this.databasesCache = Array.isArray(payload.databases) ? payload.databases : [];
+            this.populateDatabaseProjectFilter(this.databasesCache);
+            this.renderDatabases(this.databasesCache);
+            if (showNotification) this.showNotification('Databases refreshed', 'success');
+        } catch (error) {
+            console.error('Error loading databases:', error);
+            this.populateDatabaseProjectFilter([]);
+            this.renderDatabases([]);
+            if (showNotification) this.showNotification(error.message || 'Failed to load databases', 'error');
+        }
+    }
+
+    renderDeployments(projects) {
+        const list = this.elements.deploymentsList;
+        const empty = this.elements.deploymentsEmpty;
+        if (!list || !empty) return;
+
+        list.innerHTML = '';
+        const items = Array.isArray(projects) ? projects : [];
+        if (!items.length) {
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+
+        items.forEach((project) => {
+            const card = document.createElement('div');
+            card.className = 'settings-card';
+            card.innerHTML = `
+                <div class="settings-card-header">
+                    <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
+                    <span class="settings-badge">${this._safeText(project.deployment_status, 'unknown')}</span>
+                </div>
+                <div class="settings-meta-grid">
+                    <div><strong>Site ID</strong><span>${this._safeText(project.site_id)}</span></div>
+                    <div><strong>Slug</strong><span>${this._safeText(project.slug)}</span></div>
+                    <div><strong>Hostname</strong><span>${this._safeText(project.hostname)}</span></div>
+                    <div><strong>Version</strong><span>${this._safeText(project.version)}</span></div>
+                    <div><strong>Deployment ID</strong><span>${this._safeText(project.deployment_id)}</span></div>
+                    <div><strong>R2 Prefix</strong><span>${this._safeText(project.r2_prefix)}</span></div>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    populateDatabaseProjectFilter(databases) {
+        const select = this.elements.databaseProjectFilter;
+        if (!select) return;
+
+        const previous = this.selectedDatabaseProject || 'all';
+        const projectMap = new Map();
+        (Array.isArray(databases) ? databases : []).forEach((row) => {
+            const key = this._safeText(row.site_id);
+            const label = `${this._safeText(row.project_name, 'Untitled')} (${this._safeText(row.slug, key)})`;
+            if (!projectMap.has(key)) projectMap.set(key, label);
+        });
+
+        select.innerHTML = '<option value="all">All Projects</option>';
+        [...projectMap.entries()].forEach(([siteId, label]) => {
+            const option = document.createElement('option');
+            option.value = siteId;
+            option.textContent = label;
+            select.appendChild(option);
+        });
+
+        const hasPrevious = previous === 'all' || projectMap.has(previous);
+        this.selectedDatabaseProject = hasPrevious ? previous : 'all';
+        select.value = this.selectedDatabaseProject;
+    }
+
+    renderDatabases(databases) {
+        const list = this.elements.databasesList;
+        const empty = this.elements.databasesEmpty;
+        if (!list || !empty) return;
+
+        const selectedProject = this.selectedDatabaseProject || 'all';
+        const items = (Array.isArray(databases) ? databases : []).filter((row) =>
+            selectedProject === 'all' ? true : String(row.site_id) === String(selectedProject)
+        );
+
+        list.innerHTML = '';
+        if (!items.length) {
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+
+        items.forEach((row) => {
+            const card = document.createElement('div');
+            card.className = 'settings-card';
+            card.innerHTML = `
+                <div class="settings-card-header">
+                    <h4>${this._safeText(row.project_name, 'Untitled')}</h4>
+                    <span class="settings-badge">${this._safeText(row.deployment_status, 'unknown')}</span>
+                </div>
+                <div class="settings-meta-grid">
+                    <div><strong>Site ID</strong><span>${this._safeText(row.site_id)}</span></div>
+                    <div><strong>Slug</strong><span>${this._safeText(row.slug)}</span></div>
+                    <div><strong>Hostname</strong><span>${this._safeText(row.hostname)}</span></div>
+                    <div><strong>Database Name</strong><span>${this._safeText(row.database_name)}</span></div>
+                    <div><strong>DB Hostname</strong><span>${this._safeText(row.database_hostname)}</span></div>
+                    <div><strong>Created</strong><span>${this._formatDate(row.database_created_at)}</span></div>
+                    <div><strong>Version</strong><span>${this._safeText(row.version)}</span></div>
+                    <div><strong>R2 Prefix</strong><span>${this._safeText(row.r2_prefix)}</span></div>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
     async loadUserData() {
         const defaultData = {
             account: { email: 'user@example.com', name: 'User Name' },
@@ -646,6 +850,10 @@ class AIOS {
         // If switching to integration tab, check integration status
         if (tabName === 'integration') {
             this.checkIntegrationStatus();
+        } else if (tabName === 'deployments') {
+            this.loadDeployments();
+        } else if (tabName === 'database') {
+            this.loadDatabases();
         }
     }
 
@@ -668,8 +876,13 @@ class AIOS {
         }
         if (isAuthenticated) {
             this.checkIntegrationStatus();
+            this.loadDeployments();
+            this.loadDatabases();
         } else {
             ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
+            this.renderDeployments([]);
+            this.populateDatabaseProjectFilter([]);
+            this.renderDatabases([]);
         }
     }
 
