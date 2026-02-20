@@ -1,11 +1,23 @@
 # python-backend/sandbox_tools.py (Complete, Updated Version with Persistence)
 
 import os
+import base64
+import mimetypes
 import requests
 import eventlet
 from agno.tools import Toolkit
 from typing import Optional, Set, Dict, Any, List
 import logging
+from deploy_platform import (
+    activate_deployment,
+    get_deployment_file_bytes,
+    get_deployment_summary,
+    get_site_summary,
+    list_deployment_files,
+    resolve_site_ref,
+    upload_site_files,
+    upsert_site_manifest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +50,9 @@ class SandboxTools(Toolkit):
         """
         super().__init__(
             name="sandbox_tools",
-            tools=[self.execute_in_sandbox]
+            tools=[self.execute_in_sandbox, self.copy_deployed_project, self.redeploy_project]
         )
-        self.session_info = session_info
+        self.session_info = session_info or {}
         self.sandbox_api_url = os.getenv("SANDBOX_API_URL")
         if not self.sandbox_api_url:
             raise ValueError("SANDBOX_API_URL environment variable is not set.")
@@ -206,6 +218,220 @@ class SandboxTools(Toolkit):
                     pass
             
             return f"Error executing command: {e}"
+
+    def copy_deployed_project(
+        self,
+        site_id: Optional[str] = None,
+        deployment_id: Optional[str] = None,
+        target_directory: str = "/home/sandboxuser/deployed_projects/current",
+        site_ref: Optional[str] = None,
+    ) -> str:
+        """
+        Copy files from an existing deployed project into the current sandbox.
+        This avoids token-heavy file transfer through the model by doing backend-to-sandbox transfer directly.
+        """
+        if not self.user_id:
+            return "Error: Missing user context for deployment access."
+
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+
+        try:
+            resolved = resolve_site_ref(user_id=str(self.user_id), site_ref=(site_id or site_ref or "default"))
+            resolved_site_id = str(resolved["id"])
+            site = get_site_summary(site_id=resolved_site_id, user_id=str(self.user_id))
+            deployment = get_deployment_summary(
+                site_id=resolved_site_id,
+                user_id=str(self.user_id),
+                deployment_id=str(deployment_id) if deployment_id else None,
+            )
+            files = list_deployment_files(
+                site_id=resolved_site_id,
+                user_id=str(self.user_id),
+                deployment_id=deployment["id"],
+            )
+            if not files:
+                return "Error: Deployment has no files to copy."
+
+            target_directory = str(target_directory).strip().rstrip("/") or "/home/sandboxuser/deployed_projects/current"
+            if not target_directory.startswith("/home/sandboxuser/"):
+                return "Error: target_directory must be under /home/sandboxuser/."
+
+            copied = 0
+            for item in files:
+                rel_path = str(item["path"]).replace("\\", "/").lstrip("/")
+                if not rel_path or ".." in rel_path.split("/"):
+                    continue
+                content_bytes = get_deployment_file_bytes(
+                    site_id=resolved_site_id,
+                    user_id=str(self.user_id),
+                    path=rel_path,
+                    deployment_id=deployment["id"],
+                )
+                dest_path = f"{target_directory}/{rel_path}"
+                self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=dest_path, content_bytes=content_bytes)
+                copied += 1
+
+            return (
+                f"Copied {copied} file(s) from deployment {deployment['id']} for site {site['slug']} "
+                f"into {target_directory} in sandbox {sandbox_id}."
+            )
+        except PermissionError as exc:
+            return f"Error: {exc}"
+        except Exception as exc:
+            logger.error("copy_deployed_project failed: %s", exc, exc_info=True)
+            return f"Error copying deployed project: {exc}"
+
+    def redeploy_project(
+        self,
+        site_id: Optional[str] = None,
+        project_directory: str = "/home/sandboxuser/deployed_projects/current",
+        activate: bool = True,
+        site_ref: Optional[str] = None,
+    ) -> str:
+        """
+        Redeploy a project from files in sandbox directory.
+        The tool reads files from sandbox, uploads to hosting, and optionally activates deployment.
+        """
+        if not self.user_id:
+            return "Error: Missing user context for deployment access."
+
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+
+        project_directory = str(project_directory).strip().rstrip("/")
+        if not project_directory.startswith("/home/sandboxuser/"):
+            return "Error: project_directory must be under /home/sandboxuser/."
+
+        try:
+            resolved = resolve_site_ref(user_id=str(self.user_id), site_ref=(site_id or site_ref or "default"))
+            resolved_site_id = str(resolved["id"])
+            site = get_site_summary(site_id=resolved_site_id, user_id=str(self.user_id))
+
+            list_resp = requests.get(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/files",
+                params={"path": project_directory},
+                timeout=60,
+            )
+            list_resp.raise_for_status()
+            all_files = list_resp.json().get("files", []) or []
+            if not all_files:
+                return "Error: No files found in project_directory."
+
+            upload_files: List[Dict[str, Any]] = []
+            for item in all_files:
+                abs_path = str(item.get("path", ""))
+                if not abs_path.startswith(project_directory + "/"):
+                    continue
+                rel_path = abs_path[len(project_directory) + 1 :].replace("\\", "/")
+                if not rel_path or ".." in rel_path.split("/"):
+                    continue
+
+                content_resp = requests.get(
+                    f"{self.sandbox_api_url}/sessions/{sandbox_id}/files/content",
+                    params={"filepath": abs_path},
+                    timeout=60,
+                )
+                content_resp.raise_for_status()
+                payload = content_resp.json() or {}
+                content_b64 = payload.get("content", "")
+                content_type = mimetypes.guess_type(rel_path)[0] or "application/octet-stream"
+                upload_files.append(
+                    {
+                        "path": rel_path,
+                        "content_base64": content_b64,
+                        "content_type": content_type,
+                    }
+                )
+
+            if not upload_files:
+                return "Error: No deployable files found in project_directory."
+
+            has_index = any(str(f.get("path", "")).lower() == "index.html" for f in upload_files)
+            if not has_index:
+                return "Error: Deployment must include index.html."
+
+            upload = upload_site_files(site_id=resolved_site_id, user_id=str(self.user_id), files=upload_files)
+            if not activate:
+                return (
+                    f"Uploaded {upload.files_uploaded} file(s) for site {site['slug']} as deployment "
+                    f"{upload.deployment_id} (not activated)."
+                )
+
+            upsert_site_manifest(
+                site_id=resolved_site_id,
+                user_id=str(self.user_id),
+                deployment_id=str(upload.deployment_id),
+            )
+            activated = activate_deployment(
+                site_id=resolved_site_id,
+                user_id=str(self.user_id),
+                deployment_id=str(upload.deployment_id),
+            )
+            return (
+                f"Redeployed site {site['slug']} successfully. "
+                f"Deployment: {upload.deployment_id}, Files: {upload.files_uploaded}, URL: {activated.get('url')}"
+            )
+        except PermissionError as exc:
+            return f"Error: {exc}"
+        except Exception as exc:
+            logger.error("redeploy_project failed: %s", exc, exc_info=True)
+            return f"Error redeploying project: {exc}"
+
+    def _write_file_to_sandbox(self, sandbox_id: str, filepath: str, content_bytes: bytes) -> None:
+        payload = {
+            "filepath": filepath,
+            "content_base64": base64.b64encode(content_bytes).decode("utf-8"),
+            "make_dirs": True,
+        }
+        try:
+            resp = requests.put(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/files/content",
+                json=payload,
+                timeout=60,
+            )
+            if resp.status_code == 405:
+                self._write_file_to_sandbox_fallback(sandbox_id=sandbox_id, filepath=filepath, content_bytes=content_bytes)
+                return
+            resp.raise_for_status()
+            return
+        except requests.HTTPError:
+            raise
+        except Exception:
+            # Network/proxy incompatibility fallback path.
+            self._write_file_to_sandbox_fallback(sandbox_id=sandbox_id, filepath=filepath, content_bytes=content_bytes)
+
+    def _write_file_to_sandbox_fallback(self, sandbox_id: str, filepath: str, content_bytes: bytes) -> None:
+        """
+        Fallback for environments where sandbox-manager PUT /files/content is unavailable.
+        Writes file via sandbox exec + Python.
+        """
+        b64 = base64.b64encode(content_bytes).decode("utf-8")
+        if len(b64) > 1_500_000:
+            raise RuntimeError(
+                "Sandbox file-write fallback hit payload limit. Restart sandbox-manager with updated PUT /files/content endpoint."
+            )
+        command = (
+            "python3 - <<'PY'\n"
+            "import base64, pathlib\n"
+            f"p = pathlib.Path(r'''{filepath}''')\n"
+            "p.parent.mkdir(parents=True, exist_ok=True)\n"
+            f"p.write_bytes(base64.b64decode('''{b64}'''))\n"
+            "print('ok')\n"
+            "PY"
+        )
+        exec_resp = requests.post(
+            f"{self.sandbox_api_url}/sessions/{sandbox_id}/exec",
+            json={"command": command},
+            timeout=120,
+        )
+        exec_resp.raise_for_status()
+        result = exec_resp.json() or {}
+        if int(result.get("exit_code", 1)) != 0:
+            stderr = result.get("stderr", "")
+            raise RuntimeError(f"Fallback file write failed: {stderr}")
     
     def _get_sandbox_files(self, sandbox_id: str) -> Set[str]:
         """

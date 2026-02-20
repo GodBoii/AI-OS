@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import uuid
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
@@ -19,6 +20,9 @@ from r2_client import get_r2_client
 
 _TENANT_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$")
 _DB_NAME_RE = re.compile(r"^[a-z0-9-]{3,64}$")
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+)
 _RESERVED_SLUGS = {
     "www",
     "api",
@@ -52,6 +56,26 @@ def _require_env(name: str) -> str:
     if not val:
         raise ValueError(f"Missing required environment variable: {name}")
     return val
+
+
+def get_runtime_query_endpoint() -> str:
+    """
+    Public endpoint that deployed websites should call for runtime database queries.
+    If DEPLOY_RUNTIME_API_BASE_URL is unset, returns a relative path.
+    """
+    base = ""
+    for key in (
+        "DEPLOY_RUNTIME_API_BASE_URL",
+        "BACKEND_PUBLIC_URL",
+        "PUBLIC_API_BASE_URL",
+        "API_BASE_URL",
+    ):
+        val = (os.getenv(key) or "").strip()
+        if val:
+            base = val.rstrip("/")
+            break
+    path = "/api/deploy/runtime/query"
+    return f"{base}{path}" if base else path
 
 
 def _fernet() -> Fernet:
@@ -462,6 +486,101 @@ def get_site_db_credentials(site_id: str, user_id: str, include_admin: bool = Fa
     return out
 
 
+def resolve_public_site_hostname(hostname: str) -> dict[str, Any]:
+    """
+    Resolve a deployed site by hostname without requiring a platform user token.
+    Used for runtime website requests that originate from deployed subdomains.
+    """
+    host = (hostname or "").strip().lower().rstrip(".")
+    if ":" in host:
+        host = host.split(":", 1)[0]
+    if not host:
+        raise ValueError("hostname is required")
+
+    with _engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                select
+                  s.id,
+                  s.slug,
+                  s.status,
+                  d.hostname
+                from platform_domains d
+                join platform_sites s on s.id = d.site_id
+                where lower(d.hostname) = :hostname
+                order by d.is_primary desc, d.created_at asc
+                limit 1
+                """
+            ),
+            {"hostname": host},
+        ).mappings().first()
+        if not row:
+            raise ValueError("Site not found for hostname")
+
+        active_dep = conn.execute(
+            text(
+                """
+                select id
+                from platform_deployments
+                where site_id = :site_id and status = 'active'
+                order by activated_at desc nulls last, created_at desc
+                limit 1
+                """
+            ),
+            {"site_id": str(row["id"])},
+        ).mappings().first()
+
+    if str(row["status"]) != "active":
+        raise ValueError("Site is not active")
+    if not active_dep:
+        raise ValueError("No active deployment for hostname")
+
+    return {
+        "id": str(row["id"]),
+        "slug": row["slug"],
+        "status": row["status"],
+        "hostname": row["hostname"],
+        "active_deployment_id": str(active_dep["id"]),
+    }
+
+
+def get_site_runtime_db_credentials(site_id: str) -> dict[str, Any]:
+    """
+    Fetch decrypted runtime DB credentials for an active site.
+    This is intended for server-side runtime routing only.
+    """
+    with _engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                select
+                  s.status,
+                  db.turso_db_name,
+                  db.turso_db_hostname,
+                  db.encrypted_rw_token,
+                  db.encrypted_ro_token
+                from platform_sites s
+                join platform_site_databases db on db.site_id = s.id
+                where s.id = :site_id
+                """
+            ),
+            {"site_id": site_id},
+        ).mappings().first()
+    if not row:
+        raise ValueError("No database provisioned for this site")
+    if str(row["status"]) != "active":
+        raise ValueError("Site is not active")
+
+    return {
+        "database_name": row["turso_db_name"],
+        "hostname": row["turso_db_hostname"],
+        "url": f"libsql://{row['turso_db_hostname']}",
+        "rw_token": decrypt_secret(row["encrypted_rw_token"]),
+        "ro_token": decrypt_secret(row["encrypted_ro_token"]) if row.get("encrypted_ro_token") else None,
+    }
+
+
 def activate_deployment(site_id: str, user_id: str, deployment_id: str) -> dict[str, Any]:
     _ensure_site_owned(site_id=site_id, user_id=user_id)
     with _engine.begin() as conn:
@@ -530,10 +649,9 @@ def upsert_site_manifest(site_id: str, user_id: str, deployment_id: str) -> dict
         "db": (
             {
                 "url": creds["url"],
-                "rw_token": creds["rw_token"],
-                "ro_token": creds["ro_token"],
                 "hostname": creds["hostname"],
                 "database_name": creds["database_name"],
+                "runtime_query_endpoint": get_runtime_query_endpoint(),
             }
             if creds
             else None
@@ -554,3 +672,361 @@ def upsert_site_manifest(site_id: str, user_id: str, deployment_id: str) -> dict
         Metadata={"site-id": site_id, "deployment-id": deployment_id, "sha256": etag},
     )
     return {"manifest_key": key, "sha256": etag}
+
+
+def _normalize_site_ref(site_ref: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Returns a tuple: (raw_ref, normalized_slug_candidate, normalized_hostname_candidate).
+    """
+    if not site_ref:
+        return None, None, None
+    raw = str(site_ref).strip()
+    if not raw:
+        return None, None, None
+
+    lower = raw.lower().strip()
+    if lower.startswith("http://") or lower.startswith("https://"):
+        parsed = urlparse(lower)
+        host = (parsed.netloc or "").strip().lower()
+    else:
+        host = lower
+        if "/" in host:
+            host = host.split("/", 1)[0]
+
+    deploy_domain = (os.getenv("DEPLOY_DOMAIN") or "").strip().lower()
+    slug_candidate = None
+    if host and deploy_domain and host.endswith("." + deploy_domain):
+        slug_candidate = host[: -(len(deploy_domain) + 1)]
+    elif _TENANT_RE.fullmatch(host):
+        slug_candidate = host
+
+    hostname_candidate = host if "." in host else None
+    return raw, slug_candidate, hostname_candidate
+
+
+def resolve_site_ref(user_id: str, site_ref: Optional[str] = None) -> dict[str, Any]:
+    """
+    Resolve a user site from flexible references:
+    - UUID site_id
+    - slug
+    - hostname
+    - full URL
+    - special refs: default/current/active/latest (or empty)
+    """
+    special_default = {"default", "current", "active", "latest", ""}
+    raw, slug_candidate, hostname_candidate = _normalize_site_ref(site_ref)
+    ref_value = (raw or "").strip()
+    is_default = (not ref_value) or (ref_value.lower() in special_default)
+
+    if is_default:
+        with _engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    select
+                      s.id,
+                      s.user_id,
+                      s.project_name,
+                      s.slug,
+                      s.status,
+                      s.updated_at,
+                      d.hostname,
+                      dep.id as active_deployment_id
+                    from platform_sites s
+                    left join platform_domains d
+                      on d.site_id = s.id and d.is_primary = true
+                    left join platform_deployments dep
+                      on dep.site_id = s.id and dep.status = 'active'
+                    where s.user_id = :user_id
+                    order by (dep.id is not null) desc, s.updated_at desc
+                    limit 1
+                    """
+                ),
+                {"user_id": str(user_id)},
+            ).mappings().first()
+        if not row:
+            raise ValueError("No sites found for this user")
+        return dict(row)
+
+    params = {
+        "user_id": str(user_id),
+        "ref_text": ref_value.lower(),
+        "slug_candidate": slug_candidate,
+        "hostname_candidate": hostname_candidate,
+    }
+    with _engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                select
+                  s.id,
+                  s.user_id,
+                  s.project_name,
+                  s.slug,
+                  s.status,
+                  s.updated_at,
+                  d.hostname,
+                  dep.id as active_deployment_id
+                from platform_sites s
+                left join platform_domains d
+                  on d.site_id = s.id and d.is_primary = true
+                left join platform_deployments dep
+                  on dep.site_id = s.id and dep.status = 'active'
+                where
+                  s.user_id = :user_id
+                  and (
+                    cast(s.id as text) = :ref_text
+                    or s.slug = :ref_text
+                    or lower(coalesce(d.hostname, '')) = :ref_text
+                    or (:slug_candidate is not null and s.slug = :slug_candidate)
+                    or (:hostname_candidate is not null and lower(coalesce(d.hostname, '')) = :hostname_candidate)
+                    or lower(s.project_name) = :ref_text
+                  )
+                order by (dep.id is not null) desc, s.updated_at desc
+                limit 1
+                """
+            ),
+            params,
+        ).mappings().first()
+
+    if not row:
+        raise ValueError(f"Could not resolve site from reference '{ref_value}'")
+    return dict(row)
+
+
+def list_user_sites(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    lim = max(1, min(int(limit or 20), 100))
+    with _engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                select
+                  s.id as site_id,
+                  s.project_name,
+                  s.slug,
+                  s.status,
+                  s.created_at,
+                  s.updated_at,
+                  d.hostname,
+                  dep.id as active_deployment_id,
+                  dep.activated_at as active_deployment_activated_at,
+                  db.turso_db_name as database_name
+                from platform_sites s
+                left join platform_domains d
+                  on d.site_id = s.id and d.is_primary = true
+                left join platform_deployments dep
+                  on dep.site_id = s.id and dep.status = 'active'
+                left join platform_site_databases db
+                  on db.site_id = s.id
+                where s.user_id = :user_id
+                order by s.updated_at desc
+                limit :lim
+                """
+            ),
+            {"user_id": str(user_id), "lim": lim},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def list_deployed_projects(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """
+    List deployed projects for a user with one representative deployment per site
+    (prefers active deployment, otherwise latest version).
+    """
+    lim = max(1, min(int(limit or 20), 100))
+    with _engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                with ranked as (
+                  select
+                    s.id as site_id,
+                    s.project_name,
+                    s.slug,
+                    s.status as site_status,
+                    s.updated_at,
+                    d.hostname,
+                    dep.id as deployment_id,
+                    dep.version,
+                    dep.r2_prefix,
+                    dep.status as deployment_status,
+                    dep.created_at as deployment_created_at,
+                    dep.activated_at,
+                    row_number() over (
+                      partition by s.id
+                      order by (dep.status = 'active') desc, dep.version desc
+                    ) as rn
+                  from platform_sites s
+                  join platform_deployments dep
+                    on dep.site_id = s.id
+                  left join platform_domains d
+                    on d.site_id = s.id and d.is_primary = true
+                  where s.user_id = :user_id
+                )
+                select
+                  site_id,
+                  project_name,
+                  slug,
+                  site_status,
+                  hostname,
+                  deployment_id,
+                  version,
+                  r2_prefix,
+                  deployment_status,
+                  deployment_created_at,
+                  activated_at,
+                  updated_at
+                from ranked
+                where rn = 1
+                order by updated_at desc
+                limit :lim
+                """
+            ),
+            {"user_id": str(user_id), "lim": lim},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def list_user_databases(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    """
+    List provisioned per-site databases owned by a user.
+    Returns one row per site database with deployment/domain context when available.
+    """
+    lim = max(1, min(int(limit or 50), 200))
+    with _engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                with latest_dep as (
+                  select
+                    d.site_id,
+                    d.id as deployment_id,
+                    d.status as deployment_status,
+                    d.version,
+                    d.r2_prefix,
+                    row_number() over (
+                      partition by d.site_id
+                      order by (d.status = 'active') desc, d.version desc
+                    ) as rn
+                  from platform_deployments d
+                )
+                select
+                  s.id as site_id,
+                  s.project_name,
+                  s.slug,
+                  dm.hostname,
+                  db.turso_db_name as database_name,
+                  db.turso_db_hostname as database_hostname,
+                  db.created_at as database_created_at,
+                  dep.deployment_id,
+                  dep.deployment_status,
+                  dep.version,
+                  dep.r2_prefix
+                from platform_sites s
+                join platform_site_databases db
+                  on db.site_id = s.id
+                left join platform_domains dm
+                  on dm.site_id = s.id and dm.is_primary = true
+                left join latest_dep dep
+                  on dep.site_id = s.id and dep.rn = 1
+                where s.user_id = :user_id
+                order by db.created_at desc
+                limit :lim
+                """
+            ),
+            {"user_id": str(user_id), "lim": lim},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def get_site_summary(site_id: str, user_id: str) -> dict[str, Any]:
+    site = _ensure_site_owned(site_id=site_id, user_id=user_id)
+    with _engine.connect() as conn:
+        host_row = conn.execute(
+            text(
+                """
+                select hostname
+                from platform_domains
+                where site_id = :site_id and is_primary = true
+                """
+            ),
+            {"site_id": site_id},
+        ).mappings().first()
+    return {
+        "site_id": site_id,
+        "slug": site["slug"],
+        "status": site["status"],
+        "hostname": host_row["hostname"] if host_row else None,
+    }
+
+
+def get_deployment_summary(site_id: str, user_id: str, deployment_id: Optional[str] = None) -> dict[str, Any]:
+    _ensure_site_owned(site_id=site_id, user_id=user_id)
+    with _engine.connect() as conn:
+        if deployment_id:
+            row = conn.execute(
+                text(
+                    """
+                    select id, site_id, version, r2_prefix, status, created_at, activated_at
+                    from platform_deployments
+                    where site_id = :site_id and id = :deployment_id
+                    """
+                ),
+                {"site_id": site_id, "deployment_id": deployment_id},
+            ).mappings().first()
+        else:
+            row = conn.execute(
+                text(
+                    """
+                    select id, site_id, version, r2_prefix, status, created_at, activated_at
+                    from platform_deployments
+                    where site_id = :site_id
+                    order by (status = 'active') desc, version desc
+                    limit 1
+                    """
+                ),
+                {"site_id": site_id},
+            ).mappings().first()
+    if not row:
+        raise ValueError("Deployment not found")
+    return dict(row)
+
+
+def list_deployment_files(site_id: str, user_id: str, deployment_id: Optional[str] = None) -> list[dict[str, Any]]:
+    dep = get_deployment_summary(site_id=site_id, user_id=user_id, deployment_id=deployment_id)
+    prefix = str(dep["r2_prefix"]).rstrip("/") + "/"
+    bucket = _require_env("R2_SITES_BUCKET")
+    r2 = get_r2_client()
+
+    files: list[dict[str, Any]] = []
+    paginator = r2.client.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+    for page in pages:
+        for obj in page.get("Contents", []) or []:
+            key = str(obj.get("Key", ""))
+            if not key or key.endswith("/"):
+                continue
+            rel_path = key[len(prefix):] if key.startswith(prefix) else key
+            files.append(
+                {
+                    "path": rel_path,
+                    "key": key,
+                    "size": int(obj.get("Size", 0) or 0),
+                    "last_modified": obj.get("LastModified").isoformat() if obj.get("LastModified") else None,
+                }
+            )
+    return files
+
+
+def get_deployment_file_bytes(site_id: str, user_id: str, path: str, deployment_id: Optional[str] = None) -> bytes:
+    dep = get_deployment_summary(site_id=site_id, user_id=user_id, deployment_id=deployment_id)
+    rel = _sanitize_path(path)
+    key = f"{str(dep['r2_prefix']).rstrip('/')}/{rel}"
+    bucket = _require_env("R2_SITES_BUCKET")
+    r2 = get_r2_client()
+    response = r2.client.get_object(Bucket=bucket, Key=key)
+    body = response.get("Body")
+    data = body.read() if body else b""
+    if data is None:
+        return b""
+    return data
