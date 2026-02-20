@@ -16,6 +16,7 @@ const path = window.electron?.path;
 const ipcRenderer = window.electron?.ipcRenderer;
 
 let currentConversationId = null;
+window.currentConversationId = currentConversationId;
 
 let chatConfig = {
     memory: true,
@@ -359,6 +360,7 @@ async function startNewConversation() {
     }
 
     currentConversationId = self.crypto.randomUUID();
+    window.currentConversationId = currentConversationId;
     console.log(`Starting new conversation with ID: ${currentConversationId}`);
 
     document.getElementById('chat-messages').innerHTML = '';
@@ -1434,6 +1436,7 @@ async function handleSendMessage() {
     if (window.needsNewBackendSession) {
         // Generate new conversation ID for backend
         currentConversationId = self.crypto.randomUUID();
+        window.currentConversationId = currentConversationId;
         console.log(`Creating new backend session after error: ${currentConversationId}`);
 
         // Extract conversation history from DOM

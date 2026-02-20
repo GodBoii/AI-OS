@@ -49,6 +49,7 @@ class ArtifactHandler {
         `;
         
         document.body.appendChild(container);
+        this.setupDeployPreviewModal();
         
         container.querySelector('.close-artifact-btn').addEventListener('click', () => this.hideArtifact());
         container.querySelector('.copy-artifact-btn').addEventListener('click', () => this.copyArtifactContent());
@@ -63,6 +64,34 @@ class ArtifactHandler {
                 this.setViewMode(mode);
             });
         });
+    }
+
+    setupDeployPreviewModal() {
+        if (document.getElementById('deploy-preview-modal')) {
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'deploy-preview-modal';
+        modal.className = 'deploy-preview-modal hidden';
+        modal.innerHTML = `
+            <div class="deploy-preview-dialog" role="dialog" aria-modal="true" aria-label="Deploy Preview">
+                <div class="deploy-preview-header">
+                    <div class="deploy-preview-title">Deploy Preview</div>
+                    <button type="button" class="deploy-preview-close" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="deploy-preview-meta"></div>
+                <div class="deploy-preview-tree"></div>
+                <div class="deploy-preview-actions">
+                    <button type="button" class="deploy-preview-cancel">Cancel</button>
+                    <button type="button" class="deploy-preview-confirm">Deploy</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
     }
 
     cachePendingImage(artifactId, base64Data) {
@@ -948,6 +977,403 @@ class ArtifactHandler {
         return payload;
     }
 
+    getCurrentConversationId() {
+        const sessionId = window.currentConversationId;
+        return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : null;
+    }
+
+    inferContentTypeFromPath(path) {
+        const ext = String(path || '').toLowerCase().split('.').pop();
+        const map = {
+            html: 'text/html',
+            htm: 'text/html',
+            css: 'text/css',
+            js: 'text/javascript',
+            mjs: 'text/javascript',
+            json: 'application/json',
+            txt: 'text/plain',
+            md: 'text/markdown',
+            svg: 'image/svg+xml',
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            ico: 'image/x-icon',
+            woff: 'font/woff',
+            woff2: 'font/woff2',
+            ttf: 'font/ttf',
+            eot: 'application/vnd.ms-fontobject',
+            xml: 'application/xml',
+            wasm: 'application/wasm'
+        };
+        return map[ext] || 'application/octet-stream';
+    }
+
+    normalizeDeployPath(rawPath, fallbackName = null) {
+        let path = String(rawPath || fallbackName || '')
+            .replace(/\\/g, '/')
+            .trim();
+
+        if (!path) return null;
+
+        path = path.replace(/^\/home\/sandboxuser\//, '');
+        path = path.replace(/^\/+/, '');
+        path = path.replace(/^\.\/+/, '');
+
+        if (!path || path.endsWith('/') || path.split('/').includes('..')) {
+            return null;
+        }
+
+        return path;
+    }
+
+    async arrayBufferToBase64(arrayBuffer) {
+        const bytes = new Uint8Array(arrayBuffer);
+        const chunkSize = 0x8000;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode(...chunk);
+        }
+        return btoa(binary);
+    }
+
+    async getSessionContent(accessToken, sessionId) {
+        if (!sessionId) return [];
+
+        if (window.sessionContentViewer) {
+            const cached = window.sessionContentViewer.getCachedContent(sessionId);
+            if (Array.isArray(cached)) {
+                return cached;
+            }
+        }
+
+        const response = await fetch(`${this.backendBaseUrl}/api/sessions/${sessionId}/content`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to load session files (HTTP ${response.status})`);
+        }
+
+        const payload = await response.json();
+        const content = Array.isArray(payload?.content) ? payload.content : [];
+
+        if (window.sessionContentViewer) {
+            window.sessionContentViewer.cacheContent(sessionId, content);
+        }
+
+        return content;
+    }
+
+    async collectSessionDeployFiles(accessToken) {
+        const sessionId = this.getCurrentConversationId();
+        if (!sessionId) {
+            return [];
+        }
+
+        const content = await this.getSessionContent(accessToken, sessionId);
+        const artifacts = content.filter((item) => item?.content_type === 'artifact');
+        if (!artifacts.length) {
+            return [];
+        }
+
+        // Keep latest artifact for each path.
+        const latestByPath = new Map();
+        for (const item of artifacts) {
+            const metadata = item?.metadata || {};
+            const normalizedPath = this.normalizeDeployPath(metadata.file_path, metadata.filename);
+            if (!normalizedPath || !item?.download_url) continue;
+            latestByPath.set(normalizedPath, item);
+        }
+
+        const deployFiles = [];
+        const MAX_FILES = 100;
+        let processed = 0;
+
+        for (const [path, item] of latestByPath) {
+            if (processed >= MAX_FILES) break;
+
+            const metadata = item?.metadata || {};
+            const contentType = metadata.mime_type || this.inferContentTypeFromPath(path);
+
+            deployFiles.push({
+                path,
+                content_type: contentType,
+                download_url: item.download_url
+            });
+
+            processed += 1;
+        }
+
+        return deployFiles;
+    }
+
+    parseLocalAssetRefs(html) {
+        const text = String(html || '');
+        const refs = new Set();
+        const patterns = [
+            /<link[^>]+href=["']([^"']+)["']/gi,
+            /<script[^>]+src=["']([^"']+)["']/gi,
+            /<img[^>]+src=["']([^"']+)["']/gi
+        ];
+
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                const raw = String(match[1] || '').trim();
+                if (!raw) continue;
+                if (
+                    raw.startsWith('http://') ||
+                    raw.startsWith('https://') ||
+                    raw.startsWith('//') ||
+                    raw.startsWith('data:') ||
+                    raw.startsWith('#')
+                ) {
+                    continue;
+                }
+                refs.add(raw.replace(/^\.\/+/, ''));
+            }
+        }
+        return refs;
+    }
+
+    buildDeploymentDraft(files, htmlFallback) {
+        const groups = new Map();
+        const assetRefs = this.parseLocalAssetRefs(htmlFallback);
+
+        for (const file of files) {
+            const fullPath = String(file.path || '');
+            const root = fullPath.includes('/') ? fullPath.split('/')[0] : '';
+            if (!groups.has(root)) groups.set(root, []);
+            groups.get(root).push(file);
+        }
+
+        const scoreGroup = (root, items) => {
+            const rebased = items.map((file) => {
+                const fullPath = String(file.path || '');
+                const path = root && fullPath.startsWith(`${root}/`) ? fullPath.slice(root.length + 1) : fullPath;
+                return { ...file, path, _root: root };
+            });
+
+            const pathSet = new Set(rebased.map((f) => String(f.path || '').toLowerCase()));
+            const hasIndex = pathSet.has('index.html');
+            let matchedRefs = 0;
+            for (const ref of assetRefs) {
+                if (pathSet.has(String(ref).toLowerCase())) matchedRefs += 1;
+            }
+
+            // Prefer coherent website groups: has index + asset matches + richer file set.
+            const score =
+                (hasIndex ? 100 : 0) +
+                (matchedRefs * 25) +
+                Math.min(rebased.length, 30);
+
+            return { root, rebased, score, hasIndex, matchedRefs };
+        };
+
+        const candidates = Array.from(groups.entries()).map(([root, items]) => scoreGroup(root, items));
+        candidates.sort((a, b) => b.score - a.score);
+
+        let selected = candidates.length ? candidates[0] : { root: '', rebased: [], hasIndex: false };
+        let draftFiles = [...selected.rebased];
+
+        if (!selected.hasIndex) {
+            draftFiles.push({
+                path: 'index.html',
+                content: String(htmlFallback || ''),
+                content_type: 'text/html',
+                _root: 'fallback'
+            });
+        }
+
+        return {
+            rootPrefix: selected.root || null,
+            candidateCount: candidates.length,
+            files: draftFiles
+        };
+    }
+
+    buildFileTreeMarkup(paths) {
+        const root = {};
+
+        for (const rawPath of paths) {
+            const path = String(rawPath || '').trim();
+            if (!path) continue;
+
+            const parts = path.split('/');
+            let node = root;
+            for (let i = 0; i < parts.length; i += 1) {
+                const part = parts[i];
+                if (!part) continue;
+                if (!node[part]) {
+                    node[part] = { __children: {}, __file: i === parts.length - 1 };
+                } else if (i === parts.length - 1) {
+                    node[part].__file = true;
+                }
+                node = node[part].__children;
+            }
+        }
+
+        const renderNode = (obj) => {
+            const keys = Object.keys(obj).sort((a, b) => {
+                const aFile = obj[a].__file;
+                const bFile = obj[b].__file;
+                if (aFile !== bFile) return aFile ? 1 : -1;
+                return a.localeCompare(b);
+            });
+
+            return `<ul class="deploy-tree-list">${keys.map((key) => {
+                const entry = obj[key];
+                const safeName = this.escapeHtml(key);
+                if (entry.__file) {
+                    return `<li class="deploy-tree-file"><i class="fas fa-file-code"></i><span>${safeName}</span></li>`;
+                }
+                return `<li class="deploy-tree-dir"><i class="fas fa-folder"></i><span>${safeName}</span>${renderNode(entry.__children)}</li>`;
+            }).join('')}</ul>`;
+        };
+
+        return renderNode(root);
+    }
+
+    async confirmDeployPreview({ files, rootPrefix, candidateCount }) {
+        const modal = document.getElementById('deploy-preview-modal');
+        if (!modal) return files;
+
+        const metaEl = modal.querySelector('.deploy-preview-meta');
+        const treeEl = modal.querySelector('.deploy-preview-tree');
+        const confirmBtn = modal.querySelector('.deploy-preview-confirm');
+        const cancelBtn = modal.querySelector('.deploy-preview-cancel');
+        const closeBtn = modal.querySelector('.deploy-preview-close');
+
+        const fileCount = files.length;
+        const rootInfo = rootPrefix
+            ? `Selected project root: <code>${this.escapeHtml(rootPrefix)}</code> (rebased to web root).`
+            : 'Deploying from current root paths.';
+        const candidateInfo = candidateCount > 1
+            ? `Detected <strong>${candidateCount}</strong> project-root candidates in this session; best match selected automatically.`
+            : 'Single project-root candidate detected.';
+
+        metaEl.innerHTML = `
+            <div><strong>${fileCount}</strong> file${fileCount === 1 ? '' : 's'} will be deployed.</div>
+            <div>${rootInfo}</div>
+            <div>${candidateInfo}</div>
+        `;
+
+        treeEl.innerHTML = `
+            <div class="deploy-editor-list">
+                ${files.map((file, index) => `
+                    <div class="deploy-editor-row" data-row-index="${index}">
+                        <input class="deploy-editor-include" type="checkbox" checked />
+                        <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
+                        <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="deploy-editor-tree"></div>
+        `;
+
+        const rebuildTree = () => {
+            const rows = Array.from(treeEl.querySelectorAll('.deploy-editor-row'));
+            const selectedPaths = rows
+                .filter((row) => row.querySelector('.deploy-editor-include')?.checked)
+                .map((row) => (row.querySelector('.deploy-editor-path')?.value || '').trim())
+                .filter(Boolean);
+            const treeHtml = this.buildFileTreeMarkup(selectedPaths);
+            const treeContainer = treeEl.querySelector('.deploy-editor-tree');
+            if (treeContainer) treeContainer.innerHTML = treeHtml;
+        };
+
+        treeEl.querySelectorAll('.deploy-editor-include, .deploy-editor-path').forEach((el) => {
+            el.addEventListener('change', rebuildTree);
+            el.addEventListener('input', rebuildTree);
+        });
+        rebuildTree();
+        modal.classList.remove('hidden');
+
+        return new Promise((resolve) => {
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                closeBtn.removeEventListener('click', onCancel);
+                modal.removeEventListener('click', onBackdrop);
+            };
+
+            const onConfirm = () => {
+                const rows = Array.from(treeEl.querySelectorAll('.deploy-editor-row'));
+                const selected = rows
+                    .filter((row) => row.querySelector('.deploy-editor-include')?.checked)
+                    .map((row) => {
+                        const index = Number(row.dataset.rowIndex);
+                        const editedPath = this.normalizeDeployPath(row.querySelector('.deploy-editor-path')?.value || '');
+                        if (!editedPath) return null;
+                        const source = files[index];
+                        return {
+                            ...source,
+                            path: editedPath
+                        };
+                    })
+                    .filter(Boolean);
+
+                cleanup();
+                resolve(selected);
+            };
+
+            const onCancel = () => {
+                cleanup();
+                resolve(null);
+            };
+
+            const onBackdrop = (event) => {
+                if (event.target === modal) {
+                    onCancel();
+                }
+            };
+
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            closeBtn.addEventListener('click', onCancel);
+            modal.addEventListener('click', onBackdrop);
+        });
+    }
+
+    async materializeDeployFiles(files) {
+        const deployFiles = [];
+        for (const file of files) {
+            if (file.content !== undefined) {
+                deployFiles.push({
+                    path: file.path,
+                    content: file.content,
+                    content_type: file.content_type || this.inferContentTypeFromPath(file.path)
+                });
+                continue;
+            }
+
+            if (!file.download_url) {
+                continue;
+            }
+
+            const fileResponse = await fetch(file.download_url);
+            if (!fileResponse.ok) {
+                throw new Error(`Failed to fetch '${file.path}' (HTTP ${fileResponse.status})`);
+            }
+
+            const arrayBuffer = await fileResponse.arrayBuffer();
+            const contentBase64 = await this.arrayBufferToBase64(arrayBuffer);
+            deployFiles.push({
+                path: file.path,
+                content_base64: contentBase64,
+                content_type: file.content_type || this.inferContentTypeFromPath(file.path)
+            });
+        }
+
+        return deployFiles;
+    }
+
     async deployCurrentArtifact() {
         if (this.deployInProgress) {
             this.showNotification('Deploy already in progress', 'info');
@@ -963,7 +1389,7 @@ class ArtifactHandler {
         const language = String(artifact.language || artifact.type || '').toLowerCase();
         const html = String(artifact.content || '');
         if (!(language === 'html' || this.isHtmlContent(html))) {
-            this.showNotification('Only HTML artifact deploy is enabled in this phase', 'error');
+            this.showNotification('Open the website entry HTML file (index.html) before deploying', 'error');
             return;
         }
 
@@ -981,6 +1407,36 @@ class ArtifactHandler {
         this.showNotification('Deploy started...', 'info');
 
         try {
+            const sessionFiles = await this.collectSessionDeployFiles(session.access_token);
+            const draft = this.buildDeploymentDraft(sessionFiles, html);
+            let filesToDeploy = draft.files;
+
+            if (!filesToDeploy.length) {
+                throw new Error('No deployable files found in this session');
+            }
+
+            const editedFiles = await this.confirmDeployPreview({
+                files: filesToDeploy,
+                rootPrefix: draft.rootPrefix,
+                candidateCount: draft.candidateCount
+            });
+            if (!editedFiles) {
+                this.showNotification('Deploy canceled', 'info');
+                return;
+            }
+
+            filesToDeploy = editedFiles;
+            const hasIndexHtml = filesToDeploy.some((file) => String(file.path || '').toLowerCase() === 'index.html');
+            if (!hasIndexHtml) {
+                throw new Error('Deployment must include index.html');
+            }
+
+            const uploadPayload = await this.materializeDeployFiles(filesToDeploy);
+
+            if (uploadPayload.length > 1) {
+                this.showNotification(`Deploying ${uploadPayload.length} files...`, 'info');
+            }
+
             await this.deployApi('/api/deploy/site/init', session.access_token, {
                 site_id: siteId,
                 project_name: artifact.title || 'Generated Site',
@@ -991,13 +1447,7 @@ class ArtifactHandler {
 
             const upload = await this.deployApi('/api/deploy/upload-site', session.access_token, {
                 site_id: siteId,
-                files: [
-                    {
-                        path: 'index.html',
-                        content: html,
-                        content_type: 'text/html'
-                    }
-                ]
+                files: uploadPayload
             });
 
             const activated = await this.deployApi('/api/deploy/activate', session.access_token, {
