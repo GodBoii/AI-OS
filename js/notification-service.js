@@ -41,6 +41,14 @@ class NotificationService {
         return notification.id;
     }
 
+    showComputerTool(message, action) {
+        // Create a brief, elegant notification for computer tool usage
+        const notification = this.createNotification(message, 'computer-tool', 3000);
+        notification.action = action; // Store action for potential filtering
+        this.addNotification(notification);
+        return notification.id;
+    }
+
     createNotification(message, type, duration, showRetry = false) {
         const id = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const element = document.createElement('div');
@@ -98,7 +106,8 @@ class NotificationService {
             error: '<i class="fas fa-exclamation-circle"></i>',
             warning: '<i class="fas fa-exclamation-triangle"></i>',
             info: '<i class="fas fa-info-circle"></i>',
-            connection: '<i class="fas fa-circle-notch fa-spin"></i>'
+            connection: '<i class="fas fa-circle-notch fa-spin"></i>',
+            'computer-tool': '<i class="fas fa-desktop"></i>'
         };
         return icons[type] || icons.info;
     }
