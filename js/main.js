@@ -116,7 +116,8 @@ function createWindow() {
             nodeIntegration: true,
             contextIsolation: true,
             enableRemoteModule: true,
-            webSecurity: false
+            webSecurity: false,
+            webviewTag: true  // Enable <webview> tag support
         },
         frame: true,
         transparent: true
