@@ -179,6 +179,12 @@ class PythonBridge {
                 console.error('PythonBridge: ComputerController is not linked. Cannot handle computer command.');
             }
         });
+
+        // NEW: Handler for computer tool notifications
+        this.socket.on('computer-tool-notification', (data) => {
+            console.log('PythonBridge: Received computer-tool-notification:', data.message);
+            this.mainWindow.webContents.send('computer-tool-notification', data);
+        });
     }
 
     /**

@@ -44,30 +44,41 @@ class ComputerControlHandler {
                 return null;
             }
 
-            const { createClient } = require('@supabase/supabase-js');
-            const supabase = createClient(
-                process.env.SUPABASE_URL,
-                process.env.SUPABASE_ANON_KEY
+            const axios = require('axios');
+            const config = require('./config');
+
+            const imageBuffer = Buffer.from(screenshotBase64, 'base64');
+            const fileName = `computer-screenshot-${Date.now()}.png`;
+
+            // Request signed upload URL from backend (same as browser tools)
+            const urlResponse = await axios.post(
+                `${config.backend.url}/api/generate-upload-url`,
+                { fileName },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
             );
 
-            const buffer = Buffer.from(screenshotBase64, 'base64');
-            const filename = `screenshots/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-
-            const { data, error } = await supabase.storage
-                .from('media-uploads')
-                .upload(filename, buffer, {
-                    contentType: 'image/png',
-                    upsert: false
-                });
-
-            if (error) {
-                console.error('ComputerControlHandler: Screenshot upload failed:', error);
+            const { signedURL, path } = urlResponse.data;
+            if (!signedURL || !path) {
+                console.error('ComputerControlHandler: Backend did not return valid signed URL or path');
                 return null;
             }
 
-            return filename;
+            // Upload to Supabase using signed URL
+            await axios.put(signedURL, imageBuffer, {
+                headers: { 'Content-Type': 'image/png' }
+            });
+
+            console.log(`ComputerControlHandler: Screenshot successfully uploaded to Supabase path: ${path}`);
+            return path;
+
         } catch (error) {
-            console.error('ComputerControlHandler: Screenshot upload error:', error);
+            const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+            console.error('ComputerControlHandler: Screenshot upload error:', errorMessage);
             return null;
         }
     }
