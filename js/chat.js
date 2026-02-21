@@ -748,6 +748,14 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('socket-status', (data) => console.log('Socket status:', data));
+    
+    // Listen for computer tool notifications
+    ipcRenderer.on('computer-tool-notification', (data) => {
+        if (window.notificationService) {
+            window.notificationService.showComputerTool(data.message, data.action);
+        }
+    });
+    
     ipcRenderer.send('check-socket-connection');
 }
 
