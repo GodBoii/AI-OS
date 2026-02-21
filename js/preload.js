@@ -51,6 +51,8 @@ const validReceiveChannels = [
     'sandbox-command-started',
     'sandbox-command-update',
     'sandbox-command-finished',
+    'task_execution_status',
+    'computer-tool-notification',  // NEW: Computer tool notifications
 
     // Browse AI related channels
     'browse-ai-webview-created',
