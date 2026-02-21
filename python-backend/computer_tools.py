@@ -107,6 +107,7 @@ class ComputerTools(Toolkit):
         """
         request_id = str(uuid.uuid4())
         command_payload['request_id'] = request_id
+        action = command_payload.get('action')
         
         response_channel = f"computer-response:{request_id}"
         pubsub = self.redis_client.pubsub()
@@ -116,9 +117,12 @@ class ComputerTools(Toolkit):
             
             # 1. Send the command to the client
             self.socketio.emit('computer-command', command_payload, room=self.sid)
-            logger.info(f"ComputerTools: Sent command '{command_payload.get('action')}' to client {self.sid}")
+            logger.info(f"ComputerTools: Sent command '{action}' to client {self.sid}")
+            
+            # 2. Emit notification to client about tool usage
+            self._emit_tool_notification(action, command_payload)
 
-            # 2. Wait for a message on the subscribed channel
+            # 3. Wait for a message on the subscribed channel
             for message in pubsub.listen():
                 if message['type'] == 'message':
                     result = json.loads(message['data'])
@@ -133,9 +137,52 @@ class ComputerTools(Toolkit):
             logger.error(f"Computer command error: {e}")
             return {"status": "error", "error": f"An internal error occurred: {e}"}
         finally:
-            # 3. Always clean up the subscription
+            # 4. Always clean up the subscription
             pubsub.unsubscribe(response_channel)
             pubsub.close()
+    
+    def _emit_tool_notification(self, action: str, payload: Dict[str, Any]) -> None:
+        """Emit notification to client about computer tool usage."""
+        # Map actions to user-friendly messages
+        action_messages = {
+            'take_screenshot': 'Captured screen',
+            'get_active_window': 'Checked active window',
+            'get_cursor_position': 'Read cursor position',
+            'read_clipboard': 'Read clipboard',
+            'ocr_screen': 'Extracted text from screen',
+            'move_mouse': f"Moved mouse to ({payload.get('x', '?')}, {payload.get('y', '?')})",
+            'click_mouse': f"Clicked {payload.get('button', 'left')} mouse button",
+            'type_text': f"Typed text",
+            'press_hotkey': f"Pressed {payload.get('keys', 'hotkey')}",
+            'scroll': f"Scrolled {payload.get('direction', 'down')}",
+            'drag_drop': 'Performed drag & drop',
+            'list_windows': 'Listed open windows',
+            'focus_window': f"Focused window",
+            'resize_window': 'Resized window',
+            'minimize_window': 'Minimized window',
+            'maximize_window': 'Maximized window',
+            'close_window': 'Closed window',
+            'run_command': f"Executed command",
+            'list_files': f"Listed files in {payload.get('directory', 'directory')}",
+            'read_file': f"Read file",
+            'write_file': f"Wrote to file",
+            'delete_file': f"Deleted file",
+            'create_directory': f"Created directory",
+            'open_application': f"Opened {payload.get('app_name', 'application')}",
+            'close_application': f"Closed {payload.get('app_name', 'application')}",
+            'get_volume': 'Checked system volume',
+            'set_volume': f"Set volume to {payload.get('volume', '?')}%",
+            'get_system_info': 'Retrieved system information',
+        }
+        
+        message = action_messages.get(action, f"Executed {action.replace('_', ' ')}")
+        
+        # Emit notification event to client
+        self.socketio.emit('computer-tool-notification', {
+            'action': action,
+            'message': message,
+            'timestamp': str(uuid.uuid4())  # Use as unique ID
+        }, room=self.sid)
 
     # ===== PERMISSION & STATUS =====
 
