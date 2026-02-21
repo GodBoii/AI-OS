@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computer Tool Notifications Preview</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #faf8f0 0%, #f5f3eb 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .preview-container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: #111827;
+            margin-bottom: 1rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.125rem;
+            color: #6b7280;
+            margin-bottom: 3rem;
+            font-weight: 400;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .demo-section h2 {
+            font-size: 1.25rem;
+            color: #1f2937;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+
+        .notification-demo {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 12px;
+            min-width: 300px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px) saturate(200%);
+            -webkit-backdrop-filter: blur(16px) saturate(200%);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border-left: 4px solid #374151;
+            margin-bottom: 1rem;
+            animation: slideInComputer 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .notification-icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #374151;
+            animation: pulseIcon 2s ease-in-out infinite;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-message {
+            color: #111827;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            opacity: 0.95;
+            line-height: 1.5;
+        }
+
+        .notification-close {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .notification-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #111827;
+        }
+
+        .notification-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            width: 100%;
+            background: linear-gradient(90deg, #374151, #52525b);
+            transform-origin: left;
+            animation: progress 3s linear;
+        }
+
+        @keyframes slideInComputer {
+            0% {
+                opacity: 0;
+                transform: translateX(120%) scale(0.85);
+            }
+            60% {
+                transform: translateX(-8px) scale(1.02);
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+        }
+
+        @keyframes pulseIcon {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes progress {
+            from {
+                transform: scaleX(1);
+            }
+            to {
+                transform: scaleX(0);
+            }
+        }
+
+        .notification-demo:hover {
+            transform: scale(1.01);
+            border-left-width: 5px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Dark Mode */
+        body.dark-mode {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        body.dark-mode h1 {
+            color: #f9fafb;
+        }
+
+        body.dark-mode .subtitle {
+            color: #9ca3af;
+        }
+
+        body.dark-mode .demo-section {
+            background: rgba(31, 41, 55, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        body.dark-mode .demo-section h2 {
+            color: #f3f4f6;
+        }
+
+        body.dark-mode .notification-demo {
+            background: rgba(31, 41, 55, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+            border-left-color: #6b7280;
+        }
+
+        body.dark-mode .notification-icon {
+            color: #9ca3af;
+        }
+
+        body.dark-mode .notification-message {
+            color: #f9fafb;
+        }
+
+        body.dark-mode .notification-progress {
+            background: linear-gradient(90deg, #6b7280, #9ca3af);
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            padding: 0.75rem 1.5rem;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode .theme-toggle {
+            background: rgba(31, 41, 55, 0.9);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: #f3f4f6;
+        }
+
+        .theme-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 2rem;
+        }
+
+        .feature-list li {
+            padding: 0.75rem 0;
+            color: #4b5563;
+            font-size: 0.9375rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        body.dark-mode .feature-list li {
+            color: #d1d5db;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            font-size: 1.125rem;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <i class="fas fa-moon"></i> Toggle Dark Mode
+    </button>
+
+    <div class="preview-container">
+        <h1>Computer Tool Notifications</h1>
+        <p class="subtitle">Elegant, real-time feedback when the Computer Agent performs actions</p>
+
+        <div class="demo-grid">
+            <div class="demo-section">
+                <h2>Perception Tools</h2>
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Captured screen</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Read clipboard</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+            </div>
+
+            <div class="demo-section">
+                <h2>Interaction Tools</h2>
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Moved mouse to (450, 320)</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Clicked left mouse button</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Typed text</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+            </div>
+
+            <div class="demo-section">
+                <h2>System Tools</h2>
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Opened Chrome</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Executed command</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+
+                <div class="notification-demo">
+                    <div class="notification-icon">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-message">Set volume to 75%</div>
+                    </div>
+                    <button class="notification-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="notification-progress"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>Design Features</h2>
+            <ul class="feature-list">
+                <li>Refined minimalism with purposeful motion</li>
+                <li>Neutral gray color palette (no purple)</li>
+                <li>Glassmorphism with 16px backdrop blur</li>
+                <li>Spring-like entrance animation with overshoot</li>
+                <li>Subtle icon pulse (2s cycle)</li>
+                <li>3-second auto-dismiss with hover pause</li>
+                <li>Seamless light/dark mode support</li>
+                <li>Micro-interactions on hover</li>
+                <li>Accessible with ARIA labels</li>
+                <li>Performance optimized (CSS animations)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const icon = document.querySelector('.theme-toggle i');
+            if (document.body.classList.contains('dark-mode')) {
+                icon.className = 'fas fa-sun';
+            } else {
+                icon.className = 'fas fa-moon';
+            }
+        }
+
+        // Add click handlers to close buttons
+        document.querySelectorAll('.notification-close').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const notification = e.target.closest('.notification-demo');
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%) scale(0.9)';
+                setTimeout(() => {
+                    notification.style.opacity = '1';
+                    notification.style.transform = 'translateX(0) scale(1)';
+                }, 300);
+            });
+        });
+    </script>
+</body>
+</html>
