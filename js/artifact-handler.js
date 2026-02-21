@@ -38,6 +38,7 @@ class ArtifactHandler {
                         </button>
                         <button class="deploy-artifact-btn" title="Deploy HTML Site">
                             <i class="fas fa-rocket"></i>
+                            <span class="deploy-btn-text">Deploy</span>
                         </button>
                         <button class="close-artifact-btn">
                             <i class="fas fa-times"></i>
@@ -77,7 +78,13 @@ class ArtifactHandler {
         modal.innerHTML = `
             <div class="deploy-preview-dialog" role="dialog" aria-modal="true" aria-label="Deploy Preview">
                 <div class="deploy-preview-header">
-                    <div class="deploy-preview-title">Deploy Preview</div>
+                    <div class="deploy-preview-header-content">
+                        <i class="fas fa-rocket deploy-preview-icon"></i>
+                        <div class="deploy-preview-title-group">
+                            <div class="deploy-preview-title">Deployment Preview</div>
+                            <div class="deploy-preview-subtitle">Review files before deploying to production</div>
+                        </div>
+                    </div>
                     <button type="button" class="deploy-preview-close" aria-label="Close">
                         <i class="fas fa-times"></i>
                     </button>
@@ -85,8 +92,14 @@ class ArtifactHandler {
                 <div class="deploy-preview-meta"></div>
                 <div class="deploy-preview-tree"></div>
                 <div class="deploy-preview-actions">
-                    <button type="button" class="deploy-preview-cancel">Cancel</button>
-                    <button type="button" class="deploy-preview-confirm">Deploy</button>
+                    <button type="button" class="deploy-preview-cancel">
+                        <i class="fas fa-times-circle"></i>
+                        <span>Cancel</span>
+                    </button>
+                    <button type="button" class="deploy-preview-confirm">
+                        <i class="fas fa-rocket"></i>
+                        <span>Deploy Now</span>
+                    </button>
                 </div>
             </div>
         `;

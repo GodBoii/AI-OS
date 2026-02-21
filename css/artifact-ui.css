@@ -89,7 +89,6 @@
 
 .copy-artifact-btn,
 .download-artifact-btn,
-.deploy-artifact-btn,
 .close-artifact-btn {
     background: none;
     border: none;
@@ -106,10 +105,64 @@
 
 .copy-artifact-btn:hover,
 .download-artifact-btn:hover,
-.deploy-artifact-btn:hover,
 .close-artifact-btn:hover {
     background-color: var(--hover-bg);
     color: var(--text-color);
+}
+
+/* Deploy Button - Enhanced with text - YELLOW COLOR */
+.deploy-artifact-btn {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    border: none;
+    color: #000000;
+    cursor: pointer;
+    height: 32px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all var(--anim-fast) var(--easing-standard);
+    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.deploy-artifact-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.deploy-artifact-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+    background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 100%);
+}
+
+.deploy-artifact-btn:hover::before {
+    left: 100%;
+}
+
+.deploy-artifact-btn:active {
+    transform: translateY(0);
+}
+
+.deploy-artifact-btn i {
+    font-size: 12px;
+}
+
+.deploy-btn-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .back-btn:disabled, 
@@ -172,8 +225,17 @@
     font-family: var(--font-sans);
     line-height: 1.5;
     position: relative;
-    padding-bottom: 64px; /* Space for zoom controls */
     min-height: 0;
+}
+
+.artifact-content > * {
+    flex-shrink: 0;
+}
+
+/* When showing HTML preview, make iframe fill the space */
+.artifact-content > .artifact-html-preview {
+    flex: 1;
+    flex-shrink: 1;
 }
 
 .artifact-markdown-preview {
@@ -182,7 +244,9 @@
     border-radius: 10px;
     padding: 16px;
     color: var(--text-color);
-    overflow: auto;
+    overflow-y: auto;
+    max-height: 100%;
+    flex: 1;
 }
 
 .artifact-markdown-preview pre {
@@ -198,7 +262,8 @@
 
 .artifact-html-preview {
     width: 100%;
-    min-height: 420px;
+    height: 100%;
+    min-height: 500px;
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: #ffffff;
@@ -208,8 +273,9 @@
     margin: 0;
     border-radius: 8px;
     background: var(--code-bg);
-    overflow: hidden;
+    overflow: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    max-height: none;
 }
 
 .code-header {
@@ -233,6 +299,8 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     overflow-x: auto;
+    white-space: pre;
+    max-height: none;
 }
 
 .webview-loading {
@@ -496,12 +564,23 @@
 .deploy-preview-modal {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1200;
     padding: 16px;
+    animation: deployModalFadeIn 0.2s ease-out;
+}
+
+@keyframes deployModalFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .deploy-preview-modal.hidden {
@@ -509,113 +588,227 @@
 }
 
 .deploy-preview-dialog {
-    width: min(760px, 95vw);
-    max-height: 85vh;
+    width: min(820px, 95vw);
+    max-height: 88vh;
     background: var(--window-bg);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    animation: deployDialogSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes deployDialogSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .deploy-preview-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
+    padding: 20px 24px;
     border-bottom: 1px solid var(--border-color);
-    background: var(--card-bg);
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.08) 100%);
+}
+
+.deploy-preview-header-content {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.deploy-preview-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #000000;
+    border-radius: 10px;
+    font-size: 18px;
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+}
+
+.deploy-preview-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .deploy-preview-title {
-    font-size: var(--text-base);
-    font-weight: var(--font-semibold);
+    font-size: 18px;
+    font-weight: 700;
     color: var(--text-color);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.deploy-preview-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 400;
 }
 
 .deploy-preview-close {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border: none;
     border-radius: 8px;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .deploy-preview-close:hover {
     background: var(--hover-bg);
     color: var(--text-color);
+    transform: rotate(90deg);
 }
 
 .deploy-preview-meta {
-    padding: 12px 16px;
+    padding: 16px 24px;
     border-bottom: 1px solid var(--border-color);
     color: var(--text-color);
-    font-size: var(--text-sm);
+    font-size: 13px;
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    background: var(--card-bg);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+}
+
+.deploy-preview-meta strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .deploy-preview-tree {
-    padding: 12px 16px;
+    padding: 20px 24px;
     overflow: auto;
-    max-height: 52vh;
-    font-size: var(--text-sm);
+    max-height: 50vh;
+    font-size: 13px;
+    background: var(--window-bg);
 }
 
 .deploy-editor-list {
     display: grid;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
 .deploy-editor-row {
     display: grid;
-    grid-template-columns: 24px 1fr 180px;
-    gap: 10px;
+    grid-template-columns: 28px 1fr 200px;
+    gap: 12px;
     align-items: center;
+    padding: 10px 12px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.deploy-editor-row:hover {
+    border-color: var(--border-color);
+    background: var(--hover-bg);
 }
 
 .deploy-editor-include {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #667eea;
 }
 
 .deploy-editor-path {
-    height: 34px;
+    height: 36px;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0 10px;
-    background: var(--input-bg, var(--card-bg));
+    border-radius: 6px;
+    padding: 0 12px;
+    background: var(--input-bg, var(--window-bg));
     color: var(--text-color);
-    font-size: var(--text-sm);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    transition: all 0.2s ease;
+}
+
+.deploy-editor-path:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .deploy-editor-type {
     color: var(--text-secondary);
-    font-size: var(--text-xs);
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
 }
 
 .deploy-editor-tree {
-    margin-top: 8px;
-    border-top: 1px solid var(--border-color);
-    padding-top: 10px;
+    margin-top: 16px;
+    border-top: 2px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.deploy-editor-tree h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.deploy-editor-tree h4::before {
+    content: '';
+    width: 3px;
+    height: 14px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 2px;
 }
 
 .deploy-tree-list {
     list-style: none;
     margin: 0;
-    padding-left: 18px;
+    padding-left: 20px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 }
 
 .deploy-tree-list > li {
-    margin: 4px 0;
+    margin: 6px 0;
+    position: relative;
+}
+
+.deploy-tree-list > li::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    width: 6px;
+    height: 1px;
+    background: var(--border-color);
 }
 
 .deploy-tree-file,
@@ -623,42 +816,181 @@
     color: var(--text-color);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+
+.deploy-tree-file:hover,
+.deploy-tree-dir:hover {
+    background: var(--hover-bg);
 }
 
 .deploy-tree-file i {
     color: #f59e0b;
+    font-size: 14px;
 }
 
 .deploy-tree-dir i {
     color: #60a5fa;
+    font-size: 14px;
 }
 
 .deploy-preview-actions {
-    padding: 12px 16px;
+    padding: 16px 24px;
     border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 12px;
+    background: var(--card-bg);
 }
 
 .deploy-preview-cancel,
 .deploy-preview-confirm {
-    border: 1px solid var(--border-color);
     border-radius: 8px;
-    height: 36px;
-    padding: 0 14px;
+    height: 40px;
+    padding: 0 20px;
     cursor: pointer;
-    font-size: var(--text-sm);
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .deploy-preview-cancel {
-    background: var(--card-bg);
+    background: var(--window-bg);
     color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.deploy-preview-cancel:hover {
+    background: var(--hover-bg);
+    border-color: var(--text-secondary);
+}
+
+.deploy-preview-cancel i {
+    font-size: 13px;
+    opacity: 0.7;
 }
 
 .deploy-preview-confirm {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: #fff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.deploy-preview-confirm::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.deploy-preview-confirm:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.deploy-preview-confirm:hover::before {
+    left: 100%;
+}
+
+.deploy-preview-confirm:active {
+    transform: translateY(0);
+}
+
+.deploy-preview-confirm i {
+    font-size: 13px;
+}
+
+/* Responsive improvements for deploy preview */
+@media (max-width: 768px) {
+    .deploy-preview-dialog {
+        width: 95vw;
+        max-height: 92vh;
+    }
+
+    .deploy-preview-header {
+        padding: 16px;
+    }
+
+    .deploy-preview-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+
+    .deploy-preview-title {
+        font-size: 16px;
+    }
+
+    .deploy-preview-subtitle {
+        font-size: 12px;
+    }
+
+    .deploy-editor-row {
+        grid-template-columns: 24px 1fr;
+        gap: 10px;
+    }
+
+    .deploy-editor-type {
+        grid-column: 2;
+        margin-top: -6px;
+        font-size: 11px;
+    }
+
+    .deploy-preview-actions {
+        padding: 12px 16px;
+        gap: 8px;
+    }
+
+    .deploy-preview-cancel,
+    .deploy-preview-confirm {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* Loading state for deploy button */
+.deploy-artifact-btn.deploying {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.deploy-artifact-btn.deploying i {
+    animation: deploySpinning 1s linear infinite;
+}
+
+@keyframes deploySpinning {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Success state animation */
+@keyframes deploySuccess {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.deploy-artifact-btn.success {
+    animation: deploySuccess 0.4s ease;
 }
