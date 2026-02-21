@@ -110,6 +110,97 @@ class AIOS {
             databasesEmpty: document.getElementById('databases-empty'),
             databaseProjectFilter: document.getElementById('database-project-filter'),
         };
+        
+        // Setup deployment detail modal
+        this.setupDeploymentDetailModal();
+    }
+    
+    setupDeploymentDetailModal() {
+        if (document.getElementById('deployment-detail-modal')) {
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'deployment-detail-modal';
+        modal.className = 'deployment-detail-modal hidden';
+        modal.innerHTML = `
+            <div class="deployment-detail-dialog">
+                <div class="deployment-detail-header">
+                    <div class="deployment-detail-header-left">
+                        <div class="deployment-detail-icon">
+                            <i class="fas fa-rocket"></i>
+                        </div>
+                        <div class="deployment-detail-title-group">
+                            <div class="deployment-detail-title" id="deployment-detail-title">Deployment Details</div>
+                            <div class="deployment-detail-subtitle" id="deployment-detail-subtitle">View files and preview</div>
+                        </div>
+                    </div>
+                    <button type="button" class="deployment-detail-close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="deployment-detail-content">
+                    <div class="deployment-detail-left">
+                        <div class="deployment-detail-section">
+                            <div class="deployment-info-grid" id="deployment-info-grid"></div>
+                        </div>
+                        <div class="deployment-file-tree-card" id="deployment-file-tree">
+                            <div class="deployment-file-tree-header">
+                                <i class="fas fa-folder-tree"></i>
+                                <span>File Structure</span>
+                            </div>
+                            <ul class="deployment-file-tree-list" id="deployment-file-tree-list"></ul>
+                        </div>
+                    </div>
+                    <div class="deployment-detail-right">
+                        <div class="deployment-preview-card">
+                            <div class="deployment-preview-header">
+                                <div class="deployment-preview-url-container">
+                                    <i class="fas fa-link"></i>
+                                    <div class="deployment-preview-url" id="deployment-preview-url">Loading...</div>
+                                </div>
+                                <div class="deployment-preview-actions">
+                                    <button class="deployment-preview-btn" id="deployment-preview-refresh" title="Refresh">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    <button class="deployment-preview-btn" id="deployment-preview-open" title="Open in Browser">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="deployment-preview-container">
+                                <iframe class="deployment-preview-frame" id="deployment-preview-frame"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Setup event listeners
+        modal.querySelector('.deployment-detail-close').addEventListener('click', () => {
+            this.hideDeploymentDetail();
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.hideDeploymentDetail();
+            }
+        });
+
+        document.getElementById('deployment-preview-refresh').addEventListener('click', () => {
+            const iframe = document.getElementById('deployment-preview-frame');
+            iframe.src = iframe.src;
+        });
+
+        document.getElementById('deployment-preview-open').addEventListener('click', () => {
+            const url = document.getElementById('deployment-preview-url').textContent;
+            if (url && url !== 'Loading...' && window.electron?.shell?.openExternal) {
+                window.electron.shell.openExternal(url);
+            }
+        });
     }
 
     setupEventListeners() {
@@ -593,27 +684,46 @@ class AIOS {
         const items = Array.isArray(projects) ? projects : [];
         if (!items.length) {
             empty.classList.remove('hidden');
+            empty.innerHTML = '<div class="empty-state-text">No deployments found. Deploy your first project to see it here.</div>';
             return;
         }
         empty.classList.add('hidden');
 
         items.forEach((project) => {
+            const status = this._safeText(project.deployment_status, 'unknown').toLowerCase();
+            const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
+            
             const card = document.createElement('div');
             card.className = 'settings-card';
             card.innerHTML = `
                 <div class="settings-card-header">
-                    <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
-                    <span class="settings-badge">${this._safeText(project.deployment_status, 'unknown')}</span>
+                    <div class="settings-card-header-left">
+                        <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
+                    </div>
+                    <div class="settings-card-actions">
+                        <button class="expand-deployment-btn" title="View Details" data-project='${JSON.stringify(project).replace(/'/g, "&apos;")}'>
+                            <i class="fas fa-expand-alt"></i>
+                        </button>
+                        <span class="settings-badge ${badgeClass}">${this._safeText(project.deployment_status, 'unknown')}</span>
+                    </div>
                 </div>
                 <div class="settings-meta-grid">
                     <div><strong>Site ID</strong><span>${this._safeText(project.site_id)}</span></div>
                     <div><strong>Slug</strong><span>${this._safeText(project.slug)}</span></div>
                     <div><strong>Hostname</strong><span>${this._safeText(project.hostname)}</span></div>
-                    <div><strong>Version</strong><span>${this._safeText(project.version)}</span></div>
+                    <div><strong>Version</strong><span>v${this._safeText(project.version)}</span></div>
                     <div><strong>Deployment ID</strong><span>${this._safeText(project.deployment_id)}</span></div>
                     <div><strong>R2 Prefix</strong><span>${this._safeText(project.r2_prefix)}</span></div>
                 </div>
             `;
+            
+            // Add click handler for expand button
+            const expandBtn = card.querySelector('.expand-deployment-btn');
+            expandBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showDeploymentDetail(project);
+            });
+            
             list.appendChild(card);
         });
     }
@@ -656,17 +766,21 @@ class AIOS {
         list.innerHTML = '';
         if (!items.length) {
             empty.classList.remove('hidden');
+            empty.innerHTML = '<div class="empty-state-text">No databases found. Provision a database for your deployed sites.</div>';
             return;
         }
         empty.classList.add('hidden');
 
         items.forEach((row) => {
+            const status = this._safeText(row.deployment_status, 'unknown').toLowerCase();
+            const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
+            
             const card = document.createElement('div');
             card.className = 'settings-card';
             card.innerHTML = `
                 <div class="settings-card-header">
                     <h4>${this._safeText(row.project_name, 'Untitled')}</h4>
-                    <span class="settings-badge">${this._safeText(row.deployment_status, 'unknown')}</span>
+                    <span class="settings-badge ${badgeClass}">${this._safeText(row.deployment_status, 'unknown')}</span>
                 </div>
                 <div class="settings-meta-grid">
                     <div><strong>Site ID</strong><span>${this._safeText(row.site_id)}</span></div>
@@ -675,8 +789,6 @@ class AIOS {
                     <div><strong>Database Name</strong><span>${this._safeText(row.database_name)}</span></div>
                     <div><strong>DB Hostname</strong><span>${this._safeText(row.database_hostname)}</span></div>
                     <div><strong>Created</strong><span>${this._formatDate(row.database_created_at)}</span></div>
-                    <div><strong>Version</strong><span>${this._safeText(row.version)}</span></div>
-                    <div><strong>R2 Prefix</strong><span>${this._safeText(row.r2_prefix)}</span></div>
                 </div>
             `;
             list.appendChild(card);
