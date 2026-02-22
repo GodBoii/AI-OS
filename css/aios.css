@@ -235,13 +235,13 @@
 }
 
 .primary {
-    background-color: #F5F3EB;
-    color: #111827;
+    background-color: var(--button-primary-bg);
+    color: var(--button-primary-text);
 }
 
 .dark-mode .primary {
-    background-color: #F5F3EB;
-    color: #111827;
+    background-color: var(--button-primary-bg);
+    color: var(--button-primary-text);
 }
 
 .secondary {
@@ -1406,23 +1406,23 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
 }
 
 .update-actions .btn-primary {
-    background: #F5F3EB;
-    color: #111827;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
 }
 
 .dark-mode .update-actions .btn-primary {
-    background: #F5F3EB;
-    color: #111827;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
 }
 
 .update-actions .btn-primary:hover:not(:disabled) {
-    background: #EAE0C8;
+    background: var(--accent-hover);
     transform: none;
     box-shadow: none;
 }
 
 .dark-mode .update-actions .btn-primary:hover:not(:disabled) {
-    background: #EAE0C8;
+    background: var(--accent-hover);
 }
 
 .update-actions .btn-primary.hidden {
@@ -1833,7 +1833,9 @@ webview.deployment-preview-frame {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Responsive */
