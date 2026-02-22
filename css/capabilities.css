@@ -1,0 +1,348 @@
+/* ================================================================= */
+/* CAPABILITIES TAB - AI AGENT SHOWCASE                             */
+/* Matches AI-OS design system with elegant, minimal aesthetic      */
+/* ================================================================= */
+
+.capabilities-content {
+    font-family: var(--font-sans);
+}
+
+/* Introduction Section */
+.capabilities-intro {
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-4xl);
+    padding: var(--space-xl) var(--space-2xl);
+    background: var(--elevated-bg);
+    border: 1.5px solid var(--border-primary);
+    border-radius: var(--radius-xl);
+    position: relative;
+}
+
+/* Capabilities Grid */
+.capabilities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-2xl);
+    margin-bottom: var(--space-4xl);
+}
+
+/* Capability Module Card */
+.capability-module {
+    position: relative;
+    background: var(--elevated-bg);
+    border: 1.5px solid var(--border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+    overflow: hidden;
+    transition: all var(--anim-normal) var(--easing-spring);
+    cursor: pointer;
+    animation: staggerFadeIn var(--anim-normal) var(--easing-smooth) backwards;
+}
+
+.capability-module:nth-child(1) { animation-delay: 50ms; }
+.capability-module:nth-child(2) { animation-delay: 100ms; }
+.capability-module:nth-child(3) { animation-delay: 150ms; }
+.capability-module:nth-child(4) { animation-delay: 200ms; }
+.capability-module:nth-child(5) { animation-delay: 250ms; }
+.capability-module:nth-child(6) { animation-delay: 300ms; }
+
+.capability-module:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-color);
+    box-shadow: 
+        0 8px 24px rgba(45, 55, 72, 0.15),
+        0 4px 12px rgba(45, 55, 72, 0.10),
+        0 0 0 1px rgba(45, 55, 72, 0.05);
+}
+
+/* Module Header */
+.module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-xl);
+}
+
+/* Module Icon */
+.module-icon {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-muted);
+    border: 1.5px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    font-size: 24px;
+    color: var(--accent-color);
+    transition: all var(--anim-normal) var(--easing-spring);
+}
+
+.capability-module:hover .module-icon {
+    transform: scale(1.1) rotate(5deg);
+    background: var(--accent-color);
+    color: var(--button-primary-text);
+    border-color: var(--accent-color);
+    box-shadow: 
+        0 4px 12px rgba(45, 55, 72, 0.20),
+        0 2px 6px rgba(45, 55, 72, 0.15);
+}
+
+/* Power Indicator */
+.module-power {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+}
+
+.power-bar {
+    width: 28px;
+    height: 3px;
+    background: var(--border-color);
+    border-radius: var(--radius-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.power-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--accent-color);
+    transform: translateX(-100%);
+    transition: transform var(--anim-normal) var(--easing-smooth);
+}
+
+.capability-module:hover .power-bar:nth-child(1)::after {
+    transform: translateX(0);
+    transition-delay: 50ms;
+}
+
+.capability-module:hover .power-bar:nth-child(2)::after {
+    transform: translateX(0);
+    transition-delay: 100ms;
+}
+
+.capability-module:hover .power-bar:nth-child(3)::after {
+    transform: translateX(0);
+    transition-delay: 150ms;
+}
+
+.capability-module:hover .power-bar:nth-child(4)::after {
+    transform: translateX(0);
+    transition-delay: 200ms;
+}
+
+/* Module Title */
+.module-title {
+    font-family: var(--font-sans);
+    font-size: var(--text-xl);
+    font-weight: var(--font-semibold);
+    color: var(--text-color);
+    margin: 0 0 var(--space-md) 0;
+    letter-spacing: var(--tracking-tight);
+    transition: all var(--anim-fast) var(--easing-smooth);
+}
+
+.capability-module:hover .module-title {
+    color: var(--accent-color);
+    transform: translateX(2px);
+}
+
+/* Module Description */
+.module-description {
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-xl);
+}
+
+/* Module Tags */
+.module-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.module-tags .tag {
+    padding: 4px 10px;
+    background: var(--accent-muted);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    transition: all var(--anim-fast) var(--easing-smooth);
+}
+
+.capability-module:hover .module-tags .tag {
+    background: var(--accent-color);
+    color: var(--button-primary-text);
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+/* Subtle Decorative Elements */
+.module-glow,
+.module-scanline,
+.module-particles {
+    display: none; /* Removed for minimal aesthetic */
+}
+
+/* Capabilities Footer */
+.capabilities-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: var(--space-xl);
+    background: var(--elevated-bg);
+    border: 1.5px solid var(--border-primary);
+    border-radius: var(--radius-xl);
+}
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    color: var(--text-color);
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    background: var(--success-500);
+    border-radius: var(--radius-full);
+    box-shadow: 0 0 0 3px var(--success-50);
+    animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
+}
+
+.status-text {
+    color: var(--text-secondary);
+}
+
+/* Dark Mode Adjustments */
+.dark-mode .capability-module {
+    background: var(--elevated-bg);
+    border-color: var(--border-color);
+}
+
+.dark-mode .capability-module:hover {
+    border-color: var(--accent-color);
+    box-shadow: 
+        0 8px 24px rgba(0, 0, 0, 0.3),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dark-mode .module-icon {
+    background: var(--accent-muted);
+    border-color: var(--border-color);
+    color: var(--accent-color);
+}
+
+.dark-mode .capability-module:hover .module-icon {
+    background: var(--accent-color);
+    color: var(--button-primary-text);
+    border-color: var(--accent-color);
+}
+
+.dark-mode .power-bar {
+    background: var(--border-color);
+}
+
+.dark-mode .power-bar::after {
+    background: var(--accent-color);
+}
+
+.dark-mode .module-title {
+    color: var(--text-color);
+}
+
+.dark-mode .capability-module:hover .module-title {
+    color: var(--accent-color);
+}
+
+.dark-mode .module-description {
+    color: var(--text-secondary);
+}
+
+.dark-mode .module-tags .tag {
+    background: var(--accent-muted);
+    border-color: var(--border-color);
+    color: var(--accent-color);
+}
+
+.dark-mode .capability-module:hover .module-tags .tag {
+    background: var(--accent-color);
+    color: var(--button-primary-text);
+    border-color: var(--accent-color);
+}
+
+.dark-mode .capabilities-footer {
+    background: var(--elevated-bg);
+    border-color: var(--border-color);
+}
+
+.dark-mode .system-status {
+    color: var(--text-color);
+}
+
+.dark-mode .status-indicator {
+    background: var(--success-500);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.dark-mode .status-text {
+    color: var(--text-secondary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .capabilities-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-xl);
+    }
+    
+    .capability-module {
+        padding: var(--space-xl);
+    }
+    
+    .module-icon {
+        width: 48px;
+        height: 48px;
+        font-size: 20px;
+    }
+    
+    .module-title {
+        font-size: var(--text-lg);
+    }
+    
+    .module-description {
+        font-size: var(--text-xs);
+    }
+    
+    .capabilities-intro {
+        padding: var(--space-lg) var(--space-xl);
+    }
+}
