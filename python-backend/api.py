@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+import json
 import requests
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -982,16 +983,67 @@ def get_session_content(session_id):
     try:
         from sandbox_persistence import get_persistence_service
         persistence_service = get_persistence_service()
+
+        def _normalize_metadata(value: Any) -> dict[str, Any]:
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    pass
+            return {}
         
-        # Get all content for this session
-        content_list = persistence_service.get_session_content(
+        # Get registry content for this session (artifacts/executions/uploads)
+        content_rows = persistence_service.get_session_content(
             session_id=session_id,
             user_id=str(user.id)
         )
+
+        normalized_rows: list[dict[str, Any]] = []
+        for row in content_rows or []:
+            row = dict(row)
+            row['metadata'] = _normalize_metadata(row.get('metadata'))
+            row['source'] = 'session_content'
+            normalized_rows.append(row)
+
+        # Also fetch all attachment rows linked to this session
+        attachment_result = supabase_client.table('attachment').select(
+            'id, metadata, created_at'
+        ).eq('session_id', session_id).eq('user_id', str(user.id)).order(
+            'created_at', desc=False
+        ).execute()
+
+        for attachment in (attachment_result.data or []):
+            metadata = _normalize_metadata(attachment.get('metadata'))
+            normalized_rows.append({
+                'id': f"attachment:{attachment.get('id')}",
+                'content_type': 'upload',
+                'reference_id': str(attachment.get('id')),
+                'message_id': None,
+                'created_at': attachment.get('created_at'),
+                'source': 'attachment',
+                'metadata': {
+                    # Normalize attachment metadata shape to match upload rows
+                    'filename': metadata.get('filename') or metadata.get('name') or 'attachment',
+                    'mime_type': metadata.get('mime_type') or metadata.get('type'),
+                    'size': metadata.get('size', 0),
+                    'relativePath': metadata.get('relativePath'),
+                    'path': metadata.get('path') or metadata.get('supabasePath'),
+                    'is_text': metadata.get('is_text', metadata.get('isText', False)),
+                    'isMedia': metadata.get('isMedia', False),
+                    'file_id': metadata.get('file_id'),
+                },
+            })
+
+        # Preserve chronological playback
+        normalized_rows.sort(key=lambda item: str(item.get('created_at') or ''))
         
         # Enrich content with fresh presigned URLs
         enriched_content = []
-        for item in content_list:
+        for item in normalized_rows:
             content_type = item['content_type']
             reference_id = item['reference_id']
             

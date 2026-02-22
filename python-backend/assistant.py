@@ -536,6 +536,7 @@ def get_llm_os(
         # Extract socketio and sid from browser_tools_config if available
         socketio_instance = browser_tools_config.get('socketio') if browser_tools_config else None
         sid = browser_tools_config.get('sid') if browser_tools_config else None
+        redis_client_instance = browser_tools_config.get('redis_client') if browser_tools_config else None
         dev_tools: List[Union[Toolkit, callable]] = [
             SandboxTools(
                 session_info=session_info,
@@ -544,7 +545,8 @@ def get_llm_os(
                 session_id=session_id,
                 message_id=message_id,
                 socketio=socketio_instance,
-                sid=sid
+                sid=sid,
+                redis_client=redis_client_instance
             )
         ]
         if user_id:

@@ -35,7 +35,8 @@ class SandboxTools(Toolkit):
         session_id: str = None,
         message_id: str = None,
         socketio=None,
-        sid: str = None
+        sid: str = None,
+        redis_client=None
     ):
         """
         Initializes the SandboxTools with session-specific information.
@@ -64,6 +65,7 @@ class SandboxTools(Toolkit):
         self.message_id = message_id
         self.socketio = socketio
         self.sid = sid
+        self.redis_client = redis_client
 
     def _create_or_get_sandbox_id(self) -> Optional[str]:
         """
@@ -88,6 +90,16 @@ class SandboxTools(Toolkit):
                     self.session_info["sandbox_ids"] = []
                 if new_sandbox_id not in self.session_info["sandbox_ids"]:
                     self.session_info["sandbox_ids"].append(new_sandbox_id)
+                
+                # Persist to Redis so the manager can terminate it later
+                if getattr(self, "redis_client", None) and getattr(self, "session_id", None):
+                    try:
+                        from session_service import ConnectionManager
+                        cm = ConnectionManager(self.redis_client)
+                        cm.add_sandbox_to_session(self.session_id, new_sandbox_id)
+                        logger.info(f"Persisted sandbox_id {new_sandbox_id} to Redis for session {self.session_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to persist sandbox_id to Redis: {e}", exc_info=True)
                 
                 return new_sandbox_id
             else:
