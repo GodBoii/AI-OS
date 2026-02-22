@@ -394,9 +394,66 @@
     padding: 20px 0 16px 0;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     flex-shrink: 0;
     background: transparent;
+    max-width: 700px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.session-history-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-content-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #f5f5dc; /* Cream white background for dark mode */
+    color: #1a1a1a; /* Black text for dark mode */
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    font-size: var(--text-sm, 14px);
+    font-weight: var(--font-medium, 500);
+    cursor: pointer;
+    transition: all 0.2s var(--easing-standard);
+}
+
+.history-content-btn:hover {
+    background: #fffacd; /* Lighter cream on hover */
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 245, 220, 0.3);
+}
+
+.history-content-btn.hidden {
+    display: none;
+}
+
+.history-content-btn i {
+    font-size: 16px;
+    color: #1a1a1a; /* Black icon for dark mode */
+}
+
+/* Light mode: opposite colors */
+.light-mode .history-content-btn,
+:root:not(.dark-mode) .history-content-btn {
+    background: #1a1a1a; /* Dark background for light mode */
+    color: #f5f5dc; /* Cream text for light mode */
+}
+
+.light-mode .history-content-btn:hover,
+:root:not(.dark-mode) .history-content-btn:hover {
+    background: #2a2a2a; /* Slightly lighter dark on hover */
+    box-shadow: 0 4px 12px rgba(26, 26, 26, 0.3);
+}
+
+.light-mode .history-content-btn i,
+:root:not(.dark-mode) .history-content-btn i {
+    color: #f5f5dc; /* Cream icon for light mode */
 }
 
 .back-to-chat-btn {
@@ -417,6 +474,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1;
 }
 
 .session-history-title::before {
