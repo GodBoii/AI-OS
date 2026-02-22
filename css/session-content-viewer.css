@@ -37,6 +37,11 @@
     pointer-events: none;
 }
 
+/* Higher z-index when in history mode to appear above history viewer */
+#session-content-modal.history-mode {
+    z-index: 1500;
+}
+
 #session-content-modal.hidden {
     display: none;
 }
@@ -45,6 +50,7 @@
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -69,6 +75,7 @@
         opacity: 0;
         transform: translateX(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -285,7 +292,7 @@
 
 .content-item:hover {
     background: var(--hover-bg, rgba(255, 255, 255, 0.08));
-    border-color: var(--accent-color, #6366f1);
+    border-color: var(--accent-color, #18181b);
     transform: translateY(-1px);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
 }
@@ -443,7 +450,7 @@
 }
 
 .content-item:hover .content-item-action {
-    color: var(--accent-color, #6366f1);
+    color: var(--accent-color, #18181b);
 }
 
 /* Responsive Design */

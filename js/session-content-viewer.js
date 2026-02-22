@@ -1,5 +1,6 @@
 // session-content-viewer.js - Displays all content (files, artifacts, terminal logs) for a session
 import { artifactHandler } from './artifact-handler.js';
+import historyContentPreview from './history-content-preview.js';
 
 class SessionContentViewer {
     constructor() {
@@ -8,6 +9,7 @@ class SessionContentViewer {
         this.contentCache = new Map(); // Cache for session content
         this.cacheTimestamps = new Map(); // Track when cache was created
         this.cacheExpiry = 5 * 60 * 1000; // 5 minutes cache expiry
+        this.isHistoryMode = false; // Track if we're in history mode
         this.init();
     }
 
@@ -155,11 +157,20 @@ class SessionContentViewer {
         });
     }
 
-    async show(sessionId, forceRefresh = false) {
-        console.log('[SessionContentViewer] Opening for session:', sessionId);
+    async show(sessionId, forceRefresh = false, isHistoryMode = false) {
+        console.log('[SessionContentViewer] Opening for session:', sessionId, 'History mode:', isHistoryMode);
         this.currentSessionId = sessionId;
+        this.isHistoryMode = isHistoryMode;
 
         const modal = document.getElementById('session-content-modal');
+        
+        // Add/remove history-mode class for styling
+        if (isHistoryMode) {
+            modal.classList.add('history-mode');
+        } else {
+            modal.classList.remove('history-mode');
+        }
+        
         modal.classList.remove('hidden');
         this.positionNearTrigger();
         this.switchTab('files');
@@ -176,27 +187,59 @@ class SessionContentViewer {
     hide() {
         const modal = document.getElementById('session-content-modal');
         modal.classList.add('hidden');
+        modal.classList.remove('history-mode');
+        this.isHistoryMode = false;
     }
 
     positionNearTrigger() {
         const modal = document.getElementById('session-content-modal');
         const panel = modal.querySelector('.session-content-panel');
-        const trigger = document.getElementById('view-content-btn');
-        if (!panel || !trigger) return;
+        
+        if (!panel) return;
+
+        // In history mode, position relative to history content button
+        // In live mode, position relative to live content button
+        const trigger = this.isHistoryMode 
+            ? document.getElementById('history-view-content-btn')
+            : document.getElementById('view-content-btn');
+        
+        if (!trigger) {
+            console.warn('[SessionContentViewer] Trigger button not found, using default positioning');
+            // Default positioning if trigger not found
+            const panelWidth = Math.min(420, Math.max(300, window.innerWidth - 24));
+            modal.style.left = 'auto';
+            modal.style.right = '12px';
+            modal.style.bottom = '80px';
+            modal.style.width = `${panelWidth}px`;
+            modal.style.transform = 'none';
+            return;
+        }
 
         const triggerRect = trigger.getBoundingClientRect();
         const panelWidth = Math.min(420, Math.max(300, window.innerWidth - 24));
         const horizontalPadding = 12;
 
-        let left = triggerRect.right - panelWidth;
-        left = Math.max(horizontalPadding, Math.min(left, window.innerWidth - panelWidth - horizontalPadding));
+        // In history mode, position from the right side of the screen
+        // In live mode, position near the trigger button
+        if (this.isHistoryMode) {
+            // Position on the right side of the screen
+            modal.style.left = 'auto';
+            modal.style.right = `${horizontalPadding}px`;
+            modal.style.bottom = '80px';
+            modal.style.width = `${panelWidth}px`;
+            modal.style.transform = 'none';
+        } else {
+            // Original live mode positioning
+            let left = triggerRect.right - panelWidth;
+            left = Math.max(horizontalPadding, Math.min(left, window.innerWidth - panelWidth - horizontalPadding));
 
-        const bottom = Math.max(80, window.innerHeight - triggerRect.top + 10);
+            const bottom = Math.max(80, window.innerHeight - triggerRect.top + 10);
 
-        modal.style.left = `${left}px`;
-        modal.style.bottom = `${bottom}px`;
-        modal.style.width = `${panelWidth}px`;
-        modal.style.transform = 'none';
+            modal.style.left = `${left}px`;
+            modal.style.bottom = `${bottom}px`;
+            modal.style.width = `${panelWidth}px`;
+            modal.style.transform = 'none';
+        }
     }
 
     async loadContent(sessionId, forceRefresh = false) {
@@ -459,8 +502,16 @@ class SessionContentViewer {
     }
 
     async viewFile(file) {
-        console.log('[SessionContentViewer] Viewing file:', file);
+        console.log('[SessionContentViewer] Viewing file:', file, 'History mode:', this.isHistoryMode);
 
+        // In history mode, use inline preview instead of artifact handler
+        if (this.isHistoryMode) {
+            this.hide(); // Close the content sidebar
+            historyContentPreview.show(file);
+            return;
+        }
+
+        // Live mode: use existing artifact handler logic
         try {
             const metadata = file.metadata || {};
             const filename = metadata.filename || 'file';
@@ -556,8 +607,16 @@ class SessionContentViewer {
     }
 
     async viewTerminal(exec) {
-        console.log('[SessionContentViewer] Viewing terminal:', exec);
+        console.log('[SessionContentViewer] Viewing terminal:', exec, 'History mode:', this.isHistoryMode);
 
+        // In history mode, use inline preview instead of artifact handler
+        if (this.isHistoryMode) {
+            this.hide(); // Close the content sidebar
+            historyContentPreview.show(exec);
+            return;
+        }
+
+        // Live mode: use existing artifact handler logic
         try {
             const metadata = exec.metadata || {};
             const command = metadata.command || 'Unknown command';
