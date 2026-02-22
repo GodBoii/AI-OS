@@ -7,8 +7,8 @@ body {
     place-items: center;
     background: var(--bg-color);
     background-image:
-        radial-gradient(circle at 25% 25%, rgba(var(--accent-color-rgb, 24, 24, 27), 0.06) 0%, transparent 42%),
-        radial-gradient(circle at 75% 75%, rgba(var(--accent-color-rgb, 24, 24, 27), 0.06) 0%, transparent 42%);
+        radial-gradient(circle at 25% 25%, rgba(var(--accent-color-rgb, 67, 56, 202), 0.06) 0%, transparent 42%),
+        radial-gradient(circle at 75% 75%, rgba(var(--accent-color-rgb, 67, 56, 202), 0.06) 0%, transparent 42%);
     background-attachment: fixed;
 }
 
@@ -20,7 +20,7 @@ body {
     width: 2.5%;
     min-width: 40px;
     background-color: var(--bg-color);
-    border-right: 1px solid var(--border-color);
+    border-right: 1.5px solid var(--border-primary);
     z-index: 1000;
     display: flex;
     align-items: flex-start;
@@ -59,8 +59,11 @@ body {
 
 .sidebar-icon:hover {
     color: var(--accent-color);
-    background-color: rgba(var(--accent-color-rgb, 24, 24, 27), 0.14);
+    background-color: var(--accent-muted);
     transform: scale(1.1);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
 }
 
 .sidebar-icon:active {
@@ -83,8 +86,8 @@ body {
     align-items: center;
     padding: 0.5rem;
     background-color: var(--taskbar-bg);
-    border-bottom: 1px solid var(--border-color);
-    border-left: 1px solid var(--border-color);
+    border-bottom: 1.5px solid var(--border-primary);
+    border-left: 1.5px solid var(--border-primary);
     border-radius: 0 0 0 0.5rem;
     box-shadow: var(--shadow-md);
     backdrop-filter: blur(12px);
@@ -145,6 +148,9 @@ body {
 .window-control-btn:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.10),
+        0 4px 12px rgba(45, 55, 72, 0.06);
 }
 
 .window-control-btn:active {
@@ -219,7 +225,7 @@ body {
     position: relative;
     border-top-left-radius: 0.9rem;
     border-top-right-radius: 0.9rem;
-    background-image: linear-gradient(to right, rgba(24, 24, 27, 0.1), rgba(24, 24, 27, 0.2));
+    background-image: linear-gradient(to right, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.2));
     pointer-events: all;
 }
 
