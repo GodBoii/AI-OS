@@ -76,7 +76,7 @@
 
 .history-sidebar-heading i {
     font-size: 20px;
-    color: var(--accent-color, #18181b);
+    color: var(--accent-color, #6366f1);
 }
 
 .history-sidebar-heading h3 {
@@ -107,8 +107,11 @@
 }
 
 .history-sidebar-actions button:hover {
-    background: var(--hover-bg, #333);
-    color: var(--text-color, #e0e0e0);
+    background: var(--accent-muted);
+    color: var(--accent-color);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.08),
+        0 4px 12px rgba(45, 55, 72, 0.06);
 }
 
 .close-history-sidebar-btn:hover {
@@ -148,7 +151,7 @@
 }
 
 .history-tab-btn.active {
-    background: var(--accent-color, #18181b);
+    background: var(--accent-color, #6366f1);
     color: white;
 }
 
@@ -240,15 +243,18 @@
 }
 
 .history-content-item:hover {
-    background: var(--hover-bg, #2a2a2a);
+    background: var(--accent-muted);
     transform: translateX(4px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
 }
 
 .history-item-icon {
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    background: var(--icon-bg, rgba(24, 24, 27, 0.1));
+    background: var(--icon-bg, rgba(99, 102, 241, 0.1));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -257,7 +263,7 @@
 
 .history-item-icon i {
     font-size: 20px;
-    color: var(--accent-color, #18181b);
+    color: var(--accent-color, #6366f1);
 }
 
 .history-item-info {
@@ -303,7 +309,10 @@
 
 .history-content-item:hover .history-item-action {
     opacity: 1;
-    background: var(--accent-color, #18181b);
+    background: var(--accent-color);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.15),
+        0 4px 12px rgba(45, 55, 72, 0.10);
 }
 
 .history-item-action i {
