@@ -539,6 +539,7 @@ class ContextHandler {
             const historyViewer = document.getElementById('session-history-viewer');
             const historyTitle = historyViewer.querySelector('.session-history-title');
             const historyContent = historyViewer.querySelector('.session-history-content');
+            const historyContentBtn = document.getElementById('history-view-content-btn');
             
             if (!historyViewer || !historyTitle || !historyContent) {
                 console.error("Session history viewer elements not found!");
@@ -548,6 +549,11 @@ class ContextHandler {
             // Show skeleton loading immediately
             historyTitle.textContent = 'Loading...';
             historyContent.innerHTML = '';
+            
+            // Hide content button initially
+            if (historyContentBtn) {
+                historyContentBtn.classList.add('hidden');
+            }
             
             const skeletonContainer = document.createElement('div');
             skeletonContainer.className = 'skeleton-history-loading';
@@ -600,6 +606,29 @@ class ContextHandler {
                 historyTitle.textContent = trimmed.length > 60 ? `${trimmed.substring(0, 60)}...` : trimmed;
             } else {
                 historyTitle.textContent = `Session ${sessionId.substring(0, 8)}`;
+            }
+
+            // Check if session has content and show button
+            if (historyContentBtn) {
+                try {
+                    const hasContent = await this.checkSessionHasContent(sessionId);
+                    if (hasContent) {
+                        historyContentBtn.classList.remove('hidden');
+                        
+                        // Remove old event listeners and add new one
+                        const newBtn = historyContentBtn.cloneNode(true);
+                        historyContentBtn.parentNode.replaceChild(newBtn, historyContentBtn);
+                        
+                        newBtn.addEventListener('click', () => {
+                            // Use the new history sidebar instead of session-content-viewer
+                            if (window.historyContentSidebar) {
+                                window.historyContentSidebar.show(sessionId, false);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('[ContextHandler] Error checking session content:', error);
+                }
             }
 
             // Clear and populate content
@@ -713,6 +742,35 @@ class ContextHandler {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * Check if a session has any content (artifacts, uploads, executions)
+     */
+    async checkSessionHasContent(sessionId) {
+        try {
+            const session = await window.electron.auth.getSession();
+            if (!session || !session.access_token) {
+                return false;
+            }
+
+            const response = await fetch(`http://localhost:8765/api/sessions/${sessionId}/content`, {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
+
+            if (!response.ok) {
+                return false;
+            }
+
+            const data = await response.json();
+            const content = data.content || [];
+            return content.length > 0;
+        } catch (error) {
+            console.error('[ContextHandler] Error checking session content:', error);
+            return false;
+        }
     }
 
     /**
