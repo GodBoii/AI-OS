@@ -25,6 +25,10 @@
                     <i class="fa-solid fa-database"></i>
                     <span>Database</span>
                 </button>
+                <button class="tab-btn" data-tab="capabilities">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>Capabilities</span>
+                </button>
                 <button class="tab-btn" data-tab="about">
                     <i class="fi fi-tr-information"></i>
                     <span>About</span>
@@ -262,6 +266,148 @@
                     </div>
                     <div id="databases-empty" class="empty-state hidden">No databases found.</div>
                     <div id="databases-list" class="settings-list"></div>
+                </div>
+
+                <div class="tab-content" id="capabilities-tab">
+                    <h3 class="tab-heading">What AI-OS Can Do</h3>
+                    <div class="capabilities-content">
+                        <p class="capabilities-intro">
+                            AI-OS orchestrates specialized AI agents to handle complex tasks through natural conversation. Each capability represents a powerful tool at your disposal.
+                        </p>
+                        
+                        <div class="capabilities-grid">
+                            <!-- Development Agent -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-solid fa-code"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">Development Agent</h4>
+                                <p class="module-description">Full-stack development with Ubuntu terminal access. Build and deploy live websites, manage databases, and execute system commands seamlessly.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Terminal</span>
+                                    <span class="tag">Deploy</span>
+                                    <span class="tag">Database</span>
+                                </div>
+                            </div>
+
+                            <!-- Knowledge Agent -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-solid fa-globe"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">Knowledge Agent</h4>
+                                <p class="module-description">Gather real-time information from multiple sources across the web. Intelligent data synthesis, API integration, and comprehensive research capabilities.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Research</span>
+                                    <span class="tag">APIs</span>
+                                    <span class="tag">Data</span>
+                                </div>
+                            </div>
+
+                            <!-- Reasoning Engine -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-solid fa-brain"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">Reasoning Engine</h4>
+                                <p class="module-description">Advanced AI model for complex problem-solving. Breaks down intricate tasks into actionable steps with deep logical analysis and strategic planning.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Planning</span>
+                                    <span class="tag">Analysis</span>
+                                    <span class="tag">Strategy</span>
+                                </div>
+                            </div>
+
+                            <!-- Image Generation -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-solid fa-image"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">Image Generation</h4>
+                                <p class="module-description">Transform text descriptions into stunning visuals. AI-powered image synthesis for creative projects, design mockups, and visual content.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Creative</span>
+                                    <span class="tag">Design</span>
+                                </div>
+                            </div>
+
+                            <!-- System Automation -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-solid fa-desktop"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">System Automation</h4>
+                                <p class="module-description">Direct control over your computer. Automate mouse movements, keyboard inputs, and application interactions with AI-driven precision.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Automation</span>
+                                    <span class="tag">Control</span>
+                                </div>
+                            </div>
+
+                            <!-- Web Automation -->
+                            <div class="capability-module">
+                                <div class="module-header">
+                                    <div class="module-icon">
+                                        <i class="fa-brands fa-chrome"></i>
+                                    </div>
+                                    <div class="module-power">
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                        <div class="power-bar"></div>
+                                    </div>
+                                </div>
+                                <h4 class="module-title">Web Automation</h4>
+                                <p class="module-description">Intelligent browser control for web tasks. Navigate websites, fill forms, extract data, and automate repetitive online workflows.</p>
+                                <div class="module-tags">
+                                    <span class="tag">Browser</span>
+                                    <span class="tag">Scraping</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="capabilities-footer">
+                            <div class="system-status">
+                                <span class="status-indicator"></span>
+                                <span class="status-text">All agents ready</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="tab-content" id="about-tab">
