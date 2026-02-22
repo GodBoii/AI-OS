@@ -47,8 +47,11 @@
 .shuffle-btn:hover,
 .mic-btn:hover {
     color: var(--accent-color);
-    background-color: var(--hover-bg);
+    background-color: var(--accent-muted);
     transform: translateY(-2px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
 }
 
 .tool-btn.active,
@@ -100,11 +103,11 @@
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(var(--accent-color-rgb, 24, 24, 27), 0.7);
+        box-shadow: 0 0 0 0 rgba(var(--accent-color-rgb, 99, 102, 241), 0.7);
     }
 
     50% {
-        box-shadow: 0 0 0 8px rgba(var(--accent-color-rgb, 24, 24, 27), 0);
+        box-shadow: 0 0 0 8px rgba(var(--accent-color-rgb, 99, 102, 241), 0);
     }
 }
 
@@ -154,15 +157,18 @@
 
 /* --- Send Button Styles --- */
 .send-btn {
-    background-color: #18181b;
+    background-color: #2d3748;
     color: #ffffff;
     position: relative;
     overflow: hidden;
 }
 
 .send-btn:hover {
-    background-color: #27272a;
+    background-color: #1a202c;
     color: #ffffff;
+    box-shadow: 
+        0 4px 16px rgba(45, 55, 72, 0.25),
+        0 8px 32px rgba(45, 55, 72, 0.15);
 }
 
 .dark-mode .send-btn {
@@ -233,7 +239,10 @@
 
 .sync-context-btn:hover {
     color: var(--accent-color);
-    background: var(--hover-bg);
+    background: var(--accent-muted);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.08),
+        0 4px 12px rgba(45, 55, 72, 0.06);
 }
 
 /* --- Inline Mermaid Toggle --- */

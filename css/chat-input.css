@@ -12,8 +12,10 @@
     max-width: var(--input-container-max-width);
     background-color: var(--window-bg);
     border-radius: 16px;
-    box-shadow: 0 8px 32px var(--shadow-color);
-    border: 1px solid var(--border-color);
+    box-shadow: 
+        0 8px 32px rgba(45, 55, 72, 0.15),
+        0 4px 16px rgba(45, 55, 72, 0.10);
+    border: 2px solid var(--border-primary);
     padding: 0;
     z-index: var(--z-input-container);
     display: flex;
@@ -24,11 +26,6 @@
     transition: all var(--anim-normal) var(--easing-standard);
     opacity: 1;
     visibility: visible;
-}
-
-.floating-input-container:hover {
-    border-color: var(--accent-muted);
-    box-shadow: 0 12px 40px var(--shadow-color), 0 0 0 2px var(--accent-muted);
 }
 
 /* --- Centered Input State (No Messages) --- */
@@ -54,8 +51,11 @@
 /* --- Input Container with Files Attached --- */
 .floating-input-container.has-files {
     background: rgba(var(--accent-color-rgb), 0.02);
-    border-color: rgba(var(--accent-color-rgb), 0.2);
-    box-shadow: 0 8px 32px var(--shadow-color), 0 0 0 1px rgba(var(--accent-color-rgb), 0.1);
+    border-color: var(--accent-color);
+    box-shadow: 
+        0 8px 32px rgba(45, 55, 72, 0.18),
+        0 4px 16px rgba(45, 55, 72, 0.12),
+        0 0 0 1px rgba(45, 55, 72, 0.1);
 }
 
 .floating-input-container.hidden {
@@ -141,7 +141,7 @@
     gap: 8px;
     padding: 6px 12px;
     background: var(--window-bg);
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-secondary);
     border-radius: 20px;
     font-size: 0.85rem;
     color: var(--text-color);
@@ -152,9 +152,12 @@
 
 .file-chip:hover {
     border-color: var(--accent-color);
-    background: var(--hover-bg);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background: var(--accent-muted);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08),
+        0 0 0 1px rgba(45, 55, 72, 0.05);
 }
 
 .file-chip-icon {
@@ -287,7 +290,7 @@
     gap: 8px;
     padding: 6px 12px;
     background: var(--elevated-bg);
-    border: 1px solid var(--accent-color);
+    border: 1.5px solid var(--accent-color);
     border-radius: 20px;
     font-size: 0.85rem;
     color: var(--text-color);
@@ -298,8 +301,10 @@
 
 .session-chip:hover {
     background: var(--accent-muted);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
 }
 
 .session-chip-icon {
@@ -359,9 +364,11 @@
     bottom: calc(100% + 8px);
     left: 0;
     background: var(--window-bg);
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-primary);
     border-radius: 12px;
-    box-shadow: 0 8px 32px var(--shadow-color);
+    box-shadow: 
+        0 8px 32px rgba(45, 55, 72, 0.18),
+        0 4px 16px rgba(45, 55, 72, 0.12);
     padding: 8px;
     min-width: 220px;
     z-index: var(--z-dropdown-menu);
@@ -436,9 +443,11 @@
     bottom: calc(100% + 8px);
     left: 0;
     background: var(--window-bg);
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-primary);
     border-radius: 12px;
-    box-shadow: 0 8px 32px var(--shadow-color);
+    box-shadow: 
+        0 8px 32px rgba(45, 55, 72, 0.18),
+        0 4px 16px rgba(45, 55, 72, 0.12);
     padding: 8px;
     min-width: 200px;
     z-index: var(--z-dropdown-menu);
