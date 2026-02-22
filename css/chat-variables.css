@@ -39,15 +39,15 @@
     --shadow-xl: var(--shadow-xl, 0 40px 65px rgba(17, 24, 39, 0.12));
 
     /* Accent & Interactive Colors */
-    --accent-color: var(--accent-color, #18181b);
-    --accent-hover: var(--accent-hover, #27272a);
-    --accent-color-rgb: var(--accent-color-rgb, 24, 24, 27);
-    --accent-muted: var(--accent-muted, rgba(24, 24, 27, 0.08));
+    --accent-color: var(--accent-color, #4338ca);
+    --accent-hover: var(--accent-hover, #3730a3);
+    --accent-color-rgb: var(--accent-color-rgb, 67, 56, 202);
+    --accent-muted: var(--accent-muted, rgba(67, 56, 202, 0.08));
     --icon-color: var(--icon-color, #64748b);
 
     /* Link Colors */
-    --link-color: var(--accent-color, #18181b);
-    --link-hover: var(--accent-hover, #27272a);
+    --link-color: var(--accent-color, #4338ca);
+    --link-hover: var(--accent-hover, #3730a3);
 
     /* Code & Syntax Colors */
     --code-bg: var(--code-bg, #f1f5f9);
@@ -61,7 +61,7 @@
     --table-stripe-bg: #f8fafc;
 
     /* Message Colors */
-    --message-user-bg: var(--message-user-bg, #18181b);
+    --message-user-bg: var(--message-user-bg, #4338ca);
     --message-bot-bg: var(--message-bot-bg, #ffffff);
 
     /* Animation Variables */

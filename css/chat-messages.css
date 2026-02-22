@@ -217,11 +217,11 @@
 
 .message-user {
     margin-left: auto;
-    background-color: var(--message-user-bg);
-    color: var(--message-user-text);
-    padding: 14px 20px;
-    border-radius: 16px 16px 0 16px;
-    box-shadow: var(--shadow-sm);
+    background-color: transparent;
+    color: var(--text-color);
+    padding: 12px 16px;
+    border-radius: 0;
+    box-shadow: none;
     display: flex;
     justify-content: flex-end;
 }
@@ -277,21 +277,16 @@
 }
 
 .message-bot {
-    background-color: var(--message-bot-bg);
-    color: var(--message-bot-text);
-    padding: 18px 20px;
-    border-radius: 0 16px 16px 16px;
-    border: 1px solid var(--border-color);
+    background-color: transparent;
+    color: var(--text-color);
+    padding: 14px;
+    border-radius: 0;
+    border: none;
     word-break: break-word;
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     position: relative;
     margin-top: 10px;
-    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
-}
-
-.message-bot:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--accent-muted);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .message-bot .message-content {
