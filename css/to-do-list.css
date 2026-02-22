@@ -11,8 +11,10 @@
     height: 82%;
     background-color: var(--elevated-bg);
     border-radius: 1rem;
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--border-color);
+    box-shadow: 
+        0 16px 48px rgba(45, 55, 72, 0.20),
+        0 8px 24px rgba(45, 55, 72, 0.15);
+    border: 2px solid var(--border-primary);
     overflow: hidden;
     z-index: 1001;
     display: flex;
@@ -102,12 +104,18 @@
 #context-btn:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.08),
+        0 4px 12px rgba(45, 55, 72, 0.06);
 }
 
 .to-do-list-input-area button:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
     transform: translateY(-1px);
+    box-shadow: 
+        0 2px 6px rgba(45, 55, 72, 0.08),
+        0 4px 12px rgba(45, 55, 72, 0.06);
 }
 
 /* Task List */
@@ -123,7 +131,7 @@
     margin-bottom: 0.75rem;
     background-color: var(--card-bg);
     border-radius: 0.75rem;
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-primary);
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
@@ -136,9 +144,11 @@
 }
 
 #task-list li:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--accent-muted);
-    transform: translateY(-1px);
+    box-shadow: 
+        0 6px 20px rgba(45, 55, 72, 0.18),
+        0 2px 8px rgba(45, 55, 72, 0.12);
+    border-color: var(--accent-color);
+    transform: translateY(-3px);
 }
 
 #task-list li .task-details {
@@ -276,8 +286,10 @@
     max-width: 90%;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--border-color);
+    box-shadow: 
+        0 20px 60px rgba(45, 55, 72, 0.25),
+        0 10px 30px rgba(45, 55, 72, 0.18);
+    border: 2px solid var(--border-primary);
     position: relative;
     z-index: 2001;
 }
@@ -322,7 +334,7 @@
     width: 100%;
     padding: 0.75rem;
     background-color: var(--input-bg);
-    border: 1px solid var(--input-border);
+    border: 1.5px solid var(--input-border);
     border-radius: 0.5rem;
     font-size: var(--text-sm);
     color: var(--text-color);
@@ -339,7 +351,9 @@
 .form-group textarea:focus,
 .form-group select:focus {
     border-color: var(--input-focus-border);
-    box-shadow: 0 0 0 3px var(--input-focus-ring);
+    box-shadow: 
+        0 0 0 3px var(--input-focus-ring),
+        0 2px 8px rgba(45, 55, 72, 0.08);
 }
 
 .modal-footer {
@@ -449,7 +463,7 @@
     padding: 0.5rem 0.25rem;
     background-color: var(--card-bg);
     color: var(--text-color);
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-secondary);
     border-radius: 0.5rem;
     font-size: 0.7rem;
     font-weight: var(--font-medium);
@@ -459,10 +473,13 @@
 }
 
 .view-work-btn:hover {
-    background-color: var(--hover-bg);
+    background-color: var(--accent-muted);
     border-color: var(--accent-color);
     color: var(--accent-color);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
 }
 
 .view-work-btn:active {
