@@ -26,6 +26,11 @@
     visibility: visible;
 }
 
+.floating-input-container:hover {
+    border-color: var(--accent-muted);
+    box-shadow: 0 12px 40px var(--shadow-color), 0 0 0 2px var(--accent-muted);
+}
+
 /* --- Centered Input State (No Messages) --- */
 .floating-input-container.centered {
     bottom: 50%;
@@ -445,18 +450,18 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     will-change: opacity, transform;
-    color: #111827;
+    color: #0f172a;
     /* Explicit Black for Light Mode */
     text-align: left;
 }
 
 /* Ensure icons and text inside inherit this black color in Light Mode by default */
 .shuffle-menu .shuffle-item {
-    color: #111827;
+    color: #0f172a;
 }
 
 .shuffle-menu .shuffle-item i {
-    color: #4b5563;
+    color: #475569;
     /* distinct gray/black icon color */
 }
 
