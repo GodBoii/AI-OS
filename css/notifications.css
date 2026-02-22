@@ -227,18 +227,16 @@
 }
 
 .notification-computer-tool .notification-progress {
-    background: linear-gradient(90deg, 
-        var(--neutral-700, #374151), 
-        var(--neutral-600, #52525b)
-    );
+    background: linear-gradient(90deg,
+            var(--neutral-700, #374151),
+            var(--neutral-600, #52525b));
     height: 2px;
 }
 
 .dark-mode .notification-computer-tool .notification-progress {
-    background: linear-gradient(90deg, 
-        var(--neutral-500, #6b7280), 
-        var(--neutral-400, #9ca3af)
-    );
+    background: linear-gradient(90deg,
+            var(--neutral-500, #6b7280),
+            var(--neutral-400, #9ca3af));
 }
 
 /* Subtle entrance animation for computer tools */
@@ -247,9 +245,11 @@
         opacity: 0;
         transform: translateX(120%) scale(0.85);
     }
+
     60% {
         transform: translateX(-8px) scale(1.02);
     }
+
     100% {
         opacity: 1;
         transform: translateX(0) scale(1);
@@ -258,10 +258,13 @@
 
 /* Subtle icon pulse */
 @keyframes pulseIcon {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
         transform: scale(1);
     }
+
     50% {
         opacity: 0.8;
         transform: scale(1.05);
