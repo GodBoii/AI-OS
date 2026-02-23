@@ -1,0 +1,120 @@
+/* Usage Section - Data Dashboard Aesthetic */
+.account-usage-section {
+    margin-top: 18px;
+    border: 1.5px solid var(--border-primary);
+    border-radius: 12px;
+    background: var(--elevated-bg);
+    padding: 16px;
+}
+
+.usage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.usage-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.usage-refresh-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* Hierarchical Display */
+.usage-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    text-align: center;
+}
+
+.usage-lifetime-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    opacity: 0.8;
+}
+
+.usage-total-hero {
+    color: var(--text-color);
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Breakdown Row */
+.usage-breakdown {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+
+.usage-breakdown-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.breakdown-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.breakdown-value {
+    color: var(--text-color);
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.usage-breakdown-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border-color);
+    opacity: 0.5;
+}
+
+.usage-error {
+    min-height: 16px;
+    margin-top: 12px;
+    color: #f87171;
+    font-size: 12px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .usage-total-hero {
+        font-size: 48px;
+    }
+    
+    .usage-breakdown {
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+    }
+    
+    .usage-breakdown-divider {
+        width: 100%;
+        height: 1px;
+    }
+}
