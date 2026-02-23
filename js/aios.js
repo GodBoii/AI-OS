@@ -12,6 +12,7 @@ class AIOS {
         this.deploymentsCache = [];
         this.databasesCache = [];
         this.selectedDatabaseProject = 'all';
+        this.usageView = null;
     }
 
     async init() {
@@ -29,6 +30,7 @@ class AIOS {
         this.userData = await this.loadUserData();
 
         this.cacheElements();
+        this.initializeUsageUI();
         this.setupEventListeners();
         this.loadSavedData();
         this.updateAuthUI(); // Initial UI state update
@@ -76,6 +78,11 @@ class AIOS {
             accountUserName: document.getElementById('account-userName'),
             accountUserEmail: document.getElementById('account-userEmail'),
             logoutBtn: document.getElementById('logout-btn'),
+            refreshUsageBtn: document.getElementById('refresh-usage-btn'),
+            usageInputTokens: document.getElementById('usage-input-tokens'),
+            usageOutputTokens: document.getElementById('usage-output-tokens'),
+            usageTotalTokens: document.getElementById('usage-total-tokens'),
+            usageError: document.getElementById('usage-error'),
 
             // Auth Forms
             authTabs: document.querySelectorAll('.auth-tab-btn'),
@@ -113,6 +120,21 @@ class AIOS {
         
         // Setup deployment detail modal
         this.setupDeploymentDetailModal();
+    }
+
+    initializeUsageUI() {
+        if (typeof window.AIOSUsage !== 'function') {
+            this.usageView = null;
+            return;
+        }
+
+        this.usageView = new window.AIOSUsage({
+            usageInputTokens: this.elements.usageInputTokens,
+            usageOutputTokens: this.elements.usageOutputTokens,
+            usageTotalTokens: this.elements.usageTotalTokens,
+            usageError: this.elements.usageError,
+        });
+        this.usageView.setEmpty();
     }
     
     setupDeploymentDetailModal() {
@@ -299,6 +321,7 @@ class AIOS {
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
         addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadDatabases(true));
+        addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
             this.selectedDatabaseProject = e.target.value || 'all';
             this.renderDatabases(this.databasesCache);
@@ -318,12 +341,15 @@ class AIOS {
                     this.saveUserData();
                     this.loadDeployments();
                     this.loadDatabases();
+                    this.loadUsage();
                 } else {
                     this.deploymentsCache = [];
                     this.databasesCache = [];
                     this.renderDeployments([]);
                     this.populateDatabaseProjectFilter([]);
                     this.renderDatabases([]);
+                    this.usageView?.setEmpty();
+                    this.usageView?.setError('');
                 }
             });
         }
@@ -675,6 +701,36 @@ class AIOS {
         }
     }
 
+    async loadUsage(showNotification = false) {
+        if (!this.usageView) return;
+
+        try {
+            const isAuthenticated = this.authService?.isAuthenticated?.() || false;
+            if (!isAuthenticated) {
+                this.usageView.setEmpty();
+                this.usageView.setError('');
+                return;
+            }
+
+            this.usageView.setLoading();
+            const usageData = await this.authService.fetchRequestUsage();
+
+            if (!usageData) {
+                this.usageView.setEmpty();
+                if (showNotification) this.showNotification('No usage records yet', 'success');
+                return;
+            }
+
+            this.usageView.render(usageData);
+            if (showNotification) this.showNotification('Usage refreshed', 'success');
+        } catch (error) {
+            console.error('Error loading usage:', error);
+            this.usageView.setEmpty();
+            this.usageView.setError(error.message || 'Failed to load usage');
+            if (showNotification) this.showNotification(error.message || 'Failed to load usage', 'error');
+        }
+    }
+
     renderDeployments(projects) {
         const list = this.elements.deploymentsList;
         const empty = this.elements.deploymentsEmpty;
@@ -962,6 +1018,8 @@ class AIOS {
         // If switching to integration tab, check integration status
         if (tabName === 'integration') {
             this.checkIntegrationStatus();
+        } else if (tabName === 'account') {
+            this.loadUsage();
         } else if (tabName === 'deployments') {
             this.loadDeployments();
         } else if (tabName === 'database') {
@@ -990,11 +1048,14 @@ class AIOS {
             this.checkIntegrationStatus();
             this.loadDeployments();
             this.loadDatabases();
+            this.loadUsage();
         } else {
             ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
             this.renderDeployments([]);
             this.populateDatabaseProjectFilter([]);
             this.renderDatabases([]);
+            this.usageView?.setEmpty();
+            this.usageView?.setError('');
         }
     }
 

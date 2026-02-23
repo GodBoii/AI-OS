@@ -120,6 +120,32 @@
                             </button>
                         </div>
                         <!-- END: User Identity Card -->
+
+                        <section class="account-usage-section" aria-labelledby="usage-title">
+                            <div class="usage-header">
+                                <h4 class="usage-title" id="usage-title">Usage</h4>
+                                <button type="button" class="btn-secondary usage-refresh-btn" id="refresh-usage-btn">
+                                    <i class="fi fi-tr-refresh"></i>
+                                    Refresh
+                                </button>
+                            </div>
+                            <div class="usage-display">
+                                <div class="usage-lifetime-label">Lifetime Usage</div>
+                                <div class="usage-total-hero" id="usage-total-tokens">-</div>
+                                <div class="usage-breakdown">
+                                    <div class="usage-breakdown-item">
+                                        <span class="breakdown-label">Input</span>
+                                        <span class="breakdown-value" id="usage-input-tokens">-</span>
+                                    </div>
+                                    <div class="usage-breakdown-divider"></div>
+                                    <div class="usage-breakdown-item">
+                                        <span class="breakdown-label">Output</span>
+                                        <span class="breakdown-value" id="usage-output-tokens">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="usage-error" id="usage-error" role="status" aria-live="polite"></div>
+                        </section>
                     </div>
                 </div>
 
