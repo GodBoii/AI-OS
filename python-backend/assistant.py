@@ -78,11 +78,11 @@ def get_llm_os(
     browser_tools_config: Optional[Dict[str, Any]] = None,
     computer_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None,  # NEW: For persistence
-    message_id: Optional[str] = None,  # NEW: For persistence
+    session_id: Optional[str] = None, 
+    message_id: Optional[str] = None, 
 ) -> Team:
     """
-    Constructs the hierarchical Aetheria AI multi-agent system with integrated planner.
+    hierarchical Aetheria AI multi-agent system with integrated planner.
     """
     direct_tools: List[Union[Toolkit, callable]] = []
 
@@ -149,8 +149,8 @@ def get_llm_os(
 
     if Planner_Agent:
         planner = Agent(
-            name="planner",
-            role="Omniscient planner who sees all dependencies before execution",
+            name="REASONING AGENT",
+            role="Omniscient reasoning agent who knows about all the tools and there working and can plan out which tools to use to complete the task, use this agent if the user have provided complex query and you want a step by step plan on how to complete the query.",
             model=Groq(id="groq/compound"),
             instructions=[
                 "<role>",
@@ -556,7 +556,7 @@ def get_llm_os(
         dev_team = Agent(
             name="dev_team",
             model=OpenRouter(id="arcee-ai/trinity-large-preview:free"),
-            role="It can do Any code related task",
+            role="""Full-stack software engineer and code execution specialist. Delegate here for ANY task that requires writing, running, testing, debugging, or modifying code — including scripts, web apps, APIs, automation, data processing, and terminal commands. This agent has access to a persistent sandbox environment (execute commands, manage files, install packages), deployed project tools (copy live site files, redeploy after edits), and a database engine (create databases, run SQL queries, run migrations). Use for: writing code in any language, executing shell commands, building/modifying websites or apps, creating/querying databases, debugging errors, running tests, setting up project structures, or any task where code must actually be run and verified. NOT for general knowledge questions, research, or tasks that only need information retrieval without code execution.""",
             tools=dev_tools,
             instructions=[
                 "Development team: Plan and execute code and data solutions using tools.",
@@ -582,7 +582,7 @@ def get_llm_os(
     if World_Agent:
         world_ai = Agent(
             name="World_Agent",
-            role="Universal knowledge and research agent with access to world information.",
+            role="""Research and information retrieval specialist with access to global knowledge sources. Delegate here whenever the task requires fetching, searching, or synthesizing external information — without code execution. This agent can: search Wikipedia for encyclopedic or general factual knowledge, search ArXiv for academic papers and scientific research, fetch top tech/startup stories from Hacker News, retrieve YouTube video transcripts, captions, metadata, and timestamps (given a video URL), and make direct HTTP requests to any external REST API (GET/POST/PUT/DELETE with custom headers and auth). Use for: research queries, summarizing papers or articles, tech news, YouTube video analysis, calling third-party APIs to fetch data, or answering knowledge-based questions that need live or specialized sources. NOT for writing or executing code, computer control, or tasks requiring file creation.""",
             model=Gemini(id="gemini-2.5-flash-lite"),
             tools=[WikipediaTools(),HackerNewsTools(),ArxivTools(),CustomApiTools(),YouTubeTools()],
             instructions=[
@@ -620,7 +620,7 @@ def get_llm_os(
             
             computer_agent = Agent(
                 name="Computer_Agent",
-                role="Desktop computer control specialist with full system access",
+                role="Desktop computer automation and control agent. Delegate here for ANY task that requires directly controlling the user's local desktop machine",
                 model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
                 tools=[ComputerTools(**computer_tools_config)],
                 instructions=[
