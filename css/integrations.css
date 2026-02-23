@@ -1,0 +1,231 @@
+/* ================================================================= */
+/* INTEGRATIONS TAB STYLES                                           */
+/* Styles for the Integrations section in Account Settings          */
+/* ================================================================= */
+
+/* Integration Tab Content */
+.integration-content {
+    color: var(--text-color);
+}
+
+.integration-description {
+    line-height: 1.6;
+    margin-bottom: 28px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 0;
+    border-left: none;
+}
+
+/* Integrations Section */
+.integrations-section {
+    margin-top: 8px;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 0;
+    border: none;
+}
+
+.section-subheading {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 16px;
+}
+
+/* Integration Item */
+.integration-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 0;
+    margin-bottom: 0;
+    background-color: transparent;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    transition: all var(--anim-normal) var(--easing-smooth);
+    box-shadow: none;
+}
+
+.integration-item:last-child {
+    border-bottom: none;
+}
+
+.integration-item:hover {
+    transform: translateX(4px);
+    box-shadow: none;
+    background-color: transparent;
+}
+
+.integration-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Integration Info */
+.integration-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.integration-info i,
+.integration-info .provider-icon {
+    font-size: 20px;
+    color: var(--text-color);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Provider Icon Styles */
+.integration-info .provider-icon {
+    width: 1.1em;
+    height: 1.1em;
+    fill: currentColor;
+    vertical-align: middle;
+    margin-right: -2px;
+}
+
+/* Brand-specific icon colors that adapt to theme */
+.integration-info .fa-github {
+    color: #181717;
+}
+
+.dark-mode .integration-info .fa-github {
+    color: #ffffff;
+}
+
+.integration-info .fa-google {
+    color: #4285F4;
+}
+
+.integration-info .vercel-icon {
+    fill: #000000;
+}
+
+.dark-mode .integration-info .vercel-icon {
+    fill: #ffffff;
+}
+
+.integration-info .google-sheets-icon {
+    fill: #0F9D58;
+}
+
+.integration-info .whatsapp-icon {
+    fill: #25D366;
+}
+
+.integration-info span {
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--text-color);
+}
+
+/* Connect Button */
+.connect-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border-secondary);
+    background-color: var(--elevated-bg);
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--anim-normal) var(--easing-smooth);
+    min-width: 110px;
+    justify-content: center;
+}
+
+.connect-btn:hover {
+    background-color: var(--accent-muted);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        0 4px 16px rgba(45, 55, 72, 0.08);
+}
+
+.connect-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Connect Button States */
+.connect-btn[data-action="connect"] {
+    color: var(--accent-color);
+}
+
+.connect-btn[data-action="connect"] .icon-connected {
+    display: none;
+}
+
+.icon-connected {
+    display: none;
+}
+
+.connect-btn[data-action="disconnect"] {
+    background-color: var(--status-completed-bg);
+    border-color: var(--status-completed);
+    color: var(--status-completed);
+}
+
+.connect-btn[data-action="disconnect"]:hover {
+    background-color: var(--error-500);
+    border-color: var(--error-500);
+    color: white;
+}
+
+.connect-btn[data-action="disconnect"] .icon-connect {
+    display: none;
+}
+
+.connect-btn[data-action="disconnect"] .icon-connected {
+    display: inline;
+}
+
+/* Settings Section Header (used in Integrations, Deployments, Database) */
+.settings-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.settings-section-header .integration-description {
+    flex: 1;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .integration-description {
+        padding: 0;
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+
+    .integration-item {
+        padding: 16px 0;
+        flex-direction: row;
+        gap: 12px;
+    }
+
+    .integration-info {
+        justify-content: flex-start;
+    }
+
+    .connect-btn {
+        width: auto;
+        min-width: 100px;
+        font-size: 12px;
+        padding: 8px 14px;
+    }
+}
