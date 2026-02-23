@@ -25,6 +25,10 @@
                     <i class="fa-solid fa-database"></i>
                     <span>Database</span>
                 </button>
+                <button class="tab-btn" data-tab="memory">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Memory</span>
+                </button>
                 <button class="tab-btn" data-tab="capabilities">
                     <i class="fa-solid fa-bolt"></i>
                     <span>Capabilities</span>
@@ -292,6 +296,68 @@
                     </div>
                     <div id="databases-empty" class="empty-state hidden">No databases found.</div>
                     <div id="databases-list" class="settings-list"></div>
+                </div>
+
+                <div class="tab-content" id="memory-tab">
+                    <h3 class="tab-heading">Memory</h3>
+                    <div class="settings-section-header">
+                        <p class="integration-description">
+                            Personal memory stored in Supabase for personalized responses. Add or review what your agents remember.
+                        </p>
+                        <button class="btn-secondary" id="refresh-memories-btn">
+                            <i class="fi fi-tr-refresh"></i>
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div class="memory-entry-card">
+                        <h4 class="memory-entry-title" id="memory-entry-title">Add Memory Manually</h4>
+                        <form id="memory-form" class="memory-form">
+                            <div class="form-group">
+                                <label for="memory-content">Memory Content <span style="color: #ef4444;">*</span></label>
+                                <textarea id="memory-content" placeholder='{"name": "Prajwal", "timezone": "Asia/Kolkata", "preferences": {"theme": "dark"}}' required></textarea>
+                                <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                    Enter JSON object or plain text. JSON is recommended for structured data.
+                                </small>
+                            </div>
+                            <div class="form-group">
+                                <label for="memory-input">Source / Context <span style="color: var(--text-secondary); font-size: 11px; font-weight: 400;">(Optional)</span></label>
+                                <input type="text" id="memory-input" placeholder="How this memory was captured">
+                            </div>
+                            <div class="memory-form-grid">
+                                <div class="form-group">
+                                    <label for="memory-agent-id">Agent ID <span style="color: var(--text-secondary); font-size: 11px; font-weight: 400;">(Optional)</span></label>
+                                    <input type="text" id="memory-agent-id" placeholder="assistant-v1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="memory-team-id">Team ID <span style="color: var(--text-secondary); font-size: 11px; font-weight: 400;">(Optional)</span></label>
+                                    <input type="text" id="memory-team-id" placeholder="aetheria-ai">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="memory-topics">Topics <span style="color: var(--text-secondary); font-size: 11px; font-weight: 400;">(Optional)</span></label>
+                                <input type="text" id="memory-topics" placeholder="preferences, profile, work">
+                                <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                    Comma-separated tags for organizing memories
+                                </small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="auth-btn primary" id="memory-submit-btn">
+                                    <i class="fas fa-plus"></i>
+                                    Add Memory
+                                </button>
+                                <button type="button" class="btn-secondary hidden" id="memory-cancel-edit-btn">
+                                    <i class="fas fa-times"></i>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="memories-empty" class="empty-state hidden">
+                        No memories found. Add one manually or let the agent capture it automatically.
+                    </div>
+                    <div id="memories-list" class="settings-list"></div>
                 </div>
 
                 <div class="tab-content" id="capabilities-tab">

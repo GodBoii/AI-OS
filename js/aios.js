@@ -11,6 +11,8 @@ class AIOS {
         this.backendBaseUrl = 'http://localhost:8765';
         this.deploymentsCache = [];
         this.databasesCache = [];
+        this.memoriesCache = [];
+        this.editingMemoryId = null;
         this.selectedDatabaseProject = 'all';
         this.usageView = null;
     }
@@ -116,6 +118,20 @@ class AIOS {
             databasesList: document.getElementById('databases-list'),
             databasesEmpty: document.getElementById('databases-empty'),
             databaseProjectFilter: document.getElementById('database-project-filter'),
+
+            // Memory Tab
+            refreshMemoriesBtn: document.getElementById('refresh-memories-btn'),
+            memoriesList: document.getElementById('memories-list'),
+            memoriesEmpty: document.getElementById('memories-empty'),
+            memoryForm: document.getElementById('memory-form'),
+            memoryContent: document.getElementById('memory-content'),
+            memoryInput: document.getElementById('memory-input'),
+            memoryAgentId: document.getElementById('memory-agent-id'),
+            memoryTeamId: document.getElementById('memory-team-id'),
+            memoryTopics: document.getElementById('memory-topics'),
+            memoryEntryTitle: document.getElementById('memory-entry-title'),
+            memorySubmitBtn: document.getElementById('memory-submit-btn'),
+            memoryCancelEditBtn: document.getElementById('memory-cancel-edit-btn'),
         };
         
         // Setup deployment detail modal
@@ -321,7 +337,13 @@ class AIOS {
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
         addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadDatabases(true));
+        addClickHandler(this.elements.refreshMemoriesBtn, () => this.loadMemories(true));
         addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
+        this.elements.memoryForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleAddMemory();
+        });
+        addClickHandler(this.elements.memoryCancelEditBtn, () => this.resetMemoryForm());
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
             this.selectedDatabaseProject = e.target.value || 'all';
             this.renderDatabases(this.databasesCache);
@@ -341,13 +363,16 @@ class AIOS {
                     this.saveUserData();
                     this.loadDeployments();
                     this.loadDatabases();
+                    this.loadMemories();
                     this.loadUsage();
                 } else {
                     this.deploymentsCache = [];
                     this.databasesCache = [];
+                    this.memoriesCache = [];
                     this.renderDeployments([]);
                     this.populateDatabaseProjectFilter([]);
                     this.renderDatabases([]);
+                    this.renderMemories([]);
                     this.usageView?.setEmpty();
                     this.usageView?.setError('');
                 }
@@ -635,6 +660,15 @@ class AIOS {
         return text.length ? text : fallback;
     }
 
+    _escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     _formatDate(value) {
         if (!value) return '-';
         try {
@@ -729,6 +763,180 @@ class AIOS {
             this.usageView.setError(error.message || 'Failed to load usage');
             if (showNotification) this.showNotification(error.message || 'Failed to load usage', 'error');
         }
+    }
+
+    _formatMemoryContent(value) {
+        if (value === null || value === undefined) return '-';
+        if (typeof value === 'string') return value;
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch (e) {
+            return String(value);
+        }
+    }
+
+    _setMemoryFormMode(editing = false) {
+        const title = this.elements.memoryEntryTitle;
+        const submitBtn = this.elements.memorySubmitBtn;
+        const cancelBtn = this.elements.memoryCancelEditBtn;
+        if (title) title.textContent = editing ? 'Edit Memory' : 'Add Memory Manually';
+        if (submitBtn) submitBtn.textContent = editing ? 'Update Memory' : 'Add Memory';
+        if (cancelBtn) cancelBtn.classList.toggle('hidden', !editing);
+    }
+
+    resetMemoryForm() {
+        this.editingMemoryId = null;
+        this.elements.memoryForm?.reset();
+        this._setMemoryFormMode(false);
+    }
+
+    startEditMemory(row) {
+        this.editingMemoryId = row?.memory_id || null;
+        if (!this.editingMemoryId) return;
+
+        const memoryText = this._formatMemoryContent(row.memory);
+        if (this.elements.memoryContent) this.elements.memoryContent.value = memoryText === '-' ? '' : memoryText;
+        if (this.elements.memoryInput) this.elements.memoryInput.value = this._safeText(row.input, '');
+        if (this.elements.memoryAgentId) this.elements.memoryAgentId.value = this._safeText(row.agent_id, '');
+        if (this.elements.memoryTeamId) this.elements.memoryTeamId.value = this._safeText(row.team_id, '');
+
+        let topicsText = '';
+        if (Array.isArray(row.topics)) topicsText = row.topics.join(', ');
+        else if (typeof row.topics === 'string') topicsText = row.topics;
+        if (this.elements.memoryTopics) this.elements.memoryTopics.value = topicsText;
+
+        this._setMemoryFormMode(true);
+        this.elements.memoryContent?.focus();
+        this.elements.memoryContent?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async loadMemories(showNotification = false) {
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.memoriesCache = [];
+                this.renderMemories([]);
+                return;
+            }
+
+            const response = await fetch(`${this.backendBaseUrl}/api/memories?limit=200`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to load memories');
+            }
+
+            this.memoriesCache = Array.isArray(payload.memories) ? payload.memories : [];
+            this.renderMemories(this.memoriesCache);
+            if (showNotification) this.showNotification('Memories refreshed successfully', 'success');
+        } catch (error) {
+            console.error('Error loading memories:', error);
+            this.renderMemories([]);
+            if (showNotification) this.showNotification(error.message || 'Failed to load memories', 'error');
+        }
+    }
+
+    async handleAddMemory() {
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.showNotification('Please log in to add memory', 'error');
+                return;
+            }
+
+            const memoryRaw = this.elements.memoryContent?.value?.trim();
+            if (!memoryRaw) {
+                this.showNotification('Memory content is required', 'error');
+                return;
+            }
+
+            let memoryValue = memoryRaw;
+            try {
+                memoryValue = JSON.parse(memoryRaw);
+            } catch (e) {
+                // Keep as plain string when not valid JSON.
+            }
+
+            const input = this.elements.memoryInput?.value?.trim() || '';
+            const agentId = this.elements.memoryAgentId?.value?.trim() || '';
+            const teamId = this.elements.memoryTeamId?.value?.trim() || '';
+            const topicsRaw = this.elements.memoryTopics?.value?.trim() || '';
+            const topics = topicsRaw
+                ? topicsRaw.split(',').map((x) => x.trim()).filter(Boolean)
+                : [];
+
+            const body = {
+                memory: memoryValue,
+                input: input || null,
+                agent_id: agentId || null,
+                team_id: teamId || null,
+                topics: topics.length ? topics : null,
+            };
+
+            const isEdit = !!this.editingMemoryId;
+            const endpoint = isEdit
+                ? `${this.backendBaseUrl}/api/memories/${encodeURIComponent(this.editingMemoryId)}`
+                : `${this.backendBaseUrl}/api/memories`;
+            const method = isEdit ? 'PUT' : 'POST';
+
+            const response = await fetch(endpoint, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(body),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to save memory');
+            }
+
+            this.resetMemoryForm();
+            this.showNotification(
+                isEdit ? 'Memory updated successfully' : 'Memory added successfully',
+                'success'
+            );
+            this.loadMemories();
+        } catch (error) {
+            console.error('Error adding memory:', error);
+            this.showNotification(error.message || 'Failed to save memory', 'error');
+        }
+    }
+
+    async deleteMemory(memoryId) {
+        if (!memoryId) return;
+
+        // Use custom confirmation modal instead of browser confirm
+        this.showMemoryConfirmation(
+            'This action cannot be undone. The memory will be permanently removed from your account.',
+            async () => {
+                try {
+                    const token = await this._getAccessToken();
+                    if (!token) {
+                        this.showNotification('Please log in to delete memory', 'error');
+                        return;
+                    }
+
+                    const response = await fetch(`${this.backendBaseUrl}/api/memories/${encodeURIComponent(memoryId)}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.ok) {
+                        throw new Error(payload.error || 'Failed to delete memory');
+                    }
+
+                    if (this.editingMemoryId === memoryId) this.resetMemoryForm();
+                    this.showNotification('Memory deleted successfully', 'success');
+                    this.loadMemories();
+                } catch (error) {
+                    console.error('Error deleting memory:', error);
+                    this.showNotification(error.message || 'Failed to delete memory', 'error');
+                }
+            }
+        );
     }
 
     renderDeployments(projects) {
@@ -847,6 +1055,121 @@ class AIOS {
                     <div><strong>Created</strong><span>${this._formatDate(row.database_created_at)}</span></div>
                 </div>
             `;
+            list.appendChild(card);
+        });
+    }
+
+    renderMemories(memories) {
+        const list = this.elements.memoriesList;
+        const empty = this.elements.memoriesEmpty;
+        if (!list || !empty) return;
+
+        const items = Array.isArray(memories) ? memories : [];
+        list.innerHTML = '';
+
+        if (!items.length) {
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+
+        items.forEach((row, index) => {
+            const card = document.createElement('div');
+            card.className = 'memory-compact-card';
+            card.style.animationDelay = `${index * 0.04}s`;
+            
+            const memoryContent = this._formatMemoryContent(row.memory);
+            const memoryPreview = this._escapeHtml(
+                typeof memoryContent === 'string' && memoryContent.length > 80 
+                    ? memoryContent.substring(0, 80) + '...' 
+                    : memoryContent
+            );
+            const memoryFull = this._escapeHtml(memoryContent);
+            
+            const topicsArray = Array.isArray(row.topics) ? row.topics : [];
+            const topicsHtml = topicsArray.length 
+                ? topicsArray.map(t => `<span class="topic-tag">${this._escapeHtml(t)}</span>`).join('')
+                : '<span style="color: var(--text-secondary); font-style: italic; font-size: 13px;">No topics</span>';
+            
+            const memoryId = this._escapeHtml(this._safeText(row.memory_id, 'Memory'));
+            const updatedAt = this._escapeHtml(this._formatDate((row.updated_at || 0) * 1000));
+            const agentId = this._escapeHtml(this._safeText(row.agent_id, '-'));
+            const teamId = this._escapeHtml(this._safeText(row.team_id, '-'));
+            const inputText = this._escapeHtml(this._safeText(row.input, '-'));
+
+            card.innerHTML = `
+                <div class="memory-card-collapsed">
+                    <div class="memory-expand-icon">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                    <div class="memory-card-preview">
+                        <div class="memory-preview-content">${memoryPreview}</div>
+                    </div>
+                    <div class="memory-card-meta">
+                        <span class="memory-timestamp">
+                            <i class="far fa-clock"></i>
+                            ${updatedAt}
+                        </span>
+                        <div class="memory-card-actions" onclick="event.stopPropagation();">
+                            <button type="button" class="memory-action-btn memory-edit-btn" title="Edit Memory" aria-label="Edit Memory">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button type="button" class="memory-action-btn memory-delete-btn" title="Delete Memory" aria-label="Delete Memory">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="memory-card-expanded">
+                    <div class="memory-expanded-content">
+                        <div class="memory-detail-section">
+                            <div class="memory-detail-label">Memory ID</div>
+                            <div class="memory-detail-value">${memoryId}</div>
+                        </div>
+                        <div class="memory-detail-section">
+                            <div class="memory-detail-label">Memory Content</div>
+                            <div class="memory-detail-value code">${memoryFull}</div>
+                        </div>
+                        <div class="memory-detail-grid">
+                            <div class="memory-detail-section">
+                                <div class="memory-detail-label">Agent ID</div>
+                                <div class="memory-detail-value">${agentId}</div>
+                            </div>
+                            <div class="memory-detail-section">
+                                <div class="memory-detail-label">Team ID</div>
+                                <div class="memory-detail-value">${teamId}</div>
+                            </div>
+                        </div>
+                        <div class="memory-detail-section">
+                            <div class="memory-detail-label">Source</div>
+                            <div class="memory-detail-value">${inputText}</div>
+                        </div>
+                        <div class="memory-detail-section">
+                            <div class="memory-detail-label">Topics</div>
+                            <div class="memory-topics-container">${topicsHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Toggle expand/collapse
+            const collapsedSection = card.querySelector('.memory-card-collapsed');
+            collapsedSection.addEventListener('click', (e) => {
+                // Don't toggle if clicking on action buttons
+                if (e.target.closest('.memory-card-actions')) return;
+                card.classList.toggle('expanded');
+            });
+
+            // Action buttons
+            card.querySelector('.memory-edit-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.startEditMemory(row);
+            });
+            card.querySelector('.memory-delete-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteMemory(row.memory_id);
+            });
+
             list.appendChild(card);
         });
     }
@@ -1024,6 +1347,8 @@ class AIOS {
             this.loadDeployments();
         } else if (tabName === 'database') {
             this.loadDatabases();
+        } else if (tabName === 'memory') {
+            this.loadMemories();
         }
     }
 
@@ -1048,12 +1373,14 @@ class AIOS {
             this.checkIntegrationStatus();
             this.loadDeployments();
             this.loadDatabases();
+            this.loadMemories();
             this.loadUsage();
         } else {
             ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
             this.renderDeployments([]);
             this.populateDatabaseProjectFilter([]);
             this.renderDatabases([]);
+            this.renderMemories([]);
             this.usageView?.setEmpty();
             this.usageView?.setError('');
         }
@@ -1070,11 +1397,81 @@ class AIOS {
     }
 
     showNotification(message, type = 'success') {
+        // Use the global notificationService (lowercase)
+        if (window.notificationService && typeof window.notificationService.show === 'function') {
+            window.notificationService.show(message, type);
+            return;
+        }
+        // Fallback to NotificationService (uppercase) for backward compatibility
         if (window.NotificationService && typeof window.NotificationService.show === 'function') {
             window.NotificationService.show(message, type);
             return;
         }
         console.log(`[${type}] ${message}`);
+    }
+
+    // Custom confirmation modal for memory deletion
+    showMemoryConfirmation(message, onConfirm) {
+        // Create modal if it doesn't exist
+        let modal = document.getElementById('memory-confirm-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'memory-confirm-modal';
+            modal.className = 'memory-confirm-modal';
+            modal.innerHTML = `
+                <div class="memory-confirm-content">
+                    <div class="memory-confirm-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 class="memory-confirm-title">Delete Memory?</h3>
+                    <p class="memory-confirm-message"></p>
+                    <div class="memory-confirm-actions">
+                        <button class="memory-confirm-btn memory-confirm-btn-cancel">Cancel</button>
+                        <button class="memory-confirm-btn memory-confirm-btn-delete">Delete</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Close on backdrop click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.hideMemoryConfirmation();
+                }
+            });
+        }
+
+        // Update message
+        const messageEl = modal.querySelector('.memory-confirm-message');
+        if (messageEl) messageEl.textContent = message;
+
+        // Setup button handlers
+        const cancelBtn = modal.querySelector('.memory-confirm-btn-cancel');
+        const deleteBtn = modal.querySelector('.memory-confirm-btn-delete');
+
+        const cleanup = () => {
+            this.hideMemoryConfirmation();
+            cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+            deleteBtn.replaceWith(deleteBtn.cloneNode(true));
+        };
+
+        modal.querySelector('.memory-confirm-btn-cancel').addEventListener('click', cleanup);
+        modal.querySelector('.memory-confirm-btn-delete').addEventListener('click', () => {
+            cleanup();
+            onConfirm();
+        });
+
+        // Show modal
+        requestAnimationFrame(() => {
+            modal.classList.add('show');
+        });
+    }
+
+    hideMemoryConfirmation() {
+        const modal = document.getElementById('memory-confirm-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
     }
 }
 
