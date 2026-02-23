@@ -1,0 +1,64 @@
+/* ================================================================= */
+/* ABOUT TAB STYLES                                                  */
+/* Styles for the About section in Account Settings                 */
+/* ================================================================= */
+
+.about-content {
+    color: var(--text-color);
+}
+
+.version {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    color: var(--text-secondary);
+}
+
+.description {
+    line-height: 1.6;
+    margin-bottom: 32px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.about-links {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.link {
+    color: var(--text-color);
+    text-decoration: none;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.link:last-child {
+    border-bottom: none;
+}
+
+.link:hover {
+    text-decoration: none;
+    color: var(--text-secondary);
+}
+
+/* External Link Styles */
+.external-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.external-link::after {
+    content: '↗';
+    font-size: 12px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.external-link:hover::after {
+    opacity: 1;
+}
