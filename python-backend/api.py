@@ -3,6 +3,7 @@
 import logging
 import uuid
 import json
+import time
 import requests
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -154,6 +155,154 @@ def disconnect_integration():
     supabase_client.from_('user_integrations').delete().match({'user_id': str(user.id), 'service': service}).execute()
     
     return jsonify({"message": "Disconnected"}), 200
+
+
+@api_bp.route('/memories', methods=['GET'])
+def list_memories():
+    """
+    List authenticated user's memories from agno_memories table.
+    Query params: limit (optional, default 100)
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        limit = request.args.get("limit", default=100, type=int) or 100
+        limit = max(1, min(limit, 500))
+        response = (
+            supabase_client
+            .table("agno_memories")
+            .select("*")
+            .eq("user_id", str(user.id))
+            .order("updated_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return jsonify({"ok": True, "memories": response.data or []}), 200
+    except Exception as e:
+        logger.error(f"list memories failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "failed to load memories"}), 500
+
+
+@api_bp.route('/memories', methods=['POST'])
+def create_memory():
+    """
+    Create a new user memory in agno_memories.
+    body: { memory, input?, agent_id?, team_id?, topics?, memory_id? }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    memory = body.get("memory")
+    if memory is None:
+        return jsonify({"ok": False, "error": "memory is required"}), 400
+
+    memory_id = body.get("memory_id") or str(uuid.uuid4())
+    input_text = body.get("input")
+    agent_id = body.get("agent_id")
+    team_id = body.get("team_id")
+    topics = body.get("topics")
+
+    if topics is not None and not isinstance(topics, (list, dict, str)):
+        return jsonify({"ok": False, "error": "topics must be a JSON value"}), 400
+
+    row = {
+        "memory_id": str(memory_id),
+        "memory": memory,
+        "input": input_text,
+        "agent_id": agent_id,
+        "team_id": team_id,
+        "user_id": str(user.id),
+        "topics": topics,
+        "updated_at": int(time.time()),
+    }
+
+    try:
+        response = (
+            supabase_client
+            .table("agno_memories")
+            .insert(row)
+            .execute()
+        )
+        inserted = (response.data or [None])[0]
+        return jsonify({"ok": True, "memory": inserted, "memory_id": memory_id}), 201
+    except Exception as e:
+        logger.error(f"create memory failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "failed to create memory"}), 500
+
+
+@api_bp.route('/memories/<memory_id>', methods=['PUT', 'PATCH', 'DELETE'])
+def memory_by_id(memory_id):
+    """
+    Update or delete a memory by memory_id for authenticated user.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        existing_resp = (
+            supabase_client
+            .table("agno_memories")
+            .select("*")
+            .eq("memory_id", str(memory_id))
+            .eq("user_id", str(user.id))
+            .limit(1)
+            .execute()
+        )
+        existing = (existing_resp.data or [None])[0]
+        if not existing:
+            return jsonify({"ok": False, "error": "memory not found"}), 404
+
+        if request.method == 'DELETE':
+            (
+                supabase_client
+                .table("agno_memories")
+                .delete()
+                .eq("memory_id", str(memory_id))
+                .eq("user_id", str(user.id))
+                .execute()
+            )
+            return jsonify({"ok": True, "deleted": True, "memory_id": memory_id}), 200
+
+        body = request.json or {}
+        update_data = {"updated_at": int(time.time())}
+
+        if "memory" in body:
+            if body.get("memory") is None:
+                return jsonify({"ok": False, "error": "memory cannot be null"}), 400
+            update_data["memory"] = body.get("memory")
+        if "input" in body:
+            update_data["input"] = body.get("input")
+        if "agent_id" in body:
+            update_data["agent_id"] = body.get("agent_id")
+        if "team_id" in body:
+            update_data["team_id"] = body.get("team_id")
+        if "topics" in body:
+            topics = body.get("topics")
+            if topics is not None and not isinstance(topics, (list, dict, str)):
+                return jsonify({"ok": False, "error": "topics must be a JSON value"}), 400
+            update_data["topics"] = topics
+
+        if len(update_data.keys()) == 1:
+            return jsonify({"ok": False, "error": "no fields provided to update"}), 400
+
+        updated_resp = (
+            supabase_client
+            .table("agno_memories")
+            .update(update_data)
+            .eq("memory_id", str(memory_id))
+            .eq("user_id", str(user.id))
+            .execute()
+        )
+        updated = (updated_resp.data or [None])[0]
+        return jsonify({"ok": True, "memory": updated, "memory_id": memory_id}), 200
+    except Exception as e:
+        logger.error(f"memory by id failed: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "failed to process memory request"}), 500
 
 
 @api_bp.route('/composio/status', methods=['GET'])
