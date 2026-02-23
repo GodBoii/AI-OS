@@ -379,6 +379,30 @@ class AuthService {
         }
     }
 
+    async fetchRequestUsage() {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        const { data, error } = await this.supabase
+            .from('request_logs')
+            .select('input_tokens, output_tokens, total_tokens, created_at')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (error) {
+            throw new Error(error.message || 'Failed to fetch usage data.');
+        }
+
+        return data || null;
+    }
+
     getCurrentUser() {
         return this.user;
     }

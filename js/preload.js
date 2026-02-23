@@ -257,6 +257,7 @@ contextBridge.exposeInMainWorld(
         fetchSessionTitles: async (limit) => await authService.fetchSessionTitles(limit),
         fetchSessionData: async (sessionId) => await authService.fetchSessionData(sessionId),
         fetchSessionAttachments: async (sessionId) => await authService.fetchSessionAttachments(sessionId),
+        fetchRequestUsage: async () => await authService.fetchRequestUsage(),
         onAuthChange: (callback) => {
             const wrappedCallback = (user) => {
                 console.log('[preload.js] onAuthChange triggered, user:', user ? user.email : 'null');
