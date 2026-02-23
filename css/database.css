@@ -1,0 +1,61 @@
+/* ================================================================= */
+/* DATABASE TAB STYLES                                               */
+/* Styles for the Database section in Account Settings              */
+/* ================================================================= */
+
+/*
+ * Note: The Database tab uses the shared settings card styles
+ * defined in aios.css (.settings-list, .settings-card, etc.)
+ * 
+ * This file is created for future database-specific styles
+ * and to maintain consistency with the modular architecture.
+ */
+
+/* Database-specific styles can be added here as needed */
+
+/* Example: Database connection status indicator */
+.database-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.database-status.connected {
+    background: var(--success-50);
+    color: var(--success-700);
+    border: 1px solid var(--success-500);
+}
+
+.database-status.disconnected {
+    background: var(--error-50);
+    color: var(--error-700);
+    border: 1px solid var(--error-500);
+}
+
+.database-status.connecting {
+    background: var(--warning-50);
+    color: var(--warning-700);
+    border: 1px solid var(--warning-500);
+}
+
+/* Dark mode adjustments */
+.dark-mode .database-status.connected {
+    background: rgba(16, 185, 129, 0.16);
+    color: var(--success-500);
+}
+
+.dark-mode .database-status.disconnected {
+    background: rgba(239, 68, 68, 0.16);
+    color: var(--error-500);
+}
+
+.dark-mode .database-status.connecting {
+    background: rgba(245, 158, 11, 0.18);
+    color: var(--warning-500);
+}
