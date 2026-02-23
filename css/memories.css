@@ -1,0 +1,450 @@
+/* ================================================================= */
+/* MEMORY TAB STYLES - Compact Collapsible Design                   */
+/* ================================================================= */
+
+/* Memory Entry Card - Add/Edit Form */
+.memory-entry-card {
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--elevated-bg);
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.memory-entry-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.dark-mode .memory-entry-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.dark-mode .memory-entry-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.memory-entry-title {
+    margin: 0 0 16px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+    letter-spacing: -0.01em;
+}
+
+/* Form Styling */
+.memory-form .form-group {
+    margin-bottom: 16px;
+}
+
+.memory-form .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.memory-form .form-group textarea {
+    min-height: 100px;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    resize: vertical;
+    width: 100%;
+}
+
+.memory-form .form-group textarea:focus,
+.memory-form .form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.memory-form .form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.memory-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* ================================================================= */
+/* COMPACT MEMORY CARD - Collapsible Design                         */
+/* ================================================================= */
+
+.memory-compact-card {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--elevated-bg);
+    margin-bottom: 12px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.memory-compact-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dark-mode .memory-compact-card:hover {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Collapsed Header */
+.memory-card-collapsed {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.memory-card-collapsed:hover {
+    background: var(--hover-bg);
+}
+
+.memory-expand-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+}
+
+.memory-compact-card.expanded .memory-expand-icon {
+    transform: rotate(90deg);
+}
+
+.memory-card-preview {
+    flex: 1;
+    min-width: 0;
+}
+
+.memory-preview-content {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-size: 13px;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+}
+
+.memory-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.memory-timestamp {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Action Buttons - Compact */
+.memory-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.memory-action-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--elevated-bg);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+}
+
+.memory-action-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.memory-action-btn:active {
+    transform: scale(0.95);
+}
+
+.memory-delete-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+/* Expanded Details */
+.memory-card-expanded {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.memory-compact-card.expanded .memory-card-expanded {
+    max-height: 1000px;
+}
+
+.memory-expanded-content {
+    padding: 0 16px 16px 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.memory-detail-section {
+    margin-top: 14px;
+}
+
+.memory-detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.memory-detail-value {
+    font-size: 13px;
+    color: var(--text-color);
+    line-height: 1.5;
+}
+
+.memory-detail-value.code {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    background: var(--code-bg);
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow: auto;
+}
+
+.memory-detail-value.code::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.memory-detail-value.code::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.memory-detail-value.code::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.memory-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-top: 14px;
+}
+
+/* Topic Tags */
+.memory-topics-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.topic-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--accent-muted);
+    color: var(--accent-color);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid rgba(var(--accent-color-rgb), 0.2);
+}
+
+/* Light Mode Fixes */
+:root {
+    --memory-preview-bg: #f8fafc;
+}
+
+.dark-mode {
+    --memory-preview-bg: #1a1a1a;
+}
+
+/* Settings Card Enhancements for Memory */
+.settings-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Empty State Enhancement */
+.empty-state {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.empty-state::before {
+    content: '🧠';
+    display: block;
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+}
+
+/* Confirmation Modal */
+.memory-confirm-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.memory-confirm-modal.show {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.memory-confirm-content {
+    background: var(--elevated-bg);
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(0.9);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.memory-confirm-modal.show .memory-confirm-content {
+    transform: scale(1);
+}
+
+.memory-confirm-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 20px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #ef4444;
+}
+
+.memory-confirm-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-color);
+    margin: 0 0 12px;
+    text-align: center;
+}
+
+.memory-confirm-message {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.memory-confirm-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.memory-confirm-btn {
+    flex: 1;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.memory-confirm-btn-cancel {
+    background: var(--hover-bg);
+    color: var(--text-color);
+}
+
+.memory-confirm-btn-cancel:hover {
+    background: var(--border-color);
+}
+
+.memory-confirm-btn-delete {
+    background: #ef4444;
+    color: white;
+}
+
+.memory-confirm-btn-delete:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .memory-form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .memory-entry-card {
+        padding: 20px;
+    }
+    
+    .memory-confirm-content {
+        padding: 24px;
+    }
+}
