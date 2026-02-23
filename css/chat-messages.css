@@ -946,3 +946,51 @@
 .session-history-content .code-block-wrapper:hover .code-copy-btn {
     opacity: 1;
 }
+
+/* ================================================================= */
+/* MESSAGE CONTENT BLOCKS & ERROR STATES                            */
+/* ================================================================= */
+
+/* Error message styling */
+.error-message {
+    color: var(--error-500);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background-color: var(--error-100);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dark-mode .error-message {
+    background-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Status message styling */
+.status-message {
+    color: var(--text-color);
+    font-style: italic;
+    opacity: 0.8;
+    padding: 4px 8px;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Content block styling */
+.content-block {
+    margin-bottom: 10px;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+}
+
+.content-block-header {
+    display: none;
+}
+
+.inner-content {
+    padding: 0;
+}
