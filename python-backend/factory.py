@@ -9,6 +9,7 @@ from extensions import socketio, oauth, RedisClient
 
 # --- Service Layer Imports ---
 from session_service import ConnectionManager
+from run_state_manager import RunStateManager
 
 # --- Route and Handler Registration Imports ---
 from auth import auth_bp
@@ -46,10 +47,15 @@ def create_app():
     # --- 2. Instantiate Services ---
     redis_client = RedisClient.from_url(config.REDIS_URL)
     connection_manager = ConnectionManager(redis_client)
+    run_state_manager = RunStateManager(redis_client)
 
     # --- 3. Inject Dependencies into Modules ---
-    # Pass BOTH the connection_manager and the redis_client to the sockets module.
-    sockets.set_dependencies(manager=connection_manager, redis_client=redis_client)
+    # Pass connection_manager, redis_client, and run_state_manager to the sockets module.
+    sockets.set_dependencies(
+        manager=connection_manager,
+        redis_client=redis_client,
+        run_state_mgr=run_state_manager,
+    )
 
     # --- 4. Register OAuth Providers ---
     # (This section is unchanged)
@@ -95,6 +101,9 @@ def create_app():
         logger.warning("Supabase OAuth credentials not set. Supabase integration will be disabled.")
 
     # --- 5. Register Blueprints (HTTP Routes) ---
+    # Inject run_state_manager into api so the status endpoints can read it
+    from api import set_run_state_manager
+    set_run_state_manager(run_state_manager)
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
 

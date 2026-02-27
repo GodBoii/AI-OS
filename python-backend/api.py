@@ -36,6 +36,74 @@ logger = logging.getLogger(__name__)
 # Create a Blueprint for API routes, with a URL prefix of /api
 api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
 
+# RunStateManager is a module-level singleton injected from the factory via
+# set_run_state_manager() below.
+_run_state_manager = None
+
+
+def set_run_state_manager(manager):
+    """Called by the factory to inject the shared RunStateManager instance."""
+    global _run_state_manager
+    _run_state_manager = manager
+
+
+# --- Run Status Endpoints (used for reconnect / catch-up) ---
+
+@api_bp.route('/conversations/<conversation_id>/status', methods=['GET'])
+def conversation_run_status(conversation_id):
+    """
+    Returns the current run state for a conversation.
+    The client calls this after reconnecting to learn whether a run is still
+    in-progress, completed (with catch-up), or failed.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    if not _run_state_manager:
+        return jsonify({"status": "idle"}), 200
+
+    state = _run_state_manager.get_state(conversation_id)
+    if not state:
+        return jsonify({"status": "idle", "conversationId": conversation_id}), 200
+
+    return jsonify({
+        "conversationId": conversation_id,
+        "status": state.get("status"),
+        "messageId": state.get("message_id"),
+        "error": state.get("error"),
+        "updatedAt": state.get("updated_at"),
+    }), 200
+
+
+@api_bp.route('/conversations/<conversation_id>/result', methods=['GET'])
+def conversation_run_result(conversation_id):
+    """
+    Returns the stored result (completed/failed) for a conversation run.
+    Used for catch-up rendering when the client was not connected during streaming.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    if not _run_state_manager:
+        return jsonify({"status": "none"}), 200
+
+    result = _run_state_manager.get_result(conversation_id)
+    if not result:
+        return jsonify({"status": "none", "conversationId": conversation_id}), 200
+
+    return jsonify({
+        "conversationId": conversation_id,
+        "status": result.get("status"),
+        "messageId": result.get("message_id"),
+        "content": result.get("content"),
+        "title": result.get("title"),
+        "error": result.get("error"),
+    }), 200
+
+
+
 
 def _resolve_auth_config_id(toolkit_slug: str, request_auth_config_id: str | None) -> str | None:
     if request_auth_config_id:
