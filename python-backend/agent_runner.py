@@ -11,6 +11,7 @@ from extensions import socketio
 from assistant import get_llm_os
 from supabase_client import supabase_client
 from session_service import ConnectionManager
+from run_state_manager import RunStateManager
 import config
 
 # --- Agno Framework Imports ---
@@ -358,26 +359,36 @@ def run_agent_and_stream(
     conversation_id: str,
     message_id: str,
     turn_data: dict,
-    browser_tools_config: dict, # This is now only used to extract socketio and redis_client
-    computer_tools_config: dict, # NEW: Computer control tools config
+    browser_tools_config: dict,
+    computer_tools_config: dict,
     context_session_ids: List[str],
     connection_manager: ConnectionManager,
-    redis_client: Redis
+    redis_client: Redis,
+    run_state_manager: RunStateManager = None,  # NEW: optional, safe for assistant path
 ):
     """
     Orchestrates a full agent run, ensuring all real-time tools receive the
     necessary per-request dependencies for communication.
+
+    Emits to the conversation room (conv:{conversation_id}) so any reconnected
+    client with the same conversationId will receive the stream.
     """
+    # Durable room name - survives SID changes
+    room_name = f"conv:{conversation_id}"
     try:
         # --- DEBUG LOG ---
-        print(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}")
-        logger.info(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}")
+        print(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}, room={room_name}")
+        logger.info(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}, room={room_name}")
 
         # 1. Retrieve Session and User Data
         session_data = connection_manager.get_session(conversation_id)
         if not session_data:
             raise Exception(f"Session data not found for conversation {conversation_id}")
         user_id = session_data['user_id']
+
+        # --- Mark run as STARTED (we now have user_id) ---
+        if run_state_manager:
+            run_state_manager.start_run(conversation_id, message_id, user_id)
 
         # --- MODIFICATION START: Create a dedicated config for real-time tools ---
         # This new dictionary will contain ALL dependencies needed by any tool that
@@ -472,6 +483,7 @@ def run_agent_and_stream(
         print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         run_output: TeamRunOutput | None = None
+        accumulated_content: list[str] = []  # NEW: accumulate for catch-up
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -504,18 +516,21 @@ def run_agent_and_stream(
                 is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
                 # Include reasoning_content if present
                 reasoning_content = getattr(chunk, 'reasoning_content', None)
+                # Accumulate main content for catch-up buffer
+                if is_final and chunk.content:
+                    accumulated_content.append(chunk.content)
                 socketio.emit("response", {
-                    "content": chunk.content, 
-                    "streaming": True, 
-                    "id": message_id, 
-                    "agent_name": owner_name, 
+                    "content": chunk.content,
+                    "streaming": True,
+                    "id": message_id,
+                    "agent_name": owner_name,
                     "is_log": not is_final,
                     "reasoning_content": reasoning_content
-                }, room=sid)
+                }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
-                socketio.emit("agent_step", {"type": "tool_start", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
+                socketio.emit("agent_step", {"type": "tool_start", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=room_name)
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
-                socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=sid)
+                socketio.emit("agent_step", {"type": "tool_end", "name": getattr(chunk.tool, 'tool_name', None), "agent_name": owner_name, "id": message_id}, room=room_name)
             # Handle reasoning events
             elif chunk.event == TeamRunEvent.reasoning_step.value:
                 reasoning_step = getattr(chunk, 'reasoning_step', None)
@@ -524,10 +539,35 @@ def run_agent_and_stream(
                         "id": message_id,
                         "agent_name": owner_name,
                         "step": str(reasoning_step)
-                    }, room=sid)
+                    }, room=room_name)
 
         # 6. Finalize the Stream and Log Metrics
-        socketio.emit("response", {"done": True, "id": message_id}, room=sid)
+        socketio.emit("response", {"done": True, "id": message_id}, room=room_name)
+
+        # --- Mark run as COMPLETED and store result for catch-up ---
+        final_content = "".join(accumulated_content) if accumulated_content else None
+        if run_state_manager:
+            # Fetch session title for notification
+            conversation_title = None
+            try:
+                title_resp = supabase_client.from_("session_titles").select("tittle").eq("session_id", conversation_id).maybe_single().execute()
+                if title_resp and title_resp.data:
+                    conversation_title = title_resp.data.get("tittle")
+            except Exception:
+                pass
+            run_state_manager.complete_run(
+                conversation_id,
+                message_id,
+                final_content=final_content,
+                conversation_title=conversation_title,
+            )
+            # Broadcast completion notification to the conversation room
+            # so the client can show a local notification if in background
+            socketio.emit("run_completed", {
+                "conversationId": conversation_id,
+                "messageId": message_id,
+                "title": conversation_title,
+            }, room=room_name)
 
         try:
             _log_request_tokens(user_id=user_id, conversation_id=conversation_id, run_output=run_output)
@@ -536,4 +576,6 @@ def run_agent_and_stream(
 
     except Exception as e:
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
-        socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=sid)
+        if run_state_manager:
+            run_state_manager.fail_run(conversation_id, message_id, str(e))
+        socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=room_name)
