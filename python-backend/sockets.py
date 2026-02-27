@@ -1,4 +1,14 @@
-# python-backend/sockets.py (Corrected to align with refactored agent_runner)
+# python-backend/sockets.py
+#
+# Manages all Socket.IO event handlers.
+#
+# KEY ARCHITECTURE CHANGE (Queued-Run System):
+#   - Every send_message NOW joins the socket into a conversation room
+#     named "conv:{conversation_id}".
+#   - agent_runner emits to that room (not the ephemeral SID).
+#   - On reconnect, the client sends "join_conversation" to rejoin the room
+#     and receive the current run state / catch-up result.
+#   - RunStateManager tracks: running | completed | failed in Redis.
 
 import logging
 import json
@@ -9,28 +19,32 @@ from redis import Redis
 
 import eventlet
 from flask import request
+from flask_socketio import join_room
 from gotrue.errors import AuthApiError
 
-# Import the shared socketio instance from extensions
 from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
 from title_generator import generate_and_save_title
+from run_state_manager import RunStateManager
 
 logger = logging.getLogger(__name__)
 
 # --- Dependency Injection Placeholders ---
 connection_manager_service: ConnectionManager = None
 redis_client_instance: Redis = None
+run_state_manager_instance: RunStateManager = None
 
-def set_dependencies(manager: ConnectionManager, redis_client: Redis):
+
+def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
-    global connection_manager_service, redis_client_instance
+    global connection_manager_service, redis_client_instance, run_state_manager_instance
     connection_manager_service = manager
     redis_client_instance = redis_client
-    logger.info("Dependencies (ConnectionManager, RedisClient) injected into sockets module.")
-    
+    run_state_manager_instance = run_state_mgr
+    logger.info("Dependencies (ConnectionManager, RedisClient, RunStateManager) injected into sockets module.")
+
     # Start browser screenshot listener
     if redis_client_instance:
         eventlet.spawn(listen_for_browser_screenshots)
@@ -41,31 +55,24 @@ def listen_for_browser_screenshots():
     if not redis_client_instance:
         logger.error("[Browser Screenshot] Redis client not available")
         return
-    
+
     try:
         pubsub = redis_client_instance.pubsub()
         pubsub.psubscribe('browser-screenshot:*')
         logger.info("[Browser Screenshot] Listener started, subscribed to browser-screenshot:*")
-        
+
         for message in pubsub.listen():
             if message['type'] == 'pmessage':
                 try:
                     data = json.loads(message['data'])
                     session_id = message['channel'].decode('utf-8').split(':')[1]
-                    
                     logger.info(f"[Browser Screenshot] Received event for session {session_id}: {data.get('action')}")
-                    
-                    # Find socket ID for this session
-                    # We need to get the sid from the connection manager
-                    # For now, we'll broadcast to all connected clients with the session_id in the payload
-                    # The frontend will filter by session_id
-                    
-                    socketio.emit('browser_screenshot', data)
-                    logger.info(f"[Browser Screenshot] Emitted to frontend: {data.get('action')}")
-                    
+                    # Emit to conversation room so any reconnected client picks it up
+                    socketio.emit('browser_screenshot', data, room=f"conv:{session_id}")
+                    logger.info(f"[Browser Screenshot] Emitted to room conv:{session_id}: {data.get('action')}")
                 except Exception as e:
                     logger.error(f"[Browser Screenshot] Error processing message: {e}")
-                    
+
     except Exception as e:
         logger.error(f"[Browser Screenshot] Listener error: {e}\n{traceback.format_exc()}")
 
@@ -85,43 +92,102 @@ def on_disconnect():
     logger.info(f"Client disconnected: {request.sid}")
 
 
+@socketio.on("join_conversation")
+def on_join_conversation(data: Dict[str, Any]):
+    """
+    Called by the client on connect/reconnect to re-subscribe to a conversation room.
+    If a run was completed while the client was away, the catch-up result is sent
+    directly to this SID so the client can render the finished response.
+    """
+    sid = request.sid
+    conversation_id = data.get("conversationId") if isinstance(data, dict) else None
+    if not conversation_id:
+        return
+
+    room_name = f"conv:{conversation_id}"
+    join_room(room_name)
+    logger.info(f"[Join] SID {sid} joined room {room_name}")
+
+    if not run_state_manager_instance:
+        return
+
+    # Check current run state and send catch-up data to this specific socket
+    state = run_state_manager_instance.get_state(conversation_id)
+    if not state:
+        # No active or recent run — just confirm join
+        socketio.emit("run_status", {"status": "idle", "conversationId": conversation_id}, room=sid)
+        return
+
+    status = state.get("status")
+    message_id = state.get("message_id")
+
+    if status == "running":
+        # Agent is still working — tell the client it's in-progress
+        socketio.emit("run_status", {
+            "status": "running",
+            "conversationId": conversation_id,
+            "messageId": message_id,
+        }, room=sid)
+        logger.info(f"[Join] Conv {conversation_id} is still running, told client to wait")
+
+    elif status == "completed":
+        # Agent finished while client was away — send the stored result for catch-up
+        result = run_state_manager_instance.get_result(conversation_id)
+        if result:
+            socketio.emit("run_catchup", {
+                "conversationId": conversation_id,
+                "messageId": message_id,
+                "content": result.get("content", ""),
+                "title": result.get("title"),
+                "status": "completed",
+            }, room=sid)
+            logger.info(f"[Join] Sent catchup result for conv {conversation_id} to SID {sid}")
+        else:
+            socketio.emit("run_status", {"status": "completed", "conversationId": conversation_id, "messageId": message_id}, room=sid)
+
+    elif status == "failed":
+        result = run_state_manager_instance.get_result(conversation_id)
+        socketio.emit("run_status", {
+            "status": "failed",
+            "conversationId": conversation_id,
+            "messageId": message_id,
+            "error": (result or {}).get("error", "An error occurred."),
+        }, room=sid)
+        logger.info(f"[Join] Conv {conversation_id} had failed run, notified SID {sid}")
+
+
 @socketio.on('save-user-context')
 def handle_save_user_context(data: Dict[str, Any]):
-    """
-    Saves user context to agno_memories table via UserContextTools
-    """
+    """Saves user context to agno_memories table via UserContextTools"""
     sid = request.sid
     try:
         logger.info(f"Received save-user-context request: {data.keys()}")
-        
+
         access_token = data.get("accessToken")
         if not access_token:
             logger.error("Authentication token missing")
             return socketio.emit("user-context-saved", {"success": False, "error": "Authentication token missing"}, room=sid)
-        
+
         user = supabase_client.auth.get_user(jwt=access_token).user
         if not user:
             logger.error("User not authenticated")
             return socketio.emit("user-context-saved", {"success": False, "error": "User not authenticated"}, room=sid)
-        
+
         context_data = data.get('context')
         if not context_data:
             logger.error("Context data missing")
             return socketio.emit("user-context-saved", {"success": False, "error": "Context data missing"}, room=sid)
-        
+
         logger.info(f"Saving context for user {user.id}: {json.dumps(context_data, indent=2)}")
-        
-        # Import UserContextTools
+
         from user_context_tools import UserContextTools
-        
-        # Save context
         context_tools = UserContextTools(user_id=str(user.id))
         result = context_tools.save_user_context(context_data)
-        
+
         logger.info(f"Save result: {result}")
         socketio.emit("user-context-saved", {"success": True, "result": result}, room=sid)
         logger.info(f"User context saved successfully for user {user.id}")
-        
+
     except Exception as e:
         logger.error(f"Error saving user context: {e}\n{traceback.format_exc()}")
         socketio.emit("user-context-saved", {"success": False, "error": str(e)}, room=sid)
@@ -129,29 +195,24 @@ def handle_save_user_context(data: Dict[str, Any]):
 
 @socketio.on('get-user-context')
 def handle_get_user_context(data: Dict[str, Any]):
-    """
-    Retrieves user context from agno_memories table via UserContextTools
-    """
+    """Retrieves user context from agno_memories table via UserContextTools"""
     sid = request.sid
     try:
         access_token = data.get("accessToken")
         if not access_token:
             return socketio.emit("user-context-retrieved", {"success": False, "error": "Authentication token missing"}, room=sid)
-        
+
         user = supabase_client.auth.get_user(jwt=access_token).user
         if not user:
             return socketio.emit("user-context-retrieved", {"success": False, "error": "User not authenticated"}, room=sid)
-        
-        # Import UserContextTools
+
         from user_context_tools import UserContextTools
-        
-        # Get context
         context_tools = UserContextTools(user_id=str(user.id))
         context = context_tools.get_user_context()
-        
+
         socketio.emit("user-context-retrieved", {"success": True, "context": context}, room=sid)
         logger.info(f"User context retrieved for user {user.id}")
-        
+
     except Exception as e:
         logger.error(f"Error retrieving user context: {e}\n{traceback.format_exc()}")
         socketio.emit("user-context-retrieved", {"success": False, "error": str(e)}, room=sid)
@@ -205,7 +266,6 @@ def handle_computer_command_result(data: Dict[str, Any]):
         logger.warning("Received computer command result with no request_id.")
 
 
-
 @socketio.on("send_message")
 def on_send_message(data: str):
     """The main message handler for incoming chat messages."""
@@ -228,20 +288,26 @@ def on_send_message(data: str):
         if not user:
             raise AuthApiError("User not found for token.", 401)
 
+        # --- ROOM JOIN: Subscribe current SID to this conversation's room ---
+        room_name = f"conv:{conversation_id}"
+        join_room(room_name)
+        logger.info(f"[send_message] SID {sid} joined room {room_name}")
+
         if data.get("type") == "terminate_session":
             connection_manager_service.terminate_session(conversation_id)
+            if run_state_manager_instance:
+                run_state_manager_instance.clear(conversation_id)
             return socketio.emit("status", {"message": f"Session {conversation_id} terminated"}, room=sid)
 
         if not connection_manager_service.get_session(conversation_id):
-            # Extract device type from request
-            device_type = data.get("deviceType", "web")  # Default to 'web' if not provided
+            device_type = data.get("deviceType", "web")
             connection_manager_service.create_session(
-                conversation_id, 
-                str(user.id), 
+                conversation_id,
+                str(user.id),
                 data.get("config", {}),
-                device_type=device_type  # Pass device type
+                device_type=device_type
             )
-            
+
             # --- Title Generation for New Sessions ---
             user_msg_content = data.get("message", "")
             if user_msg_content:
@@ -252,22 +318,21 @@ def on_send_message(data: str):
         turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
-        
-        # Register user-uploaded files in session_content for persistence
+
+        # --- Register user-uploaded files in session_content for persistence ---
         files = data.get("files", [])
         if files:
             try:
                 from sandbox_persistence import get_persistence_service
                 persistence_service = get_persistence_service()
-                
+
                 for file_data in files:
-                    # Only register files that have a path (uploaded to Supabase)
                     if file_data.get('path'):
                         persistence_service.register_content(
                             session_id=conversation_id,
                             user_id=str(user.id),
                             content_type='upload',
-                            reference_id=str(uuid.uuid4()),  # Generate unique ID for upload
+                            reference_id=str(uuid.uuid4()),
                             message_id=message_id,
                             metadata={
                                 'filename': file_data.get('name', 'unknown'),
@@ -279,14 +344,10 @@ def on_send_message(data: str):
                 logger.info(f"Registered {len(files)} user uploads for session {conversation_id}")
             except Exception as e:
                 logger.warning(f"Failed to register user uploads: {e}")
-        
+
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
-        
-        # --- FIX APPLIED HERE ---
-        # The obsolete `custom_tool_config` variable and its corresponding argument
-        # in the spawn call have been removed to match the new 9-argument signature
-        # of `run_agent_and_stream`.
+
         eventlet.spawn(
             run_agent_and_stream,
             sid,
@@ -297,7 +358,8 @@ def on_send_message(data: str):
             computer_tools_config,
             context_session_ids,
             connection_manager_service,
-            redis_client_instance
+            redis_client_instance,
+            run_state_manager_instance,  # NEW: pass run state manager
         )
         logger.info(f"Spawned agent run for conversation: {conversation_id}")
 
@@ -311,6 +373,7 @@ def on_send_message(data: str):
         logger.error(f"Error in message handler: {e}\n{traceback.format_exc()}")
         socketio.emit("error", {"message": "An error occurred. Your conversation is preserved. Please try again."}, room=sid)
 
+
 @socketio.on("assistant_message")
 def on_assistant_message(data: str):
     """
@@ -323,51 +386,48 @@ def on_assistant_message(data: str):
         return
 
     try:
-        # Data might be a JSON string or dict depending on client implementation
         if isinstance(data, str):
             data = json.loads(data)
-            
+
         logger.info(f"[Assistant Socket] Received message: {data}")
-        
+
         user_message = data.get("message", "")
         conversation_id = data.get("conversationId")
-        
-        # Helper to treat session_id as conversation_id if missing
+
         if not conversation_id and data.get("session_id"):
             conversation_id = data.get("session_id")
 
         if not conversation_id:
-            # Generate one if missing, though client should provide it
             conversation_id = str(uuid.uuid4())
             logger.info(f"[Assistant Socket] Generated new conversation ID: {conversation_id}")
 
         if not user_message:
             return socketio.emit("assistant_error", {"message": "Message is required"}, room=sid)
 
-        # Fixed User ID for assistant
+        # Join conversation room for assistant too
+        room_name = f"conv:{conversation_id}"
+        join_room(room_name)
+
         user_id = "android_assistant"
 
-        # Create session if not exists
         if not connection_manager_service.get_session(conversation_id):
             connection_manager_service.create_session(
-                conversation_id, 
-                user_id, 
+                conversation_id,
+                user_id,
                 data.get("config", {
                     "internet_search": True,
-                    "coding_assistant": True, 
+                    "coding_assistant": True,
                     "Planner_Agent": True
                 }),
-                device_type='mobile'  # Assistant is always mobile
+                device_type='mobile'
             )
-            
+
         turn_data = {"user_message": user_message, "files": []}
         message_id = data.get("id") or str(uuid.uuid4())
-        
-        # Assistant doesn't support browser tools yet, but we pass empty config or basic
+
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
         computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
-        
-        # Reuse the existing agent runner
+
         eventlet.spawn(
             run_agent_and_stream,
             sid,
@@ -376,9 +436,10 @@ def on_assistant_message(data: str):
             turn_data,
             browser_tools_config,
             computer_tools_config,
-            [], # No context session ids
+            [],
             connection_manager_service,
-            redis_client_instance
+            redis_client_instance,
+            run_state_manager_instance,  # NEW: pass run state manager
         )
         logger.info(f"[Assistant Socket] Spawned agent for {conversation_id}")
 
