@@ -483,8 +483,10 @@ def run_agent_and_stream(
         print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         run_output: TeamRunOutput | None = None
-        accumulated_content: list[str] = []  # flat text for backward compat
-        accumulated_events: list[dict] = []  # NEW: structured event list for catch-up
+        accumulated_content: list[str] = []
+        accumulated_events: list[dict] = []
+        accumulated_log_content: Dict[str, List[str]] = {}
+        log_owner_order: List[str] = []
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -519,15 +521,12 @@ def run_agent_and_stream(
                 reasoning_content = getattr(chunk, 'reasoning_content', None)
                 # Accumulate main content for catch-up buffer
                 if is_final and chunk.content:
-                    accumulated_content.append(chunk.content)
-                # Accumulate structured event for catch-up replay
-                accumulated_events.append({
-                    "type": "response",
-                    "content": chunk.content,
-                    "agent_name": owner_name,
-                    "is_log": not is_final,
-                    "reasoning_content": reasoning_content,
-                })
+                    accumulated_content.append(str(chunk.content))
+                elif (not is_final) and chunk.content and owner_name:
+                    if owner_name not in accumulated_log_content:
+                        accumulated_log_content[owner_name] = []
+                        log_owner_order.append(owner_name)
+                    accumulated_log_content[owner_name].append(str(chunk.content))
                 socketio.emit("response", {
                     "content": chunk.content,
                     "streaming": True,
@@ -538,37 +537,59 @@ def run_agent_and_stream(
                 }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
+                socketio.emit("agent_step", {"type": "tool_start", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
                 accumulated_events.append({
                     "type": "agent_step",
                     "step_type": "tool_start",
                     "name": tool_name,
                     "agent_name": owner_name,
                 })
-                socketio.emit("agent_step", {"type": "tool_start", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
+                socketio.emit("agent_step", {"type": "tool_end", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
                 accumulated_events.append({
                     "type": "agent_step",
                     "step_type": "tool_end",
                     "name": tool_name,
                     "agent_name": owner_name,
                 })
-                socketio.emit("agent_step", {"type": "tool_end", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
             # Handle reasoning events
             elif chunk.event == TeamRunEvent.reasoning_step.value:
                 reasoning_step = getattr(chunk, 'reasoning_step', None)
                 if reasoning_step:
+                    reasoning_text = str(reasoning_step)
                     socketio.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
-                        "step": str(reasoning_step)
+                        "step": reasoning_text
                     }, room=room_name)
+                    accumulated_events.append({
+                        "type": "reasoning_step",
+                        "agent_name": owner_name,
+                        "step": reasoning_text,
+                    })
 
         # 6. Finalize the Stream and Log Metrics
         socketio.emit("response", {"done": True, "id": message_id}, room=room_name)
 
         # --- Mark run as COMPLETED and store result for catch-up ---
         final_content = "".join(accumulated_content) if accumulated_content else None
+        for owner_name in log_owner_order:
+            log_content = "".join(accumulated_log_content.get(owner_name, []))
+            if log_content:
+                accumulated_events.append({
+                    "type": "response",
+                    "content": log_content,
+                    "agent_name": owner_name,
+                    "is_log": True,
+                })
+        if final_content:
+            accumulated_events.append({
+                "type": "response",
+                "content": final_content,
+                "agent_name": "Aetheria_AI",
+                "is_log": False,
+            })
         if run_state_manager:
             # Fetch session title for notification
             conversation_title = None
@@ -582,8 +603,8 @@ def run_agent_and_stream(
                 conversation_id,
                 message_id,
                 final_content=final_content,
+                events=accumulated_events,
                 conversation_title=conversation_title,
-                events=accumulated_events if accumulated_events else None,
             )
             # Broadcast completion notification to the conversation room
             # so the client can show a local notification if in background
