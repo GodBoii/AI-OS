@@ -36,6 +36,11 @@ connection_manager_service: ConnectionManager = None
 redis_client_instance: Redis = None
 run_state_manager_instance: RunStateManager = None
 
+# SID × conversation dedup — prevents sending run_catchup twice to the same
+# socket if the client calls join_conversation more than once per session.
+# Key: (sid, conversation_id)   Value: True
+_catchup_sent: dict = {}
+
 
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
@@ -89,7 +94,12 @@ def on_connect():
 
 @socketio.on("disconnect")
 def on_disconnect():
-    logger.info(f"Client disconnected: {request.sid}")
+    sid = request.sid
+    logger.info(f"Client disconnected: {sid}")
+    # Clear all dedup entries for this SID so next reconnect works cleanly
+    to_remove = [k for k in _catchup_sent if k[0] == sid]
+    for k in to_remove:
+        del _catchup_sent[k]
 
 
 @socketio.on("join_conversation")
@@ -131,6 +141,13 @@ def on_join_conversation(data: Dict[str, Any]):
         logger.info(f"[Join] Conv {conversation_id} is still running, told client to wait")
 
     elif status == "completed":
+        # Guard: never send run_catchup twice to the same SID for the same conversation
+        dedup_key = (sid, conversation_id)
+        if dedup_key in _catchup_sent:
+            logger.info(f"[Join] Catchup already sent for conv {conversation_id} to SID {sid}, skipping")
+            return
+        _catchup_sent[dedup_key] = True
+
         # Agent finished while client was away — send the stored result for catch-up
         result = run_state_manager_instance.get_result(conversation_id)
         if result:
