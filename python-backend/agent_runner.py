@@ -483,8 +483,8 @@ def run_agent_and_stream(
         print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         run_output: TeamRunOutput | None = None
-        accumulated_events: list[dict] = []  # structured replay events for catch-up
-        accumulated_text: list[str] = []    # flat text for backward-compat result.content
+        accumulated_content: list[str] = []  # flat text for backward compat
+        accumulated_events: list[dict] = []  # NEW: structured event list for catch-up
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -515,63 +515,60 @@ def run_agent_and_stream(
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
+                # Include reasoning_content if present
                 reasoning_content = getattr(chunk, 'reasoning_content', None)
-
-                # Accumulate for catch-up (only real final-agent chunks)
-                if chunk.content:
-                    if is_final:
-                        accumulated_text.append(chunk.content)
-                    # Store as a response event so renderTurnFromEvents can replay it
-                    accumulated_events.append({
-                        "type":       "response",
-                        "content":    chunk.content,
-                        "agent_name": owner_name,
-                        "is_log":     not is_final,
-                    })
-
+                # Accumulate main content for catch-up buffer
+                if is_final and chunk.content:
+                    accumulated_content.append(chunk.content)
+                # Accumulate structured event for catch-up replay
+                accumulated_events.append({
+                    "type": "response",
+                    "content": chunk.content,
+                    "agent_name": owner_name,
+                    "is_log": not is_final,
+                    "reasoning_content": reasoning_content,
+                })
                 socketio.emit("response", {
-                    "content":          chunk.content,
-                    "streaming":        True,
-                    "id":               message_id,
-                    "agent_name":       owner_name,
-                    "is_log":           not is_final,
+                    "content": chunk.content,
+                    "streaming": True,
+                    "id": message_id,
+                    "agent_name": owner_name,
+                    "is_log": not is_final,
                     "reasoning_content": reasoning_content
-                }, room=room_name)
-
+                }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
                 accumulated_events.append({
-                    "type":       "agent_step",
-                    "step_type":  "tool_start",
-                    "name":       tool_name,
+                    "type": "agent_step",
+                    "step_type": "tool_start",
+                    "name": tool_name,
                     "agent_name": owner_name,
                 })
                 socketio.emit("agent_step", {"type": "tool_start", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
-
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
                 accumulated_events.append({
-                    "type":       "agent_step",
-                    "step_type":  "tool_end",
-                    "name":       tool_name,
+                    "type": "agent_step",
+                    "step_type": "tool_end",
+                    "name": tool_name,
                     "agent_name": owner_name,
                 })
                 socketio.emit("agent_step", {"type": "tool_end", "name": tool_name, "agent_name": owner_name, "id": message_id}, room=room_name)
-
+            # Handle reasoning events
             elif chunk.event == TeamRunEvent.reasoning_step.value:
                 reasoning_step = getattr(chunk, 'reasoning_step', None)
                 if reasoning_step:
                     socketio.emit("reasoning_step", {
-                        "id":         message_id,
+                        "id": message_id,
                         "agent_name": owner_name,
-                        "step":       str(reasoning_step)
+                        "step": str(reasoning_step)
                     }, room=room_name)
 
         # 6. Finalize the Stream and Log Metrics
         socketio.emit("response", {"done": True, "id": message_id}, room=room_name)
 
-        # --- Mark run as COMPLETED and store structured events + text for catch-up ---
-        final_content = "".join(accumulated_text) if accumulated_text else None
+        # --- Mark run as COMPLETED and store result for catch-up ---
+        final_content = "".join(accumulated_content) if accumulated_content else None
         if run_state_manager:
             # Fetch session title for notification
             conversation_title = None
@@ -585,13 +582,15 @@ def run_agent_and_stream(
                 conversation_id,
                 message_id,
                 final_content=final_content,
-                final_events=accumulated_events,
                 conversation_title=conversation_title,
+                events=accumulated_events if accumulated_events else None,
             )
+            # Broadcast completion notification to the conversation room
+            # so the client can show a local notification if in background
             socketio.emit("run_completed", {
                 "conversationId": conversation_id,
-                "messageId":      message_id,
-                "title":          conversation_title,
+                "messageId": message_id,
+                "title": conversation_title,
             }, room=room_name)
 
         try:
