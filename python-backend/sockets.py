@@ -151,15 +151,18 @@ def on_join_conversation(data: Dict[str, Any]):
         # Agent finished while client was away — send the stored result for catch-up
         result = run_state_manager_instance.get_result(conversation_id)
         if result:
-            socketio.emit("run_catchup", {
+            catchup_payload = {
                 "conversationId": conversation_id,
-                "messageId":  message_id,
-                "content":    result.get("content", ""),
-                "events":     result.get("events", []),   # structured replay
-                "title":      result.get("title"),
-                "status":     "completed",
-            }, room=sid)
-            logger.info(f"[Join] Sent catchup result for conv {conversation_id} to SID {sid}")
+                "messageId": message_id,
+                "content": result.get("content", ""),
+                "title": result.get("title"),
+                "status": "completed",
+            }
+            # Include structured events for full UI replay (reasoning, tools, logs)
+            if result.get("events"):
+                catchup_payload["events"] = result["events"]
+            socketio.emit("run_catchup", catchup_payload, room=sid)
+            logger.info(f"[Join] Sent catchup result for conv {conversation_id} to SID {sid} (events={len(result.get('events', []))})")
         else:
             socketio.emit("run_status", {"status": "completed", "conversationId": conversation_id, "messageId": message_id}, room=sid)
 
