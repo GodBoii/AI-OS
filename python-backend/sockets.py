@@ -153,10 +153,11 @@ def on_join_conversation(data: Dict[str, Any]):
         if result:
             socketio.emit("run_catchup", {
                 "conversationId": conversation_id,
-                "messageId": message_id,
-                "content": result.get("content", ""),
-                "title": result.get("title"),
-                "status": "completed",
+                "messageId":  message_id,
+                "content":    result.get("content", ""),
+                "events":     result.get("events", []),   # structured replay
+                "title":      result.get("title"),
+                "status":     "completed",
             }, room=sid)
             logger.info(f"[Join] Sent catchup result for conv {conversation_id} to SID {sid}")
         else:
