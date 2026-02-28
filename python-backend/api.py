@@ -98,6 +98,7 @@ def conversation_run_result(conversation_id):
         "status": result.get("status"),
         "messageId": result.get("message_id"),
         "content": result.get("content"),
+        "events": result.get("events", []),
         "title": result.get("title"),
         "error": result.get("error"),
     }), 200
