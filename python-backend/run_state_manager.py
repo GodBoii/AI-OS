@@ -56,9 +56,10 @@ class RunStateManager:
         conversation_id: str,
         message_id: str,
         final_content: Optional[str] = None,
+        final_events: Optional[list] = None,
         conversation_title: Optional[str] = None,
     ) -> None:
-        """Mark a run as 'completed' and persist the final accumulated content."""
+        """Mark a run as 'completed' and persist the final accumulated content + events."""
         state = {
             "status": "completed",
             "message_id": message_id,
@@ -67,19 +68,21 @@ class RunStateManager:
         key = f"{RUN_STATE_PREFIX}{conversation_id}"
         self.redis.set(key, json.dumps(state), ex=STATE_TTL)
 
-        # Persist the final response so the client can catch up on reconnect
-        if final_content:
+        # Persist the full result so the client can catch up on reconnect.
+        # `events` is the structured replay list; `content` is the flat text fallback.
+        if final_content or final_events:
             result = {
-                "status": "completed",
+                "status":     "completed",
                 "message_id": message_id,
-                "content": final_content,
-                "title": conversation_title,
+                "content":    final_content or "",
+                "events":     final_events or [],
+                "title":      conversation_title,
                 "completed_at": time.time(),
             }
             result_key = f"{RUN_RESULT_PREFIX}{conversation_id}"
             self.redis.set(result_key, json.dumps(result), ex=RESULT_TTL)
 
-        logger.info(f"[RunState] Completed run for conv={conversation_id}")
+        logger.info(f"[RunState] Completed run for conv={conversation_id} events={len(final_events or [])}")
 
     def fail_run(self, conversation_id: str, message_id: str, error: str) -> None:
         """Mark a run as 'failed' and store the error."""
