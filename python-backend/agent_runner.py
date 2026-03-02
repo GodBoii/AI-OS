@@ -5,6 +5,7 @@ import json
 import traceback
 from typing import Dict, Any, List, Tuple
 from redis import Redis
+import requests
 
 # --- Local Module Imports ---
 from extensions import socketio
@@ -20,6 +21,60 @@ from agno.run.agent import RunEvent
 from agno.run.team import TeamRunEvent, TeamRunOutput
 
 logger = logging.getLogger(__name__)
+
+
+def build_sandbox_workspace_context(session_data: Dict[str, Any]) -> str:
+    """
+    Build a concise workspace file-tree context from the latest known sandbox.
+    This reduces repetitive ls/find calls in coding turns.
+    """
+    try:
+        if not config.SANDBOX_API_URL:
+            return ""
+        sandbox_ids = session_data.get("sandbox_ids", []) or []
+        if not sandbox_ids:
+            return ""
+
+        sandbox_id = str(sandbox_ids[-1]).strip()
+        if not sandbox_id:
+            return ""
+
+        workspace_root = "/home/sandboxuser/workspace"
+        response = requests.get(
+            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files",
+            params={"path": workspace_root},
+            timeout=12
+        )
+        if response.status_code != 200:
+            return ""
+
+        files = (response.json() or {}).get("files", []) or []
+        if not files:
+            return f"SANDBOX WORKSPACE CONTEXT\nsandbox_id: {sandbox_id}\nroot: {workspace_root}\nfiles: (empty)\n"
+
+        files = sorted(files, key=lambda f: str(f.get("path", "")))
+        max_files = 120
+        shown = files[:max_files]
+        lines = [
+            "SANDBOX WORKSPACE CONTEXT",
+            f"sandbox_id: {sandbox_id}",
+            f"root: {workspace_root}",
+            f"total_files: {len(files)}",
+            f"showing_files: {len(shown)}",
+        ]
+        for item in shown:
+            abs_path = str(item.get("path", ""))
+            rel_path = abs_path[len(workspace_root) + 1:] if abs_path.startswith(workspace_root + "/") else abs_path
+            size = int(item.get("size", 0))
+            lines.append(f"- {rel_path} ({size} bytes)")
+
+        if len(files) > max_files:
+            lines.append(f"... {len(files) - max_files} more files omitted")
+
+        return "\n".join(lines) + "\n"
+    except Exception as exc:
+        logger.debug("Unable to build sandbox workspace context: %s", exc)
+        return ""
 
 
 def _to_int(value: Any) -> int:
@@ -476,7 +531,20 @@ def run_agent_and_stream(
                     logger.error(f"Failed to fetch or process context for session_id {session_id}: {e}")
             historical_context_str += "\n"
         
-        final_user_message = f"{historical_context_str}CURRENT QUESTION:\n{user_message}" if historical_context_str else user_message
+        sandbox_workspace_context = ""
+        if session_data.get("config", {}).get("coding_assistant", False):
+            sandbox_workspace_context = build_sandbox_workspace_context(session_data)
+
+        contextual_prefix = ""
+        if historical_context_str:
+            contextual_prefix += historical_context_str
+        if sandbox_workspace_context:
+            contextual_prefix += f"{sandbox_workspace_context}\n"
+
+        final_user_message = (
+            f"{contextual_prefix}CURRENT QUESTION:\n{user_message}"
+            if contextual_prefix else user_message
+        )
 
         # 5. Run the Agent and Stream Results
         # --- DEBUG LOG ---
