@@ -3,10 +3,13 @@
 import os
 import base64
 import mimetypes
+import posixpath
+import shlex
 import requests
 import eventlet
 from agno.tools import Toolkit
 from typing import Optional, Set, Dict, Any, List
+from pathlib import PurePosixPath
 import logging
 from deploy_platform import (
     activate_deployment,
@@ -51,9 +54,19 @@ class SandboxTools(Toolkit):
         """
         super().__init__(
             name="sandbox_tools",
-            tools=[self.execute_in_sandbox, self.copy_deployed_project, self.redeploy_project]
+            tools=[
+                self.get_workspace_overview,
+                self.search_code,
+                self.read_file,
+                self.write_file,
+                self.edit_file,
+                self.execute_in_sandbox,
+                self.copy_deployed_project,
+                self.redeploy_project
+            ]
         )
         self.session_info = session_info or {}
+        self.workspace_root = "/home/sandboxuser/workspace"
         self.sandbox_api_url = os.getenv("SANDBOX_API_URL")
         if not self.sandbox_api_url:
             raise ValueError("SANDBOX_API_URL environment variable is not set.")
@@ -67,6 +80,69 @@ class SandboxTools(Toolkit):
         self.sid = sid
         self.redis_client = redis_client
 
+    def _normalize_workspace_path(self, path: str) -> str:
+        """
+        Normalize and validate that a path stays under the workspace root.
+        Accepts relative paths by resolving them against self.workspace_root.
+        """
+        if path is None:
+            raise ValueError("Path is required.")
+        raw = str(path).strip().replace("\\", "/")
+        if not raw:
+            raise ValueError("Path cannot be empty.")
+
+        candidate = raw if raw.startswith("/") else f"{self.workspace_root}/{raw.lstrip('/')}"
+        normalized = posixpath.normpath(candidate).replace("\\", "/")
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+
+        root = self.workspace_root.rstrip("/")
+        if normalized != root and not normalized.startswith(root + "/"):
+            raise ValueError(f"Path must be under {self.workspace_root}")
+        if ".." in PurePosixPath(normalized).parts:
+            raise ValueError("Invalid path traversal.")
+
+        return normalized
+
+    def _is_sandbox_alive(self, sandbox_id: str) -> bool:
+        try:
+            response = requests.get(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/files",
+                params={"path": self.workspace_root},
+                timeout=10,
+            )
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def _execute_manager_command(self, sandbox_id: str, command: str, timeout: int = 310) -> Dict[str, Any]:
+        response = requests.post(
+            f"{self.sandbox_api_url}/sessions/{sandbox_id}/exec",
+            json={"command": command},
+            timeout=timeout
+        )
+        response.raise_for_status()
+        data = response.json() or {}
+        return {
+            "stdout": data.get("stdout", ""),
+            "stderr": data.get("stderr", ""),
+            "exit_code": int(data.get("exit_code", 0))
+        }
+
+    def _read_file_bytes(self, sandbox_id: str, filepath: str) -> bytes:
+        safe_path = self._normalize_workspace_path(filepath)
+        response = requests.get(
+            f"{self.sandbox_api_url}/sessions/{sandbox_id}/files/content",
+            params={"filepath": safe_path},
+            timeout=30
+        )
+        response.raise_for_status()
+        payload = response.json() or {}
+        encoded = payload.get("content", "")
+        if not encoded:
+            return b""
+        return base64.b64decode(encoded)
+
     def _create_or_get_sandbox_id(self) -> Optional[str]:
         """
         Internal helper function. Creates a new sandbox if one doesn't exist for this session,
@@ -74,8 +150,17 @@ class SandboxTools(Toolkit):
         Returns the unique sandbox_id string or None if creation fails.
         """
         active_id = self.session_info.get("active_sandbox_id")
-        if active_id:
+        if active_id and self._is_sandbox_alive(active_id):
             return active_id
+        if active_id:
+            self.session_info.pop("active_sandbox_id", None)
+
+        # Reuse the newest known sandbox from session state before creating a new one.
+        known_ids = list(self.session_info.get("sandbox_ids", []))
+        for known_id in reversed(known_ids):
+            if known_id and self._is_sandbox_alive(known_id):
+                self.session_info["active_sandbox_id"] = known_id
+                return known_id
 
         try:
             response = requests.post(f"{self.sandbox_api_url}/sessions", timeout=30)
@@ -109,6 +194,179 @@ class SandboxTools(Toolkit):
         except requests.RequestException as e:
             logger.error(f"Sandbox creation failed: {e}")
             return None
+
+    def get_workspace_overview(self, max_files: int = 200) -> str:
+        """
+        Return a concise workspace file listing for planning and navigation.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            max_files = max(1, min(int(max_files), 1000))
+            response = requests.get(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/files",
+                params={"path": self.workspace_root},
+                timeout=30
+            )
+            response.raise_for_status()
+            files = response.json().get("files", []) or []
+            files = sorted(files, key=lambda f: str(f.get("path", "")))
+            total = len(files)
+            shown = files[:max_files]
+            lines = [
+                f"Sandbox: {sandbox_id}",
+                f"Workspace root: {self.workspace_root}",
+                f"Total files: {total}",
+                f"Showing: {len(shown)}",
+            ]
+            for item in shown:
+                abs_path = str(item.get("path", ""))
+                rel = abs_path[len(self.workspace_root) + 1:] if abs_path.startswith(self.workspace_root + "/") else abs_path
+                lines.append(f"- {rel} ({int(item.get('size', 0))} bytes)")
+            if total > max_files:
+                lines.append(f"... {total - max_files} more files not shown")
+            return "\n".join(lines)
+        except Exception as exc:
+            logger.error("get_workspace_overview failed: %s", exc, exc_info=True)
+            return f"Error reading workspace overview: {exc}"
+
+    def search_code(
+        self,
+        query: str,
+        path: str = "/home/sandboxuser/workspace",
+        file_glob: Optional[str] = None,
+        case_sensitive: bool = False,
+        max_results: int = 100
+    ) -> str:
+        """
+        Search code in workspace using rg (fallback to grep). Returns file:line:content results.
+        """
+        if not str(query).strip():
+            return "Error: query cannot be empty."
+
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+
+        try:
+            safe_path = self._normalize_workspace_path(path)
+            max_results = max(1, min(int(max_results), 500))
+            query_q = shlex.quote(str(query))
+            path_q = shlex.quote(safe_path)
+            head_q = shlex.quote(str(max_results))
+            glob_clause = f"--glob {shlex.quote(str(file_glob))} " if file_glob else ""
+            case_flag = "" if case_sensitive else "-i "
+
+            command = (
+                "if command -v rg >/dev/null 2>&1; then "
+                f"rg --line-number --no-heading --color never {case_flag}{glob_clause}-- {query_q} {path_q}; "
+                "else "
+                f"grep -RIn --binary-files=without-match {'' if case_sensitive else '-i '}-- {query_q} {path_q}; "
+                "fi | head -n " + head_q
+            )
+
+            result = self._execute_manager_command(sandbox_id, command, timeout=120)
+            stdout = result.get("stdout", "")
+            stderr = result.get("stderr", "")
+            exit_code = int(result.get("exit_code", 0))
+
+            if exit_code not in (0, 1):
+                return f"Error searching code (exit {exit_code}): {stderr or stdout}"
+            if not stdout.strip():
+                return "No matches found."
+
+            return stdout.strip()
+        except Exception as exc:
+            logger.error("search_code failed: %s", exc, exc_info=True)
+            return f"Error searching code: {exc}"
+
+    def read_file(self, file_path: str, start_line: int = 1, end_line: int = 200) -> str:
+        """
+        Read a workspace file with optional line range and line numbers.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            safe_path = self._normalize_workspace_path(file_path)
+            start_line = max(1, int(start_line))
+            end_line = max(start_line, int(end_line))
+            if end_line - start_line > 2000:
+                end_line = start_line + 2000
+
+            data = self._read_file_bytes(sandbox_id, safe_path)
+            if not data:
+                return f"{safe_path} is empty."
+            if b"\x00" in data:
+                return f"Error: {safe_path} appears to be a binary file."
+
+            text = data.decode("utf-8", errors="replace")
+            lines = text.splitlines()
+            total = len(lines)
+            slice_lines = lines[start_line - 1:end_line]
+            numbered = [f"{idx}: {content}" for idx, content in enumerate(slice_lines, start=start_line)]
+
+            header = f"File: {safe_path} (lines {start_line}-{min(end_line, total)} of {total})"
+            body = "\n".join(numbered) if numbered else "(No lines in requested range)"
+            return f"{header}\n{body}"
+        except Exception as exc:
+            logger.error("read_file failed: %s", exc, exc_info=True)
+            return f"Error reading file: {exc}"
+
+    def write_file(self, file_path: str, content: str) -> str:
+        """
+        Write UTF-8 text to a workspace file.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            safe_path = self._normalize_workspace_path(file_path)
+            payload = content or ""
+            self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=safe_path, content_bytes=payload.encode("utf-8"))
+            return f"Wrote {len(payload.encode('utf-8'))} bytes to {safe_path}."
+        except Exception as exc:
+            logger.error("write_file failed: %s", exc, exc_info=True)
+            return f"Error writing file: {exc}"
+
+    def edit_file(self, file_path: str, search_text: str, replace_text: str, replace_all: bool = False) -> str:
+        """
+        Perform deterministic text replacement on a workspace file.
+        - If multiple matches exist and replace_all is False, returns an error for precision.
+        """
+        if not search_text:
+            return "Error: search_text cannot be empty."
+
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            safe_path = self._normalize_workspace_path(file_path)
+            raw = self._read_file_bytes(sandbox_id, safe_path)
+            if b"\x00" in raw:
+                return f"Error: {safe_path} appears to be a binary file."
+
+            original = raw.decode("utf-8", errors="replace")
+            hits = original.count(search_text)
+            if hits == 0:
+                return "Error: search_text was not found in file."
+            if hits > 1 and not replace_all:
+                return (
+                    f"Error: search_text matched {hits} times. "
+                    "Refine search_text or set replace_all=True."
+                )
+
+            updated = original.replace(search_text, replace_text) if replace_all else original.replace(search_text, replace_text, 1)
+            self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=safe_path, content_bytes=updated.encode("utf-8"))
+
+            return (
+                f"Updated {safe_path}. "
+                f"Replacements applied: {hits if replace_all else 1}."
+            )
+        except Exception as exc:
+            logger.error("edit_file failed: %s", exc, exc_info=True)
+            return f"Error editing file: {exc}"
 
     def execute_in_sandbox(self, command: str) -> str:
         """
@@ -160,13 +418,7 @@ class SandboxTools(Toolkit):
         
         # Execute command in sandbox
         try:
-            response = requests.post(
-                f"{self.sandbox_api_url}/sessions/{sandbox_id}/exec",
-                json={"command": command},
-                timeout=310
-            )
-            response.raise_for_status()
-            data = response.json()
+            data = self._execute_manager_command(sandbox_id=sandbox_id, command=command, timeout=310)
             
             stdout = data.get("stdout", "")
             stderr = data.get("stderr", "")
@@ -235,7 +487,7 @@ class SandboxTools(Toolkit):
         self,
         site_id: Optional[str] = None,
         deployment_id: Optional[str] = None,
-        target_directory: str = "/home/sandboxuser/deployed_projects/current",
+        target_directory: str = "/home/sandboxuser/workspace/deployed_projects/current",
         site_ref: Optional[str] = None,
     ) -> str:
         """
@@ -266,9 +518,8 @@ class SandboxTools(Toolkit):
             if not files:
                 return "Error: Deployment has no files to copy."
 
-            target_directory = str(target_directory).strip().rstrip("/") or "/home/sandboxuser/deployed_projects/current"
-            if not target_directory.startswith("/home/sandboxuser/"):
-                return "Error: target_directory must be under /home/sandboxuser/."
+            target_directory = str(target_directory).strip().rstrip("/") or f"{self.workspace_root}/deployed_projects/current"
+            target_directory = self._normalize_workspace_path(target_directory)
 
             copied = 0
             for item in files:
@@ -298,7 +549,7 @@ class SandboxTools(Toolkit):
     def redeploy_project(
         self,
         site_id: Optional[str] = None,
-        project_directory: str = "/home/sandboxuser/deployed_projects/current",
+        project_directory: str = "/home/sandboxuser/workspace/deployed_projects/current",
         activate: bool = True,
         site_ref: Optional[str] = None,
     ) -> str:
@@ -313,9 +564,7 @@ class SandboxTools(Toolkit):
         if not sandbox_id:
             return "Error: Failed to create or retrieve sandbox session."
 
-        project_directory = str(project_directory).strip().rstrip("/")
-        if not project_directory.startswith("/home/sandboxuser/"):
-            return "Error: project_directory must be under /home/sandboxuser/."
+        project_directory = self._normalize_workspace_path(str(project_directory).strip().rstrip("/"))
 
         try:
             resolved = resolve_site_ref(user_id=str(self.user_id), site_ref=(site_id or site_ref or "default"))
@@ -393,6 +642,7 @@ class SandboxTools(Toolkit):
             return f"Error redeploying project: {exc}"
 
     def _write_file_to_sandbox(self, sandbox_id: str, filepath: str, content_bytes: bytes) -> None:
+        filepath = self._normalize_workspace_path(filepath)
         payload = {
             "filepath": filepath,
             "content_base64": base64.b64encode(content_bytes).decode("utf-8"),
@@ -420,6 +670,7 @@ class SandboxTools(Toolkit):
         Fallback for environments where sandbox-manager PUT /files/content is unavailable.
         Writes file via sandbox exec + Python.
         """
+        filepath = self._normalize_workspace_path(filepath)
         b64 = base64.b64encode(content_bytes).decode("utf-8")
         if len(b64) > 1_500_000:
             raise RuntimeError(
@@ -456,7 +707,7 @@ class SandboxTools(Toolkit):
         try:
             response = requests.get(
                 f"{self.sandbox_api_url}/sessions/{sandbox_id}/files",
-                params={"path": "/home/sandboxuser"},
+                params={"path": self.workspace_root},
                 timeout=30
             )
             response.raise_for_status()
@@ -497,7 +748,7 @@ class SandboxTools(Toolkit):
         for file_path in file_list:
             try:
                 # Skip system files and hidden files
-                if file_path.startswith('/home/sandboxuser/.'):
+                if file_path.startswith(f"{self.workspace_root}/."):
                     continue
                 
                 # Get file content from sandbox

@@ -6,6 +6,7 @@ import uuid
 import logging
 import os
 import base64
+from pathlib import PurePosixPath
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -27,6 +28,7 @@ except docker.errors.DockerException as e:
 
 
 SANDBOX_IMAGE = "godboi/aios-sandbox:latest"
+WORKSPACE_ROOT = "/home/sandboxuser/workspace"
 
 class CommandRequest(BaseModel):
     command: str
@@ -36,6 +38,32 @@ class FileWriteRequest(BaseModel):
     filepath: str
     content_base64: str
     make_dirs: bool = True
+
+
+def _normalize_workspace_path(path: str) -> str:
+    """
+    Normalize and validate path so all file API operations stay inside WORKSPACE_ROOT.
+    """
+    if not path:
+        raise HTTPException(status_code=400, detail="Path is required.")
+
+    raw = path.replace("\\", "/").strip()
+    if not raw.startswith("/"):
+        raw = f"{WORKSPACE_ROOT}/{raw.lstrip('/')}"
+
+    normalized = os.path.normpath(raw).replace("\\", "/")
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+
+    root = WORKSPACE_ROOT.rstrip("/")
+    if normalized != root and not normalized.startswith(root + "/"):
+        raise HTTPException(status_code=400, detail=f"Path must be under {WORKSPACE_ROOT}")
+
+    path_obj = PurePosixPath(normalized)
+    if ".." in path_obj.parts:
+        raise HTTPException(status_code=400, detail="Invalid path traversal.")
+
+    return normalized
 
 @app.post("/sessions")
 def create_session():
@@ -53,6 +81,10 @@ def create_session():
             user='sandboxuser',
             working_dir='/home/sandboxuser'
         )
+        init_exit, init_out = container.exec_run(cmd=["mkdir", "-p", WORKSPACE_ROOT])
+        if init_exit != 0:
+            stderr = init_out.decode("utf-8", errors="ignore") if init_out else ""
+            logger.warning(f"Workspace init failed in {container_name}: {stderr}")
         logger.info(f"Successfully created container {container.short_id} for session {sandbox_id}")
         return {"sandbox_id": sandbox_id}
     except docker.errors.APIError as e:
@@ -97,24 +129,24 @@ def execute_in_session(sandbox_id: str, request: CommandRequest):
         raise HTTPException(status_code=500, detail=f"An error occurred during execution: {e}")
 
 @app.get("/sessions/{sandbox_id}/files")
-def list_sandbox_files(sandbox_id: str, path: str = "/home/sandboxuser"):
+def list_sandbox_files(sandbox_id: str, path: str = WORKSPACE_ROOT):
     """
     List all files in the sandbox filesystem.
     Returns file paths, sizes, and modification times.
     """
     container_name = f"sandbox-session-{sandbox_id}"
-    logger.info(f"Listing files in {container_name} at path: {path}")
+    safe_path = _normalize_workspace_path(path)
+    logger.info(f"Listing files in {container_name} at path: {safe_path}")
     try:
         container = docker_client.containers.get(container_name)
-        
-        # Use find command to list all files with details
+
+        # Use find command without shell interpolation.
         # Format: filepath|size|mtime
-        find_command = [
-            "/bin/bash", "-c",
-            f"find {path} -type f -printf '%p|%s|%T@\\n' 2>/dev/null || true"
-        ]
-        
+        find_command = ["find", safe_path, "-type", "f", "-printf", "%p|%s|%T@\n"]
         exit_code, output = container.exec_run(cmd=find_command)
+        if exit_code not in (0, 1):
+            stderr = output.decode("utf-8", errors="ignore") if output else ""
+            raise HTTPException(status_code=500, detail=f"Find command failed: {stderr}")
         output_str = output.decode('utf-8', errors='ignore') if output else ""
         
         files = []
@@ -147,17 +179,18 @@ def get_file_content(sandbox_id: str, filepath: str):
     Returns binary content as base64 encoded string in JSON.
     """
     container_name = f"sandbox-session-{sandbox_id}"
-    logger.info(f"Reading file from {container_name}: {filepath}")
+    safe_filepath = _normalize_workspace_path(filepath)
+    logger.info(f"Reading file from {container_name}: {safe_filepath}")
     try:
         container = docker_client.containers.get(container_name)
-        
+
         # Read file content
         exit_code, output = container.exec_run(
-            cmd=["/bin/cat", filepath]
+            cmd=["/bin/cat", safe_filepath]
         )
-        
+
         if exit_code != 0:
-            raise HTTPException(status_code=404, detail=f"File not found: {filepath}")
+            raise HTTPException(status_code=404, detail=f"File not found: {safe_filepath}")
         
         # Return as base64 to handle binary files properly
         import base64
@@ -186,31 +219,27 @@ def put_file_content(sandbox_id: str, request: FileWriteRequest):
     Expects base64 content for binary-safe transfer.
     """
     container_name = f"sandbox-session-{sandbox_id}"
-    logger.info(f"Writing file in {container_name}: {request.filepath}")
+    safe_filepath = _normalize_workspace_path(request.filepath)
+    logger.info(f"Writing file in {container_name}: {safe_filepath}")
     try:
         container = docker_client.containers.get(container_name)
 
-        if not request.filepath.startswith("/home/sandboxuser/"):
-            raise HTTPException(status_code=400, detail="filepath must be under /home/sandboxuser/")
-        if ".." in request.filepath.replace("\\", "/").split("/"):
-            raise HTTPException(status_code=400, detail="Invalid filepath")
-
         file_bytes = base64.b64decode(request.content_base64.encode("utf-8")) if request.content_base64 else b""
-        dirpath = os.path.dirname(request.filepath)
+        dirpath = os.path.dirname(safe_filepath)
 
         if request.make_dirs and dirpath:
-            mkdir_cmd = ["/bin/bash", "-c", f"mkdir -p {dirpath}"]
+            mkdir_cmd = ["mkdir", "-p", dirpath]
             mkdir_exit, mkdir_out = container.exec_run(cmd=mkdir_cmd)
             if mkdir_exit != 0:
                 stderr = mkdir_out.decode("utf-8", errors="ignore") if mkdir_out else ""
                 raise HTTPException(status_code=500, detail=f"Failed to create directories: {stderr}")
 
-        archive_stream = _build_single_file_tar(request.filepath, file_bytes)
+        archive_stream = _build_single_file_tar(safe_filepath, file_bytes)
         ok = container.put_archive(path="/", data=archive_stream)
         if not ok:
             raise HTTPException(status_code=500, detail="Failed to write file into container")
 
-        return {"ok": True, "filepath": request.filepath, "size": len(file_bytes)}
+        return {"ok": True, "filepath": safe_filepath, "size": len(file_bytes)}
     except docker.errors.NotFound:
         logger.warning(f"Put file content failed: sandbox session {container_name} not found.")
         raise HTTPException(status_code=404, detail="Sandbox session not found.")
