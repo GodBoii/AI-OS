@@ -58,6 +58,9 @@ class SandboxTools(Toolkit):
                 self.get_workspace_overview,
                 self.search_code,
                 self.read_file,
+                self.create_file,
+                self.append_file_chunk,
+                self.create_and_write,
                 self.write_file,
                 self.edit_file,
                 self.execute_in_sandbox,
@@ -142,6 +145,344 @@ class SandboxTools(Toolkit):
         if not encoded:
             return b""
         return base64.b64decode(encoded)
+
+    def _append_file_bytes(self, sandbox_id: str, filepath: str, chunk_bytes: bytes) -> None:
+        """
+        Append raw bytes directly in sandbox using Python, avoiding full-file read/replace.
+        """
+        safe_path = self._normalize_workspace_path(filepath)
+        encoded = base64.b64encode(chunk_bytes).decode("ascii")
+        py_code = (
+            "import base64, pathlib; "
+            f"p=pathlib.Path({safe_path!r}); "
+            "p.parent.mkdir(parents=True, exist_ok=True); "
+            f"p.open('ab').write(base64.b64decode({encoded!r}))"
+        )
+        cmd = f"python3 -c {shlex.quote(py_code)} || python -c {shlex.quote(py_code)}"
+        result = self._execute_manager_command(sandbox_id, cmd, timeout=120)
+        if int(result.get("exit_code", 1)) != 0:
+            stderr = (result.get("stderr") or "").strip()
+            raise RuntimeError(f"Append command failed for {safe_path}: {stderr or 'unknown error'}")
+
+    def _workspace_file_suggestions(self, sandbox_id: str, max_items: int = 20) -> List[str]:
+        """
+        Return a small list of relative file paths currently visible in workspace.
+        Useful in error messages when requested path is missing.
+        """
+        try:
+            response = requests.get(
+                f"{self.sandbox_api_url}/sessions/{sandbox_id}/files",
+                params={"path": self.workspace_root},
+                timeout=20,
+            )
+            response.raise_for_status()
+            files = response.json().get("files", []) or []
+            rel = []
+            for item in files:
+                abs_path = str(item.get("path", ""))
+                if abs_path.startswith(self.workspace_root + "/"):
+                    rel.append(abs_path[len(self.workspace_root) + 1 :])
+                elif abs_path:
+                    rel.append(abs_path)
+            rel.sort()
+            return rel[:max_items]
+        except Exception:
+            return []
+
+    def _resolve_target_path(
+        self,
+        file_path: Optional[str] = None,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+        default_filename: Optional[str] = None,
+    ) -> Optional[str]:
+        for candidate in (file_path, path, filename):
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return default_filename
+
+    def _resolve_text_content(
+        self,
+        content: Optional[str] = None,
+        text: Optional[str] = None,
+        body: Optional[str] = None,
+        content_base64: Optional[str] = None,
+    ) -> Optional[str]:
+        if content_base64:
+            try:
+                return base64.b64decode(content_base64.encode("utf-8")).decode("utf-8", errors="replace")
+            except Exception:
+                return None
+        for candidate in (content, text, body):
+            if candidate is None:
+                continue
+            if isinstance(candidate, str):
+                return candidate
+            return str(candidate)
+        return None
+
+    def _file_exists(self, sandbox_id: str, filepath: str) -> bool:
+        try:
+            self._read_file_bytes(sandbox_id, filepath)
+            return True
+        except requests.HTTPError as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 404:
+                return False
+            raise
+
+    def _persist_file_tool_activity(
+        self,
+        sandbox_id: str,
+        safe_path: str,
+        file_bytes: bytes,
+        tool_name: str,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Persist file-tool mutations so they appear in session content history.
+        This mirrors the execution/artifact model used by execute_in_sandbox.
+        Never raises to avoid breaking core file operations.
+        """
+        if not (self.persistence_service and self.user_id and self.session_id):
+            return
+        try:
+            command = f"[file_tool:{tool_name}] {safe_path}"
+            execution_id = self.persistence_service.create_execution_record(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                sandbox_id=sandbox_id,
+                command=command,
+                message_id=self.message_id,
+            )
+            if not execution_id:
+                return
+
+            meta = {"tool": tool_name, "file_path": safe_path, "size_bytes": len(file_bytes)}
+            if extra:
+                meta.update(extra)
+
+            stdout = (
+                f"Tool: {tool_name}\n"
+                f"File: {safe_path}\n"
+                f"Bytes: {len(file_bytes)}\n"
+                f"Metadata: {meta}"
+            )
+            self.persistence_service.persist_execution_output(
+                execution_id=execution_id,
+                stdout=stdout,
+                stderr="",
+                exit_code=0,
+            )
+
+            artifact_id = self.persistence_service.create_artifact(
+                execution_id=execution_id,
+                user_id=self.user_id,
+                session_id=self.session_id,
+                sandbox_id=sandbox_id,
+                file_path=safe_path,
+                file_content=file_bytes,
+                message_id=self.message_id,
+            )
+
+            if artifact_id and self.socketio and self.sid:
+                self.socketio.emit(
+                    "sandbox-artifacts-created",
+                    {
+                        "id": self.message_id,
+                        "execution_id": execution_id,
+                        "artifacts": [
+                            {
+                                "artifact_id": artifact_id,
+                                "file_path": safe_path,
+                                "size_bytes": len(file_bytes),
+                                "execution_id": execution_id,
+                            }
+                        ],
+                    },
+                    room=self.sid,
+                )
+        except Exception as exc:
+            logger.warning("Non-blocking file-tool persistence failed for %s: %s", safe_path, exc)
+
+    def create_file(
+        self,
+        file_path: str,
+        overwrite: bool = False,
+        initial_content: Optional[str] = None,
+        content: Optional[str] = None,
+        text: Optional[str] = None,
+        body: Optional[str] = None,
+        content_base64: Optional[str] = None,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
+        """
+        Create a file in workspace (optionally overwrite existing).
+        Use this before edit_file for brand new files.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            resolved = self._resolve_target_path(file_path=file_path, path=path, filename=filename)
+            if not resolved:
+                return "Error: file_path is required. Example: create_file(file_path='index.html')."
+
+            safe_path = self._normalize_workspace_path(resolved)
+            exists = self._file_exists(sandbox_id, safe_path)
+            if exists and not overwrite:
+                return f"Error: File already exists: {safe_path}. Set overwrite=True to replace it."
+
+            resolved_initial_content = self._resolve_text_content(
+                content=content if content is not None else initial_content,
+                text=text,
+                body=body,
+                content_base64=content_base64,
+            )
+            if resolved_initial_content is None:
+                resolved_initial_content = ""
+
+            self._write_file_to_sandbox(
+                sandbox_id=sandbox_id,
+                filepath=safe_path,
+                content_bytes=resolved_initial_content.encode("utf-8"),
+            )
+            self._persist_file_tool_activity(
+                sandbox_id=sandbox_id,
+                safe_path=safe_path,
+                file_bytes=resolved_initial_content.encode("utf-8"),
+                tool_name="create_file",
+                extra={"overwrite": overwrite, "exists_before": exists},
+            )
+            action = "Overwritten" if exists else "Created"
+            return f"{action} file: {safe_path}"
+        except Exception as exc:
+            logger.error("create_file failed: %s", exc, exc_info=True)
+            return f"Error creating file: {exc}"
+
+    def append_file_chunk(
+        self,
+        file_path: str,
+        chunk: str,
+        content: Optional[str] = None,
+        text: Optional[str] = None,
+        body: Optional[str] = None,
+        chunk_base64: Optional[str] = None,
+        create_if_missing: bool = True,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
+        """
+        Append a small chunk to a file.
+        Preferred for large generated files to avoid single-call JSON payload failures.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            resolved = self._resolve_target_path(file_path=file_path, path=path, filename=filename)
+            if not resolved:
+                return "Error: file_path is required."
+            safe_path = self._normalize_workspace_path(resolved)
+
+            resolved_chunk = self._resolve_text_content(
+                content=chunk if chunk is not None else content,
+                text=text,
+                body=body,
+                content_base64=chunk_base64,
+            )
+            if resolved_chunk is None:
+                return (
+                    "Error: Missing chunk content. Provide chunk/text/body or chunk_base64."
+                )
+
+            chunk_bytes = resolved_chunk.encode("utf-8")
+            exists = self._file_exists(sandbox_id, safe_path)
+            if not exists and not create_if_missing:
+                return f"Error: File not found: {safe_path}"
+
+            self._append_file_bytes(sandbox_id=sandbox_id, filepath=safe_path, chunk_bytes=chunk_bytes)
+            final_bytes = self._read_file_bytes(sandbox_id, safe_path)
+            self._persist_file_tool_activity(
+                sandbox_id=sandbox_id,
+                safe_path=safe_path,
+                file_bytes=final_bytes,
+                tool_name="append_file_chunk",
+                extra={"appended_bytes": len(chunk_bytes), "create_if_missing": create_if_missing},
+            )
+            return f"Appended {len(chunk_bytes)} bytes to {safe_path}."
+        except Exception as exc:
+            logger.error("append_file_chunk failed: %s", exc, exc_info=True)
+            return f"Error appending file chunk: {exc}"
+
+    def create_and_write(
+        self,
+        file_path: str,
+        content: str,
+        text: Optional[str] = None,
+        body: Optional[str] = None,
+        content_base64: Optional[str] = None,
+        overwrite: bool = True,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
+        """
+        Create (or overwrite) a file and write full content in one call.
+        Best for small/medium payloads; for large payloads prefer create_file + append_file_chunk.
+        """
+        sandbox_id = self._create_or_get_sandbox_id()
+        if not sandbox_id:
+            return "Error: Failed to create or retrieve sandbox session."
+        try:
+            resolved = self._resolve_target_path(
+                file_path=file_path,
+                path=path,
+                filename=filename,
+            )
+            if not resolved:
+                return "Error: file_path is required."
+            safe_path = self._normalize_workspace_path(resolved)
+
+            resolved_content = self._resolve_text_content(
+                content=content,
+                text=text,
+                body=body,
+                content_base64=content_base64,
+            )
+            if resolved_content is None:
+                return (
+                    "Error: Missing file content. Provide content/text/body or content_base64."
+                )
+
+            exists = self._file_exists(sandbox_id, safe_path)
+            if exists and not overwrite:
+                return f"Error: File already exists: {safe_path}. Set overwrite=True to replace it."
+
+            payload = resolved_content.encode("utf-8")
+            self._write_file_to_sandbox(
+                sandbox_id=sandbox_id,
+                filepath=safe_path,
+                content_bytes=payload,
+            )
+            self._persist_file_tool_activity(
+                sandbox_id=sandbox_id,
+                safe_path=safe_path,
+                file_bytes=payload,
+                tool_name="create_and_write",
+                extra={"overwrite": overwrite, "exists_before": exists},
+            )
+
+            # Soft warning for reliability when very large content is pushed in one call.
+            if len(payload) > 40_000:
+                return (
+                    f"Wrote {len(payload)} bytes to {safe_path}. "
+                    "For higher reliability on very large files, prefer create_file + append_file_chunk in small chunks."
+                )
+            return f"Wrote {len(payload)} bytes to {safe_path}."
+        except Exception as exc:
+            logger.error("create_and_write failed: %s", exc, exc_info=True)
+            return f"Error creating and writing file: {exc}"
 
     def _create_or_get_sandbox_id(self) -> Optional[str]:
         """
@@ -281,21 +622,45 @@ class SandboxTools(Toolkit):
             logger.error("search_code failed: %s", exc, exc_info=True)
             return f"Error searching code: {exc}"
 
-    def read_file(self, file_path: str, start_line: int = 1, end_line: int = 200) -> str:
+    def read_file(
+        self,
+        file_path: str,
+        start_line: int = 1,
+        end_line: int = 200,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
         """
         Read a workspace file with optional line range and line numbers.
         """
+        resolved_path = file_path or path or filename
+        if not resolved_path:
+            return (
+                "Error: Missing file path. Provide file_path (or path/filename in your tool call). "
+                "Example: read_file(file_path='index.html', start_line=1, end_line=200)"
+            )
         sandbox_id = self._create_or_get_sandbox_id()
         if not sandbox_id:
             return "Error: Failed to create or retrieve sandbox session."
         try:
-            safe_path = self._normalize_workspace_path(file_path)
+            safe_path = self._normalize_workspace_path(resolved_path)
             start_line = max(1, int(start_line))
             end_line = max(start_line, int(end_line))
             if end_line - start_line > 2000:
                 end_line = start_line + 2000
 
-            data = self._read_file_bytes(sandbox_id, safe_path)
+            try:
+                data = self._read_file_bytes(sandbox_id, safe_path)
+            except requests.HTTPError as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status == 404:
+                    suggestions = self._workspace_file_suggestions(sandbox_id)
+                    hint = (
+                        "\nWorkspace files (sample):\n- " + "\n- ".join(suggestions)
+                        if suggestions else ""
+                    )
+                    return f"Error: File not found: {safe_path}{hint}"
+                raise
             if not data:
                 return f"{safe_path} is empty."
             if b"\x00" in data:
@@ -314,41 +679,138 @@ class SandboxTools(Toolkit):
             logger.error("read_file failed: %s", exc, exc_info=True)
             return f"Error reading file: {exc}"
 
-    def write_file(self, file_path: str, content: str) -> str:
+    def write_file(
+        self,
+        file_path: str,
+        content: str,
+        text: Optional[str] = None,
+        body: Optional[str] = None,
+        content_base64: Optional[str] = None,
+        append: bool = False,
+        path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
         """
         Write UTF-8 text to a workspace file.
+        Flexible inputs:
+        - path can be passed as file_path/path/filename
+        - content can be passed as content/text/body/content_base64
+        - append=True appends to existing file (creates file if missing)
         """
         sandbox_id = self._create_or_get_sandbox_id()
         if not sandbox_id:
             return "Error: Failed to create or retrieve sandbox session."
         try:
-            safe_path = self._normalize_workspace_path(file_path)
-            payload = content or ""
-            self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=safe_path, content_bytes=payload.encode("utf-8"))
-            return f"Wrote {len(payload.encode('utf-8'))} bytes to {safe_path}."
+            resolved_path = self._resolve_target_path(
+                file_path=file_path,
+                path=path,
+                filename=filename,
+            )
+            resolved_content = self._resolve_text_content(
+                content=content,
+                text=text,
+                body=body,
+                content_base64=content_base64,
+            )
+
+            if resolved_content is None:
+                return (
+                    "Error: Missing file content. Provide content (or text/body/content_base64). "
+                    "Example: write_file(file_path='index.html', content='<!doctype html>...')"
+                )
+
+            safe_path = self._normalize_workspace_path(resolved_path)
+            payload_bytes = resolved_content.encode("utf-8")
+
+            if append:
+                self._append_file_bytes(sandbox_id=sandbox_id, filepath=safe_path, chunk_bytes=payload_bytes)
+                final_bytes = self._read_file_bytes(sandbox_id, safe_path)
+                self._persist_file_tool_activity(
+                    sandbox_id=sandbox_id,
+                    safe_path=safe_path,
+                    file_bytes=final_bytes,
+                    tool_name="write_file",
+                    extra={"append": True, "appended_bytes": len(payload_bytes)},
+                )
+                return f"Appended {len(payload_bytes)} bytes to {safe_path}."
+
+            self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=safe_path, content_bytes=payload_bytes)
+            self._persist_file_tool_activity(
+                sandbox_id=sandbox_id,
+                safe_path=safe_path,
+                file_bytes=payload_bytes,
+                tool_name="write_file",
+                extra={"append": False},
+            )
+            if len(payload_bytes) > 40_000:
+                return (
+                    f"Wrote {len(payload_bytes)} bytes to {safe_path}. "
+                    "For higher reliability on very large files, prefer create_file + append_file_chunk with small chunks."
+                )
+            return f"Wrote {len(payload_bytes)} bytes to {safe_path}."
         except Exception as exc:
             logger.error("write_file failed: %s", exc, exc_info=True)
             return f"Error writing file: {exc}"
 
-    def edit_file(self, file_path: str, search_text: str, replace_text: str, replace_all: bool = False) -> str:
+    def edit_file(
+        self,
+        file_path: str,
+        search_text: str,
+        replace_text: str,
+        replace_all: bool = False,
+        path: Optional[str] = None,
+        find_text: Optional[str] = None,
+        replacement: Optional[str] = None,
+        create_if_missing: bool = False,
+    ) -> str:
         """
         Perform deterministic text replacement on a workspace file.
         - If multiple matches exist and replace_all is False, returns an error for precision.
         """
-        if not search_text:
+        resolved_path = file_path or path
+        resolved_search = search_text if search_text is not None else find_text
+        resolved_replace = replace_text if replace_text is not None else replacement
+        if not resolved_path:
+            return "Error: file_path is required."
+        if not resolved_search:
             return "Error: search_text cannot be empty."
+        if resolved_replace is None:
+            return "Error: replace_text is required."
 
         sandbox_id = self._create_or_get_sandbox_id()
         if not sandbox_id:
             return "Error: Failed to create or retrieve sandbox session."
         try:
-            safe_path = self._normalize_workspace_path(file_path)
-            raw = self._read_file_bytes(sandbox_id, safe_path)
+            safe_path = self._normalize_workspace_path(resolved_path)
+            try:
+                raw = self._read_file_bytes(sandbox_id, safe_path)
+            except requests.HTTPError as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status == 404:
+                    if create_if_missing:
+                        created = str(resolved_replace)
+                        self._write_file_to_sandbox(
+                            sandbox_id=sandbox_id,
+                            filepath=safe_path,
+                            content_bytes=created.encode("utf-8"),
+                        )
+                        return f"Created missing file {safe_path} with provided replacement content."
+                    suggestions = self._workspace_file_suggestions(sandbox_id)
+                    hint = (
+                        "\nWorkspace files (sample):\n- " + "\n- ".join(suggestions)
+                        if suggestions else ""
+                    )
+                    return (
+                        f"Error: File not found: {safe_path}. "
+                        "Use get_workspace_overview/read_file to confirm path, or set create_if_missing=True."
+                        f"{hint}"
+                    )
+                raise
             if b"\x00" in raw:
                 return f"Error: {safe_path} appears to be a binary file."
 
             original = raw.decode("utf-8", errors="replace")
-            hits = original.count(search_text)
+            hits = original.count(resolved_search)
             if hits == 0:
                 return "Error: search_text was not found in file."
             if hits > 1 and not replace_all:
@@ -357,8 +819,19 @@ class SandboxTools(Toolkit):
                     "Refine search_text or set replace_all=True."
                 )
 
-            updated = original.replace(search_text, replace_text) if replace_all else original.replace(search_text, replace_text, 1)
+            updated = (
+                original.replace(resolved_search, resolved_replace)
+                if replace_all
+                else original.replace(resolved_search, resolved_replace, 1)
+            )
             self._write_file_to_sandbox(sandbox_id=sandbox_id, filepath=safe_path, content_bytes=updated.encode("utf-8"))
+            self._persist_file_tool_activity(
+                sandbox_id=sandbox_id,
+                safe_path=safe_path,
+                file_bytes=updated.encode("utf-8"),
+                tool_name="edit_file",
+                extra={"replace_all": replace_all, "matches": hits},
+            )
 
             return (
                 f"Updated {safe_path}. "
