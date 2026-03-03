@@ -5,6 +5,8 @@ import uuid
 import json
 import time
 import requests
+import redis
+import base64
 from typing import Any, Optional
 from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify
@@ -21,7 +23,9 @@ from deploy_platform import (
     ensure_deploy_tables,
     get_site_runtime_db_credentials,
     get_site_db_credentials,
+    get_deployment_file_bytes,
     list_deployed_projects,
+    list_deployment_files,
     list_user_databases,
     preflight_check,
     provision_turso_database,
@@ -778,6 +782,99 @@ def deploy_projects():
         return jsonify({"error": "failed to load deployed projects"}), 500
 
 
+@api_bp.route('/deploy/files', methods=['GET'])
+def deploy_files():
+    """
+    List files for a site's deployment from R2.
+    Query params: site_id|site_ref, deployment_id (optional)
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    site_ref = request.args.get("site_id") or request.args.get("site_ref") or "default"
+    deployment_id = request.args.get("deployment_id")
+
+    try:
+        ensure_deploy_tables()
+        site = resolve_site_ref(user_id=str(user.id), site_ref=str(site_ref))
+        files = list_deployment_files(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=str(deployment_id) if deployment_id else None,
+        )
+        return jsonify({
+            "ok": True,
+            "site_id": str(site["id"]),
+            "deployment_id": deployment_id,
+            "file_count": len(files),
+            "files": files,
+        }), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/files failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load deployment files"}), 500
+
+
+@api_bp.route('/deploy/file-content', methods=['GET'])
+def deploy_file_content():
+    """
+    Get one deployed file's content.
+    Query params: site_id|site_ref, path, deployment_id (optional)
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    site_ref = request.args.get("site_id") or request.args.get("site_ref") or "default"
+    rel_path = (request.args.get("path") or "").strip()
+    deployment_id = request.args.get("deployment_id")
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        site = resolve_site_ref(user_id=str(user.id), site_ref=str(site_ref))
+        data = get_deployment_file_bytes(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            path=rel_path,
+            deployment_id=str(deployment_id) if deployment_id else None,
+        )
+
+        is_binary = b"\x00" in (data or b"")
+        if is_binary:
+            return jsonify({
+                "ok": True,
+                "path": rel_path,
+                "is_binary": True,
+                "size_bytes": len(data or b""),
+                "content": None,
+            }), 200
+
+        text_content = (data or b"").decode("utf-8", errors="replace")
+        lim = 300_000
+        truncated = text_content[:lim]
+        return jsonify({
+            "ok": True,
+            "path": rel_path,
+            "is_binary": False,
+            "size_bytes": len(data or b""),
+            "truncated": len(text_content) > len(truncated),
+            "content": truncated,
+        }), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"deploy/file-content failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load deployment file content"}), 500
+
+
 @api_bp.route('/deploy/databases', methods=['GET'])
 def deploy_databases():
     """
@@ -1022,6 +1119,155 @@ def deploy_runtime_query():
     except Exception as e:
         logger.error(f"deploy/runtime/query failed: {e}", exc_info=True)
         return jsonify({"ok": False, "error": "runtime database query failed"}), 500
+
+
+@api_bp.route('/project/workspace/tree', methods=['POST'])
+def project_workspace_tree():
+    """
+    List workspace files from sandbox for the current conversation.
+    body: { conversation_id, path? }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    conversation_id = str(body.get("conversation_id") or "").strip()
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+
+    path = str(body.get("path") or "/home/sandboxuser/workspace").strip()
+    if not path.startswith("/home/sandboxuser/workspace"):
+        return jsonify({"error": "path must be under /home/sandboxuser/workspace"}), 400
+
+    try:
+        redis_client = redis.from_url(config.REDIS_URL, decode_responses=True)
+        session_json = redis_client.get(f"session:{conversation_id}")
+        if not session_json:
+            return jsonify({"ok": True, "files": [], "sandbox_id": None}), 200
+
+        session_data = json.loads(session_json) if isinstance(session_json, str) else (session_json or {})
+        if str(session_data.get("user_id")) != str(user.id):
+            return jsonify({"error": "Unauthorized session access"}), 403
+
+        sandbox_id = session_data.get("active_sandbox_id")
+        if not sandbox_id:
+            sandbox_ids = session_data.get("sandbox_ids", []) or []
+            sandbox_id = sandbox_ids[-1] if sandbox_ids else None
+
+        if not sandbox_id:
+            return jsonify({"ok": True, "files": [], "sandbox_id": None}), 200
+
+        if not config.SANDBOX_API_URL:
+            return jsonify({"error": "SANDBOX_API_URL not configured"}), 500
+
+        resp = requests.get(
+            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files",
+            params={"path": path},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": f"failed to list sandbox files (HTTP {resp.status_code})"}), 502
+
+        rows = (resp.json() or {}).get("files", []) or []
+        rel_rows = []
+        prefix = "/home/sandboxuser/workspace/"
+        for row in rows:
+            abs_path = str(row.get("path", ""))
+            rel_path = abs_path[len(prefix):] if abs_path.startswith(prefix) else abs_path
+            rel_rows.append({
+                "path": rel_path,
+                "size": int(row.get("size", 0) or 0),
+            })
+
+        return jsonify({
+            "ok": True,
+            "sandbox_id": sandbox_id,
+            "path": path,
+            "files": rel_rows,
+            "count": len(rel_rows),
+        }), 200
+    except Exception as e:
+        logger.error(f"project/workspace/tree failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load workspace tree"}), 500
+
+
+@api_bp.route('/project/workspace/file-content', methods=['POST'])
+def project_workspace_file_content():
+    """
+    Get file content from sandbox workspace for active conversation.
+    body: { conversation_id, path }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    conversation_id = str(body.get("conversation_id") or "").strip()
+    rel_path = str(body.get("path") or "").strip().replace("\\", "/")
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+    if not rel_path:
+        return jsonify({"error": "path is required"}), 400
+    if ".." in rel_path.split("/"):
+        return jsonify({"error": "Invalid path"}), 400
+
+    try:
+        redis_client = redis.from_url(config.REDIS_URL, decode_responses=True)
+        session_json = redis_client.get(f"session:{conversation_id}")
+        if not session_json:
+            return jsonify({"error": "session not found"}), 404
+
+        session_data = json.loads(session_json) if isinstance(session_json, str) else (session_json or {})
+        if str(session_data.get("user_id")) != str(user.id):
+            return jsonify({"error": "Unauthorized session access"}), 403
+
+        sandbox_id = session_data.get("active_sandbox_id")
+        if not sandbox_id:
+            sandbox_ids = session_data.get("sandbox_ids", []) or []
+            sandbox_id = sandbox_ids[-1] if sandbox_ids else None
+        if not sandbox_id:
+            return jsonify({"error": "sandbox not found"}), 404
+
+        if not config.SANDBOX_API_URL:
+            return jsonify({"error": "SANDBOX_API_URL not configured"}), 500
+
+        abs_path = f"/home/sandboxuser/workspace/{rel_path.lstrip('/')}"
+        resp = requests.get(
+            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files/content",
+            params={"filepath": abs_path},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": f"failed to load sandbox file (HTTP {resp.status_code})"}), 502
+
+        payload = resp.json() or {}
+        encoded = payload.get("content", "") or ""
+        data = base64.b64decode(encoded) if encoded else b""
+        is_binary = b"\x00" in data
+        if is_binary:
+            return jsonify({
+                "ok": True,
+                "path": rel_path,
+                "is_binary": True,
+                "size_bytes": len(data),
+                "content": None,
+            }), 200
+
+        text_content = data.decode("utf-8", errors="replace")
+        lim = 300_000
+        truncated = text_content[:lim]
+        return jsonify({
+            "ok": True,
+            "path": rel_path,
+            "is_binary": False,
+            "size_bytes": len(data),
+            "truncated": len(text_content) > len(truncated),
+            "content": truncated,
+        }), 200
+    except Exception as e:
+        logger.error(f"project/workspace/file-content failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to load workspace file content"}), 500
 
 
 @api_bp.route('/deploy/activate', methods=['POST'])
