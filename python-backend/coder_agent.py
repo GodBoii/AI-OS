@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
-from agno.models.google import Gemini
 from agno.models.openrouter import OpenRouter
 from agno.tools import Toolkit
 
@@ -69,7 +68,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=Gemini(id="gemini-2.5-flash-lite"),
+        model=OpenRouter(id="nvidia/nemotron-3-nano-30b-a3b:free"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, database, and deployment operations."

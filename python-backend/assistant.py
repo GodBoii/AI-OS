@@ -265,7 +265,7 @@ def get_llm_os(
         
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="qwen/qwen3-vl-30b-a3b-thinking"),
+            model=OpenRouter(id="nvidia/nemotron-3-nano-30b-a3b:free"),
             role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a database engine. Delegate all coding, debugging, building, querying, and deployment tasks here.",
             tools=dev_tools,
             instructions=[
