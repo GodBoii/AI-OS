@@ -10,6 +10,7 @@ import requests
 # --- Local Module Imports ---
 from extensions import socketio
 from assistant import get_llm_os
+from coder_agent import get_coder_agent
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
@@ -417,6 +418,7 @@ def run_agent_and_stream(
     browser_tools_config: dict,
     computer_tools_config: dict,
     context_session_ids: List[str],
+    agent_mode: str,
     connection_manager: ConnectionManager,
     redis_client: Redis,
     run_state_manager: RunStateManager = None,  # NEW: optional, safe for assistant path
@@ -470,16 +472,38 @@ def run_agent_and_stream(
             config.COMPOSIO_ENABLE_WHATSAPP,
         )
 
-        agent = get_llm_os(
-            user_id=user_id,
-            session_info=session_data,
-            browser_tools_config=realtime_tool_config,
-            computer_tools_config=realtime_tool_config,  # NEW: Pass computer tools config
-            custom_tool_config=realtime_tool_config,
-            session_id=conversation_id,  # NEW: For persistence
-            message_id=message_id,  # NEW: For persistence
-            **session_config
-        )
+        # Internal routing metadata should not be forwarded to get_llm_os kwargs.
+        session_agent_mode = str(session_config.pop("agent_mode", "default")).strip().lower()
+
+        requested_mode = str(agent_mode or "").strip().lower()
+        if requested_mode not in ("coder", "default"):
+            requested_mode = session_agent_mode
+        if requested_mode not in ("coder", "default"):
+            requested_mode = "default"
+
+        if requested_mode == "coder":
+            agent = get_coder_agent(
+                user_id=user_id,
+                session_info=session_data,
+                browser_tools_config=realtime_tool_config,
+                custom_tool_config=realtime_tool_config,
+                session_id=conversation_id,
+                message_id=message_id,
+                use_memory=session_config.get("use_memory", False),
+                debug_mode=True,
+                enable_github=session_config.get("enable_github", True),
+            )
+        else:
+            agent = get_llm_os(
+                user_id=user_id,
+                session_info=session_data,
+                browser_tools_config=realtime_tool_config,
+                computer_tools_config=realtime_tool_config,  # NEW: Pass computer tools config
+                custom_tool_config=realtime_tool_config,
+                session_id=conversation_id,  # NEW: For persistence
+                message_id=message_id,  # NEW: For persistence
+                **session_config
+            )
         # --- MODIFICATION END ---
 
         # 3. Process Input Data
@@ -555,6 +579,7 @@ def run_agent_and_stream(
         accumulated_events: list[dict] = []
         accumulated_log_content: Dict[str, List[str]] = {}
         log_owner_order: List[str] = []
+        final_owner_name = None
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -584,12 +609,16 @@ def run_agent_and_stream(
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
-                is_final = owner_name == "Aetheria_AI" and not getattr(chunk, 'member_responses', [])
+                is_final = (
+                    owner_name in ("Aetheria_AI", "Aetheria_Coder")
+                    and not getattr(chunk, 'member_responses', [])
+                )
                 # Include reasoning_content if present
                 reasoning_content = getattr(chunk, 'reasoning_content', None)
                 # Accumulate main content for catch-up buffer
                 if is_final and chunk.content:
                     accumulated_content.append(str(chunk.content))
+                    final_owner_name = owner_name
                 elif (not is_final) and chunk.content and owner_name:
                     if owner_name not in accumulated_log_content:
                         accumulated_log_content[owner_name] = []
@@ -655,7 +684,7 @@ def run_agent_and_stream(
             accumulated_events.append({
                 "type": "response",
                 "content": final_content,
-                "agent_name": "Aetheria_AI",
+                "agent_name": final_owner_name or "Aetheria_AI",
                 "is_log": False,
             })
         if run_state_manager:

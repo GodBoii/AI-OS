@@ -42,6 +42,11 @@ run_state_manager_instance: RunStateManager = None
 _catchup_sent: dict = {}
 
 
+def _normalize_agent_mode(raw_value: Any) -> str:
+    value = str(raw_value or "").strip().lower()
+    return "coder" if value == "coder" else "default"
+
+
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
     global connection_manager_service, redis_client_instance, run_state_manager_instance
@@ -317,12 +322,18 @@ def on_send_message(data: str):
                 run_state_manager_instance.clear(conversation_id)
             return socketio.emit("status", {"message": f"Session {conversation_id} terminated"}, room=sid)
 
+        requested_agent_mode = _normalize_agent_mode(
+            data.get("agent_mode") or (data.get("config", {}) or {}).get("agent_mode")
+        )
+
         if not connection_manager_service.get_session(conversation_id):
             device_type = data.get("deviceType", "web")
+            session_config = dict(data.get("config", {}))
+            session_config["agent_mode"] = requested_agent_mode
             connection_manager_service.create_session(
                 conversation_id,
                 str(user.id),
-                data.get("config", {}),
+                session_config,
                 device_type=device_type
             )
 
@@ -375,6 +386,7 @@ def on_send_message(data: str):
             browser_tools_config,
             computer_tools_config,
             context_session_ids,
+            requested_agent_mode,
             connection_manager_service,
             redis_client_instance,
             run_state_manager_instance,  # NEW: pass run state manager
@@ -455,6 +467,7 @@ def on_assistant_message(data: str):
             browser_tools_config,
             computer_tools_config,
             [],
+            "default",
             connection_manager_service,
             redis_client_instance,
             run_state_manager_instance,  # NEW: pass run state manager
