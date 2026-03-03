@@ -52,27 +52,32 @@ body {
     color: var(--icon-color);
     font-size: 1.1rem;
     cursor: pointer;
-    transition: transform var(--anim-fast) var(--easing-spring), color var(--anim-fast) var(--easing-standard), background-color var(--anim-fast) var(--easing-standard);
+    transition: all var(--anim-normal) var(--easing-smooth);
     background: transparent;
-    border: none;
+    border: 1.5px solid transparent;
 }
 
 .sidebar-icon:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
-    transform: scale(1.1);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
     box-shadow: 
-        0 2px 8px rgba(45, 55, 72, 0.12),
-        0 4px 16px rgba(45, 55, 72, 0.08);
+        0 4px 12px rgba(45, 55, 72, 0.15),
+        0 2px 6px rgba(45, 55, 72, 0.10);
 }
 
 .sidebar-icon:active {
-    transform: scale(1);
+    transform: translateY(0);
 }
 
 .sidebar-icon.active {
-    color: white;
-    background-color: var(--accent-color);
+    color: var(--accent-color);
+    background-color: var(--accent-muted);
+    border-color: var(--accent-color);
+    box-shadow: 
+        0 2px 8px rgba(45, 55, 72, 0.12),
+        inset 0 1px 3px rgba(45, 55, 72, 0.08);
 }
 
 /* --- MODIFICATION: Hover-to-expand top control bar --- */
