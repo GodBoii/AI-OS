@@ -967,6 +967,7 @@ class AIOS {
                     <div class="settings-card-actions">
                         <button class="start-project-coding-btn" title="Start Coding Workspace">
                             <i class="fas fa-code"></i>
+                            <span>Start Coding</span>
                         </button>
                         <button class="expand-deployment-btn" title="View Details" data-project='${JSON.stringify(project).replace(/'/g, "&apos;")}'>
                             <i class="fas fa-expand-alt"></i>

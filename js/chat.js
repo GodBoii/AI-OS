@@ -75,6 +75,23 @@ function resolveAgentMode() {
     return 'default';
 }
 
+function isProjectWorkspaceMode() {
+    const ctx = window.projectContext || window.activeProjectContext || null;
+    if (!ctx || typeof ctx !== 'object') {
+        return false;
+    }
+    if (String(ctx.agentMode || '').toLowerCase() === 'coder') {
+        return true;
+    }
+    if (ctx.isDedicatedProject === true) {
+        return true;
+    }
+    if (String(ctx.mode || '').toLowerCase() === 'project') {
+        return true;
+    }
+    return false;
+}
+
 async function startNewConversation() {
     // Stop any ongoing audio recording
     if (audioInputHandler && audioInputHandler.isRecording) {
@@ -251,18 +268,25 @@ function setupIpcListeners() {
                     const finalContent = messageFormatter.getFinalContent(streamId);
                     const innerContentDiv = block.querySelector('.inner-content');
                     if (finalContent && innerContentDiv) {
-                        innerContentDiv.innerHTML = messageFormatter.format(finalContent);
+                        const inlineArtifacts = isProjectWorkspaceMode();
+                        innerContentDiv.innerHTML = messageFormatter.format(finalContent, { inlineArtifacts });
 
-                        // Apply syntax highlighting to code blocks in final formatting
-                        innerContentDiv.querySelectorAll('pre code').forEach(codeBlock => {
-                            if (typeof hljs !== 'undefined' && !codeBlock.dataset.highlighted) {
-                                hljs.highlightElement(codeBlock);
-                                codeBlock.dataset.highlighted = 'true';
+                        if (inlineArtifacts) {
+                            if (typeof messageFormatter.applyInlineEnhancements === 'function') {
+                                messageFormatter.applyInlineEnhancements(innerContentDiv);
                             }
-                        });
+                        } else {
+                            // Apply syntax highlighting to code blocks in final formatting
+                            innerContentDiv.querySelectorAll('pre code').forEach(codeBlock => {
+                                if (typeof hljs !== 'undefined' && !codeBlock.dataset.highlighted) {
+                                    hljs.highlightElement(codeBlock);
+                                    codeBlock.dataset.highlighted = 'true';
+                                }
+                            });
 
-                        // Add copy buttons to code blocks in live messages
-                        addCopyButtonsToCodeBlocks(innerContentDiv);
+                            // Add copy buttons to code blocks in live messages
+                            addCopyButtonsToCodeBlocks(innerContentDiv);
+                        }
                     }
                 });
 
@@ -389,7 +413,7 @@ function setupIpcListeners() {
             }
 
             if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base_64) {
-                if (artifactHandler) {
+                if (artifactHandler && !isProjectWorkspaceMode()) {
                     console.log("Detected browser tool output. Showing artifact.");
                     artifactHandler.showArtifact('browser_view', tool.tool_output);
                 }
@@ -426,14 +450,14 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('sandbox-command-started', (data) => {
-        if (artifactHandler) {
+        if (artifactHandler && !isProjectWorkspaceMode()) {
             artifactHandler.showTerminal(data.artifactId);
             artifactHandler.updateCommand(data.artifactId, data.command);
         }
     });
 
     ipcRenderer.on('sandbox-command-finished', (data) => {
-        if (artifactHandler) {
+        if (artifactHandler && !isProjectWorkspaceMode()) {
             artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
         }
         
@@ -658,19 +682,29 @@ function populateBotMessage(data) {
     const innerContentDiv = contentBlock.querySelector('.inner-content');
     if (innerContentDiv) {
         const streamId = `${messageId}-${ownerName}`;
-        const formattedContent = messageFormatter.formatStreaming(content, streamId);
+        const inlineArtifacts = isProjectWorkspaceMode();
+        if (inlineArtifacts && artifactHandler) {
+            artifactHandler.hideArtifact();
+        }
+        const formattedContent = messageFormatter.formatStreaming(content, streamId, { inlineArtifacts });
         innerContentDiv.innerHTML = formattedContent;
 
-        // Apply live syntax highlighting to code blocks during streaming
-        innerContentDiv.querySelectorAll('pre code:not([data-highlighted])').forEach(codeBlock => {
-            if (typeof hljs !== 'undefined') {
-                hljs.highlightElement(codeBlock);
-                codeBlock.dataset.highlighted = 'true';
+        if (inlineArtifacts) {
+            if (typeof messageFormatter.applyInlineEnhancements === 'function') {
+                messageFormatter.applyInlineEnhancements(innerContentDiv);
             }
-        });
+        } else {
+            // Apply live syntax highlighting to code blocks during streaming
+            innerContentDiv.querySelectorAll('pre code:not([data-highlighted])').forEach(codeBlock => {
+                if (typeof hljs !== 'undefined') {
+                    hljs.highlightElement(codeBlock);
+                    codeBlock.dataset.highlighted = 'true';
+                }
+            });
 
-        // Add copy buttons to code blocks during streaming
-        addCopyButtonsToCodeBlocks(innerContentDiv);
+            // Add copy buttons to code blocks during streaming
+            addCopyButtonsToCodeBlocks(innerContentDiv);
+        }
     }
 }
 
