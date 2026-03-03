@@ -965,6 +965,9 @@ class AIOS {
                         <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
                     </div>
                     <div class="settings-card-actions">
+                        <button class="start-project-coding-btn" title="Start Coding Workspace">
+                            <i class="fas fa-code"></i>
+                        </button>
                         <button class="expand-deployment-btn" title="View Details" data-project='${JSON.stringify(project).replace(/'/g, "&apos;")}'>
                             <i class="fas fa-expand-alt"></i>
                         </button>
@@ -986,6 +989,29 @@ class AIOS {
             expandBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showDeploymentDetail(project);
+            });
+
+            const startCodingBtn = card.querySelector('.start-project-coding-btn');
+            startCodingBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                document.dispatchEvent(new CustomEvent('project-workspace:open', {
+                    detail: {
+                        site_id: project.site_id,
+                        deployment_id: project.deployment_id,
+                        project_name: project.project_name,
+                        slug: project.slug,
+                        hostname: project.hostname,
+                        r2_prefix: project.r2_prefix
+                    }
+                }));
+
+                if (window.stateManager?.setState) {
+                    window.stateManager.setState({ isProjectWorkspaceOpen: true, isAIOSOpen: false });
+                }
+
+                this.hideWindow();
+                this.showNotification(`Opened coding workspace for ${this._safeText(project.project_name, 'project')}`, 'success');
             });
             
             list.appendChild(card);

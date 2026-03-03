@@ -263,15 +263,35 @@ if (window.AIOS) {
         // Show loading state
         fileTreeList.innerHTML = '<li class="deployment-file-tree-item"><i class="fas fa-spinner fa-spin"></i> Loading files...</li>';
 
-        // Since backend doesn't have /api/deploy/files endpoint,
-        // show a mock file structure based on typical web deployment
-        const files = [
-            { path: 'index.html', size: 2048 },
-            { path: 'styles.css', size: 1024 },
-            { path: 'script.js', size: 3072 },
-            { path: 'assets/logo.png', size: 15360 },
-            { path: 'assets/favicon.ico', size: 4096 }
-        ];
+        let files = [];
+        try {
+            const session = await window.electron?.auth?.getSession?.();
+            const token = session?.access_token;
+            if (!token) throw new Error('Not authenticated');
+
+            const query = new URLSearchParams({
+                site_id: String(project.site_id || ''),
+                ...(project.deployment_id ? { deployment_id: String(project.deployment_id) } : {})
+            });
+            const response = await fetch(`${this.backendBaseUrl}/api/deploy/files?${query.toString()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.error || `HTTP ${response.status}`);
+            }
+
+            files = Array.isArray(payload?.files) ? payload.files : [];
+        } catch (error) {
+            console.warn('[AIOS] Failed to load deployment files from API, using fallback sample:', error.message);
+            files = [
+                { path: 'index.html', size: 2048 },
+                { path: 'styles.css', size: 1024 },
+                { path: 'script.js', size: 3072 },
+                { path: 'assets/logo.png', size: 15360 },
+                { path: 'assets/favicon.ico', size: 4096 }
+            ];
+        }
 
         if (files.length === 0) {
             fileTreeList.innerHTML = '<li class="deployment-file-tree-item"><i class="fas fa-info-circle"></i> No files found</li>';
