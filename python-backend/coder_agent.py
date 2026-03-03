@@ -3,9 +3,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
+from agno.models.google import Gemini
 from agno.models.openrouter import OpenRouter
-from agno.run.team import TeamRunEvent
-from agno.team import Team
 from agno.tools import Toolkit
 
 from database_tools import DatabaseTools
@@ -32,11 +31,13 @@ def get_coder_agent(
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = True,
-) -> Team:
+) -> Agent:
     """
-    Dedicated coding-only team used for project workspace mode.
-    Persists sessions/runs in Postgres, same persistence model as assistant.py.
+    Dedicated coding-only Agent used for project workspace mode.
+    Persists sessions/runs in Postgres using the same DB backend as assistant.py.
     """
+    _ = custom_tool_config
+
     db = PostgresDb(
         db_url=_db_url_sqlalchemy(),
         db_schema="public",
@@ -47,7 +48,7 @@ def get_coder_agent(
     sid = browser_tools_config.get("sid") if browser_tools_config else None
     redis_client_instance = browser_tools_config.get("redis_client") if browser_tools_config else None
 
-    dev_tools: List[Union[Toolkit, callable]] = [
+    coder_tools: List[Union[Toolkit, callable]] = [
         SandboxTools(
             session_info=session_info or {},
             persistence_service=persistence_service,
@@ -59,43 +60,50 @@ def get_coder_agent(
             redis_client=redis_client_instance,
         )
     ]
-    if user_id:
-        dev_tools.append(DeployedProjectTools(user_id=user_id))
-        dev_tools.append(DatabaseTools(user_id=user_id))
-        if enable_github:
-            dev_tools.append(GitHubTools(user_id=user_id))
 
-    dev_team = Agent(
-        name="dev_team",
-        model=OpenRouter(id="qwen/qwen3-vl-30b-a3b-thinking"),
+    if user_id:
+        coder_tools.append(DeployedProjectTools(user_id=user_id))
+        coder_tools.append(DatabaseTools(user_id=user_id))
+        if enable_github:
+            coder_tools.append(GitHubTools(user_id=user_id))
+
+    return Agent(
+        name="Aetheria_Coder",
+        model=Gemini(id="gemini-2.5-flash-lite"),
         role=(
-            "Dedicated coding agent for project workspace mode. "
-            "Handles code edits, terminal execution, repository operations, and redeploy flows."
+            "Dedicated software engineering agent for project mode. "
+            "Executes coding, repository, sandbox, database, and deployment operations."
         ),
-        tools=dev_tools,
+        tools=coder_tools,
         instructions=[
             "<system_instructions>",
-            "You are a dedicated coding agent. Do not behave as a general assistant.",
-            "Workspace root: /home/sandboxuser/workspace.",
-            "For code changes: inspect -> edit -> run checks/commands -> report concise results.",
-            "Prefer surgical edits over full-file rewrites.",
-            "Before deployment/database actions: resolve project context first.",
-            "Never expose provider tokens in frontend code.",
-            "For deployed frontend DB access, use runtime_query_endpoint with JSON { sql, params }.",
-            "For live project updates: copy_deployed_project -> edit -> redeploy_project.",
-            "</system_instructions>",
-        ],
-        debug_mode=debug_mode,
-    )
-
-    return Team(
-        name="Aetheria_Coder",
-        model=OpenRouter(id="qwen/qwen3-vl-30b-a3b-thinking"),
-        members=[dev_team],
-        tools=[] if not custom_tool_config else [],
-        instructions=[
             "You are Aetheria Coder. Focus only on software engineering tasks.",
-            "Keep responses concise and implementation-first.",
+            "Use deterministic implementation flow: inspect -> edit -> verify -> summarize.",
+            "Workspace root: /home/sandboxuser/workspace.",
+            "Prefer surgical edits over full-file rewrites.",
+            "Before deployment/database operations, resolve project context first.",
+            "Never expose provider secrets/tokens in frontend source.",
+            "For deployed frontend DB calls, use runtime_query_endpoint with JSON { sql, params }.",
+            "For deployed-site changes: copy_deployed_project -> edit -> redeploy_project.",
+            "Keep responses concise, implementation-first, and verifiable.",
+            "</system_instructions>",
+            "",
+            "<frontend>",
+            "Build responsive, production-grade UI and preserve existing design language unless user requests redesign.",
+            "Use semantic HTML and reusable CSS classes.",
+            "When touching interaction flows, keep backward compatibility for existing controls.",
+            "For file preview/edit features, handle large content safely and avoid blocking UI.",
+            "Preserve accessibility basics (labels, keyboard behavior, focus states).",
+            "</frontend>",
+            "",
+            "<backend>",
+            "Validate/sanitize all inputs at API boundaries.",
+            "Keep API response shapes stable for existing clients.",
+            "Enforce ownership/auth checks for project/session/file access.",
+            "Use explicit error handling and actionable error messages.",
+            "Use parameterized data access patterns and avoid inline secrets.",
+            "Protect deployment/runtime boundaries and avoid unsafe data exposure.",
+            "</backend>",
         ],
         user_id=user_id,
         db=db,
@@ -104,13 +112,6 @@ def get_coder_agent(
         enable_session_summaries=use_memory,
         stream_intermediate_steps=True,
         search_knowledge=False,
-        events_to_skip=[
-            TeamRunEvent.run_started,
-            TeamRunEvent.run_completed,
-            TeamRunEvent.memory_update_started,
-            TeamRunEvent.memory_update_completed,
-        ],
-        read_team_history=True,
         add_history_to_context=True,
         num_history_runs=40,
         store_events=True,
