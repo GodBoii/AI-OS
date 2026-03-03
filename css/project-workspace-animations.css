@@ -1,0 +1,180 @@
+/* Project Workspace Enhanced Animations */
+
+/* Panel slide-in animation */
+@keyframes projectPanelSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-30px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+.project-workspace-panel:not(.hidden) {
+    animation: projectPanelSlideIn var(--anim-slow) var(--easing-fluid);
+}
+
+/* File tree item stagger animation */
+.project-file-row {
+    animation: fileRowFadeIn var(--anim-normal) var(--easing-smooth) backwards;
+}
+
+@keyframes fileRowFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Add stagger delays for file rows */
+.project-file-row:nth-child(1) { animation-delay: 0ms; }
+.project-file-row:nth-child(2) { animation-delay: 30ms; }
+.project-file-row:nth-child(3) { animation-delay: 60ms; }
+.project-file-row:nth-child(4) { animation-delay: 90ms; }
+.project-file-row:nth-child(5) { animation-delay: 120ms; }
+.project-file-row:nth-child(6) { animation-delay: 150ms; }
+.project-file-row:nth-child(7) { animation-delay: 180ms; }
+.project-file-row:nth-child(8) { animation-delay: 210ms; }
+.project-file-row:nth-child(9) { animation-delay: 240ms; }
+.project-file-row:nth-child(10) { animation-delay: 270ms; }
+
+/* Button ripple effect */
+@keyframes ripple {
+    0% {
+        transform: scale(0);
+        opacity: 0.6;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+.project-action-btn,
+.start-project-coding-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.project-action-btn::after,
+.start-project-coding-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.project-action-btn:active::after,
+.start-project-coding-btn:active::after {
+    animation: ripple 0.6s var(--easing-smooth);
+}
+
+/* Icon pulse animation on hover */
+@keyframes iconPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+.project-workspace-icon i {
+    transition: transform var(--anim-normal) var(--easing-smooth);
+}
+
+.project-workspace-header:hover .project-workspace-icon i {
+    animation: iconPulse 1s var(--easing-smooth) infinite;
+}
+
+/* Smooth scroll for file tree */
+.project-workspace-body {
+    scroll-behavior: smooth;
+}
+
+/* Loading shimmer for status text */
+@keyframes statusShimmer {
+    0% {
+        background-position: -200% center;
+    }
+    100% {
+        background-position: 200% center;
+    }
+}
+
+.project-workspace-status.loading {
+    background: linear-gradient(
+        90deg,
+        var(--text-secondary) 0%,
+        var(--accent-color) 50%,
+        var(--text-secondary) 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: statusShimmer 2s linear infinite;
+}
+
+/* Preview content fade-in */
+@keyframes previewFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.project-file-preview-content {
+    animation: previewFadeIn var(--anim-normal) var(--easing-smooth);
+}
+
+/* Badge pulse animation */
+@keyframes badgePulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 var(--accent-color);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(var(--accent-color-rgb), 0.2);
+    }
+}
+
+.settings-badge.status-active {
+    animation: badgePulse 2s var(--easing-smooth) infinite;
+}
+
+/* Hover glow effect for cards */
+@keyframes cardGlow {
+    0%, 100% {
+        box-shadow: 
+            0 12px 30px rgba(45, 55, 72, 0.20),
+            0 4px 12px rgba(45, 55, 72, 0.15),
+            0 0 0 1px rgba(45, 55, 72, 0.08);
+    }
+    50% {
+        box-shadow: 
+            0 16px 40px rgba(45, 55, 72, 0.25),
+            0 6px 16px rgba(45, 55, 72, 0.18),
+            0 0 0 1px var(--accent-color);
+    }
+}
+
+.settings-card:hover {
+    animation: cardGlow 2s var(--easing-smooth) infinite;
+}
