@@ -11,6 +11,46 @@
     </div>
 </div>
 
+<aside id="project-workspace-panel" class="project-workspace-panel hidden">
+    <div class="project-workspace-header">
+        <div class="project-workspace-title-wrap">
+            <div class="project-workspace-icon">
+                <i class="fas fa-code-branch"></i>
+            </div>
+            <div>
+                <h3 id="project-workspace-title" class="project-workspace-title">Project Workspace</h3>
+                <p id="project-workspace-subtitle" class="project-workspace-subtitle">No active project</p>
+            </div>
+        </div>
+        <button id="project-workspace-close" class="project-workspace-close" aria-label="Close project panel">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="project-workspace-actions">
+        <button id="project-start-chat-btn" class="project-action-btn">Start Coder Chat</button>
+        <button id="project-sync-files-btn" class="project-action-btn">Sync Files</button>
+    </div>
+
+    <div class="project-workspace-clone">
+        <input id="project-repo-url" class="project-workspace-input" type="text" placeholder="GitHub repo URL (https://github.com/org/repo)" />
+        <div class="project-clone-row">
+            <input id="project-repo-branch" class="project-workspace-input" type="text" placeholder="branch" value="main" />
+            <button id="project-clone-repo-btn" class="project-action-btn">Clone Repo</button>
+        </div>
+        <button id="project-exit-btn" class="project-action-btn">Exit Project Mode</button>
+    </div>
+
+    <div class="project-workspace-body">
+        <div id="project-workspace-status" class="project-workspace-status">Open a deployment or clone a repo to start.</div>
+        <div id="project-file-tree"></div>
+        <div class="project-file-preview">
+            <div id="project-file-preview-title" class="project-file-preview-title">File Preview</div>
+            <pre id="project-file-preview-content" class="project-file-preview-content">Click a file to view its content.</pre>
+        </div>
+    </div>
+</aside>
+
 <!-- MODIFIED: Restructured floating input container -->
 <div id="floating-input-container" class="floating-input-container hidden">
     <!-- NEW: Horizontal context and files bar -->
