@@ -947,6 +947,24 @@
     opacity: 1;
 }
 
+/* Inline artifact rendering for live chat (project workspace mode) */
+.chat-messages .inline-artifact-code {
+    margin: 12px 0;
+    background: var(--code-bg, rgba(0, 0, 0, 0.4));
+    border-radius: 8px;
+    overflow-x: auto;
+    box-shadow: var(--shadow-sm);
+}
+
+.chat-messages .inline-artifact-code code {
+    display: block;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-color);
+    background: transparent;
+}
+
 /* ================================================================= */
 /* MESSAGE CONTENT BLOCKS & ERROR STATES                            */
 /* ================================================================= */
