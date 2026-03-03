@@ -45,6 +45,10 @@ class ProjectWorkspace {
             tree: document.getElementById('project-file-tree'),
             previewTitle: document.getElementById('project-file-preview-title'),
             previewContent: document.getElementById('project-file-preview-content'),
+            mainPreview: document.getElementById('project-main-file-preview'),
+            mainPreviewTitle: document.getElementById('project-main-file-preview-title'),
+            mainPreviewContent: document.getElementById('project-main-file-preview-content'),
+            mainPreviewCloseBtn: document.getElementById('project-main-file-preview-close'),
             closeBtn: document.getElementById('project-workspace-close'),
             syncBtn: document.getElementById('project-sync-files-btn'),
             startChatBtn: document.getElementById('project-start-chat-btn'),
@@ -61,6 +65,13 @@ class ProjectWorkspace {
         this.el.startChatBtn?.addEventListener('click', () => this.startCoderChat());
         this.el.cloneRepoBtn?.addEventListener('click', () => this.cloneGithubRepo());
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
+        this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && document.body.classList.contains('project-file-preview-active')) {
+                this.hideMainFilePreview();
+            }
+        });
 
         document.addEventListener('project-workspace:open', (event) => {
             this.openProject(event?.detail || {});
@@ -77,6 +88,7 @@ class ProjectWorkspace {
     }
 
     closePanel() {
+        this.hideMainFilePreview();
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isProjectWorkspaceOpen: false });
         } else {
@@ -100,6 +112,7 @@ class ProjectWorkspace {
         this.el.subtitle.textContent = sub;
         this.setStatus('Project mode active. Messages will route to dedicated coder agent.');
         this.setPreviewPlaceholder('Click a file to view its content.');
+        this.hideMainFilePreview();
 
         this.openPanel();
         await this.syncWorkspaceTree();
@@ -136,6 +149,20 @@ class ProjectWorkspace {
         if (this.el.status) {
             this.el.status.textContent = message;
         }
+    }
+
+    showMainFilePreview() {
+        if (this.el.mainPreview) {
+            this.el.mainPreview.classList.remove('hidden');
+        }
+        document.body.classList.add('project-file-preview-active');
+    }
+
+    hideMainFilePreview() {
+        if (this.el.mainPreview) {
+            this.el.mainPreview.classList.add('hidden');
+        }
+        document.body.classList.remove('project-file-preview-active');
     }
 
     renderTreeFromPaths(paths) {
@@ -242,6 +269,7 @@ class ProjectWorkspace {
                 this.setStatus('No files found. Clone repo or run project sync.');
                 this.currentTreeSource = null;
                 this.setPreviewPlaceholder('Click a file to view its content.');
+                this.hideMainFilePreview();
                 return;
             }
 
@@ -261,6 +289,12 @@ class ProjectWorkspace {
         }
         if (this.el.previewContent) {
             this.el.previewContent.textContent = message;
+        }
+        if (this.el.mainPreviewTitle) {
+            this.el.mainPreviewTitle.textContent = 'File Preview';
+        }
+        if (this.el.mainPreviewContent) {
+            this.el.mainPreviewContent.textContent = message;
         }
     }
 
@@ -285,6 +319,13 @@ class ProjectWorkspace {
         if (this.el.previewContent) {
             this.el.previewContent.textContent = 'Loading file content...';
         }
+        if (this.el.mainPreviewTitle) {
+            this.el.mainPreviewTitle.textContent = path;
+        }
+        if (this.el.mainPreviewContent) {
+            this.el.mainPreviewContent.textContent = 'Loading file content...';
+        }
+        this.showMainFilePreview();
 
         try {
             let payload;
@@ -309,8 +350,12 @@ class ProjectWorkspace {
             }
 
             if (payload?.is_binary) {
-                this.el.previewContent.textContent =
+                const binaryText =
                     `[Binary file]\nPath: ${path}\nSize: ${payload.size_bytes || 0} bytes\n\nBinary content preview is not shown.`;
+                this.el.previewContent.textContent = binaryText;
+                if (this.el.mainPreviewContent) {
+                    this.el.mainPreviewContent.textContent = binaryText;
+                }
                 return;
             }
 
@@ -318,9 +363,17 @@ class ProjectWorkspace {
             const truncNote = payload?.truncated
                 ? '\n\n[Preview truncated for large file]'
                 : '';
-            this.el.previewContent.textContent = `${body}${truncNote}`;
+            const previewText = `${body}${truncNote}`;
+            this.el.previewContent.textContent = previewText;
+            if (this.el.mainPreviewContent) {
+                this.el.mainPreviewContent.textContent = previewText;
+            }
         } catch (error) {
-            this.el.previewContent.textContent = `Failed to load file: ${error.message}`;
+            const errorText = `Failed to load file: ${error.message}`;
+            this.el.previewContent.textContent = errorText;
+            if (this.el.mainPreviewContent) {
+                this.el.mainPreviewContent.textContent = errorText;
+            }
         }
     }
 
@@ -381,6 +434,7 @@ class ProjectWorkspace {
         this.el.tree.innerHTML = '';
         this.currentTreeSource = null;
         this.selectedFilePath = null;
+        this.hideMainFilePreview();
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.setStatus('Project mode off. Starting a new normal chat session.');
         this.closePanel();

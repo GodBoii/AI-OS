@@ -70,6 +70,15 @@ class MessageFormatter {
             const btn = e.target.closest('.artifact-reference');
             if (btn && btn.dataset.artifactId) {
                 e.preventDefault();
+                const ctx = window.projectContext || window.activeProjectContext || null;
+                const inProjectMode = !!(ctx && (
+                    String(ctx.agentMode || '').toLowerCase() === 'coder' ||
+                    ctx.isDedicatedProject === true ||
+                    String(ctx.mode || '').toLowerCase() === 'project'
+                ));
+                if (inProjectMode) {
+                    return;
+                }
                 artifactHandler.reopenArtifact(btn.dataset.artifactId);
             }
         });
@@ -162,20 +171,29 @@ class MessageFormatter {
         });
     }
 
-    formatStreaming(content, streamId) {
+    formatStreaming(content, streamId, options = {}) {
         if (!this.pendingContent.has(streamId)) {
             this.pendingContent.set(streamId, '');
         }
 
         const newTotalContent = this.pendingContent.get(streamId) + content;
         this.pendingContent.set(streamId, newTotalContent);
+        const inlineArtifacts = options.inlineArtifacts === true;
 
         // Apply live markdown formatting during streaming
         try {
-            const rawHtml = marked.parse(newTotalContent);
+            if (!inlineArtifacts) {
+                const rawHtml = marked.parse(newTotalContent);
+                return DOMPurify.sanitize(rawHtml, {
+                    ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ADD_ATTR: ['class', 'id', 'data-artifact-id']
+                });
+            }
+
+            const rawHtml = marked.parse(newTotalContent, { renderer: this.inlineRenderer });
             return DOMPurify.sanitize(rawHtml, {
-                ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-                ADD_ATTR: ['class', 'id', 'data-artifact-id']
+                ADD_TAGS: ['div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'button', 'i'],
+                ADD_ATTR: ['class', 'title', 'aria-label', 'data-copy-setup']
             });
         } catch (error) {
             // Fallback to basic formatting if markdown parsing fails during streaming
