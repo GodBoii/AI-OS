@@ -44,7 +44,11 @@ _catchup_sent: dict = {}
 
 def _normalize_agent_mode(raw_value: Any) -> str:
     value = str(raw_value or "").strip().lower()
-    return "coder" if value == "coder" else "default"
+    if value == "coder":
+        return "coder"
+    if value == "computer":
+        return "computer"
+    return "default"
 
 
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
@@ -375,7 +379,6 @@ def on_send_message(data: str):
                 logger.warning(f"Failed to register user uploads: {e}")
 
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
-        computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
 
         eventlet.spawn(
             run_agent_and_stream,
@@ -384,7 +387,6 @@ def on_send_message(data: str):
             message_id,
             turn_data,
             browser_tools_config,
-            computer_tools_config,
             context_session_ids,
             requested_agent_mode,
             connection_manager_service,
@@ -456,7 +458,6 @@ def on_assistant_message(data: str):
         message_id = data.get("id") or str(uuid.uuid4())
 
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
-        computer_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
 
         eventlet.spawn(
             run_agent_and_stream,
@@ -465,7 +466,6 @@ def on_assistant_message(data: str):
             message_id,
             turn_data,
             browser_tools_config,
-            computer_tools_config,
             [],
             "default",
             connection_manager_service,

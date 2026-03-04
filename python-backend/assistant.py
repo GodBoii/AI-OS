@@ -34,7 +34,6 @@ from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
-from computer_tools import ComputerTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
 from database_tools import DatabaseTools
@@ -225,14 +224,11 @@ def get_llm_os(
                 "- `GoogleSearchTools` Ã¢â‚¬â€ general web search",
                 "</world_agent>",
                 "",
-                "<computer_agent>",
-                "**Computer_Agent (delegate desktop control tasks)** Ã¢â‚¬â€ screenshot, mouse/keyboard control, window management, file system, shell commands. Always starts with `request_permission()` then `take_screenshot()`.",
-                "</computer_agent>",
                 "",
                 "## Key Rules",
                 "- For simple/conversational queries, reply: `No plan needed Ã¢â‚¬â€ this is a simple query.`",
                 "- Always respect tool ordering: GitHub metadata Ã¢â€ â€™ Vercel; Browser status Ã¢â€ â€™ Browser actions; list_actions Ã¢â€ â€™ execute (Composio)",
-                "- Delegate: coding Ã¢â€ â€™ `dev_team`, research Ã¢â€ â€™ `World_Agent`, desktop Ã¢â€ â€™ `Computer_Agent`",
+                "- Delegate: coding -> `dev_team`, research -> `World_Agent`",
                 "- Never skip prerequisite steps (status checks, ID lookups, list calls)",
             ],
             debug_mode=debug_mode,
@@ -348,107 +344,6 @@ def get_llm_os(
             debug_mode=debug_mode,
         )
         main_team_members.append(world_ai)
-
-    # NEW: Computer Agent - Handles all desktop computer control operations
-    if enable_computer_control and computer_tools_config:
-        device_type = session_info.get('device_type', 'web') if session_info else 'web'
-        
-        if device_type == 'desktop':
-            logger.info(f"[Computer Agent] Enabling Computer Agent for desktop (session: {session_id})")
-            
-            computer_agent = Agent(
-                name="Computer_Agent",
-                role="Desktop computer automation and control agent. Delegate here for ANY task that requires directly controlling the user's local desktop machine",
-                model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
-                tools=[ComputerTools(**computer_tools_config)],
-                instructions=[
-                    "You are the Computer Agent with complete control over the desktop computer.",
-                    "Access context from session_state['turn_context'] for queries.",
-                    "",
-                    "CAPABILITIES:",
-                    "You have 32 tools organized into 5 categories:",
-                    "",
-                    "1. PERMISSION & STATUS (2 tools):",
-                    "   Ã¢â‚¬Â¢ get_status() - Check if computer control is enabled",
-                    "   Ã¢â‚¬Â¢ request_permission() - Enable computer control (MUST call first)",
-                    "",
-                    "2. PERCEPTION - How you see the computer (5 tools):",
-                    "   Ã¢â‚¬Â¢ take_screenshot() - Capture screen for vision analysis",
-                    "   Ã¢â‚¬Â¢ get_active_window() - Get current window info",
-                    "   Ã¢â‚¬Â¢ get_cursor_position() - Get mouse coordinates",
-                    "   Ã¢â‚¬Â¢ read_clipboard() - Read clipboard contents",
-                    "   Ã¢â‚¬Â¢ ocr_screen() - Extract text from screen",
-                    "",
-                    "3. INTERACTION - How you control the computer (6 tools):",
-                    "   Ã¢â‚¬Â¢ move_mouse(x, y, smooth) - Move cursor",
-                    "   Ã¢â‚¬Â¢ click_mouse(button, double, x, y) - Click mouse",
-                    "   Ã¢â‚¬Â¢ type_text(text) - Type text",
-                    "   Ã¢â‚¬Â¢ press_hotkey(keys) - Press key combinations",
-                    "   Ã¢â‚¬Â¢ scroll(direction, amount) - Scroll wheel",
-                    "   Ã¢â‚¬Â¢ drag_drop(from_x, from_y, to_x, to_y) - Drag and drop",
-                    "",
-                    "4. WINDOW MANAGEMENT (6 tools):",
-                    "   Ã¢â‚¬Â¢ list_windows() - List all open windows",
-                    "   Ã¢â‚¬Â¢ focus_window(window_id, title) - Focus window",
-                    "   Ã¢â‚¬Â¢ resize_window(window_id, width, height) - Resize",
-                    "   Ã¢â‚¬Â¢ minimize_window(window_id) - Minimize",
-                    "   Ã¢â‚¬Â¢ maximize_window(window_id) - Maximize",
-                    "   Ã¢â‚¬Â¢ close_window(window_id) - Close window",
-                    "",
-                    "5. SYSTEM CONTROL (11 tools):",
-                    "   Ã¢â‚¬Â¢ run_command(command, timeout) - Execute shell command",
-                    "   Ã¢â‚¬Â¢ list_files(directory) - List directory contents",
-                    "   Ã¢â‚¬Â¢ read_file(file_path, encoding) - Read file",
-                    "   Ã¢â‚¬Â¢ write_file(file_path, content, encoding) - Write file",
-                    "   Ã¢â‚¬Â¢ delete_file(file_path) - Delete file/directory",
-                    "   Ã¢â‚¬Â¢ create_directory(directory_path) - Create directory",
-                    "   Ã¢â‚¬Â¢ open_application(app_name) - Open app",
-                    "   Ã¢â‚¬Â¢ close_application(app_name) - Close app",
-                    "   Ã¢â‚¬Â¢ get_volume() - Get system volume",
-                    "   Ã¢â‚¬Â¢ set_volume(volume, mute) - Set volume/mute",
-                    "   Ã¢â‚¬Â¢ get_system_info() - Get system information",
-                    "",
-                    "WORKFLOW - The Agentic Loop:",
-                    "1. OBSERVE - Take screenshot, get active window, check cursor position",
-                    "2. REASON - Analyze what you see using vision model",
-                    "3. ACT - Execute mouse clicks, keyboard input, or system commands",
-                    "4. VERIFY - Take another screenshot to confirm action completed",
-                    "",
-                    "CRITICAL RULES:",
-                    "Ã¢â‚¬Â¢ ALWAYS call request_permission() before first use",
-                    "Ã¢â‚¬Â¢ ALWAYS take screenshot before clicking (to get coordinates)",
-                    "Ã¢â‚¬Â¢ Use vision model to analyze screenshots and find UI elements",
-                    "Ã¢â‚¬Â¢ Verify actions completed by taking another screenshot",
-                    "Ã¢â‚¬Â¢ For file operations, use absolute paths",
-                    "Ã¢â‚¬Â¢ For commands, validate they're safe (no rm -rf /, format, etc.)",
-                    "Ã¢â‚¬Â¢ When clicking, provide x,y coordinates from vision analysis",
-                    "",
-                    "VISION-BASED INTERACTION:",
-                    "When user asks to click something:",
-                    "1. take_screenshot() Ã¢â€ â€™ Get current screen",
-                    "2. Analyze screenshot with vision model Ã¢â€ â€™ Find element coordinates",
-                    "3. click_mouse(x=coord_x, y=coord_y) Ã¢â€ â€™ Click at coordinates",
-                    "4. take_screenshot() Ã¢â€ â€™ Verify action completed",
-                    "",
-                    "PLATFORM-SPECIFIC NOTES:",
-                    "Ã¢â‚¬Â¢ Windows: Use PowerShell commands, app names like 'notepad', 'chrome'",
-                    "Ã¢â‚¬Â¢ macOS: Use bash/AppleScript, app names like 'Safari', 'TextEdit'",
-                    "Ã¢â‚¬Â¢ Linux: Use bash commands, app names vary by distro",
-                    "",
-                    "OUTPUT STYLE:",
-                    "Ã¢â‚¬Â¢ Describe what you're doing in natural language",
-                    "Ã¢â‚¬Â¢ Report results clearly and concisely",
-                    "Ã¢â‚¬Â¢ If action fails, explain why and suggest alternatives",
-                    "Ã¢â‚¬Â¢ Keep responses focused on the task",
-                    "",
-                    "SAFETY:",
-                    "Ã¢â‚¬Â¢ Dangerous commands are automatically blocked",
-                    "Ã¢â‚¬Â¢ Always confirm destructive operations with user",
-                    "Ã¢â‚¬Â¢ Respect system boundaries and user privacy",
-                ],
-                debug_mode=debug_mode,
-            )
-            main_team_members.append(computer_agent)
 
     aetheria_instructions = [
         "<system_instructions>",
