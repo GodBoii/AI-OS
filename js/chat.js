@@ -44,6 +44,7 @@ let welcomeDisplay = null;
 let floatingWindowManager = null;
 let audioInputHandler = null;
 let connectionStatus = false;
+const queuedConversations = new Map();
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
     'txt': 'text/plain',
@@ -110,7 +111,16 @@ async function startNewConversation() {
     }
 
     if (currentConversationId) {
-        terminateSession(currentConversationId);
+        const hasActiveRun = Object.keys(ongoingStreams).length > 0;
+        if (hasActiveRun) {
+            queuedConversations.set(currentConversationId, {
+                queuedAt: Date.now()
+            });
+            console.log(`[Queue] Conversation ${currentConversationId} moved to local queue (run still in progress)`);
+            showNotification('Previous run moved to queue and will continue in background.', 'success', 3500);
+        } else {
+            terminateSession(currentConversationId);
+        }
     }
 
     currentConversationId = self.crypto.randomUUID();
@@ -449,16 +459,93 @@ function setupIpcListeners() {
         }
     });
 
-    ipcRenderer.on('sandbox-command-started', (data) => {
-        if (artifactHandler && !isProjectWorkspaceMode()) {
-            artifactHandler.showTerminal(data.artifactId);
-            artifactHandler.updateCommand(data.artifactId, data.command);
+    const escapeHtml = (text = '') => String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const appendSandboxToolLog = (messageId, html, logEntryId = null) => {
+        const messageDiv = ongoingStreams[messageId];
+        if (!messageDiv) return;
+
+        const logsContainer = messageDiv.querySelector('.detailed-logs');
+        if (!logsContainer) return;
+
+        if (logEntryId) {
+            const existing = logsContainer.querySelector(`#${logEntryId}`);
+            if (existing) {
+                existing.outerHTML = html;
+            } else {
+                logsContainer.insertAdjacentHTML('beforeend', html);
+            }
+        } else {
+            logsContainer.insertAdjacentHTML('beforeend', html);
         }
+
+        updateReasoningSummary(messageId);
+    };
+
+    ipcRenderer.on('sandbox-command-started', (data) => {
+        const messageId = data?.id;
+        const executionId = data?.execution_id || data?.artifactId;
+        const command = String(data?.command || '').trim();
+
+        if (!messageId || !executionId) return;
+
+        if (artifactHandler && !isProjectWorkspaceMode()) {
+            artifactHandler.showTerminal(executionId);
+            artifactHandler.updateCommand(executionId, command);
+        }
+
+        const safeCommand = escapeHtml(command || 'Command started');
+        appendSandboxToolLog(
+            messageId,
+            `
+            <div id="sandbox-log-${executionId}" class="tool-log-entry">
+                <i class="fi fi-tr-terminal tool-log-icon"></i>
+                <div class="tool-log-details">
+                    <span class="tool-log-action">Sandbox command: <strong>${safeCommand}</strong></span>
+                </div>
+                <span class="tool-log-status in-progress"></span>
+            </div>
+            `,
+            `sandbox-log-${executionId}`
+        );
     });
 
     ipcRenderer.on('sandbox-command-finished', (data) => {
-        if (artifactHandler && !isProjectWorkspaceMode()) {
-            artifactHandler.updateTerminalOutput(data.artifactId, data.stdout, data.stderr, data.exitCode);
+        const messageId = data?.id;
+        const executionId = data?.execution_id || data?.artifactId;
+        const command = String(data?.command || '').trim();
+        const exitCode = Number.isFinite(Number(data?.exit_code)) ? Number(data.exit_code) : Number(data?.exitCode || 0);
+
+        if (executionId && artifactHandler && !isProjectWorkspaceMode()) {
+            artifactHandler.updateTerminalOutput(
+                executionId,
+                data?.stdout || '',
+                data?.stderr || '',
+                exitCode
+            );
+        }
+
+        if (messageId && executionId) {
+            const statusClass = exitCode === 0 ? 'completed' : 'failed';
+            const safeCommand = escapeHtml(command || 'Sandbox command finished');
+            appendSandboxToolLog(
+                messageId,
+                `
+                <div id="sandbox-log-${executionId}" class="tool-log-entry">
+                    <i class="fi fi-tr-terminal tool-log-icon"></i>
+                    <div class="tool-log-details">
+                        <span class="tool-log-action">Sandbox command: <strong>${safeCommand}</strong> (exit ${exitCode})</span>
+                    </div>
+                    <span class="tool-log-status ${statusClass}"></span>
+                </div>
+                `,
+                `sandbox-log-${executionId}`
+            );
         }
         
         // Invalidate cache when new execution content is added
@@ -467,6 +554,38 @@ function setupIpcListeners() {
         }
         
         // Check if session has content to show button
+        checkAndShowContentButton();
+    });
+
+    ipcRenderer.on('sandbox-artifacts-created', (data) => {
+        const messageId = data?.id;
+        const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
+        if (!messageId || artifacts.length === 0) return;
+
+        for (const artifact of artifacts) {
+            const artifactId = artifact?.artifact_id || `${messageId}-${artifact?.filename || 'artifact'}`;
+            const filename = escapeHtml(String(artifact?.filename || artifact?.file_path || 'Generated file').trim());
+            appendSandboxToolLog(
+                messageId,
+                `
+                <div id="sandbox-artifact-${artifactId}" class="tool-log-entry">
+                    <i class="fi fi-tr-file-check tool-log-icon"></i>
+                    <div class="tool-log-details">
+                        <span class="tool-log-action">Generated file: <strong>${filename}</strong></span>
+                    </div>
+                    <span class="tool-log-status completed"></span>
+                </div>
+                `,
+                `sandbox-artifact-${artifactId}`
+            );
+        }
+
+        if (window.sessionContentViewer && currentConversationId) {
+            window.sessionContentViewer.invalidateCache(currentConversationId);
+        }
+        document.dispatchEvent(new CustomEvent('session-content:updated', {
+            detail: { conversationId: currentConversationId, type: 'artifact' }
+        }));
         checkAndShowContentButton();
     });
 
