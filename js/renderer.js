@@ -7,6 +7,7 @@ class StateManager {
             isAIOSOpen: false,
             isToDoListOpen: false,
             isProjectWorkspaceOpen: false,
+            isComputerWorkspaceOpen: false,
             webViewBounds: { x: 0, y: 0, width: 400, height: 300 }
         };
         this.subscribers = new Set();
@@ -59,6 +60,7 @@ class UIManager {
             appIcon: document.getElementById('app-icon'),
             toDoListIcon: document.getElementById('to-do-list-icon'),
             projectWorkspaceIcon: document.getElementById('project-workspace-icon'),
+            computerWorkspaceIcon: document.getElementById('computer-workspace-icon'),
             themeToggle: document.getElementById('theme-toggle'),
             minimizeBtn: document.getElementById('minimize-window'),
             resizeBtn: document.getElementById('resize-window'),
@@ -223,6 +225,7 @@ class UIManager {
         addClickHandler(this.elements.appIcon, () => this.state.setState({ isAIOSOpen: !this.state.getState().isAIOSOpen }));
         addClickHandler(this.elements.toDoListIcon, () => this.state.setState({ isToDoListOpen: !this.state.getState().isToDoListOpen }));
         addClickHandler(this.elements.projectWorkspaceIcon, () => this.state.setState({ isProjectWorkspaceOpen: !this.state.getState().isProjectWorkspaceOpen }));
+        addClickHandler(this.elements.computerWorkspaceIcon, () => this.state.setState({ isComputerWorkspaceOpen: !this.state.getState().isComputerWorkspaceOpen }));
         addClickHandler(this.elements.minimizeBtn, () => ipcRenderer.send('minimize-window'));
         addClickHandler(this.elements.resizeBtn, () => ipcRenderer.send('toggle-maximize-window'));
         addClickHandler(this.elements.closeBtn, () => ipcRenderer.send('close-window'));
@@ -253,7 +256,13 @@ class UIManager {
                         break;
                     case 'isProjectWorkspaceOpen':
                         if (state.isProjectWorkspaceOpen && state.isToDoListOpen) this.state.setState({ isToDoListOpen: false });
+                        if (state.isProjectWorkspaceOpen && state.isComputerWorkspaceOpen) this.state.setState({ isComputerWorkspaceOpen: false });
                         this.updateProjectWorkspaceVisibility(state.isProjectWorkspaceOpen);
+                        break;
+                    case 'isComputerWorkspaceOpen':
+                        if (state.isComputerWorkspaceOpen && state.isToDoListOpen) this.state.setState({ isToDoListOpen: false });
+                        if (state.isComputerWorkspaceOpen && state.isProjectWorkspaceOpen) this.state.setState({ isProjectWorkspaceOpen: false });
+                        this.updateComputerWorkspaceVisibility(state.isComputerWorkspaceOpen);
                         break;
                 }
             });
@@ -306,6 +315,19 @@ class UIManager {
             else window.floatingWindowManager.onWindowClose('project-workspace');
         }
     }
+
+    updateComputerWorkspaceVisibility(isOpen) {
+        document.getElementById('computer-workspace-panel')?.classList.toggle('hidden', !isOpen);
+        document.body.classList.toggle('computer-panel-open', isOpen);
+
+        if (this.elements.computerWorkspaceIcon) {
+            this.elements.computerWorkspaceIcon.classList.toggle('active', isOpen);
+        }
+        if (window.floatingWindowManager) {
+            if (isOpen) window.floatingWindowManager.onWindowOpen('computer-workspace');
+            else window.floatingWindowManager.onWindowClose('computer-workspace');
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -337,4 +359,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     uiManager.updateAIOSVisibility(initialState.isAIOSOpen);
     uiManager.updateToDoListVisibility(initialState.isToDoListOpen);
     uiManager.updateProjectWorkspaceVisibility(initialState.isProjectWorkspaceOpen);
+    uiManager.updateComputerWorkspaceVisibility(initialState.isComputerWorkspaceOpen);
 });
