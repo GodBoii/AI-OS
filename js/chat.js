@@ -59,19 +59,30 @@ const supportedFileTypes = {
 };
 
 function resolveAgentMode() {
-    const ctx = window.projectContext || window.activeProjectContext || null;
-    if (!ctx || typeof ctx !== 'object') {
-        return 'default';
+    const computerCtx = window.computerContext || null;
+    if (computerCtx && typeof computerCtx === 'object') {
+        if (String(computerCtx.agentMode || '').toLowerCase() === 'computer') {
+            return 'computer';
+        }
+        if (computerCtx.isDedicatedComputer === true) {
+            return 'computer';
+        }
+        if (String(computerCtx.mode || '').toLowerCase() === 'computer') {
+            return 'computer';
+        }
     }
 
-    if (String(ctx.agentMode || '').toLowerCase() === 'coder') {
-        return 'coder';
-    }
-    if (ctx.isDedicatedProject === true) {
-        return 'coder';
-    }
-    if (String(ctx.mode || '').toLowerCase() === 'project') {
-        return 'coder';
+    const projectCtx = window.projectContext || window.activeProjectContext || null;
+    if (projectCtx && typeof projectCtx === 'object') {
+        if (String(projectCtx.agentMode || '').toLowerCase() === 'coder') {
+            return 'coder';
+        }
+        if (projectCtx.isDedicatedProject === true) {
+            return 'coder';
+        }
+        if (String(projectCtx.mode || '').toLowerCase() === 'project') {
+            return 'coder';
+        }
     }
     return 'default';
 }
@@ -1628,6 +1639,13 @@ function init() {
                 floatingWindowManager.registerWindow('project-workspace', projectWindow);
             } else {
                 console.warn('Project workspace element not found for registration');
+            }
+
+            const computerWindow = document.getElementById('computer-workspace-panel');
+            if (computerWindow) {
+                floatingWindowManager.registerWindow('computer-workspace', computerWindow);
+            } else {
+                console.warn('Computer workspace element not found for registration');
             }
         } catch (error) {
             console.error('Error registering floating windows:', error);

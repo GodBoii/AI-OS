@@ -128,6 +128,11 @@ class ProjectWorkspace {
     }
 
     async openProject(project) {
+        window.computerContext = null;
+        if (window.stateManager?.setState) {
+            window.stateManager.setState({ isComputerWorkspaceOpen: false });
+        }
+
         this.activeProject = {
             ...project,
             agentMode: 'coder',
