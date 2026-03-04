@@ -1,0 +1,202 @@
+.computer-workspace-panel {
+    position: fixed;
+    top: 12px;
+    left: 56px;
+    bottom: 12px;
+    width: 340px;
+    background: var(--elevated-bg);
+    border: 1.5px solid var(--border-primary);
+    border-radius: 14px;
+    box-shadow: 0 20px 44px rgba(45, 55, 72, 0.18);
+    display: flex;
+    flex-direction: column;
+    z-index: 1002;
+    transition: all var(--anim-slow) var(--easing-fluid);
+}
+
+.computer-workspace-panel.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-20px) scale(0.96);
+}
+
+.computer-workspace-header {
+    padding: 16px;
+    border-bottom: 1.5px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.computer-workspace-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.computer-workspace-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #0369a1;
+    background: rgba(14, 165, 233, 0.12);
+    border: 1.5px solid rgba(14, 165, 233, 0.45);
+}
+
+.computer-workspace-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.computer-workspace-subtitle {
+    margin: 2px 0 0;
+    font-size: 0.77rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.computer-workspace-close {
+    width: 32px;
+    height: 32px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--icon-color);
+    cursor: pointer;
+}
+
+.computer-workspace-close:hover {
+    color: #0284c7;
+    background: rgba(14, 165, 233, 0.12);
+    border-color: rgba(14, 165, 233, 0.4);
+}
+
+.computer-workspace-actions {
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    border-bottom: 1.5px solid var(--border-color);
+}
+
+.computer-action-btn {
+    border: none;
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 10px;
+    background: var(--elevated-bg);
+    color: var(--text-color);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.computer-action-btn:hover {
+    color: #0284c7;
+    background: rgba(14, 165, 233, 0.12);
+}
+
+.computer-action-btn-wide {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.computer-workspace-body {
+    flex: 1;
+    overflow: auto;
+    padding: 12px 14px;
+}
+
+.computer-workspace-status {
+    font-size: 0.79rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.computer-field-label {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.computer-workspace-input {
+    width: 100%;
+    min-height: 120px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-color);
+    padding: 10px;
+    font-size: 0.8rem;
+    resize: vertical;
+}
+
+.computer-workspace-input:focus {
+    outline: none;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.18);
+}
+
+.computer-workspace-footer {
+    padding: 10px 14px;
+    border-top: 1.5px solid var(--border-color);
+}
+
+.computer-exit-btn {
+    width: 100%;
+    border: none;
+    border-radius: 8px;
+    height: 32px;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.computer-exit-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+body.computer-panel-open .chat-container {
+    left: calc(50% + 170px);
+}
+
+body.computer-panel-open .floating-input-container {
+    left: calc(50% + 170px);
+}
+
+@media (max-width: 820px) {
+    .computer-workspace-panel {
+        left: 50px;
+        right: 12px;
+        width: auto;
+    }
+
+    body.computer-panel-open .chat-container,
+    body.computer-panel-open .floating-input-container {
+        left: 50%;
+    }
+}
