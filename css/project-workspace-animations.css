@@ -178,3 +178,56 @@
 .settings-card:hover {
     animation: cardGlow 2s var(--easing-smooth) infinite;
 }
+
+/* GitHub dropdown slide animation */
+@keyframes dropdownSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.project-github-content:not(.hidden) {
+    animation: dropdownSlide var(--anim-normal) var(--easing-smooth);
+}
+
+/* Button icon bounce on hover */
+@keyframes iconBounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-3px);
+    }
+}
+
+.project-action-btn:hover i {
+    animation: iconBounce 0.5s var(--easing-smooth);
+}
+
+/* Chevron rotation animation */
+.project-github-chevron {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-github-toggle.active .project-github-chevron {
+    transform: rotate(180deg);
+}
+
+/* Exit button pulse on hover */
+@keyframes exitPulse {
+    0%, 100% {
+        box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);
+    }
+    50% {
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+    }
+}
+
+.project-exit-btn:hover {
+    animation: exitPulse 1.5s ease-in-out infinite;
+}
