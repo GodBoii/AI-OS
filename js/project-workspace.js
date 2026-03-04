@@ -5,6 +5,7 @@ class ProjectWorkspace {
         this.currentTreeSource = null;
         this.selectedFilePath = null;
         this.initialized = false;
+        this.syncDebounceTimer = null;
         this.init();
     }
 
@@ -67,6 +68,21 @@ class ProjectWorkspace {
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
 
+        // GitHub dropdown toggle
+        const githubToggle = document.getElementById('project-github-toggle');
+        const githubContent = document.getElementById('project-github-content');
+
+        githubToggle?.addEventListener('click', () => {
+            const isHidden = githubContent.classList.contains('hidden');
+            if (isHidden) {
+                githubContent.classList.remove('hidden');
+                githubToggle.classList.add('active');
+            } else {
+                githubContent.classList.add('hidden');
+                githubToggle.classList.remove('active');
+            }
+        });
+
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && document.body.classList.contains('project-file-preview-active')) {
                 this.hideMainFilePreview();
@@ -75,6 +91,20 @@ class ProjectWorkspace {
 
         document.addEventListener('project-workspace:open', (event) => {
             this.openProject(event?.detail || {});
+        });
+
+        document.addEventListener('session-content:updated', (event) => {
+            const detail = event?.detail || {};
+            if (!this.activeProject) return;
+            if (!window.currentConversationId) return;
+            if (detail.conversationId && detail.conversationId !== window.currentConversationId) return;
+
+            if (this.syncDebounceTimer) {
+                clearTimeout(this.syncDebounceTimer);
+            }
+            this.syncDebounceTimer = setTimeout(() => {
+                this.syncWorkspaceTree();
+            }, 300);
         });
     }
 
@@ -377,14 +407,19 @@ class ProjectWorkspace {
         }
     }
 
-    sendMessageToChat(message, startNew = false) {
+    async sendMessageToChat(message, startNew = false) {
         const input = document.getElementById('floating-input');
         const sendBtn = document.getElementById('send-message');
         const newChatBtn = document.querySelector('.add-btn');
 
         if (!input || !sendBtn) return;
-        if (startNew && newChatBtn) {
-            newChatBtn.click();
+        if (startNew) {
+            if (typeof window.startNewConversation === 'function') {
+                await window.startNewConversation();
+            } else if (newChatBtn) {
+                newChatBtn.click();
+                await new Promise((resolve) => setTimeout(resolve, 150));
+            }
         }
 
         input.value = message;
@@ -392,15 +427,15 @@ class ProjectWorkspace {
         sendBtn.click();
     }
 
-    startCoderChat() {
+    async startCoderChat() {
         const intro = this.activeProject?.site_id
             ? `You are in dedicated project mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to workspace, show file tree, and wait for my next coding instruction.`
             : 'You are in dedicated coding mode. Inspect workspace, summarize file tree, and wait for my coding instruction.';
-        this.sendMessageToChat(intro, true);
+        await this.sendMessageToChat(intro, true);
         this.setStatus('Started dedicated coder chat.');
     }
 
-    cloneGithubRepo() {
+    async cloneGithubRepo() {
         const repoUrl = (this.el.repoUrlInput?.value || '').trim();
         const branch = (this.el.repoBranchInput?.value || '').trim() || 'main';
         if (!repoUrl) {
@@ -422,7 +457,7 @@ class ProjectWorkspace {
         const cloneInstruction =
             `In dedicated coder mode: clone repository ${repoUrl} (branch ${branch}) into /home/sandboxuser/workspace, ` +
             'then list the project tree and prepare for edits.';
-        this.sendMessageToChat(cloneInstruction, true);
+        await this.sendMessageToChat(cloneInstruction, true);
         this.setStatus('Clone request sent to dedicated coder.');
     }
 
