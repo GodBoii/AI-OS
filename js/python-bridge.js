@@ -157,6 +157,18 @@ class PythonBridge {
             this.mainWindow.webContents.send('task_execution_status', data);
         });
 
+        this.socket.on('sandbox-command-started', (data) => {
+            this.mainWindow.webContents.send('sandbox-command-started', data);
+        });
+
+        this.socket.on('sandbox-command-finished', (data) => {
+            this.mainWindow.webContents.send('sandbox-command-finished', data);
+        });
+
+        this.socket.on('sandbox-artifacts-created', (data) => {
+            this.mainWindow.webContents.send('sandbox-artifacts-created', data);
+        });
+
         // FIX: This handler now correctly forwards the command to the browserController instance.
         this.socket.on('browser-command', (commandPayload) => {
             console.log('PythonBridge: Received browser-command from server:', commandPayload.action);
