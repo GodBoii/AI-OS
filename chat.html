@@ -82,6 +82,51 @@
     </div>
 </aside>
 
+<aside id="computer-workspace-panel" class="computer-workspace-panel hidden">
+    <div class="computer-workspace-header">
+        <div class="computer-workspace-title-wrap">
+            <div class="computer-workspace-icon">
+                <i class="fas fa-desktop"></i>
+            </div>
+            <div>
+                <h3 id="computer-workspace-title" class="computer-workspace-title">Computer Workspace</h3>
+                <p id="computer-workspace-subtitle" class="computer-workspace-subtitle">Desktop + Browser automation mode</p>
+            </div>
+        </div>
+        <button id="computer-workspace-close" class="computer-workspace-close" aria-label="Close computer panel">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="computer-workspace-actions">
+        <button id="computer-start-chat-btn" class="computer-action-btn">
+            <i class="fas fa-comments"></i>
+            <span>Start Computer Chat</span>
+        </button>
+        <button id="computer-open-browser-task-btn" class="computer-action-btn">
+            <i class="fas fa-globe"></i>
+            <span>Browser Task</span>
+        </button>
+    </div>
+
+    <div class="computer-workspace-body">
+        <div id="computer-workspace-status" class="computer-workspace-status">Computer mode is off.</div>
+        <label for="computer-browser-prompt" class="computer-field-label">Browser task prompt</label>
+        <textarea id="computer-browser-prompt" class="computer-workspace-input" rows="5" placeholder="Example: Open docs.python.org, search for asyncio.gather, and summarize the key usage notes."></textarea>
+        <button id="computer-request-permission-btn" class="computer-action-btn computer-action-btn-wide">
+            <i class="fas fa-key"></i>
+            <span>Request Computer Permission</span>
+        </button>
+    </div>
+
+    <div class="computer-workspace-footer">
+        <button id="computer-exit-btn" class="computer-exit-btn">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Exit Computer Mode</span>
+        </button>
+    </div>
+</aside>
+
 <!-- MODIFIED: Restructured floating input container -->
 <div id="floating-input-container" class="floating-input-container hidden">
     <!-- NEW: Horizontal context and files bar -->
