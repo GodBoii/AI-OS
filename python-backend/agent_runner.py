@@ -11,6 +11,7 @@ import requests
 from extensions import socketio
 from assistant import get_llm_os
 from coder_agent import get_coder_agent
+from computer_agent import get_computer_agent
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
@@ -416,7 +417,6 @@ def run_agent_and_stream(
     message_id: str,
     turn_data: dict,
     browser_tools_config: dict,
-    computer_tools_config: dict,
     context_session_ids: List[str],
     agent_mode: str,
     connection_manager: ConnectionManager,
@@ -476,9 +476,9 @@ def run_agent_and_stream(
         session_agent_mode = str(session_config.pop("agent_mode", "default")).strip().lower()
 
         requested_mode = str(agent_mode or "").strip().lower()
-        if requested_mode not in ("coder", "default"):
+        if requested_mode not in ("coder", "computer", "default"):
             requested_mode = session_agent_mode
-        if requested_mode not in ("coder", "default"):
+        if requested_mode not in ("coder", "computer", "default"):
             requested_mode = "default"
 
         if requested_mode == "coder":
@@ -493,12 +493,22 @@ def run_agent_and_stream(
                 debug_mode=True,
                 enable_github=session_config.get("enable_github", True),
             )
+        elif requested_mode == "computer":
+            agent = get_computer_agent(
+                user_id=user_id,
+                session_info=session_data,
+                browser_tools_config=realtime_tool_config,
+                computer_tools_config=realtime_tool_config,
+                session_id=conversation_id,
+                message_id=message_id,
+                use_memory=session_config.get("use_memory", False),
+                debug_mode=True,
+            )
         else:
             agent = get_llm_os(
                 user_id=user_id,
                 session_info=session_data,
                 browser_tools_config=realtime_tool_config,
-                computer_tools_config=realtime_tool_config,  # NEW: Pass computer tools config
                 custom_tool_config=realtime_tool_config,
                 session_id=conversation_id,  # NEW: For persistence
                 message_id=message_id,  # NEW: For persistence
@@ -610,7 +620,7 @@ def run_agent_and_stream(
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = (
-                    owner_name in ("Aetheria_AI", "Aetheria_Coder")
+                    owner_name in ("Aetheria_AI", "Aetheria_Coder", "Aetheria_Computer")
                     and not getattr(chunk, 'member_responses', [])
                 )
                 # Include reasoning_content if present
