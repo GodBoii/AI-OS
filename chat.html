@@ -37,17 +37,32 @@
     </div>
 
     <div class="project-workspace-actions">
-        <button id="project-start-chat-btn" class="project-action-btn">Start Coder Chat</button>
-        <button id="project-sync-files-btn" class="project-action-btn">Sync Files</button>
+        <button id="project-start-chat-btn" class="project-action-btn">
+            <i class="fas fa-comments"></i>
+            <span>Start Coder Chat</span>
+        </button>
+        <button id="project-sync-files-btn" class="project-action-btn">
+            <i class="fas fa-sync-alt"></i>
+            <span>Sync Files</span>
+        </button>
     </div>
 
-    <div class="project-workspace-clone">
-        <input id="project-repo-url" class="project-workspace-input" type="text" placeholder="GitHub repo URL (https://github.com/org/repo)" />
-        <div class="project-clone-row">
-            <input id="project-repo-branch" class="project-workspace-input" type="text" placeholder="branch" value="main" />
-            <button id="project-clone-repo-btn" class="project-action-btn">Clone Repo</button>
+    <div class="project-workspace-github">
+        <button id="project-github-toggle" class="project-github-toggle">
+            <i class="fab fa-github"></i>
+            <span>Clone GitHub Repo</span>
+            <i class="fas fa-chevron-down project-github-chevron"></i>
+        </button>
+        <div id="project-github-content" class="project-github-content hidden">
+            <input id="project-repo-url" class="project-workspace-input" type="text" placeholder="GitHub repo URL (https://github.com/org/repo)" />
+            <div class="project-clone-row">
+                <input id="project-repo-branch" class="project-workspace-input" type="text" placeholder="branch" value="main" />
+                <button id="project-clone-repo-btn" class="project-action-btn project-action-btn-small">
+                    <i class="fas fa-download"></i>
+                    <span>Clone</span>
+                </button>
+            </div>
         </div>
-        <button id="project-exit-btn" class="project-action-btn">Exit Project Mode</button>
     </div>
 
     <div class="project-workspace-body">
@@ -57,6 +72,13 @@
             <div id="project-file-preview-title" class="project-file-preview-title">File Preview</div>
             <pre id="project-file-preview-content" class="project-file-preview-content">Click a file to view its content.</pre>
         </div>
+    </div>
+
+    <div class="project-workspace-footer">
+        <button id="project-exit-btn" class="project-exit-btn">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Exit Project Mode</span>
+        </button>
     </div>
 </aside>
 
