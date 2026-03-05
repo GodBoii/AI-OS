@@ -7,10 +7,11 @@ class ComputerWorkspace {
 
     async init() {
         try {
-            await this.waitForElement('computer-workspace-panel');
+            await this.waitForElement('computer-workspace-chip');
             this.cacheElements();
             this.bindEvents();
             this.initialized = true;
+            this.refreshScopeLabel();
         } catch (error) {
             console.warn('[ComputerWorkspace] Initialization skipped:', error.message);
         }
@@ -35,24 +36,19 @@ class ComputerWorkspace {
 
     cacheElements() {
         this.el = {
-            panel: document.getElementById('computer-workspace-panel'),
-            title: document.getElementById('computer-workspace-title'),
-            subtitle: document.getElementById('computer-workspace-subtitle'),
-            status: document.getElementById('computer-workspace-status'),
+            chip: document.getElementById('computer-workspace-chip'),
+            label: document.getElementById('computer-chip-label'),
+            manualGrantBtn: document.getElementById('computer-manual-grant-btn'),
+            selectScopeBtn: document.getElementById('computer-select-scope-btn'),
             closeBtn: document.getElementById('computer-workspace-close'),
-            startChatBtn: document.getElementById('computer-start-chat-btn'),
-            browserTaskBtn: document.getElementById('computer-open-browser-task-btn'),
-            permissionBtn: document.getElementById('computer-request-permission-btn'),
-            browserPromptInput: document.getElementById('computer-browser-prompt'),
             exitBtn: document.getElementById('computer-exit-btn'),
         };
     }
 
     bindEvents() {
+        this.el.manualGrantBtn?.addEventListener('click', () => this.manualGrantPermission());
+        this.el.selectScopeBtn?.addEventListener('click', () => this.selectScopeDirectory());
         this.el.closeBtn?.addEventListener('click', () => this.closePanel());
-        this.el.startChatBtn?.addEventListener('click', () => this.startComputerChat());
-        this.el.browserTaskBtn?.addEventListener('click', () => this.sendBrowserTask());
-        this.el.permissionBtn?.addEventListener('click', () => this.requestPermissionFlow());
         this.el.exitBtn?.addEventListener('click', () => this.exitComputerMode());
 
         document.addEventListener('computer-workspace:open', (event) => {
@@ -61,16 +57,55 @@ class ComputerWorkspace {
     }
 
     setStatus(message) {
-        if (this.el.status) {
-            this.el.status.textContent = message;
+        // Status removed from chip design - log to console for debugging
+        console.log('[ComputerWorkspace]', message);
+    }
+
+    async fetchAccessState() {
+        try {
+            const api = window.electron?.ipcRenderer;
+            if (!api?.invoke) return null;
+            const response = await api.invoke('computer-get-access-state');
+            return response?.success ? response.state : null;
+        } catch (error) {
+            console.warn('[ComputerWorkspace] Failed to fetch access state:', error.message);
+            return null;
         }
+    }
+
+    updateScopeLabel(state) {
+        const labelEl = this.el.label;
+        const scopes = state?.scopes || [];
+        if (!labelEl) return;
+
+        if (!state?.enabled) {
+            labelEl.textContent = 'Computer Workspace';
+            this.el.chip.title = 'Computer access is not granted';
+            return;
+        }
+
+        const primary = scopes[0];
+        if (!primary) {
+            labelEl.textContent = 'Computer Workspace';
+            this.el.chip.title = `Permission: ${state.permissionSource || 'unknown'}`;
+            return;
+        }
+
+        const compact = primary.length > 28 ? `...${primary.slice(-28)}` : primary;
+        labelEl.textContent = `Scope: ${compact}`;
+        this.el.chip.title = `Permission: ${state.permissionSource || 'unknown'} | Scope: ${primary}`;
+    }
+
+    async refreshScopeLabel() {
+        const state = await this.fetchAccessState();
+        this.updateScopeLabel(state);
     }
 
     openPanel() {
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isComputerWorkspaceOpen: true });
         } else {
-            this.el.panel?.classList.remove('hidden');
+            this.el.chip?.classList.remove('hidden');
             document.body.classList.add('computer-panel-open');
         }
     }
@@ -79,7 +114,7 @@ class ComputerWorkspace {
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isComputerWorkspaceOpen: false });
         } else {
-            this.el.panel?.classList.add('hidden');
+            this.el.chip?.classList.add('hidden');
             document.body.classList.remove('computer-panel-open');
         }
     }
@@ -100,10 +135,9 @@ class ComputerWorkspace {
             window.stateManager.setState({ isProjectWorkspaceOpen: false });
         }
 
-        this.el.title.textContent = 'Computer Workspace';
-        this.el.subtitle.textContent = 'Desktop + Browser automation mode';
         this.setStatus('Computer mode active. Messages will route to dedicated computer agent.');
         this.openPanel();
+        this.refreshScopeLabel();
     }
 
     ensureContext() {
@@ -134,6 +168,7 @@ class ComputerWorkspace {
         sendBtn.click();
     }
 
+    // Simplified methods - removed UI-dependent functionality
     async startComputerChat() {
         this.ensureContext();
         const intro =
@@ -142,36 +177,51 @@ class ComputerWorkspace {
         this.setStatus('Started dedicated computer chat.');
     }
 
-    async requestPermissionFlow() {
-        this.ensureContext();
-        const prompt =
-            'In dedicated computer mode, call request_permission() now. If granted, report status and wait for my next action.';
-        await this.sendMessageToChat(prompt, false);
-        this.setStatus('Permission request sent to computer agent.');
+    async manualGrantPermission() {
+        try {
+            const api = window.electron?.ipcRenderer;
+            if (!api?.invoke) {
+                throw new Error('IPC bridge is not available');
+            }
+            const response = await api.invoke('computer-manual-grant');
+            if (!response?.success) {
+                throw new Error(response?.error || 'Manual permission grant failed');
+            }
+
+            this.updateScopeLabel(response.state);
+            window.notificationService?.show('Computer control granted manually.', 'success', 2600);
+            this.setStatus('Manual permission granted (hybrid mode).');
+        } catch (error) {
+            window.notificationService?.show(`Permission grant failed: ${error.message}`, 'error', 3200);
+        }
     }
 
-    async sendBrowserTask() {
-        this.ensureContext();
-        const userPrompt = (this.el.browserPromptInput?.value || '').trim();
-        if (!userPrompt) {
-            this.setStatus('Enter a browser task prompt first.');
-            return;
-        }
+    async selectScopeDirectory() {
+        try {
+            const api = window.electron?.ipcRenderer;
+            if (!api?.invoke) {
+                throw new Error('IPC bridge is not available');
+            }
+            const response = await api.invoke('computer-select-scope');
+            if (response?.canceled) return;
+            if (!response?.success) {
+                throw new Error(response?.error || 'Scope selection failed');
+            }
 
-        const message =
-            `In dedicated computer mode, use browser tools to complete this task:\n${userPrompt}\n` +
-            'Start by checking browser status, then execute the task step-by-step.';
-        await this.sendMessageToChat(message, true);
-        this.setStatus('Browser task sent to dedicated computer agent.');
+            this.updateScopeLabel(response.state);
+            window.notificationService?.show(`Computer scope set to: ${response.selectedPath}`, 'success', 3000);
+            this.setStatus(`Scope updated to ${response.selectedPath}`);
+        } catch (error) {
+            window.notificationService?.show(`Scope update failed: ${error.message}`, 'error', 3200);
+        }
     }
 
     exitComputerMode() {
         this.activeContext = null;
         window.computerContext = null;
-        this.el.title.textContent = 'Computer Workspace';
-        this.el.subtitle.textContent = 'Desktop + Browser automation mode';
         this.setStatus('Computer mode off. Starting a new normal chat session.');
         this.closePanel();
+        this.updateScopeLabel(null);
 
         const newChatBtn = document.querySelector('.add-btn');
         if (newChatBtn) {
