@@ -1,7 +1,7 @@
 // main.js (Definitive Version with Correct Deep Link Handling and Logging)
 
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, BrowserView, shell } = electron;
+const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog } = electron;
 const path = require('path');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
@@ -147,12 +147,12 @@ function createWindow() {
     browserHandler.initialize();
 
     pythonBridge.setBrowserController(browserHandler);
-    
+
     // Initialize Computer Control Handler
     computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken);
     computerControlHandler.initialize();
     pythonBridge.setComputerController(computerControlHandler);
-    
+
     pythonBridge.start().catch(error => {
         console.error('Python bridge error:', error.message);
         mainWindow.webContents.on('did-finish-load', () => {
@@ -196,6 +196,41 @@ function createWindow() {
             });
         });
     });
+
+    ipcMain.handle('computer-get-access-state', async () => {
+        if (!computerControlHandler) {
+            return { success: false, error: 'Computer control handler not initialized' };
+        }
+        return { success: true, state: computerControlHandler.getAccessState() };
+    });
+
+    ipcMain.handle('computer-manual-grant', async () => {
+        if (!computerControlHandler) {
+            return { success: false, error: 'Computer control handler not initialized' };
+        }
+        const state = computerControlHandler.grantManualPermission();
+        return { success: true, state };
+    });
+
+    ipcMain.handle('computer-select-scope', async () => {
+        if (!computerControlHandler) {
+            return { success: false, error: 'Computer control handler not initialized' };
+        }
+
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Select Computer Tool Scope',
+            properties: ['openDirectory', 'createDirectory'],
+            buttonLabel: 'Use This Folder'
+        });
+
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+            return { success: false, canceled: true };
+        }
+
+        const state = computerControlHandler.setPrimaryScope(result.filePaths[0]);
+        return { success: true, state, selectedPath: result.filePaths[0] };
+    });
+
     ipcMain.on('open-webview', (event, url) => {
         console.log('Received open-webview request for URL:', url);
 
@@ -300,7 +335,7 @@ function createWindow() {
     ipcMain.on('resize-webview', (event, bounds) => { if (linkWebView) { linkWebView.setBounds({ x: bounds.x + 10, y: bounds.y + 60, width: bounds.width - 20, height: bounds.height - 70 }); } });
     ipcMain.on('drag-webview', (event, { x, y }) => { if (linkWebView) { const currentBounds = linkWebView.getBounds(); linkWebView.setBounds({ x: x + 10, y: y + 60, width: currentBounds.width, height: currentBounds.height }); } });
     ipcMain.on('close-webview', () => { if (linkWebView) { mainWindow.removeBrowserView(linkWebView); linkWebView.webContents.destroy(); linkWebView = null; mainWindow.webContents.send('webview-closed'); } });
-    
+
     // User context handlers - forward to backend via Socket.IO
     ipcMain.on('save-user-context', async (event, data) => {
         try {
@@ -309,14 +344,14 @@ function createWindow() {
                 mainWindow.webContents.send('user-context-saved', { success: false, error: 'Not authenticated' });
                 return;
             }
-            
+
             // Forward to backend via python bridge
             if (pythonBridge && pythonBridge.socket && pythonBridge.socket.connected) {
                 pythonBridge.socket.emit('save-user-context', {
                     accessToken: session.access_token,
                     context: data.context
                 });
-                
+
                 // Listen for response
                 pythonBridge.socket.once('user-context-saved', (result) => {
                     mainWindow.webContents.send('user-context-saved', result);
@@ -329,7 +364,7 @@ function createWindow() {
             mainWindow.webContents.send('user-context-saved', { success: false, error: error.message });
         }
     });
-    
+
     ipcMain.on('get-user-context', async (event) => {
         try {
             const session = await mainWindow.webContents.executeJavaScript('window.electron.auth.getSession()', true);
@@ -337,13 +372,13 @@ function createWindow() {
                 mainWindow.webContents.send('user-context-retrieved', { success: false, error: 'Not authenticated' });
                 return;
             }
-            
+
             // Forward to backend via python bridge
             if (pythonBridge && pythonBridge.socket && pythonBridge.socket.connected) {
                 pythonBridge.socket.emit('get-user-context', {
                     accessToken: session.access_token
                 });
-                
+
                 // Listen for response
                 pythonBridge.socket.once('user-context-retrieved', (result) => {
                     mainWindow.webContents.send('user-context-retrieved', result);
@@ -365,8 +400,6 @@ app.on('open-url', (event, url) => {
 });
 
 const fs = require('fs').promises;
-const { dialog } = require('electron');
-
 ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
 ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
 ipcMain.handle('get-path', (event, pathName) => { try { return app.getPath(pathName); } catch (error) { console.error(`Error getting path for ${pathName}:`, error); return null; } });

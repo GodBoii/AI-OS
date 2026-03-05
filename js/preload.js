@@ -79,7 +79,10 @@ const validInvokeChannels = [
     'save-file',
     'get-path',
     'get-app-path',
-    'resolve-app-resource'
+    'resolve-app-resource',
+    'computer-get-access-state',
+    'computer-manual-grant',
+    'computer-select-scope'
 ];
 
 // Expose protected methods to the renderer process
