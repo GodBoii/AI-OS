@@ -317,8 +317,22 @@ class UIManager {
     }
 
     updateComputerWorkspaceVisibility(isOpen) {
-        document.getElementById('computer-workspace-panel')?.classList.toggle('hidden', !isOpen);
+        document.getElementById('computer-workspace-chip')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('computer-panel-open', isOpen);
+
+        // Keep routing context aligned with sidebar workspace visibility.
+        // Without this, messages can route to default llm_os even when the
+        // computer workspace UI is open.
+        if (isOpen) {
+            if (!window.computerContext && window.computerWorkspace?.openComputerWorkspace) {
+                window.computerWorkspace.openComputerWorkspace({});
+            }
+        } else {
+            window.computerContext = null;
+            if (window.computerWorkspace) {
+                window.computerWorkspace.activeContext = null;
+            }
+        }
 
         if (this.elements.computerWorkspaceIcon) {
             this.elements.computerWorkspaceIcon.classList.toggle('active', isOpen);

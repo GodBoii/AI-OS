@@ -1641,7 +1641,7 @@ function init() {
                 console.warn('Project workspace element not found for registration');
             }
 
-            const computerWindow = document.getElementById('computer-workspace-panel');
+            const computerWindow = document.getElementById('computer-workspace-chip');
             if (computerWindow) {
                 floatingWindowManager.registerWindow('computer-workspace', computerWindow);
             } else {
