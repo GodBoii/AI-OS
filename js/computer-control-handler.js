@@ -8,6 +8,7 @@ const windowManager = require('node-window-manager');
 const loudness = require('loudness');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const chokidar = require('chokidar');
@@ -20,6 +21,9 @@ class ComputerControlHandler {
         this.appDataPath = appDataPath;
         this.getAuthToken = getAuthTokenFunc;
         this.isEnabled = false;
+        this.permissionSource = null;
+        this.allowedScopes = [];
+        this.defaultScope = this._normalizePath(os.homedir());
         this.fileWatchers = new Map();
         this.platform = process.platform; // 'win32', 'darwin', 'linux'
         
@@ -104,16 +108,21 @@ class ComputerControlHandler {
                     result = {
                         status: 'success',
                         enabled: this.isEnabled,
+                        permission_source: this.permissionSource,
+                        scopes: [...this.allowedScopes],
+                        default_scope: this.defaultScope,
                         platform: this.platform,
                         screen_size: screen.getPrimaryDisplay().size
                     };
                     break;
 
                 case 'request_permission':
-                    this.isEnabled = true;
+                    this._grantPermission('llm_tool');
                     result = {
                         status: 'success',
                         message: 'Computer control enabled',
+                        permission_source: this.permissionSource,
+                        scopes: [...this.allowedScopes],
                         platform: this.platform
                     };
                     break;
@@ -261,6 +270,128 @@ class ComputerControlHandler {
     }
 
     // ===== PERCEPTION METHODS =====
+
+    _normalizePath(inputPath) {
+        return path.resolve(String(inputPath || '').trim());
+    }
+
+    _normalizeForCompare(inputPath) {
+        const normalized = this._normalizePath(inputPath);
+        return this.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    }
+
+    _isPathInAllowedScopes(targetPath) {
+        if (!this.allowedScopes.length) return false;
+
+        const target = this._normalizeForCompare(targetPath);
+        return this.allowedScopes.some((scopePath) => {
+            const scope = this._normalizeForCompare(scopePath);
+            if (target === scope) return true;
+            return target.startsWith(scope + path.sep);
+        });
+    }
+
+    async _ensurePathInScope(targetPath, operation) {
+        if (!targetPath) {
+            return {
+                ok: false,
+                error: `Missing path for ${operation}`
+            };
+        }
+
+        const normalized = this._normalizePath(targetPath);
+        if (!this._isPathInAllowedScopes(normalized)) {
+            return {
+                ok: false,
+                error: `Access denied. '${operation}' is restricted to selected scope(s): ${this.allowedScopes.join(', ')}`
+            };
+        }
+
+        return { ok: true, path: normalized };
+    }
+
+    _grantPermission(source = 'manual') {
+        this.isEnabled = true;
+        this.permissionSource = source;
+        if (!this.allowedScopes.length) {
+            this.allowedScopes = [this.defaultScope];
+        }
+    }
+
+    getAccessState() {
+        return {
+            enabled: this.isEnabled,
+            permissionSource: this.permissionSource,
+            scopes: [...this.allowedScopes],
+            defaultScope: this.defaultScope,
+            platform: this.platform
+        };
+    }
+
+    grantManualPermission() {
+        this._grantPermission('manual_ui');
+        return this.getAccessState();
+    }
+
+    setPrimaryScope(scopePath) {
+        const normalized = this._normalizePath(scopePath);
+        this.allowedScopes = [normalized];
+        return this.getAccessState();
+    }
+
+    _isPlaceholderDirectory(rawDirectory) {
+        const value = String(rawDirectory || '').trim().toLowerCase().replace(/\\/g, '/');
+        if (!value) return true;
+
+        const placeholders = new Set([
+            '/path/to/folder',
+            'path/to/folder',
+            '/path/to/directory',
+            'path/to/directory',
+            '/path/to/file',
+            'path/to/file',
+            '/your/folder/path',
+            'your/folder/path',
+            '<path>',
+            '<directory>'
+        ]);
+        if (placeholders.has(value)) return true;
+
+        if (value.includes('path/to/')) return true;
+        if (value === '/' || value === '\\') return true;
+        if (value === '.' || value === './' || value === '.\\') return true;
+        if (value === 'current folder' || value === 'current directory') return true;
+        if (value === 'selected folder' || value === 'selected directory') return true;
+        return false;
+    }
+
+    _resolveDirectoryForList(rawDirectory) {
+        const primaryScope = this.allowedScopes[0] || this.defaultScope;
+        const value = String(rawDirectory || '').trim();
+
+        if (this._isPlaceholderDirectory(value)) {
+            return primaryScope;
+        }
+
+        // On Windows, "/" often appears from model-generated Unix-style defaults.
+        // Treat drive root requests as ambiguous and keep the user-selected scope.
+        if (this.platform === 'win32') {
+            const normalized = value.replace(/\//g, '\\').trim().toLowerCase();
+            if (normalized === '\\') {
+                return primaryScope;
+            }
+            if (/^[a-z]:\\?$/.test(normalized)) {
+                return primaryScope;
+            }
+        }
+
+        // Resolve relative paths against selected scope for better UX.
+        if (!path.isAbsolute(value) && primaryScope) {
+            return path.join(primaryScope, value);
+        }
+
+        return value;
+    }
 
     async _takeScreenshot(commandPayload) {
         const sources = await desktopCapturer.getSources({
@@ -626,13 +757,16 @@ class ComputerControlHandler {
 
     async _listFiles(commandPayload) {
         const { directory } = commandPayload;
+        const resolvedDirectory = this._resolveDirectoryForList(directory) || this.allowedScopes[0] || this.defaultScope;
+        const scopeCheck = await this._ensurePathInScope(resolvedDirectory, 'list_files');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         try {
-            const files = await fs.readdir(directory, { withFileTypes: true });
+            const files = await fs.readdir(scopeCheck.path, { withFileTypes: true });
             const fileList = files.map(file => ({
                 name: file.name,
                 type: file.isDirectory() ? 'directory' : 'file',
-                path: path.join(directory, file.name)
+                path: path.join(scopeCheck.path, file.name)
             }));
 
             return {
@@ -647,9 +781,11 @@ class ComputerControlHandler {
 
     async _readFile(commandPayload) {
         const { file_path, encoding = 'utf8' } = commandPayload;
+        const scopeCheck = await this._ensurePathInScope(file_path, 'read_file');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         try {
-            const content = await fs.readFile(file_path, encoding);
+            const content = await fs.readFile(scopeCheck.path, encoding);
             return {
                 status: 'success',
                 content: content,
@@ -662,12 +798,14 @@ class ComputerControlHandler {
 
     async _writeFile(commandPayload) {
         const { file_path, content, encoding = 'utf8' } = commandPayload;
+        const scopeCheck = await this._ensurePathInScope(file_path, 'write_file');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         try {
-            await fs.writeFile(file_path, content, encoding);
+            await fs.writeFile(scopeCheck.path, content, encoding);
             return {
                 status: 'success',
-                message: `File written: ${file_path}`,
+                message: `File written: ${scopeCheck.path}`,
                 size: content.length
             };
         } catch (error) {
@@ -677,18 +815,20 @@ class ComputerControlHandler {
 
     async _deleteFile(commandPayload) {
         const { file_path } = commandPayload;
+        const scopeCheck = await this._ensurePathInScope(file_path, 'delete_file');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         try {
-            const stats = await fs.stat(file_path);
+            const stats = await fs.stat(scopeCheck.path);
             if (stats.isDirectory()) {
-                await fs.rmdir(file_path, { recursive: true });
+                await fs.rmdir(scopeCheck.path, { recursive: true });
             } else {
-                await fs.unlink(file_path);
+                await fs.unlink(scopeCheck.path);
             }
 
             return {
                 status: 'success',
-                message: `Deleted: ${file_path}`
+                message: `Deleted: ${scopeCheck.path}`
             };
         } catch (error) {
             return { status: 'error', error: error.message };
@@ -697,12 +837,14 @@ class ComputerControlHandler {
 
     async _createDirectory(commandPayload) {
         const { directory_path } = commandPayload;
+        const scopeCheck = await this._ensurePathInScope(directory_path, 'create_directory');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         try {
-            await fs.mkdir(directory_path, { recursive: true });
+            await fs.mkdir(scopeCheck.path, { recursive: true });
             return {
                 status: 'success',
-                message: `Directory created: ${directory_path}`
+                message: `Directory created: ${scopeCheck.path}`
             };
         } catch (error) {
             return { status: 'error', error: error.message };
@@ -815,12 +957,14 @@ class ComputerControlHandler {
 
     async _watchDirectory(commandPayload) {
         const { directory, watch_id } = commandPayload;
+        const scopeCheck = await this._ensurePathInScope(directory, 'watch_directory');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
 
         if (this.fileWatchers.has(watch_id)) {
             return { status: 'error', error: 'Watcher with this ID already exists' };
         }
 
-        const watcher = chokidar.watch(directory, {
+        const watcher = chokidar.watch(scopeCheck.path, {
             persistent: true,
             ignoreInitial: true
         });
@@ -837,7 +981,7 @@ class ComputerControlHandler {
 
         return {
             status: 'success',
-            message: `Watching directory: ${directory}`,
+            message: `Watching directory: ${scopeCheck.path}`,
             watch_id
         };
     }
@@ -877,6 +1021,8 @@ class ComputerControlHandler {
         this.fileWatchers.clear();
         
         this.isEnabled = false;
+        this.permissionSource = null;
+        this.allowedScopes = [];
     }
 }
 
