@@ -75,8 +75,25 @@ class ComputerWorkspace {
 
     updateScopeLabel(state) {
         const labelEl = this.el.label;
+        const grantBtn = this.el.manualGrantBtn;
         const scopes = state?.scopes || [];
         if (!labelEl) return;
+
+        // Update the action button UI based on state
+        if (grantBtn) {
+            const icon = grantBtn.querySelector('i');
+            const text = grantBtn.querySelector('span');
+
+            if (state?.enabled) {
+                grantBtn.classList.add('granted');
+                if (icon) icon.className = 'fas fa-check-circle';
+                if (text) text.textContent = 'Permission Granted';
+            } else {
+                grantBtn.classList.remove('granted');
+                if (icon) icon.className = 'fas fa-unlock-alt';
+                if (text) text.textContent = 'Grant permission to your computer';
+            }
+        }
 
         if (!state?.enabled) {
             labelEl.textContent = 'Computer Workspace';

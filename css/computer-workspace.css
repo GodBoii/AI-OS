@@ -2,54 +2,57 @@
    COMPUTER WORKSPACE CHIP - REDESIGNED
    ============================================ */
 
-.computer-workspace-chip {
+.computer-workspace-container {
     position: fixed;
     top: 20px;
     left: 72px;
-    height: 48px;
-    background: linear-gradient(135deg, 
-        rgba(14, 165, 233, 0.95) 0%, 
-        rgba(6, 182, 212, 0.95) 100%);
-    border: 1.5px solid rgba(255, 255, 255, 0.2);
-    border-radius: 24px;
-    box-shadow: 
-        0 8px 32px rgba(14, 165, 233, 0.35),
-        0 2px 8px rgba(0, 0, 0, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    padding: 0 6px 0 16px;
     z-index: 1002;
-    backdrop-filter: blur(12px);
     transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    animation: chipSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: computerContainerSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes chipSlideIn {
+@keyframes computerContainerSlideIn {
     from {
         opacity: 0;
         transform: translateX(-30px) scale(0.9);
     }
+
     to {
         opacity: 1;
         transform: translateX(0) scale(1);
     }
 }
 
-.computer-workspace-chip.hidden {
+.computer-workspace-container.hidden {
     opacity: 0;
     visibility: hidden;
     transform: translateX(-30px) scale(0.9);
     pointer-events: none;
 }
 
-.computer-workspace-chip:hover {
+/* The redesigned main chip */
+.computer-chip-main {
+    height: 48px;
+    background: var(--elevated-bg, #242424);
+    border: 1px solid var(--border-color, #3a3a3a);
+    border-radius: 24px;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px 0 16px;
+    backdrop-filter: blur(12px);
+    transition: all 0.3s ease;
+    width: fit-content;
+}
+
+.computer-chip-main:hover {
     transform: translateY(-2px);
-    box-shadow: 
-        0 12px 40px rgba(14, 165, 233, 0.45),
-        0 4px 12px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-color, #d1d5db);
 }
 
 .computer-chip-content {
@@ -57,7 +60,7 @@
     align-items: center;
     gap: 10px;
     padding-right: 12px;
-    border-right: 1.5px solid rgba(255, 255, 255, 0.25);
+    border-right: 1.5px solid var(--border-color, #3a3a3a);
 }
 
 .computer-chip-icon {
@@ -66,25 +69,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ffffff;
+    color: var(--text-color, #f3f4f6);
     font-size: 14px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--hover-bg, rgba(255, 255, 255, 0.08));
     border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     transition: all 0.3s ease;
 }
 
-.computer-workspace-chip:hover .computer-chip-icon {
-    transform: rotate(5deg) scale(1.1);
-    background: rgba(255, 255, 255, 0.3);
+.computer-chip-main:hover .computer-chip-icon {
+    transform: scale(1.1);
+    background: var(--active-bg, rgba(255, 255, 255, 0.16));
 }
 
 .computer-chip-label {
     font-size: 0.875rem;
-    font-weight: 700;
-    color: #ffffff;
-    letter-spacing: 0.3px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    font-weight: 500;
+    color: var(--text-color, #f3f4f6);
     white-space: nowrap;
 }
 
@@ -99,35 +99,20 @@
     height: 32px;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15);
-    color: #ffffff;
+    background: transparent;
+    color: var(--icon-color, #9ca3af);
     font-size: 13px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    position: relative;
-    overflow: hidden;
-}
-
-.computer-chip-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.computer-chip-btn:hover::before {
-    opacity: 1;
+    transition: all 0.2s ease;
 }
 
 .computer-chip-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    background: var(--hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--text-color, #ffffff);
+    transform: scale(1.05);
 }
 
 .computer-chip-btn:active {
@@ -135,43 +120,119 @@
 }
 
 .computer-chip-exit {
-    background: rgba(239, 68, 68, 0.2);
+    color: var(--error-500, #ef4444);
 }
 
 .computer-chip-exit:hover {
-    background: rgba(239, 68, 68, 0.35);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    background: var(--danger-hover-bg, rgba(239, 68, 68, 0.16));
+    color: var(--error-500, #ef4444);
+}
+
+/* Stacked action buttons below chip */
+.computer-action-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 12px;
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.computer-action-btn {
+    background: var(--elevated-bg, #242424);
+    border: 1px solid var(--border-color, #3a3a3a);
+    color: var(--text-color, #f3f4f6);
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+    width: fit-content;
+}
+
+.computer-action-btn i {
+    color: var(--icon-color, #9ca3af);
+    font-size: 0.9rem;
+}
+
+.computer-action-btn:hover {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.08));
+    border-color: var(--accent-color, #d1d5db);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.computer-action-btn:hover i {
+    color: var(--accent-color, #d1d5db);
+}
+
+.computer-action-btn:active {
+    transform: translateY(0);
+}
+
+/* Granted state for manual grant button */
+.computer-action-btn.granted {
+    border-color: var(--success-500, #10b981);
+    background: var(--success-50, rgba(16, 185, 129, 0.05));
+    color: var(--success-700, #10b981);
+}
+
+.dark-mode .computer-action-btn.granted {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.computer-action-btn.granted i {
+    color: var(--success-500, #10b981);
+}
+
+.computer-action-btn.granted:hover {
+    background: var(--success-50, rgba(16, 185, 129, 0.1));
+    border-color: var(--success-500, #10b981);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.dark-mode .computer-action-btn.granted:hover {
+    background: rgba(16, 185, 129, 0.15);
 }
 
 /* Responsive adjustments */
 @media (max-width: 820px) {
-    .computer-workspace-chip {
+    .computer-workspace-container {
         left: 64px;
         top: 16px;
-    }
-    
-    .computer-chip-label {
-        font-size: 0.8rem;
     }
 }
 
 @media (max-width: 480px) {
-    .computer-workspace-chip {
+    .computer-workspace-container {
         left: 56px;
+    }
+
+    .computer-chip-main {
         height: 44px;
         padding: 0 4px 0 12px;
     }
-    
+
     .computer-chip-icon {
         width: 24px;
         height: 24px;
         font-size: 12px;
     }
-    
+
     .computer-chip-btn {
         width: 28px;
         height: 28px;
         font-size: 11px;
+    }
+
+    .computer-action-btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
     }
 }
 
@@ -190,4 +251,3 @@ body.computer-panel-open .floating-input-container {
     left: 50%;
     transform: translateX(-50%);
 }
-
