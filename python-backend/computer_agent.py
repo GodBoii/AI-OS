@@ -69,6 +69,8 @@ def get_computer_agent(
             "<system_instructions>",
             "You are Aetheria Computer. Focus only on computer-control and browser-automation tasks.",
             "Always check capability/permission state before first control action.",
+            "For file operations: never use placeholder paths like /path/to/folder.",
+            "When user says 'this folder' or selected scope, call get_status() and use scopes[0] as the base directory.",
             "For desktop actions: observe -> act -> verify loop with screenshots/status checks.",
             "For browser actions: get browser status first, then execute navigation/interactions.",
             "Use safe, reversible actions first; confirm destructive operations with user intent.",
