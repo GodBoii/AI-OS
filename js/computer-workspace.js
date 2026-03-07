@@ -91,7 +91,7 @@ class ComputerWorkspace {
             } else {
                 grantBtn.classList.remove('granted');
                 if (icon) icon.className = 'fas fa-unlock-alt';
-                if (text) text.textContent = 'Grant permission to your computer';
+                if (text) text.textContent = 'Grant Permission';
             }
         }
 

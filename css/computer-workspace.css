@@ -1,14 +1,11 @@
 /* ============================================
-   COMPUTER WORKSPACE CHIP - REDESIGNED
+   COMPUTER WORKSPACE CHIP - REDESIGNED WITH DROPDOWN
    ============================================ */
 
 .computer-workspace-container {
     position: fixed;
     top: 20px;
     left: 72px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
     z-index: 1002;
     transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     animation: computerContainerSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -33,20 +30,18 @@
     pointer-events: none;
 }
 
-/* The redesigned main chip */
+/* The redesigned main chip with dropdown */
 .computer-chip-main {
+    position: relative;
     height: 48px;
     background: var(--elevated-bg, #242424);
     border: 1px solid var(--border-color, #3a3a3a);
     border-radius: 24px;
     box-shadow: var(--shadow-md);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 6px 0 16px;
     backdrop-filter: blur(12px);
     transition: all 0.3s ease;
     width: fit-content;
+    cursor: pointer;
 }
 
 .computer-chip-main:hover {
@@ -59,8 +54,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding-right: 12px;
-    border-right: 1.5px solid var(--border-color, #3a3a3a);
+    padding: 0 16px;
+    height: 100%;
 }
 
 .computer-chip-icon {
@@ -88,116 +83,142 @@
     white-space: nowrap;
 }
 
-.computer-chip-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.computer-chip-btn {
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
+.computer-chip-dropdown-icon {
+    font-size: 0.75rem;
     color: var(--icon-color, #9ca3af);
-    font-size: 13px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
+    transition: transform 0.3s ease;
+    margin-left: 4px;
 }
 
-.computer-chip-btn:hover {
-    background: var(--hover-bg, rgba(255, 255, 255, 0.08));
-    color: var(--text-color, #ffffff);
-    transform: scale(1.05);
+.computer-chip-main:hover .computer-chip-dropdown-icon {
+    transform: rotate(180deg);
+    color: var(--text-color, #f3f4f6);
 }
 
-.computer-chip-btn:active {
-    transform: scale(0.95);
-}
-
-.computer-chip-exit {
-    color: var(--error-500, #ef4444);
-}
-
-.computer-chip-exit:hover {
-    background: var(--danger-hover-bg, rgba(239, 68, 68, 0.16));
-    color: var(--error-500, #ef4444);
-}
-
-/* Stacked action buttons below chip */
-.computer-action-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-left: 12px;
-    animation: fadeIn 0.4s ease forwards;
-}
-
-.computer-action-btn {
+/* Dropdown Menu */
+.computer-chip-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 220px;
     background: var(--elevated-bg, #242424);
     border: 1px solid var(--border-color, #3a3a3a);
-    color: var(--text-color, #f3f4f6);
-    padding: 8px 14px;
     border-radius: 12px;
-    font-size: 0.85rem;
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+    z-index: 1003;
+    overflow: hidden;
+}
+
+/* Add invisible bridge between chip and dropdown to prevent gap */
+.computer-chip-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: transparent;
+}
+
+.computer-chip-main:hover .computer-chip-dropdown,
+.computer-chip-dropdown:hover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: all;
+}
+
+/* Keep dropdown open when hovering over it */
+.computer-workspace-container:hover .computer-chip-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: all;
+}
+
+/* Keep chevron rotated when dropdown is hovered */
+.computer-workspace-container:hover .computer-chip-dropdown-icon {
+    transform: rotate(180deg);
+    color: var(--text-color, #f3f4f6);
+}
+
+.computer-dropdown-item {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-color, #f3f4f6);
+    padding: 12px 16px;
+    font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     transition: all 0.2s ease;
-    box-shadow: var(--shadow-sm);
-    width: fit-content;
+    text-align: left;
 }
 
-.computer-action-btn i {
+.computer-dropdown-item i {
     color: var(--icon-color, #9ca3af);
     font-size: 0.9rem;
+    width: 18px;
+    text-align: center;
 }
 
-.computer-action-btn:hover {
+.computer-dropdown-item:hover {
     background: var(--hover-bg, rgba(255, 255, 255, 0.08));
-    border-color: var(--accent-color, #d1d5db);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
 }
 
-.computer-action-btn:hover i {
+.computer-dropdown-item:hover i {
     color: var(--accent-color, #d1d5db);
 }
 
-.computer-action-btn:active {
-    transform: translateY(0);
+.computer-dropdown-item:active {
+    background: var(--active-bg, rgba(255, 255, 255, 0.12));
 }
 
 /* Granted state for manual grant button */
-.computer-action-btn.granted {
-    border-color: var(--success-500, #10b981);
+.computer-dropdown-item#computer-manual-grant-btn.granted {
     background: var(--success-50, rgba(16, 185, 129, 0.05));
     color: var(--success-700, #10b981);
 }
 
-.dark-mode .computer-action-btn.granted {
+.dark-mode .computer-dropdown-item#computer-manual-grant-btn.granted {
     background: rgba(16, 185, 129, 0.1);
 }
 
-.computer-action-btn.granted i {
+.computer-dropdown-item#computer-manual-grant-btn.granted i {
     color: var(--success-500, #10b981);
 }
 
-.computer-action-btn.granted:hover {
-    background: var(--success-50, rgba(16, 185, 129, 0.1));
-    border-color: var(--success-500, #10b981);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+.computer-dropdown-item#computer-manual-grant-btn.granted:hover {
+    background: var(--success-50, rgba(16, 185, 129, 0.15));
 }
 
-.dark-mode .computer-action-btn.granted:hover {
-    background: rgba(16, 185, 129, 0.15);
+/* Exit button styling */
+.computer-dropdown-exit {
+    color: var(--error-500, #ef4444);
+}
+
+.computer-dropdown-exit i {
+    color: var(--error-500, #ef4444);
+}
+
+.computer-dropdown-exit:hover {
+    background: var(--danger-hover-bg, rgba(239, 68, 68, 0.16));
+}
+
+/* Dropdown divider */
+.computer-dropdown-divider {
+    height: 1px;
+    background: var(--border-color, #3a3a3a);
+    margin: 4px 0;
 }
 
 /* Responsive adjustments */
@@ -215,7 +236,10 @@
 
     .computer-chip-main {
         height: 44px;
-        padding: 0 4px 0 12px;
+    }
+
+    .computer-chip-content {
+        padding: 0 12px;
     }
 
     .computer-chip-icon {
@@ -224,20 +248,20 @@
         font-size: 12px;
     }
 
-    .computer-chip-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 11px;
+    .computer-chip-dropdown {
+        min-width: 200px;
     }
 
-    .computer-action-btn {
-        padding: 6px 12px;
+    .computer-dropdown-item {
+        padding: 10px 14px;
         font-size: 0.8rem;
     }
 }
 
-/* Remove old panel styles - keeping for backward compatibility if needed */
-.computer-workspace-panel {
+/* Remove old styles - keeping for backward compatibility if needed */
+.computer-workspace-panel,
+.computer-action-stack,
+.computer-chip-actions {
     display: none !important;
 }
 
