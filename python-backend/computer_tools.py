@@ -39,6 +39,8 @@ class ComputerTools(Toolkit):
         self.sid = sid
         self.socketio = socketio
         self.redis_client = redis_client
+        self.message_id = kwargs.pop("message_id", None)
+        self.conversation_id = kwargs.pop("conversation_id", None)
 
         super().__init__(
             name="computer_tools",
@@ -100,6 +102,35 @@ class ComputerTools(Toolkit):
         
         return ToolResult(content=json.dumps(result))
 
+    def _emit_tool_result_preview(self, action: str, result: Dict[str, Any]) -> None:
+        """Emit frontend-only preview metadata for computer tool outputs."""
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            logger.info("[ComputerToolPreview] Skip emit for '%s': missing metadata", action)
+            return
+        if metadata.get("kind") != "computer_tool_output":
+            logger.info(
+                "[ComputerToolPreview] Skip emit for '%s': unsupported metadata kind=%s",
+                action,
+                metadata.get("kind"),
+            )
+            return
+
+        payload = {
+            "id": self.message_id,
+            "conversation_id": self.conversation_id,
+            "tool_name": action,
+            "metadata": metadata,
+        }
+        logger.info(
+            "[ComputerToolPreview] Emitting preview event action=%s message_id=%s preview_type=%s output_id=%s",
+            action,
+            self.message_id,
+            metadata.get("preview_type"),
+            metadata.get("output_id"),
+        )
+        self.socketio.emit("computer_tool_result_preview", payload, room=self.sid)
+
     def _send_command_and_wait(self, command_payload: Dict[str, Any]) -> Union[Dict[str, Any], ToolResult]:
         """
         Sends a command to the client via SocketIO and waits for the response
@@ -107,6 +138,10 @@ class ComputerTools(Toolkit):
         """
         request_id = str(uuid.uuid4())
         command_payload['request_id'] = request_id
+        if self.message_id:
+            command_payload['message_id'] = self.message_id
+        if self.conversation_id:
+            command_payload['conversation_id'] = self.conversation_id
         action = command_payload.get('action')
         
         response_channel = f"computer-response:{request_id}"
@@ -126,6 +161,7 @@ class ComputerTools(Toolkit):
             for message in pubsub.listen():
                 if message['type'] == 'message':
                     result = json.loads(message['data'])
+                    self._emit_tool_result_preview(action, result)
                     
                     # Process screenshot results specially
                     if "screenshot_path" in result:
