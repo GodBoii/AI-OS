@@ -341,11 +341,27 @@ async function attachComputerToolPreview(logEntry, metadata) {
         outputId: metadata.output_id || null
     });
 
+    let container = logEntry.querySelector('.tool-log-preview-container');
+
     let preview = logEntry.querySelector('.tool-log-preview');
     if (!preview) {
         preview = document.createElement('div');
         preview.className = 'tool-log-preview tool-log-preview-loading';
-        logEntry.appendChild(preview);
+        if (container) {
+            container.appendChild(preview);
+        } else {
+            logEntry.appendChild(preview);
+        }
+
+        // Show chevron since we now have a preview to toggle
+        const chevron = logEntry.querySelector('.tool-log-chevron');
+        if (chevron) {
+            chevron.style.display = 'block';
+            logEntry.classList.add('has-preview');
+            // Make it expanded by default if you want, but user requested compact:
+            // "so that it will expand the dropdown to show the image... making the chat compact"
+            // So we leave it collapsed by default.
+        }
     }
 
     preview.dataset.toolMetadata = encodeToolMetadata(metadata);
@@ -712,13 +728,35 @@ function setupIpcListeners() {
                 const logEntry = document.createElement('div');
                 logEntry.className = 'tool-log-entry';
                 logEntry.innerHTML = `
-                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
-                    <div class="tool-log-details">
-                        <span class="tool-log-action"><strong>Generated an image</strong></span>
+                    <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
+                        <i class="fi fi-tr-wisdom tool-log-icon"></i>
+                        <div class="tool-log-details" style="flex-grow: 1;">
+                            <span class="tool-log-action"><strong>Generated an image</strong></span>
+                        </div>
+                        <span class="tool-log-status completed"></span>
+                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.3s; color: var(--text-secondary);"></i>
                     </div>
-                    <span class="tool-log-status completed"></span>
+                    <div class="tool-log-preview-container" style="display: none; width: 100%;"></div>
                 `;
                 logsContainer.appendChild(logEntry);
+
+                // Add click event for accordion (if a preview ever gets attached)
+                const header = logEntry.querySelector('.tool-log-header');
+                header.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const container = logEntry.querySelector('.tool-log-preview-container');
+                    const chevron = logEntry.querySelector('.tool-log-chevron');
+                    if (container && logEntry.classList.contains('has-preview')) {
+                        logEntry.classList.toggle('preview-expanded');
+                        if (logEntry.classList.contains('preview-expanded')) {
+                            container.style.display = 'block';
+                            chevron.style.transform = 'rotate(180deg)';
+                        } else {
+                            container.style.display = 'none';
+                            chevron.style.transform = 'rotate(0deg)';
+                        }
+                    }
+                });
 
                 // OPTION B: Update the summary live when an image is generated
                 updateReasoningSummary(messageId);
@@ -756,13 +794,35 @@ function setupIpcListeners() {
                 logEntry.dataset.messageId = String(messageId);
                 logEntry.dataset.toolName = String(name || '');
                 logEntry.innerHTML = `
-                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
-                    <div class="tool-log-details">
-                        <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
+                    <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
+                        <i class="fi fi-tr-wisdom tool-log-icon"></i>
+                        <div class="tool-log-details" style="flex-grow: 1;">
+                            <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
+                        </div>
+                        <span class="tool-log-status in-progress"></span>
+                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.3s; color: var(--text-secondary);"></i>
                     </div>
-                    <span class="tool-log-status in-progress"></span>
+                    <div class="tool-log-preview-container" style="display: none; width: 100%;"></div>
                 `;
                 logsContainer.appendChild(logEntry);
+
+                // Add click event for accordion
+                const header = logEntry.querySelector('.tool-log-header');
+                header.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const container = logEntry.querySelector('.tool-log-preview-container');
+                    const chevron = logEntry.querySelector('.tool-log-chevron');
+                    if (container && logEntry.classList.contains('has-preview')) {
+                        logEntry.classList.toggle('preview-expanded');
+                        if (logEntry.classList.contains('preview-expanded')) {
+                            container.style.display = 'block';
+                            chevron.style.transform = 'rotate(180deg)';
+                        } else {
+                            container.style.display = 'none';
+                            chevron.style.transform = 'rotate(0deg)';
+                        }
+                    }
+                });
 
                 // OPTION B: Update the summary live when a tool starts
                 updateReasoningSummary(messageId);
@@ -914,12 +974,12 @@ function setupIpcListeners() {
                 `sandbox-log-${executionId}`
             );
         }
-        
+
         // Invalidate cache when new execution content is added
         if (window.sessionContentViewer && currentConversationId) {
             window.sessionContentViewer.invalidateCache(currentConversationId);
         }
-        
+
         // Check if session has content to show button
         checkAndShowContentButton();
     });
@@ -1042,14 +1102,14 @@ function setupIpcListeners() {
             console.error('[ComputerToolPreview] Failed handling preview event:', error);
         }
     });
-    
+
     // Listen for computer tool notifications
     ipcRenderer.on('computer-tool-notification', (data) => {
         if (window.notificationService) {
             window.notificationService.showComputerTool(data.message, data.action);
         }
     });
-    
+
     ipcRenderer.send('check-socket-connection');
 }
 
@@ -1652,7 +1712,7 @@ async function persistAttachmentMetadata(sessionId, files, userId) {
             // Don't throw - this is non-critical, message should still send
         } else {
             console.log(`[AttachmentDB] Successfully persisted ${files.length} attachment records`);
-            
+
             // Invalidate cache when new attachment content is added
             if (window.sessionContentViewer && sessionId) {
                 window.sessionContentViewer.invalidateCache(sessionId);
