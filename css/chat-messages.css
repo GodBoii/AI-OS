@@ -537,8 +537,9 @@
 }
 
 .tool-log-preview {
-    width: 100%;
-    margin: 6px 0 10px 28px;
+    width: calc(100% - 36px);
+    /* Fix horizontal overflow taking margin into account */
+    margin: 6px 0 10px 32px;
 }
 
 
