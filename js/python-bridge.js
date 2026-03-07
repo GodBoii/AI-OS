@@ -197,6 +197,16 @@ class PythonBridge {
             console.log('PythonBridge: Received computer-tool-notification:', data.message);
             this.mainWindow.webContents.send('computer-tool-notification', data);
         });
+
+        this.socket.on('computer_tool_result_preview', (data) => {
+            console.log('PythonBridge: Received computer_tool_result_preview:', {
+                tool: data?.tool_name || null,
+                messageId: data?.id || null,
+                outputId: data?.metadata?.output_id || null,
+                previewType: data?.metadata?.preview_type || null
+            });
+            this.mainWindow.webContents.send('computer-tool-result-preview', data);
+        });
     }
 
     /**

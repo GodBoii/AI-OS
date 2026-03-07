@@ -54,6 +54,7 @@ const validReceiveChannels = [
     'sandbox-artifacts-created',
     'task_execution_status',
     'computer-tool-notification',  // NEW: Computer tool notifications
+    'computer-tool-result-preview',
 
     // Browse AI related channels
     'browse-ai-webview-created',
