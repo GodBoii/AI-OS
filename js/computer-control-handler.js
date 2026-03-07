@@ -9,6 +9,7 @@ const loudness = require('loudness');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const chokidar = require('chokidar');
@@ -258,6 +259,13 @@ class ComputerControlHandler {
                     };
             }
 
+            if (result && !result.metadata) {
+                const metadata = await this._buildToolResultMetadata(action, commandPayload, result);
+                if (metadata) {
+                    result.metadata = metadata;
+                }
+            }
+
             this._emitResult(request_id, result);
         } catch (error) {
             console.error(`ComputerControlHandler: Error executing '${action}':`, error);
@@ -393,6 +401,233 @@ class ComputerControlHandler {
         return value;
     }
 
+    _sanitizeFileSegment(value, fallback = 'output') {
+        const cleaned = String(value || fallback)
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .trim()
+            .replace(/^-+|-+$/g, '');
+        return cleaned || fallback;
+    }
+
+    async _saveComputerOutputBuffer(buffer, commandPayload, filename) {
+        const conversationId = this._sanitizeFileSegment(commandPayload.conversation_id || 'unknown-session', 'unknown-session');
+        const messageId = this._sanitizeFileSegment(commandPayload.message_id || 'unknown-message', 'unknown-message');
+        const outputId = crypto.randomUUID();
+        const safeName = this._sanitizeFileSegment(filename, 'output');
+        const relativePath = path.join('computer-outputs', conversationId, messageId, outputId, safeName);
+        const fullPath = path.join(this.appDataPath, relativePath);
+
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, buffer);
+
+        return {
+            outputId,
+            relativePath,
+            fullPath,
+            size: buffer.length
+        };
+    }
+
+    async _saveComputerOutputJson(payload, commandPayload, filename) {
+        const jsonBuffer = Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
+        return this._saveComputerOutputBuffer(jsonBuffer, commandPayload, filename);
+    }
+
+    async _buildToolResultMetadata(action, commandPayload, result) {
+        const base = {
+            kind: 'computer_tool_output',
+            action,
+            session_id: commandPayload.conversation_id || null,
+            message_id: commandPayload.message_id || null,
+            preview_type: 'none',
+            title: action.replace(/_/g, ' '),
+            inline_safe: true
+        };
+
+        if (!result || result.status !== 'success') {
+            if (action === 'run_command') {
+                const saved = await this._saveComputerOutputJson({
+                    command: commandPayload.command || '',
+                    stdout: result.stdout || '',
+                    stderr: result.stderr || '',
+                    error: result.error || '',
+                    status: result.status || 'error'
+                }, commandPayload, 'command-output.json');
+                return {
+                    ...base,
+                    output_id: saved.outputId,
+                    preview_type: 'terminal',
+                    title: 'Command output',
+                    filename: 'command-output.json',
+                    mime_type: 'application/json',
+                    relativePath: saved.relativePath,
+                    size: saved.size,
+                    isText: true,
+                    isMedia: false,
+                    inline: {
+                        command: commandPayload.command || '',
+                        exit_code: null,
+                        stdout_preview: String(result.stdout || '').slice(0, 1200),
+                        stderr_preview: String(result.stderr || result.error || '').slice(0, 1200),
+                        status: result.status || 'error'
+                    }
+                };
+            }
+            return null;
+        }
+
+        switch (action) {
+            case 'get_status':
+                return {
+                    ...base,
+                    preview_type: 'kv',
+                    title: 'Computer status',
+                    inline: {
+                        enabled: result.enabled,
+                        permission_source: result.permission_source,
+                        scope: Array.isArray(result.scopes) ? result.scopes[0] || null : null,
+                        platform: result.platform,
+                        screen_size: result.screen_size || null
+                    }
+                };
+            case 'get_active_window':
+                return {
+                    ...base,
+                    preview_type: 'kv',
+                    title: 'Active window',
+                    inline: {
+                        title: result.title,
+                        owner: result.owner,
+                        bounds: result.bounds || null,
+                        platform: result.platform || null
+                    }
+                };
+            case 'get_cursor_position':
+                return {
+                    ...base,
+                    preview_type: 'kv',
+                    title: 'Cursor position',
+                    inline: {
+                        x: result.x,
+                        y: result.y
+                    }
+                };
+            case 'read_clipboard':
+                return {
+                    ...base,
+                    preview_type: 'text',
+                    title: 'Clipboard',
+                    inline_safe: false,
+                    inline: {
+                        text_preview: String(result.text || '').slice(0, 280),
+                        has_image: result.has_image,
+                        redacted: true
+                    }
+                };
+            case 'ocr_screen': {
+                const saved = await this._saveComputerOutputJson({
+                    text: result.text || '',
+                    screenshot_path: result.screenshot_path || null
+                }, commandPayload, 'ocr-screen.json');
+                return {
+                    ...base,
+                    output_id: saved.outputId,
+                    preview_type: 'text',
+                    title: 'OCR screen text',
+                    filename: 'ocr-screen.json',
+                    mime_type: 'application/json',
+                    relativePath: saved.relativePath,
+                    size: saved.size,
+                    isText: true,
+                    isMedia: false,
+                    inline: {
+                        text_preview: String(result.text || '').slice(0, 1200)
+                    }
+                };
+            }
+            case 'list_windows':
+                return {
+                    ...base,
+                    preview_type: 'list',
+                    title: 'Open windows',
+                    inline: {
+                        count: result.count || 0,
+                        items: Array.isArray(result.windows) ? result.windows.slice(0, 8) : []
+                    }
+                };
+            case 'list_files':
+                return {
+                    ...base,
+                    preview_type: 'list',
+                    title: 'Files',
+                    inline: {
+                        count: result.count || 0,
+                        items: Array.isArray(result.files) ? result.files.slice(0, 10) : []
+                    }
+                };
+            case 'run_command': {
+                const saved = await this._saveComputerOutputJson({
+                    command: commandPayload.command || '',
+                    stdout: result.stdout || '',
+                    stderr: result.stderr || '',
+                    status: result.status || 'success'
+                }, commandPayload, 'command-output.json');
+                return {
+                    ...base,
+                    output_id: saved.outputId,
+                    preview_type: 'terminal',
+                    title: 'Command output',
+                    filename: 'command-output.json',
+                    mime_type: 'application/json',
+                    relativePath: saved.relativePath,
+                    size: saved.size,
+                    isText: true,
+                    isMedia: false,
+                    inline: {
+                        command: commandPayload.command || '',
+                        stdout_preview: String(result.stdout || '').slice(0, 1200),
+                        stderr_preview: String(result.stderr || '').slice(0, 1200),
+                        status: result.status || 'success'
+                    }
+                };
+            }
+            case 'get_volume':
+                return {
+                    ...base,
+                    preview_type: 'kv',
+                    title: 'Volume',
+                    inline: {
+                        volume: result.volume,
+                        muted: result.muted
+                    }
+                };
+            case 'get_system_info':
+                return {
+                    ...base,
+                    preview_type: 'kv',
+                    title: 'System info',
+                    inline: {
+                        platform: result.platform,
+                        arch: result.arch,
+                        hostname: result.hostname,
+                        cpu_count: result.cpu_count || result.cpu || null,
+                        displays: result.displays || null
+                    }
+                };
+            default:
+                return {
+                    ...base,
+                    preview_type: 'text',
+                    title: action.replace(/_/g, ' '),
+                    inline: {
+                        text_preview: result.message || 'Completed successfully'
+                    }
+                };
+        }
+    }
+
     async _takeScreenshot(commandPayload) {
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
@@ -405,6 +640,7 @@ class ComputerControlHandler {
 
         const screenshot = sources[0].thumbnail.toPNG();
         const screenshotBase64 = screenshot.toString('base64');
+        const localSave = await this._saveComputerOutputBuffer(screenshot, commandPayload, `screenshot-${Date.now()}.png`);
         
         const screenshotPath = await this._uploadScreenshot(screenshotBase64);
 
@@ -412,7 +648,28 @@ class ComputerControlHandler {
             status: 'success',
             screenshot_path: screenshotPath,
             width: sources[0].thumbnail.getSize().width,
-            height: sources[0].thumbnail.getSize().height
+            height: sources[0].thumbnail.getSize().height,
+            metadata: {
+                kind: 'computer_tool_output',
+                output_id: localSave.outputId,
+                action: 'take_screenshot',
+                session_id: commandPayload.conversation_id || null,
+                message_id: commandPayload.message_id || null,
+                title: 'Captured screen',
+                preview_type: 'image',
+                filename: path.basename(localSave.relativePath),
+                mime_type: 'image/png',
+                relativePath: localSave.relativePath,
+                remotePath: screenshotPath || null,
+                size: localSave.size,
+                isMedia: true,
+                isText: false,
+                inline_safe: true,
+                inline: {
+                    width: sources[0].thumbnail.getSize().width,
+                    height: sources[0].thumbnail.getSize().height
+                }
+            }
         };
     }
 
