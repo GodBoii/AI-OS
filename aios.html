@@ -134,7 +134,7 @@
                                 </button>
                             </div>
                             <div class="usage-display">
-                                <div class="usage-lifetime-label">Lifetime Usage</div>
+                                <div class="usage-lifetime-label" id="usage-period-label">Current Usage</div>
                                 <div class="usage-total-hero" id="usage-total-tokens">-</div>
                                 <div class="usage-breakdown">
                                     <div class="usage-breakdown-item">
@@ -149,6 +149,51 @@
                                 </div>
                             </div>
                             <div class="usage-error" id="usage-error" role="status" aria-live="polite"></div>
+                        </section>
+
+                        <section class="subscription-section" aria-labelledby="subscription-title">
+                            <div class="subscription-section-header">
+                                <div>
+                                    <h4 class="subscription-title" id="subscription-title">Subscription</h4>
+                                    <p class="subscription-subtitle" id="subscription-subtitle">Track your plan and upgrade when you need more headroom.</p>
+                                </div>
+                                <button type="button" class="btn-secondary subscription-manage-btn" id="manage-subscription-btn">
+                                    <i class="fi fi-tr-credit-card"></i>
+                                    Manage Plans
+                                </button>
+                            </div>
+
+                            <div class="subscription-summary-card">
+                                <div class="subscription-summary-top">
+                                    <div>
+                                        <div class="subscription-summary-label">Current plan</div>
+                                        <div class="subscription-current-name" id="current-plan-name">Core</div>
+                                    </div>
+                                    <span class="subscription-status-badge status-free" id="subscription-status-badge">FREE</span>
+                                </div>
+
+                                <div class="subscription-meta-grid">
+                                    <div class="subscription-meta-item">
+                                        <span class="subscription-meta-label">Limit</span>
+                                        <strong class="subscription-meta-value" id="current-plan-limit">50,000 tokens/day</strong>
+                                    </div>
+                                    <div class="subscription-meta-item">
+                                        <span class="subscription-meta-label">Remaining</span>
+                                        <strong class="subscription-meta-value" id="current-plan-remaining">-</strong>
+                                    </div>
+                                    <div class="subscription-meta-item">
+                                        <span class="subscription-meta-label">Reset / renewal</span>
+                                        <strong class="subscription-meta-value" id="current-plan-renewal">-</strong>
+                                    </div>
+                                </div>
+
+                                <div class="subscription-progress-block">
+                                    <div class="subscription-progress-track">
+                                        <div class="subscription-progress-bar" id="subscription-usage-bar"></div>
+                                    </div>
+                                    <div class="subscription-progress-copy" id="subscription-progress-copy">Usage will appear here.</div>
+                                </div>
+                            </div>
                         </section>
                     </div>
                 </div>
@@ -579,6 +624,55 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pricing-modal" class="pricing-modal hidden" aria-hidden="true">
+        <div class="pricing-modal-backdrop" id="pricing-modal-backdrop"></div>
+        <div class="pricing-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pricing-modal-title">
+            <div class="pricing-modal-header">
+                <div>
+                    <div class="pricing-modal-kicker">Billing</div>
+                    <h3 class="pricing-modal-title" id="pricing-modal-title">Choose your plan</h3>
+                    <p class="pricing-modal-message" id="pricing-modal-message">Subscriptions are billed monthly through Razorpay.</p>
+                </div>
+                <button type="button" class="pricing-modal-close" id="pricing-modal-close" aria-label="Close pricing modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="pricing-plan-grid">
+                <article class="pricing-plan-card" data-plan-card="free">
+                    <div class="pricing-plan-badge">Core</div>
+                    <h4 class="pricing-plan-name">Core</h4>
+                    <div class="pricing-plan-price">Rs 0<span>/month</span></div>
+                    <p class="pricing-plan-copy">For evaluation and light daily usage.</p>
+                    <div class="pricing-plan-limit">50,000 tokens/day</div>
+                    <button type="button" class="pricing-plan-btn is-current" id="plan-btn-free" data-plan-type="free" disabled>Current plan</button>
+                </article>
+
+                <article class="pricing-plan-card is-featured" data-plan-card="pro">
+                    <div class="pricing-plan-badge">Most Popular</div>
+                    <h4 class="pricing-plan-name">Pro</h4>
+                    <div class="pricing-plan-price">Rs 428<span>/month</span></div>
+                    <p class="pricing-plan-copy">For steady builder workflows and larger token budgets.</p>
+                    <div class="pricing-plan-limit">5,000,000 tokens/month</div>
+                    <button type="button" class="pricing-plan-btn" id="plan-btn-pro" data-plan-type="pro">Upgrade to Pro</button>
+                </article>
+
+                <article class="pricing-plan-card is-elite" data-plan-card="elite">
+                    <div class="pricing-plan-badge">High Capacity</div>
+                    <h4 class="pricing-plan-name">Elite</h4>
+                    <div class="pricing-plan-price">Rs 4,428<span>/month</span></div>
+                    <p class="pricing-plan-copy">For sustained, high-volume work across coding and automation.</p>
+                    <div class="pricing-plan-limit">50,000,000 tokens/month</div>
+                    <button type="button" class="pricing-plan-btn" id="plan-btn-elite" data-plan-type="elite">Upgrade to Elite</button>
+                </article>
+            </div>
+
+            <div class="pricing-modal-footer">
+                <div class="pricing-modal-footnote" id="pricing-modal-footnote">Your current usage and renewal window will update after payment verification.</div>
             </div>
         </div>
     </div>
