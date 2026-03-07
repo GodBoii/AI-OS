@@ -8,6 +8,7 @@ const http = require('http');
 const { EventEmitter } = require('events');
 const BrowserHandler = require('./browser-handler.js');
 const ComputerControlHandler = require('./computer-control-handler.js');
+const NativeNotificationService = require('./native-notification-service.js');
 
 let mainWindow;
 
@@ -27,6 +28,7 @@ if (process.defaultApp) {
 let pythonBridge;
 let browserHandler;
 let computerControlHandler;
+let nativeNotificationService;
 let linkWebView = null;
 
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
@@ -152,6 +154,24 @@ function createWindow() {
     computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken);
     computerControlHandler.initialize();
     pythonBridge.setComputerController(computerControlHandler);
+
+    nativeNotificationService = new NativeNotificationService();
+    nativeNotificationService.setMainWindow(mainWindow);
+
+    mainProcessEmitter.on('computer-tool-notification', (data) => {
+        console.log('[main.js] Routing computer tool notification to native pipeline:', {
+            action: data?.action || null,
+            message: data?.message || null
+        });
+        if (!nativeNotificationService) {
+            return;
+        }
+        nativeNotificationService.queueNotification(
+            data?.action || 'computer_tool',
+            data?.message || 'Computer tool used',
+            { urgency: 'low' }
+        );
+    });
 
     pythonBridge.start().catch(error => {
         console.error('Python bridge error:', error.message);
