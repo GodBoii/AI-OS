@@ -62,7 +62,7 @@ body {
     background-color: var(--accent-muted);
     border-color: var(--accent-color);
     transform: translateY(-2px);
-    box-shadow: 
+    box-shadow:
         0 4px 12px rgba(45, 55, 72, 0.15),
         0 2px 6px rgba(45, 55, 72, 0.10);
 }
@@ -71,11 +71,17 @@ body {
     transform: translateY(0);
 }
 
+.sidebar-icon svg {
+    width: 20px;
+    height: 20px;
+    transition: transform var(--anim-normal) var(--easing-smooth);
+}
+
 .sidebar-icon.active {
     color: var(--accent-color);
     background-color: var(--accent-muted);
     border-color: var(--accent-color);
-    box-shadow: 
+    box-shadow:
         0 2px 8px rgba(45, 55, 72, 0.12),
         inset 0 1px 3px rgba(45, 55, 72, 0.08);
 }
@@ -153,7 +159,7 @@ body {
 .window-control-btn:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
-    box-shadow: 
+    box-shadow:
         0 2px 6px rgba(45, 55, 72, 0.10),
         0 4px 12px rgba(45, 55, 72, 0.06);
 }
