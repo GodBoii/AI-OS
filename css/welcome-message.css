@@ -13,7 +13,7 @@
 /* --- Welcome Container --- */
 .welcome-container {
     position: fixed;
-    top: 30%;
+    top: 25%;
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: var(--z-welcome-message, 998);
