@@ -90,37 +90,36 @@
 
 <!-- Computer Workspace Container -->
 <div id="computer-workspace-chip" class="computer-workspace-container hidden">
-    <!-- Main Computer Workspace Chip -->
+    <!-- Main Computer Workspace Chip with Dropdown -->
     <div class="computer-chip-main">
         <div class="computer-chip-content">
             <div class="computer-chip-icon">
                 <i class="fas fa-desktop"></i>
             </div>
             <span id="computer-chip-label" class="computer-chip-label">Computer Workspace</span>
+            <i class="fas fa-chevron-down computer-chip-dropdown-icon"></i>
         </div>
-        <div class="computer-chip-actions">
-            <button id="computer-workspace-close" class="computer-chip-btn" aria-label="Close computer workspace"
-                title="Close">
-                <i class="fas fa-times"></i>
-            </button>
-            <button id="computer-exit-btn" class="computer-chip-btn computer-chip-exit" aria-label="Exit computer mode"
-                title="Exit Mode">
-                <i class="fas fa-sign-out-alt"></i>
-            </button>
-        </div>
-    </div>
 
-    <!-- Stacked Action Buttons -->
-    <div class="computer-action-stack">
-        <button id="computer-manual-grant-btn" class="computer-action-btn" aria-label="Grant computer permission">
-            <i class="fas fa-unlock-alt"></i>
-            <span>Grant permission to your computer</span>
-        </button>
-        <button id="computer-select-scope-btn" class="computer-action-btn secondary"
-            aria-label="Select computer scope directory">
-            <i class="fas fa-folder-open"></i>
-            <span>Select scope</span>
-        </button>
+        <!-- Dropdown Menu -->
+        <div class="computer-chip-dropdown">
+            <button id="computer-manual-grant-btn" class="computer-dropdown-item" aria-label="Grant computer permission">
+                <i class="fas fa-unlock-alt"></i>
+                <span>Grant Permission</span>
+            </button>
+            <button id="computer-select-scope-btn" class="computer-dropdown-item" aria-label="Select computer scope directory">
+                <i class="fas fa-folder-open"></i>
+                <span>Select Scope</span>
+            </button>
+            <div class="computer-dropdown-divider"></div>
+            <button id="computer-workspace-close" class="computer-dropdown-item" aria-label="Close computer workspace">
+                <i class="fas fa-times"></i>
+                <span>Close</span>
+            </button>
+            <button id="computer-exit-btn" class="computer-dropdown-item computer-dropdown-exit" aria-label="Exit computer mode">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Exit Mode</span>
+            </button>
+        </div>
     </div>
 </div>
 
