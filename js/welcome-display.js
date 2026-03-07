@@ -1,16 +1,49 @@
-// js/welcome-display.js (Complete, Updated with Refresh Logic)
+// js/welcome-display.js (Complete, Updated with Home Screen Cards)
 
 import UserProfileService from './user-profile-service.js';
 
 /**
- * WelcomeDisplay - Manages the welcome message display and user personalization
- * Handles the transition between welcome state and chat state
+ * Suggestion card data — prompt starters, guides, and capability highlights.
+ * Each card can optionally have a `prompt` that auto-fills the chat input on click.
+ */
+const SUGGESTION_CARDS = [
+    {
+        icon: 'fa-solid fa-code',
+        title: 'Build a website',
+        desc: 'Create and deploy a full-stack web app from scratch',
+        prompt: 'Build me a modern portfolio website with React and deploy it to Vercel'
+    },
+    {
+        icon: 'fa-solid fa-magnifying-glass',
+        title: 'Deep research',
+        desc: 'Comprehensive web search and multi-source analysis',
+        prompt: 'Research the latest trends in AI agents and give me a detailed summary'
+    },
+    {
+        icon: 'fa-solid fa-desktop',
+        title: 'Automate my PC',
+        desc: 'Control your mouse, keyboard, and any desktop application',
+        prompt: 'Open Google Chrome and search for the latest tech headlines'
+    },
+    {
+        icon: 'fa-solid fa-brain',
+        title: 'Solve & plan',
+        desc: 'Break complex problems into clear, actionable steps',
+        prompt: 'Help me plan and architect a SaaS application from zero to launch'
+    }
+];
+
+/**
+ * WelcomeDisplay - Manages the welcome message display, user personalization,
+ * and home screen suggestion cards.
+ * Handles the transition between welcome state and chat state.
  */
 class WelcomeDisplay {
     constructor() {
         this.isVisible = false;
         this.username = null;
         this.welcomeElement = null;
+        this.suggestionsWrapper = null;
         this.initialized = false;
         this.userProfileService = new UserProfileService();
         this.hiddenByFloatingWindow = false;
@@ -23,6 +56,7 @@ class WelcomeDisplay {
         if (this.initialized) return;
 
         this.createWelcomeElement();
+        this.createSuggestionCards();
         this.fetchUsername(); // Initial fetch on startup
         this.bindEvents();
         this.initialized = true;
@@ -67,6 +101,87 @@ class WelcomeDisplay {
     }
 
     /**
+     * Create the suggestion cards grid and append to the app container
+     */
+    createSuggestionCards() {
+        this.suggestionsWrapper = document.createElement('div');
+        this.suggestionsWrapper.className = 'home-suggestions-wrapper hidden';
+        this.suggestionsWrapper.id = 'home-suggestions-wrapper';
+        this.suggestionsWrapper.setAttribute('role', 'navigation');
+        this.suggestionsWrapper.setAttribute('aria-label', 'Quick start suggestions');
+
+        const grid = document.createElement('div');
+        grid.className = 'home-suggestions-grid';
+
+        SUGGESTION_CARDS.forEach((card, index) => {
+            const article = document.createElement('article');
+            article.className = 'suggestion-card';
+            article.setAttribute('tabindex', '0');
+            article.setAttribute('role', 'button');
+            article.setAttribute('aria-label', card.title + ': ' + card.desc);
+            if (card.prompt) {
+                article.dataset.prompt = card.prompt;
+            }
+
+            article.innerHTML = `
+                <div class="suggestion-card-icon">
+                    <i class="${card.icon}" aria-hidden="true"></i>
+                </div>
+                <h4 class="suggestion-card-title">${card.title}</h4>
+                <p class="suggestion-card-desc">${card.desc}</p>
+                <div class="suggestion-card-arrow">
+                    <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                </div>
+            `;
+
+            // Click handler: populate the input and send
+            article.addEventListener('click', () => this.onCardClick(card));
+            article.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.onCardClick(card);
+                }
+            });
+
+            grid.appendChild(article);
+        });
+
+        this.suggestionsWrapper.appendChild(grid);
+
+        const appContainer = document.querySelector('.app-container');
+        if (appContainer) {
+            appContainer.appendChild(this.suggestionsWrapper);
+        }
+    }
+
+    /**
+     * Handle a suggestion card click.
+     * Fills the floating input with the card's prompt text then triggers send.
+     */
+    onCardClick(card) {
+        if (!card.prompt) return;
+
+        const input = document.getElementById('floating-input');
+        const sendBtn = document.getElementById('send-message');
+
+        if (input) {
+            input.value = card.prompt;
+            input.style.height = 'auto';
+            input.style.height = input.scrollHeight + 'px';
+            input.focus();
+            // Dispatch input event so any listeners (autosize, state) pick up the change
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // Auto-send after a brief delay so the user sees what was typed
+        if (sendBtn) {
+            setTimeout(() => {
+                sendBtn.click();
+            }, 150);
+        }
+    }
+
+    /**
      * Fetch username for personalization using UserProfileService
      */
     async fetchUsername() {
@@ -92,22 +207,44 @@ class WelcomeDisplay {
     }
 
     /**
-     * Show the welcome message with animation
+     * Show the welcome message and suggestion cards with animation
      */
     show() {
         if (!this.welcomeElement || this.isVisible) return;
         this.welcomeElement.classList.remove('hidden');
         this.welcomeElement.classList.add('visible');
+
+        // Show suggestion cards
+        if (this.suggestionsWrapper) {
+            this.suggestionsWrapper.classList.remove('hidden');
+            this.suggestionsWrapper.classList.add('visible');
+            // Re-trigger card animations by removing and re-adding them
+            const cards = this.suggestionsWrapper.querySelectorAll('.suggestion-card');
+            cards.forEach(card => {
+                card.style.animation = 'none';
+                // Force reflow
+                void card.offsetHeight;
+                card.style.animation = '';
+            });
+        }
+
         this.isVisible = true;
     }
 
     /**
-     * Hide the welcome message with animation
+     * Hide the welcome message and suggestion cards with animation
      */
     hide() {
         if (!this.welcomeElement || !this.isVisible) return;
         this.welcomeElement.classList.remove('visible');
         this.welcomeElement.classList.add('hidden');
+
+        // Hide suggestion cards
+        if (this.suggestionsWrapper) {
+            this.suggestionsWrapper.classList.remove('visible');
+            this.suggestionsWrapper.classList.add('hidden');
+        }
+
         this.isVisible = false;
     }
 
@@ -155,7 +292,7 @@ class WelcomeDisplay {
     }
 
     /**
-     * NEW: Public method to refresh the username from the auth service.
+     * Public method to refresh the username from the auth service.
      * This is the key to solving the race condition.
      */
     async refreshUsername() {

@@ -12,7 +12,7 @@
     max-width: var(--input-container-max-width);
     background-color: var(--window-bg);
     border-radius: 16px;
-    box-shadow: 
+    box-shadow:
         0 8px 32px rgba(45, 55, 72, 0.15),
         0 4px 16px rgba(45, 55, 72, 0.10);
     border: 2px solid var(--border-primary);
@@ -30,13 +30,13 @@
 
 /* --- Centered Input State (No Messages) --- */
 .floating-input-container.centered {
-    bottom: 50%;
+    bottom: 55%;
     transform: translateX(-50%) translateY(50%);
 }
 
 /* --- Welcome Mode (Centered) --- */
 .floating-input-container.welcome-mode {
-    bottom: 50%;
+    bottom: 55%;
     transform: translateX(-50%) translateY(50%);
     transition: all var(--anim-normal) var(--easing-standard);
 }
@@ -52,7 +52,7 @@
 .floating-input-container.has-files {
     background: rgba(var(--accent-color-rgb), 0.02);
     border-color: var(--accent-color);
-    box-shadow: 
+    box-shadow:
         0 8px 32px rgba(45, 55, 72, 0.18),
         0 4px 16px rgba(45, 55, 72, 0.12),
         0 0 0 1px rgba(45, 55, 72, 0.1);
@@ -154,7 +154,7 @@
     border-color: var(--accent-color);
     background: var(--accent-muted);
     transform: translateY(-2px);
-    box-shadow: 
+    box-shadow:
         0 2px 8px rgba(45, 55, 72, 0.12),
         0 4px 16px rgba(45, 55, 72, 0.08),
         0 0 0 1px rgba(45, 55, 72, 0.05);
@@ -302,7 +302,7 @@
 .session-chip:hover {
     background: var(--accent-muted);
     transform: translateY(-2px);
-    box-shadow: 
+    box-shadow:
         0 2px 8px rgba(45, 55, 72, 0.12),
         0 4px 16px rgba(45, 55, 72, 0.08);
 }
@@ -366,7 +366,7 @@
     background: var(--window-bg);
     border: 1.5px solid var(--border-primary);
     border-radius: 12px;
-    box-shadow: 
+    box-shadow:
         0 8px 32px rgba(45, 55, 72, 0.18),
         0 4px 16px rgba(45, 55, 72, 0.12);
     padding: 8px;
@@ -445,7 +445,7 @@
     background: var(--window-bg);
     border: 1.5px solid var(--border-primary);
     border-radius: 12px;
-    box-shadow: 
+    box-shadow:
         0 8px 32px rgba(45, 55, 72, 0.18),
         0 4px 16px rgba(45, 55, 72, 0.12);
     padding: 8px;
