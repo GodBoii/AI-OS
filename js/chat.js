@@ -341,7 +341,8 @@ async function attachComputerToolPreview(logEntry, metadata) {
         outputId: metadata.output_id || null
     });
 
-    let container = logEntry.querySelector('.tool-log-preview-container');
+    let innerContainer = logEntry.querySelector('.tool-log-preview-inner');
+    let container = innerContainer || logEntry.querySelector('.tool-log-preview-container');
 
     let preview = logEntry.querySelector('.tool-log-preview');
     if (!preview) {
@@ -734,9 +735,9 @@ function setupIpcListeners() {
                             <span class="tool-log-action"><strong>Generated an image</strong></span>
                         </div>
                         <span class="tool-log-status completed"></span>
-                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.3s; color: var(--text-secondary);"></i>
+                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); color: var(--text-secondary);"></i>
                     </div>
-                    <div class="tool-log-preview-container" style="display: none; width: 100%;"></div>
+                    <div class="tool-log-preview-container"><div class="tool-log-preview-inner" style="width: 100%;"></div></div>
                 `;
                 logsContainer.appendChild(logEntry);
 
@@ -745,16 +746,8 @@ function setupIpcListeners() {
                 header.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const container = logEntry.querySelector('.tool-log-preview-container');
-                    const chevron = logEntry.querySelector('.tool-log-chevron');
                     if (container && logEntry.classList.contains('has-preview')) {
                         logEntry.classList.toggle('preview-expanded');
-                        if (logEntry.classList.contains('preview-expanded')) {
-                            container.style.display = 'block';
-                            chevron.style.transform = 'rotate(180deg)';
-                        } else {
-                            container.style.display = 'none';
-                            chevron.style.transform = 'rotate(0deg)';
-                        }
                     }
                 });
 
@@ -800,9 +793,9 @@ function setupIpcListeners() {
                             <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
                         </div>
                         <span class="tool-log-status in-progress"></span>
-                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.3s; color: var(--text-secondary);"></i>
+                        <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); color: var(--text-secondary);"></i>
                     </div>
-                    <div class="tool-log-preview-container" style="display: none; width: 100%;"></div>
+                    <div class="tool-log-preview-container"><div class="tool-log-preview-inner" style="width: 100%;"></div></div>
                 `;
                 logsContainer.appendChild(logEntry);
 
@@ -811,16 +804,8 @@ function setupIpcListeners() {
                 header.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const container = logEntry.querySelector('.tool-log-preview-container');
-                    const chevron = logEntry.querySelector('.tool-log-chevron');
                     if (container && logEntry.classList.contains('has-preview')) {
                         logEntry.classList.toggle('preview-expanded');
-                        if (logEntry.classList.contains('preview-expanded')) {
-                            container.style.display = 'block';
-                            chevron.style.transform = 'rotate(180deg)';
-                        } else {
-                            container.style.display = 'none';
-                            chevron.style.transform = 'rotate(0deg)';
-                        }
                     }
                 });
 

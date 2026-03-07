@@ -513,10 +513,34 @@
     flex-direction: column;
 }
 
+.tool-log-preview-container {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 0.7s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.6s ease-out;
+}
+
+.tool-log-entry.preview-expanded .tool-log-preview-container {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.tool-log-preview-inner {
+    overflow: hidden;
+    /* Add a subtle watery slide from top to bottom */
+    transform: translateY(-8px);
+    transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.tool-log-entry.preview-expanded .tool-log-preview-inner {
+    transform: translateY(0);
+}
+
 .tool-log-preview {
     width: 100%;
-    margin: 10px 0 4px 28px;
+    margin: 6px 0 10px 28px;
 }
+
 
 .tool-log-preview-loading {
     font-size: 0.82rem;
