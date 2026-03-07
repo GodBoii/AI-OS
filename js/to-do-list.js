@@ -44,18 +44,18 @@ class ToDoList {
         this.cacheElements();
         this.setupEventListeners();
         this.setupSocketListeners();
-        
+
         // Wait for app to be fully loaded and authenticated before loading tasks
         // This prevents race conditions where auth hasn't completed yet
         await this.waitForAppReady();
-        
+
         // Check if migration is needed
         await this.checkAndMigrate();
-        
+
         // Load tasks from database
         await this.loadData();
         this.renderTasks();
-        
+
         // Subscribe to real-time updates
         this.subscribeToChanges();
     }
@@ -73,7 +73,7 @@ class ToDoList {
         const maxAttempts = 30; // 30 attempts
         const initialDelay = 500; // Start with 500ms
         let attempt = 0;
-        
+
         while (attempt < maxAttempts) {
             try {
                 // Check if electron.tasks API is available (indicates app is ready)
@@ -85,13 +85,13 @@ class ToDoList {
             } catch (error) {
                 // Continue waiting
             }
-            
+
             // Exponential backoff: increase delay with each attempt
             const delay = initialDelay * Math.pow(1.2, attempt);
             await new Promise(resolve => setTimeout(resolve, delay));
             attempt++;
         }
-        
+
         // If we get here, log a warning but continue anyway
         console.warn('App readiness check timed out after 30 attempts, proceeding anyway');
     }
@@ -101,11 +101,11 @@ class ToDoList {
         if (window.electron?.ipcRenderer) {
             window.electron.ipcRenderer.on('task_execution_status', (event, data) => {
                 console.log('Task execution status:', data);
-                
+
                 const taskId = data.task_id;
                 const status = data.status;
                 const message = data.message;
-                
+
                 // Update task UI based on status
                 if (status === 'started' || status === 'processing') {
                     this.showTaskProcessing(taskId, message);
@@ -138,7 +138,7 @@ class ToDoList {
             if (!existingIndicator) {
                 const indicator = document.createElement('div');
                 indicator.classList.add('processing-indicator');
-                indicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI is working...';
+                indicator.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-2 fa-spin" style="margin-right: 4px;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> AI is working...';
                 indicator.style.cssText = 'color: #3b82f6; font-size: 12px; margin-top: 4px;';
                 taskElement.querySelector('.task-details').appendChild(indicator);
             }
@@ -149,42 +149,42 @@ class ToDoList {
         // Create modal overlay
         const modal = document.createElement('div');
         modal.classList.add('task-work-modal-overlay');
-        
+
         // Create modal content
         const modalContent = document.createElement('div');
         modalContent.classList.add('task-work-modal-content');
-        
+
         // Header
         const header = document.createElement('div');
         header.classList.add('task-work-modal-header');
-        
+
         const title = document.createElement('h3');
         title.classList.add('task-work-modal-title');
         title.textContent = task.text;
-        
+
         const closeBtn = document.createElement('button');
         closeBtn.classList.add('task-work-modal-close');
-        closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
         closeBtn.addEventListener('click', () => modal.remove());
-        
+
         header.appendChild(title);
         header.appendChild(closeBtn);
-        
+
         // Body
         const body = document.createElement('div');
         body.classList.add('task-work-modal-body');
-        
+
         const workContent = document.createElement('div');
         workContent.classList.add('task-work-modal-text');
-        
+
         // Format the task work content as markdown with INLINE rendering
         // (not using artifact viewer)
         const htmlContent = this.parseMarkdownInline(task.task_work);
         workContent.innerHTML = htmlContent;
-        
+
         // Initialize mermaid diagrams inline
         this.initInlineMermaid(workContent);
-        
+
         // Highlight code blocks if highlight.js is available
         if (window.hljs) {
             workContent.querySelectorAll('pre code').forEach((block) => {
@@ -193,19 +193,19 @@ class ToDoList {
                 }
             });
         }
-        
+
         body.appendChild(workContent);
-        
+
         // Assemble modal
         modalContent.appendChild(header);
         modalContent.appendChild(body);
         modal.appendChild(modalContent);
-        
+
         // Close on overlay click
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.remove();
         });
-        
+
         document.body.appendChild(modal);
     }
 
@@ -221,7 +221,7 @@ class ToDoList {
                 code: (code, language = 'plaintext') => {
                     const lang = language || 'plaintext';
                     const escapedCode = this.escapeHtml(code);
-                    
+
                     // Handle mermaid diagrams inline
                     if (lang === 'mermaid') {
                         return `
@@ -230,12 +230,12 @@ class ToDoList {
                             </div>
                         `;
                     }
-                    
+
                     // Handle image references (skip them in task work)
                     if (lang === 'image') {
-                        return '<div class="task-work-image-placeholder"><i class="fas fa-image"></i> Image reference</div>';
+                        return '<div class="task-work-image-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Image reference</div>';
                     }
-                    
+
                     // Regular code blocks - render inline with syntax highlighting
                     const validLang = (window.hljs && window.hljs.getLanguage(lang)) ? lang : 'plaintext';
                     return `
@@ -243,7 +243,7 @@ class ToDoList {
                             <div class="task-work-code-header">
                                 <span class="task-work-code-lang">${validLang}</span>
                                 <button class="task-work-copy-btn" onclick="navigator.clipboard.writeText(this.closest('.task-work-code-block').querySelector('code').textContent)">
-                                    <i class="fas fa-copy"></i>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                                 </button>
                             </div>
                             <pre><code class="language-${validLang}">${escapedCode}</code></pre>
@@ -255,9 +255,9 @@ class ToDoList {
             // Use marked with custom inline renderer
             const markedInstance = new marked.Marked();
             markedInstance.use({ renderer: inlineRenderer });
-            
+
             const rawHtml = markedInstance.parse(content);
-            
+
             // Sanitize if DOMPurify is available
             if (window.DOMPurify) {
                 return window.DOMPurify.sanitize(rawHtml, {
@@ -265,7 +265,7 @@ class ToDoList {
                     ADD_ATTR: ['class', 'onclick']
                 });
             }
-            
+
             return rawHtml;
         } catch (error) {
             console.error('Error parsing markdown inline:', error);
@@ -276,16 +276,16 @@ class ToDoList {
     initInlineMermaid(container) {
         // Initialize mermaid diagrams within the container
         if (!window.mermaid) return;
-        
+
         const mermaidBlocks = container.querySelectorAll('.task-work-mermaid-diagram');
         if (mermaidBlocks.length === 0) return;
-        
+
         try {
             mermaidBlocks.forEach((block, index) => {
                 const id = `task-mermaid-${Date.now()}-${index}`;
                 block.id = id;
             });
-            
+
             window.mermaid.init(undefined, mermaidBlocks);
         } catch (error) {
             console.error('Error initializing mermaid in task work:', error);
@@ -316,12 +316,12 @@ class ToDoList {
         try {
             const appPath = await window.electron.ipcRenderer.invoke('get-app-path');
             const tasklistPath = window.electron.path.join(appPath, 'tasklist.txt');
-            
+
             // Check if old tasklist.txt exists
             if (window.electron.fs.existsSync(tasklistPath)) {
                 const tasksData = window.electron.fs.readFileSync(tasklistPath, 'utf8');
                 const localTasks = JSON.parse(tasksData || '[]');
-                
+
                 if (localTasks.length > 0) {
                     // Migrate each task
                     let migratedCount = 0;
@@ -345,12 +345,12 @@ class ToDoList {
                             console.error('Error migrating task:', error);
                         }
                     }
-                    
+
                     // Rename the file to mark as migrated
                     const migratedPath = window.electron.path.join(appPath, 'tasklist.txt.migrated');
                     window.electron.fs.writeFileSync(migratedPath, tasksData, 'utf8');
                     window.electron.fs.unlinkSync(tasklistPath);
-                    
+
                     this.showToast(`Successfully migrated ${migratedCount} tasks to database`, 'success');
                     this.migrationCompleted = true;
                 }
@@ -386,7 +386,7 @@ class ToDoList {
                 } else if (payload.eventType === 'DELETE') {
                     this.tasks = this.tasks.filter(t => t.id !== payload.old.id);
                 }
-                
+
                 this.renderTasks();
             });
         } catch (error) {
@@ -416,7 +416,7 @@ class ToDoList {
                 animation: slideIn 0.3s ease;
             `;
             document.body.appendChild(toast);
-            
+
             setTimeout(() => {
                 toast.style.opacity = '0';
                 toast.style.transition = 'opacity 0.3s ease';
@@ -525,9 +525,9 @@ class ToDoList {
             if (!task) return;
 
             const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-            
+
             await window.electron.tasks.update(taskId, { status: newStatus });
-            
+
             // Update local array
             const index = this.tasks.findIndex(t => t.id === taskId);
             if (index !== -1) {
@@ -546,7 +546,7 @@ class ToDoList {
     async deleteTask(taskId) {
         try {
             await window.electron.tasks.delete(taskId);
-            
+
             // Remove from local array
             this.tasks = this.tasks.filter(task => task.id !== taskId);
             this.renderTasks();
@@ -623,7 +623,7 @@ class ToDoList {
 
             // Save to database via backend API
             await window.electron.userContext.save(this.userContext);
-            
+
             this.closeContextModal();
             this.showToast('User context saved successfully', 'success');
         } catch (error) {
@@ -637,7 +637,7 @@ class ToDoList {
         this.tasks.forEach((task) => {
             const listItem = document.createElement('li');
             listItem.dataset.id = task.id;
-            
+
             // Handle status field (database) instead of completed field (old local)
             const isCompleted = task.status === 'completed';
             if (isCompleted) listItem.classList.add('completed');
@@ -655,7 +655,7 @@ class ToDoList {
             const checkmark = document.createElement('label');
             checkmark.classList.add('checkmark');
             checkmark.htmlFor = checkbox.id;
-            checkmark.innerHTML = '<i class="fas fa-check"></i>';
+            checkmark.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"/></svg>';
 
             checkboxWrapper.appendChild(checkbox);
             checkboxWrapper.appendChild(checkmark);
@@ -678,7 +678,7 @@ class ToDoList {
             if (task.deadline) {
                 const deadline = document.createElement('div');
                 deadline.classList.add('task-deadline');
-                deadline.innerHTML = `<i class="fas fa-clock"></i>${new Date(task.deadline).toLocaleString()}`;
+                deadline.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clock" style="margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${new Date(task.deadline).toLocaleString()}`;
                 taskDetails.appendChild(deadline);
             }
 
@@ -698,7 +698,7 @@ class ToDoList {
             if (task.session_id) {
                 const aiIndicator = document.createElement('span');
                 aiIndicator.classList.add('ai-indicator');
-                aiIndicator.innerHTML = '<i class="fas fa-robot"></i> AI Created';
+                aiIndicator.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bot" style="margin-right:4px;"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> AI Created';
                 aiIndicator.title = `Created by AI in session ${task.session_id}`;
                 taskDetails.appendChild(aiIndicator);
             }
@@ -710,7 +710,7 @@ class ToDoList {
             if (task.task_work) {
                 const viewWorkButton = document.createElement('button');
                 viewWorkButton.classList.add('view-work-btn');
-                viewWorkButton.innerHTML = '<i class="fas fa-file-alt"></i><span>View Work</span>';
+                viewWorkButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text" style="stroke-width: 2.5px;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span>View Work</span>';
                 viewWorkButton.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showTaskWorkModal(task);
@@ -720,7 +720,7 @@ class ToDoList {
 
             const deleteButton = document.createElement('button');
             deleteButton.classList.add('delete-btn');
-            deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+            deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
             deleteButton.addEventListener('click', () => this.deleteTask(task.id));
 
             buttonContainer.appendChild(deleteButton);
