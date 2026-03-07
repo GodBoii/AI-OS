@@ -1004,6 +1004,15 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-error', (error) => {
         console.error('Socket error:', error);
         try {
+            if (error?.code === 'subscription_limit_exceeded') {
+                window.dispatchEvent(new CustomEvent('subscription-limit-reached', {
+                    detail: {
+                        message: error.message || 'Your current plan limit has been reached.',
+                        limitInfo: error.limit_info || null
+                    }
+                }));
+            }
+
             // Show error notification using the notification service
             if (window.NotificationService) {
                 window.NotificationService.show(

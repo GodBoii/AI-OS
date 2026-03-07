@@ -15,6 +15,9 @@ class AIOS {
         this.editingMemoryId = null;
         this.selectedDatabaseProject = 'all';
         this.usageView = null;
+        this.subscriptionSummary = null;
+        this.activeCheckoutPlan = null;
+        this.pricingModalContext = null;
     }
 
     async init() {
@@ -85,6 +88,26 @@ class AIOS {
             usageOutputTokens: document.getElementById('usage-output-tokens'),
             usageTotalTokens: document.getElementById('usage-total-tokens'),
             usageError: document.getElementById('usage-error'),
+            usagePeriodLabel: document.getElementById('usage-period-label'),
+            manageSubscriptionBtn: document.getElementById('manage-subscription-btn'),
+            subscriptionSubtitle: document.getElementById('subscription-subtitle'),
+            currentPlanName: document.getElementById('current-plan-name'),
+            subscriptionStatusBadge: document.getElementById('subscription-status-badge'),
+            currentPlanLimit: document.getElementById('current-plan-limit'),
+            currentPlanRemaining: document.getElementById('current-plan-remaining'),
+            currentPlanRenewal: document.getElementById('current-plan-renewal'),
+            subscriptionUsageBar: document.getElementById('subscription-usage-bar'),
+            subscriptionProgressCopy: document.getElementById('subscription-progress-copy'),
+            pricingModal: document.getElementById('pricing-modal'),
+            pricingModalBackdrop: document.getElementById('pricing-modal-backdrop'),
+            pricingModalClose: document.getElementById('pricing-modal-close'),
+            pricingModalMessage: document.getElementById('pricing-modal-message'),
+            pricingModalFootnote: document.getElementById('pricing-modal-footnote'),
+            planBtnFree: document.getElementById('plan-btn-free'),
+            planBtnPro: document.getElementById('plan-btn-pro'),
+            planBtnElite: document.getElementById('plan-btn-elite'),
+            pricingPlanButtons: document.querySelectorAll('.pricing-plan-btn[data-plan-type]'),
+            pricingPlanCards: document.querySelectorAll('.pricing-plan-card[data-plan-card]'),
 
             // Auth Forms
             authTabs: document.querySelectorAll('.auth-tab-btn'),
@@ -339,6 +362,12 @@ class AIOS {
         addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadDatabases(true));
         addClickHandler(this.elements.refreshMemoriesBtn, () => this.loadMemories(true));
         addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
+        addClickHandler(this.elements.manageSubscriptionBtn, () => this.openPricingModal());
+        addClickHandler(this.elements.pricingModalClose, () => this.closePricingModal());
+        addClickHandler(this.elements.pricingModalBackdrop, () => this.closePricingModal());
+        this.elements.pricingPlanButtons?.forEach((button) => {
+            button.addEventListener('click', () => this.startSubscriptionCheckout(button.dataset.planType));
+        });
         this.elements.memoryForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleAddMemory();
@@ -347,6 +376,19 @@ class AIOS {
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
             this.selectedDatabaseProject = e.target.value || 'all';
             this.renderDatabases(this.databasesCache);
+        });
+        window.addEventListener('subscription-limit-reached', (event) => {
+            const detail = event?.detail || {};
+            this.openPricingModal({
+                message: detail.message || 'Your current plan limit has been reached.',
+                footnote: 'Upgrade to continue immediately, or wait for the next reset window.',
+                summary: detail.limitInfo || detail.summary || null,
+            });
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && this.elements.pricingModal && !this.elements.pricingModal.classList.contains('hidden')) {
+                this.closePricingModal();
+            }
         });
 
         if (this.authService) {
@@ -375,6 +417,8 @@ class AIOS {
                     this.renderMemories([]);
                     this.usageView?.setEmpty();
                     this.usageView?.setError('');
+                    this.resetSubscriptionUI();
+                    this.closePricingModal();
                 }
             });
         }
@@ -654,6 +698,278 @@ class AIOS {
         return session?.access_token || null;
     }
 
+    async _callAuthorizedApi(endpoint, method = 'GET', body = null) {
+        const token = await this._getAccessToken();
+        if (!token) {
+            throw new Error('User not authenticated.');
+        }
+
+        const options = {
+            method,
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        };
+
+        if (body !== null) {
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(`${this.backendBaseUrl}${endpoint}`, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || 'Request failed.');
+        }
+        return payload;
+    }
+
+    _formatTokenCount(value) {
+        const numeric = Number(value) || 0;
+        return numeric.toLocaleString();
+    }
+
+    _formatResetAt(value, fallback = '-') {
+        if (!value) return fallback;
+        try {
+            return new Date(value).toLocaleString();
+        } catch (error) {
+            return String(value);
+        }
+    }
+
+    resetSubscriptionUI() {
+        this.subscriptionSummary = null;
+        if (this.elements.usagePeriodLabel) this.elements.usagePeriodLabel.textContent = 'Current Usage';
+        if (this.elements.subscriptionSubtitle) this.elements.subscriptionSubtitle.textContent = 'Track your plan and upgrade when you need more headroom.';
+        if (this.elements.currentPlanName) this.elements.currentPlanName.textContent = 'Core';
+        if (this.elements.subscriptionStatusBadge) {
+            this.elements.subscriptionStatusBadge.textContent = 'FREE';
+            this.elements.subscriptionStatusBadge.className = 'subscription-status-badge status-free';
+        }
+        if (this.elements.currentPlanLimit) this.elements.currentPlanLimit.textContent = '50,000 tokens/day';
+        if (this.elements.currentPlanRemaining) this.elements.currentPlanRemaining.textContent = '-';
+        if (this.elements.currentPlanRenewal) this.elements.currentPlanRenewal.textContent = '-';
+        if (this.elements.subscriptionUsageBar) this.elements.subscriptionUsageBar.style.width = '0%';
+        if (this.elements.subscriptionProgressCopy) this.elements.subscriptionProgressCopy.textContent = 'Usage will appear here.';
+
+        this.elements.pricingPlanCards?.forEach((card) => {
+            card.classList.remove('is-current-plan');
+        });
+        this.elements.pricingPlanButtons?.forEach((button) => {
+            const planType = button.dataset.planType;
+            button.disabled = planType === 'free';
+            button.classList.toggle('is-current', planType === 'free');
+            if (planType === 'free') {
+                button.textContent = 'Current plan';
+            } else if (planType === 'pro') {
+                button.textContent = 'Upgrade to Pro';
+            } else if (planType === 'elite') {
+                button.textContent = 'Upgrade to Elite';
+            }
+        });
+    }
+
+    renderSubscriptionSummary(summary = null) {
+        const data = summary || this.subscriptionSummary;
+        if (!data) {
+            this.resetSubscriptionUI();
+            return;
+        }
+
+        this.subscriptionSummary = data;
+        const planType = String(data.plan_type || 'free').toLowerCase();
+        const planName = data.plan_name || 'Core';
+        const badgeClass = `subscription-status-badge status-${planType}`;
+        const totalUsed = Number(data?.usage?.total_tokens) || 0;
+        const renewalText = data.current_period_end
+            ? this._formatResetAt(data.current_period_end, 'Awaiting confirmation')
+            : (planType === 'free' ? 'Daily reset' : 'Awaiting confirmation');
+        const statusLabel = String(data.status_label || planName).toUpperCase();
+
+        if (this.elements.usagePeriodLabel) {
+            this.elements.usagePeriodLabel.textContent = data.period_label || 'Current Usage';
+        }
+        if (this.elements.subscriptionSubtitle) {
+            this.elements.subscriptionSubtitle.textContent = `${planName} plan · ${data.limit_label || ''}`;
+        }
+        if (this.elements.currentPlanName) this.elements.currentPlanName.textContent = planName;
+        if (this.elements.subscriptionStatusBadge) {
+            this.elements.subscriptionStatusBadge.textContent = statusLabel;
+            this.elements.subscriptionStatusBadge.className = badgeClass;
+        }
+        if (this.elements.currentPlanLimit) this.elements.currentPlanLimit.textContent = data.limit_label || '-';
+        if (this.elements.currentPlanRemaining) this.elements.currentPlanRemaining.textContent = `${this._formatTokenCount(data.remaining_tokens)} tokens`;
+        if (this.elements.currentPlanRenewal) this.elements.currentPlanRenewal.textContent = renewalText;
+        if (this.elements.subscriptionUsageBar) {
+            this.elements.subscriptionUsageBar.style.width = `${Math.min(Math.max(Number(data.usage_percent) || 0, 0), 100)}%`;
+        }
+        if (this.elements.subscriptionProgressCopy) {
+            this.elements.subscriptionProgressCopy.textContent = `${this._formatTokenCount(totalUsed)} / ${this._formatTokenCount(data.limit_tokens)} tokens used`;
+        }
+
+        this.elements.pricingPlanCards?.forEach((card) => {
+            card.classList.toggle('is-current-plan', card.dataset.planCard === planType);
+        });
+
+        this.updatePricingButtons(data);
+    }
+
+    updatePricingButtons(summary = null) {
+        const data = summary || this.subscriptionSummary || { plan_type: 'free', can_create_subscription: true };
+        const currentPlanType = String(data.plan_type || 'free').toLowerCase();
+        const hasExistingSubscription = !data.can_create_subscription && !!data.razorpay_subscription_id;
+        const currentStatus = String(data.subscription_status || '').toLowerCase();
+
+        this.elements.pricingPlanButtons?.forEach((button) => {
+            const planType = button.dataset.planType;
+            const isCurrent = planType === currentPlanType;
+            const isLoading = this.activeCheckoutPlan === planType;
+
+            button.classList.toggle('is-current', isCurrent);
+
+            if (planType === 'free') {
+                button.disabled = true;
+                button.textContent = currentPlanType === 'free' ? 'Current plan' : 'Included';
+                return;
+            }
+
+            if (isLoading) {
+                button.disabled = true;
+                button.textContent = 'Starting...';
+                return;
+            }
+
+            if (isCurrent) {
+                button.disabled = true;
+                button.textContent = currentStatus === 'created' ? 'Pending confirmation' : 'Current plan';
+                return;
+            }
+
+            if (hasExistingSubscription) {
+                button.disabled = true;
+                button.textContent = 'Existing subscription';
+                return;
+            }
+
+            button.disabled = false;
+            button.textContent = planType === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Elite';
+        });
+    }
+
+    async openPricingModal(options = {}) {
+        if (!this.elements.pricingModal) return;
+
+        if (options.summary) {
+            this.renderSubscriptionSummary(options.summary);
+        } else if (this.authService?.isAuthenticated?.()) {
+            try {
+                const payload = await this._callAuthorizedApi('/api/subscription/status');
+                this.renderSubscriptionSummary(payload.summary || null);
+            } catch (error) {
+                console.error('Failed to refresh subscription status before opening pricing modal:', error);
+            }
+        }
+
+        if (window.stateManager) {
+            window.stateManager.setState({ isAIOSOpen: true });
+        }
+        this.switchTab('account');
+        this.pricingModalContext = options || {};
+        if (this.elements.pricingModalMessage) {
+            this.elements.pricingModalMessage.textContent = options.message || 'Subscriptions are billed monthly through Razorpay.';
+        }
+        if (this.elements.pricingModalFootnote) {
+            this.elements.pricingModalFootnote.textContent = options.footnote || 'Your current usage and renewal window will update after payment verification.';
+        }
+        this.elements.pricingModal.classList.remove('hidden');
+        this.elements.pricingModal.setAttribute('aria-hidden', 'false');
+    }
+
+    closePricingModal() {
+        if (!this.elements.pricingModal) return;
+        this.elements.pricingModal.classList.add('hidden');
+        this.elements.pricingModal.setAttribute('aria-hidden', 'true');
+        this.pricingModalContext = null;
+    }
+
+    async startSubscriptionCheckout(planType) {
+        const normalizedPlan = String(planType || '').toLowerCase();
+        if (!['pro', 'elite'].includes(normalizedPlan)) {
+            return;
+        }
+        if (this.activeCheckoutPlan) {
+            return;
+        }
+        if (typeof window.Razorpay !== 'function') {
+            this.showNotification('Razorpay checkout failed to load.', 'error');
+            return;
+        }
+
+        this.activeCheckoutPlan = normalizedPlan;
+        this.updatePricingButtons();
+
+        try {
+            const payload = await this._callAuthorizedApi('/api/subscription/create', 'POST', {
+                plan_type: normalizedPlan,
+            });
+            const currentUser = this.authService?.getCurrentUser?.();
+            const checkout = new window.Razorpay({
+                key: payload.key_id,
+                subscription_id: payload.subscription_id,
+                name: 'Aetheria AI',
+                description: `${payload.plan_name} monthly subscription`,
+                prefill: {
+                    name: currentUser?.user_metadata?.name || currentUser?.user_metadata?.full_name || this.userData?.account?.name || '',
+                    email: currentUser?.email || ''
+                },
+                theme: {
+                    color: '#38bdf8'
+                },
+                handler: async (response) => {
+                    await this.verifySubscriptionCheckout(response);
+                },
+                modal: {
+                    ondismiss: () => {
+                        this.activeCheckoutPlan = null;
+                        this.updatePricingButtons();
+                    }
+                }
+            });
+
+            checkout.on('payment.failed', (response) => {
+                const description = response?.error?.description || 'Payment failed.';
+                this.showNotification(description, 'error');
+                this.activeCheckoutPlan = null;
+                this.updatePricingButtons();
+            });
+
+            this.activeCheckoutPlan = null;
+            this.updatePricingButtons(payload.summary || this.subscriptionSummary);
+            checkout.open();
+        } catch (error) {
+            console.error('Failed to start subscription checkout:', error);
+            this.showNotification(error.message || 'Failed to start checkout.', 'error');
+            this.activeCheckoutPlan = null;
+            this.updatePricingButtons();
+        }
+    }
+
+    async verifySubscriptionCheckout(response) {
+        try {
+            const payload = await this._callAuthorizedApi('/api/subscription/verify', 'POST', response);
+            this.renderSubscriptionSummary(payload.summary || null);
+            this.showNotification(`${payload?.summary?.plan_name || 'Subscription'} activated successfully`, 'success');
+            this.closePricingModal();
+        } catch (error) {
+            console.error('Failed to verify subscription checkout:', error);
+            this.showNotification(error.message || 'Payment verification failed.', 'error');
+        } finally {
+            this.activeCheckoutPlan = null;
+            this.updatePricingButtons();
+        }
+    }
+
     _safeText(value, fallback = '-') {
         if (value === null || value === undefined) return fallback;
         const text = String(value).trim();
@@ -743,24 +1059,29 @@ class AIOS {
             if (!isAuthenticated) {
                 this.usageView.setEmpty();
                 this.usageView.setError('');
+                this.resetSubscriptionUI();
                 return;
             }
 
             this.usageView.setLoading();
-            const usageData = await this.authService.fetchRequestUsage();
+            const payload = await this._callAuthorizedApi('/api/subscription/status');
+            const summary = payload.summary || null;
 
-            if (!usageData) {
+            if (!summary) {
                 this.usageView.setEmpty();
+                this.resetSubscriptionUI();
                 if (showNotification) this.showNotification('No usage records yet', 'success');
                 return;
             }
 
-            this.usageView.render(usageData);
+            this.usageView.render(summary.usage || {});
+            this.renderSubscriptionSummary(summary);
             if (showNotification) this.showNotification('Usage refreshed', 'success');
         } catch (error) {
             console.error('Error loading usage:', error);
             this.usageView.setEmpty();
             this.usageView.setError(error.message || 'Failed to load usage');
+            this.resetSubscriptionUI();
             if (showNotification) this.showNotification(error.message || 'Failed to load usage', 'error');
         }
     }
@@ -1410,6 +1731,8 @@ class AIOS {
             this.renderMemories([]);
             this.usageView?.setEmpty();
             this.usageView?.setError('');
+            this.resetSubscriptionUI();
+            this.closePricingModal();
         }
     }
 
