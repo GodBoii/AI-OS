@@ -28,6 +28,7 @@ from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
+from subscription_service import UsageLimitExceeded, enforce_usage_limit
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +348,16 @@ def on_send_message(data: str):
                 import time
                 current_ts = int(time.time())
                 eventlet.spawn(generate_and_save_title, conversation_id, str(user.id), user_msg_content, current_ts)
+
+        try:
+            enforce_usage_limit(str(user.id))
+        except UsageLimitExceeded as exc:
+            socketio.emit("error", {
+                "message": str(exc),
+                "code": "subscription_limit_exceeded",
+                "limit_info": exc.summary,
+            }, room=sid)
+            return
 
         turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
         context_session_ids = data.get("context_session_ids", [])
