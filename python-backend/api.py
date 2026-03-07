@@ -34,6 +34,16 @@ from deploy_platform import (
     upload_site_files,
     upsert_site_manifest,
 )
+from subscription_service import (
+    UsageLimitExceeded,
+    calculate_usage_summary,
+    create_razorpay_subscription,
+    get_plan_config,
+    handle_webhook_event,
+    parse_webhook_body,
+    verify_checkout_and_activate,
+    verify_webhook_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +206,110 @@ def _normalize_single_statement(sql: str) -> str:
     if ";" in cleaned:
         raise ValueError("Only a single SQL statement is allowed per request")
     return cleaned
+
+
+@api_bp.route('/subscription/status', methods=['GET'])
+def subscription_status():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        summary = calculate_usage_summary(str(user.id), refresh_window=True)
+        return jsonify({"ok": True, "summary": summary}), 200
+    except Exception as exc:
+        logger.error("subscription/status failed: %s", exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to load subscription status"}), 500
+
+
+@api_bp.route('/subscription/create', methods=['POST'])
+def subscription_create():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    plan_type = str(body.get("plan_type") or body.get("plan") or "").strip().lower()
+    if plan_type not in {"pro", "elite"}:
+        return jsonify({"ok": False, "error": "plan_type must be either 'pro' or 'elite'"}), 400
+
+    try:
+        subscription = create_razorpay_subscription(
+            user_id=str(user.id),
+            email=str(getattr(user, "email", "") or ""),
+            plan_type=plan_type,
+        )
+        plan = get_plan_config(plan_type)
+        summary = calculate_usage_summary(str(user.id), refresh_window=False)
+        return jsonify({
+            "ok": True,
+            "key_id": config.RAZORPAY_KEY_ID,
+            "plan_type": plan_type,
+            "plan_name": plan["name"],
+            "subscription_id": subscription.get("id"),
+            "status": subscription.get("status"),
+            "subscription": subscription,
+            "summary": summary,
+        }), 200
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        logger.error("subscription/create failed: %s", exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to create subscription"}), 500
+
+
+@api_bp.route('/subscription/verify', methods=['POST'])
+def subscription_verify():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    payment_id = str(body.get("razorpay_payment_id") or "").strip()
+    subscription_id = str(body.get("razorpay_subscription_id") or "").strip()
+    signature = str(body.get("razorpay_signature") or "").strip()
+    if not payment_id or not subscription_id or not signature:
+        return jsonify({
+            "ok": False,
+            "error": "razorpay_payment_id, razorpay_subscription_id, and razorpay_signature are required",
+        }), 400
+
+    try:
+        result = verify_checkout_and_activate(
+            user_id=str(user.id),
+            payment_id=payment_id,
+            subscription_id=subscription_id,
+            signature=signature,
+        )
+        return jsonify({"ok": True, **result}), 200
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        logger.error("subscription/verify failed: %s", exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to verify subscription payment"}), 500
+
+
+@api_bp.route('/webhooks/razorpay', methods=['POST'])
+def razorpay_webhook():
+    raw_body = request.get_data(cache=False, as_text=False)
+    signature = request.headers.get("X-Razorpay-Signature", "")
+    if not signature:
+        return jsonify({"ok": False, "error": "missing X-Razorpay-Signature header"}), 400
+
+    try:
+        verify_webhook_signature(raw_body, signature)
+        payload = parse_webhook_body(raw_body)
+        result = handle_webhook_event(payload)
+        return jsonify({"ok": True, **result}), 200
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+    except Exception as exc:
+        logger.error("webhooks/razorpay failed: %s", exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to process Razorpay webhook"}), 500
 
 
 @api_bp.route('/integrations', methods=['GET'])

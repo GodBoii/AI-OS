@@ -49,6 +49,14 @@ TURSO_ORG_SLUG = os.getenv("TURSO_ORG_SLUG")
 TURSO_GROUP = os.getenv("TURSO_GROUP")
 DEPLOY_SECRET_KEY = os.getenv("DEPLOY_SECRET_KEY")
 
+# --- Razorpay Subscription Configuration ---
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+PRO_PLAN_ID = os.getenv("PRO_PLAN_ID")
+ELITE_PLAN_ID = os.getenv("ELITE_PLAN_ID")
+RAZORPAY_SUBSCRIPTION_TOTAL_COUNT = int(os.getenv("RAZORPAY_SUBSCRIPTION_TOTAL_COUNT", "1200"))
+
 # --- Celery Configuration ---
 CELERY_CONFIG = {
     'broker_url': REDIS_URL,
