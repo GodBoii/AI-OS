@@ -637,20 +637,21 @@ class ContextHandler {
             // PHASE 3: Fetch and display attachments
             try {
                 const attachments = await window.electron.auth.fetchSessionAttachments(sessionId);
-                if (attachments && attachments.length > 0) {
+                const userAttachments = (attachments || []).filter((attachment) => attachment.kind !== 'computer_tool_output');
+                if (userAttachments.length > 0) {
                     const attachmentsSection = document.createElement('div');
                     attachmentsSection.className = 'session-attachments-section';
                     attachmentsSection.innerHTML = `
                         <h4 class="attachments-header">
                             <i class="fas fa-paperclip"></i> 
-                            Attachments (${attachments.length})
+                            Attachments (${userAttachments.length})
                         </h4>
                         <div class="attachments-list"></div>
                     `;
                     
                     const attachmentsList = attachmentsSection.querySelector('.attachments-list');
                     
-                    for (const attachment of attachments) {
+                    for (const attachment of userAttachments) {
                         const attachmentItem = document.createElement('div');
                         attachmentItem.className = 'attachment-item';
                         
@@ -786,15 +787,16 @@ class ContextHandler {
             for (const session of sessions) {
                 // Fetch attachments for this session
                 const attachments = await window.electron.auth.fetchSessionAttachments(session.session_id);
+                const userAttachments = (attachments || []).filter((attachment) => attachment.kind !== 'computer_tool_output');
                 
-                if (!attachments || attachments.length === 0) {
+                if (userAttachments.length === 0) {
                     continue;
                 }
                 
-                console.log(`[ContextHandler] Found ${attachments.length} attachments in session ${session.session_id.substring(0, 8)}`);
+                console.log(`[ContextHandler] Found ${userAttachments.length} attachments in session ${session.session_id.substring(0, 8)}`);
                 
                 // Re-attach each file
-                for (const attachment of attachments) {
+                for (const attachment of userAttachments) {
                     try {
                         // Check if file exists locally
                         const fileExists = await window.electron.fileArchive.fileExists(attachment.relativePath);

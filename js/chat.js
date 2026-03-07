@@ -45,6 +45,7 @@ let floatingWindowManager = null;
 let audioInputHandler = null;
 let connectionStatus = false;
 const queuedConversations = new Map();
+const persistedComputerOutputIds = new Set();
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
     'txt': 'text/plain',
@@ -102,6 +103,338 @@ function isProjectWorkspaceMode() {
         return true;
     }
     return false;
+}
+
+function escapeToolPreviewHtml(text = '') {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function parseMaybeJson(value) {
+    if (value == null) return null;
+    if (typeof value === 'object') return value;
+    if (typeof value !== 'string') return value;
+
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+            return JSON.parse(trimmed);
+        } catch (error) {
+            return value;
+        }
+    }
+
+    return value;
+}
+
+function getComputerToolMetadata(tool) {
+    const toolOutput = parseMaybeJson(tool?.tool_output);
+    console.log('[ComputerToolPreview] Extract tool metadata', {
+        hasTool: !!tool,
+        toolName: tool?.tool_name || null,
+        toolOutputType: toolOutput ? typeof toolOutput : null,
+        toolOutputKeys: toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput) : null
+    });
+    const metadata = toolOutput?.metadata;
+    if (!metadata || metadata.kind !== 'computer_tool_output') {
+        console.log('[ComputerToolPreview] No usable metadata found', {
+            metadataKind: metadata?.kind || null,
+            metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata) : null
+        });
+        return null;
+    }
+    console.log('[ComputerToolPreview] Metadata found', {
+        action: metadata.action,
+        previewType: metadata.preview_type,
+        relativePath: metadata.relativePath || null,
+        outputId: metadata.output_id || null
+    });
+    return metadata;
+}
+
+function encodeToolMetadata(metadata) {
+    try {
+        return encodeURIComponent(JSON.stringify(metadata));
+    } catch (error) {
+        console.warn('[Chat] Failed to encode tool metadata:', error);
+        return '';
+    }
+}
+
+function decodeToolMetadata(encoded) {
+    if (!encoded) return null;
+    try {
+        return JSON.parse(decodeURIComponent(encoded));
+    } catch (error) {
+        console.warn('[Chat] Failed to decode tool metadata:', error);
+        return null;
+    }
+}
+
+function renderToolPreviewPlaceholder(metadata) {
+    const encoded = encodeToolMetadata(metadata);
+    if (!encoded) return '';
+    return `<div class="tool-log-preview tool-log-preview-loading" data-tool-metadata="${encoded}">Loading preview...</div>`;
+}
+
+function formatToolPreviewValue(value) {
+    if (value == null || value === '') return 'n/a';
+    if (typeof value === 'object') {
+        return escapeToolPreviewHtml(JSON.stringify(value, null, 2));
+    }
+    return escapeToolPreviewHtml(String(value));
+}
+
+function bufferToBase64(buffer) {
+    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+}
+
+async function buildToolPreviewMarkup(metadata) {
+    if (!metadata) return '';
+
+    const inline = metadata.inline || {};
+    const previewType = metadata.preview_type || 'none';
+    console.log('[ComputerToolPreview] Build preview markup', {
+        action: metadata.action,
+        previewType,
+        relativePath: metadata.relativePath || null,
+        hasInline: !!metadata.inline
+    });
+
+    if (previewType === 'image' && metadata.relativePath) {
+        try {
+            const exists = await window.electron.fileArchive.fileExists(metadata.relativePath);
+            console.log('[ComputerToolPreview] Image preview file check', {
+                relativePath: metadata.relativePath,
+                exists
+            });
+            if (exists) {
+                const fileData = await window.electron.fileArchive.readFile(metadata.relativePath);
+                const base64 = bufferToBase64(fileData);
+                const mimeType = metadata.mime_type || 'image/png';
+                const summary = inline.width && inline.height
+                    ? `${inline.width}x${inline.height}`
+                    : (metadata.summary || 'Screenshot');
+
+                return `
+                    <div class="tool-preview-card tool-preview-image">
+                        <img src="data:${mimeType};base64,${base64}" alt="${escapeToolPreviewHtml(metadata.title || 'Tool image preview')}" class="tool-preview-image-thumb" />
+                        <div class="tool-preview-caption">${escapeToolPreviewHtml(summary)}</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.warn('[ComputerToolPreview] Failed to load local image preview:', error);
+        }
+
+        return `
+            <div class="tool-preview-card tool-preview-image-fallback">
+                <div class="tool-preview-fallback-title">${escapeToolPreviewHtml(metadata.title || 'Screenshot')}</div>
+                <div class="tool-preview-fallback-copy">Local screenshot preview could not be loaded.</div>
+                ${metadata.relativePath ? `<div class="tool-preview-fallback-meta">${escapeToolPreviewHtml(metadata.relativePath)}</div>` : ''}
+            </div>
+        `;
+    }
+
+    if (previewType === 'terminal') {
+        return `
+            <div class="tool-preview-card tool-preview-terminal">
+                <div class="tool-preview-terminal-meta">
+                    <span class="tool-preview-terminal-command">${escapeToolPreviewHtml(inline.command || 'Command')}</span>
+                    <span class="tool-preview-terminal-status">${escapeToolPreviewHtml(inline.status || '')}</span>
+                </div>
+                ${inline.stdout_preview ? `<pre class="tool-preview-terminal-output">${escapeToolPreviewHtml(inline.stdout_preview)}</pre>` : ''}
+                ${inline.stderr_preview ? `<pre class="tool-preview-terminal-output error">${escapeToolPreviewHtml(inline.stderr_preview)}</pre>` : ''}
+            </div>
+        `;
+    }
+
+    if (previewType === 'kv') {
+        const rows = Object.entries(inline)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .slice(0, 8)
+            .map(([key, value]) => `
+                <div class="tool-preview-kv-row">
+                    <span class="tool-preview-kv-key">${escapeToolPreviewHtml(key.replace(/_/g, ' '))}</span>
+                    <span class="tool-preview-kv-value">${formatToolPreviewValue(value)}</span>
+                </div>
+            `)
+            .join('');
+        return rows ? `<div class="tool-preview-card tool-preview-kv">${rows}</div>` : '';
+    }
+
+    if (previewType === 'list') {
+        const items = Array.isArray(inline.items) ? inline.items : [];
+        const renderedItems = items.slice(0, 8).map((item) => {
+            if (typeof item === 'string') {
+                return `<li>${escapeToolPreviewHtml(item)}</li>`;
+            }
+            const label = item.title || item.name || item.path || JSON.stringify(item);
+            return `<li>${escapeToolPreviewHtml(label)}</li>`;
+        }).join('');
+        const countText = inline.count ? `<div class="tool-preview-list-count">${escapeToolPreviewHtml(String(inline.count))} total</div>` : '';
+        return renderedItems ? `<div class="tool-preview-card tool-preview-list">${countText}<ul>${renderedItems}</ul></div>` : '';
+    }
+
+    if (previewType === 'text') {
+        if (inline.redacted) {
+            return `<div class="tool-preview-card tool-preview-text tool-preview-redacted">Preview hidden for privacy.</div>`;
+        }
+        const text = inline.text_preview || metadata.summary || '';
+        return text ? `<div class="tool-preview-card tool-preview-text"><pre>${escapeToolPreviewHtml(text)}</pre></div>` : '';
+    }
+
+    return '';
+}
+
+async function hydrateComputerToolPreviews(root) {
+    if (!root) return;
+
+    const placeholders = root.querySelectorAll('.tool-log-preview[data-tool-metadata]');
+    console.log('[ComputerToolPreview] Hydrating placeholders', {
+        count: placeholders.length
+    });
+    for (const placeholder of placeholders) {
+        if (placeholder.dataset.hydrated === 'true') {
+            continue;
+        }
+
+        const metadata = decodeToolMetadata(placeholder.dataset.toolMetadata);
+        if (!metadata) {
+            placeholder.dataset.hydrated = 'true';
+            continue;
+        }
+
+        const markup = await buildToolPreviewMarkup(metadata);
+        console.log('[ComputerToolPreview] Hydration result', {
+            outputId: metadata.output_id || null,
+            hasMarkup: !!markup,
+            previewType: metadata.preview_type || null
+        });
+        placeholder.innerHTML = markup || '';
+        placeholder.classList.remove('tool-log-preview-loading');
+        if (!markup) {
+            placeholder.innerHTML = '<div class="tool-preview-card tool-preview-image-fallback">Preview unavailable.</div>';
+        }
+        placeholder.dataset.hydrated = 'true';
+    }
+}
+
+async function attachComputerToolPreview(logEntry, metadata) {
+    if (!logEntry || !metadata) return;
+    console.log('[ComputerToolPreview] Attaching preview to log entry', {
+        action: metadata.action,
+        previewType: metadata.preview_type,
+        outputId: metadata.output_id || null
+    });
+
+    let preview = logEntry.querySelector('.tool-log-preview');
+    if (!preview) {
+        preview = document.createElement('div');
+        preview.className = 'tool-log-preview tool-log-preview-loading';
+        logEntry.appendChild(preview);
+    }
+
+    preview.dataset.toolMetadata = encodeToolMetadata(metadata);
+    preview.dataset.hydrated = 'false';
+    preview.textContent = 'Loading preview...';
+    await hydrateComputerToolPreviews(logEntry);
+}
+
+function findComputerToolLogEntry(messageDiv, messageId, toolName) {
+    if (!messageDiv) return null;
+
+    const normalizedName = String(toolName || '').trim();
+    if (!normalizedName) {
+        return messageDiv.querySelector('.tool-log-entry:last-of-type');
+    }
+
+    const entries = Array.from(messageDiv.querySelectorAll('.tool-log-entry'));
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (entry.dataset.messageId === String(messageId) && entry.dataset.toolName === normalizedName) {
+            return entry;
+        }
+    }
+
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (entry.dataset.toolName === normalizedName) {
+            return entry;
+        }
+    }
+
+    return null;
+}
+
+async function persistComputerToolAttachment(metadata, toolName = 'computer_tool') {
+    if (!metadata?.relativePath || !metadata?.output_id || persistedComputerOutputIds.has(metadata.output_id)) {
+        console.log('[ComputerOutputDB] Skip persist', {
+            hasRelativePath: !!metadata?.relativePath,
+            outputId: metadata?.output_id || null,
+            alreadyPersisted: metadata?.output_id ? persistedComputerOutputIds.has(metadata.output_id) : false
+        });
+        return;
+    }
+
+    try {
+        const session = await window.electron.auth.getSession();
+        if (!session?.user?.id) return;
+
+        const record = {
+            session_id: metadata.session_id || currentConversationId,
+            user_id: session.user.id,
+            metadata: {
+                kind: 'computer_tool_output',
+                file_id: metadata.output_id,
+                message_id: metadata.message_id || null,
+                action: metadata.action || toolName,
+                filename: metadata.filename || `${toolName}.bin`,
+                name: metadata.title || toolName.replace(/_/g, ' '),
+                type: metadata.mime_type || 'application/octet-stream',
+                mime_type: metadata.mime_type || 'application/octet-stream',
+                size: metadata.size || 0,
+                relativePath: metadata.relativePath,
+                path: metadata.remotePath || null,
+                isMedia: metadata.isMedia === true,
+                isText: metadata.isText === true,
+                preview_type: metadata.preview_type || 'none',
+                summary: metadata.summary || null,
+                inline: metadata.inline || null
+            }
+        };
+
+        const { error } = await window.electron.auth.insertAttachments([record]);
+        if (error) {
+            console.error('[ComputerOutputDB] Failed to persist tool metadata:', error);
+            return;
+        }
+
+        console.log('[ComputerOutputDB] Persisted tool metadata', {
+            sessionId: record.session_id,
+            outputId: metadata.output_id,
+            action: metadata.action
+        });
+        persistedComputerOutputIds.add(metadata.output_id);
+        if (window.sessionContentViewer && record.session_id) {
+            window.sessionContentViewer.invalidateCache(record.session_id);
+        }
+    } catch (error) {
+        console.error('[ComputerOutputDB] Exception persisting tool metadata:', error);
+    }
 }
 
 async function startNewConversation() {
@@ -393,9 +726,18 @@ function setupIpcListeners() {
         }
     });
 
-    ipcRenderer.on('agent-step', (data) => {
+    ipcRenderer.on('agent-step', async (data) => {
         const { id: messageId, type, name, agent_name, team_name, tool } = data;
         if (!messageId || !ongoingStreams[messageId]) return;
+        console.log('[ComputerToolPreview] agent-step received', {
+            messageId,
+            type,
+            name,
+            owner: agent_name || team_name || null,
+            hasTool: !!tool,
+            toolName: tool?.tool_name || null,
+            toolOutputType: tool?.tool_output ? typeof tool.tool_output : null
+        });
 
         const messageDiv = ongoingStreams[messageId];
         const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
@@ -411,6 +753,8 @@ function setupIpcListeners() {
                 logEntry = document.createElement('div');
                 logEntry.id = logEntryId;
                 logEntry.className = 'tool-log-entry';
+                logEntry.dataset.messageId = String(messageId);
+                logEntry.dataset.toolName = String(name || '');
                 logEntry.innerHTML = `
                     <i class="fi fi-tr-wisdom tool-log-icon"></i>
                     <div class="tool-log-details">
@@ -431,6 +775,18 @@ function setupIpcListeners() {
                     statusEl.classList.remove('in-progress');
                     statusEl.classList.add('completed');
                 }
+            }
+
+            const metadata = getComputerToolMetadata(tool);
+            if (logEntry && metadata) {
+                await attachComputerToolPreview(logEntry, metadata);
+                await persistComputerToolAttachment(metadata, name || 'computer_tool');
+            } else {
+                console.log('[ComputerToolPreview] No metadata attached on tool_end', {
+                    messageId,
+                    toolName: name || null,
+                    hasLogEntry: !!logEntry
+                });
             }
 
             if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base_64) {
@@ -639,6 +995,53 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('socket-status', (data) => console.log('Socket status:', data));
+
+    ipcRenderer.on('computer-tool-result-preview', async (data) => {
+        try {
+            const messageId = data?.id;
+            const toolName = data?.tool_name;
+            const metadata = data?.metadata;
+
+            if (!messageId || !ongoingStreams[messageId]) {
+                console.log('[ComputerToolPreview] Preview event ignored: no live message container', {
+                    messageId: messageId || null,
+                    toolName: toolName || null
+                });
+                return;
+            }
+
+            console.log('[ComputerToolPreview] Preview event received', {
+                messageId,
+                toolName: toolName || null,
+                previewType: metadata?.preview_type || null,
+                outputId: metadata?.output_id || null,
+                relativePath: metadata?.relativePath || null
+            });
+
+            if (!metadata || metadata.kind !== 'computer_tool_output') {
+                console.log('[ComputerToolPreview] Preview event skipped: invalid metadata', {
+                    toolName: toolName || null,
+                    metadataKind: metadata?.kind || null
+                });
+                return;
+            }
+
+            const messageDiv = ongoingStreams[messageId];
+            const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName);
+            if (!logEntry) {
+                console.log('[ComputerToolPreview] Preview event could not find matching log entry', {
+                    messageId,
+                    toolName: toolName || null
+                });
+                return;
+            }
+
+            await attachComputerToolPreview(logEntry, metadata);
+            await persistComputerToolAttachment(metadata, toolName || 'computer_tool');
+        } catch (error) {
+            console.error('[ComputerToolPreview] Failed handling preview event:', error);
+        }
+    });
     
     // Listen for computer tool notifications
     ipcRenderer.on('computer-tool-notification', (data) => {
@@ -929,14 +1332,23 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         if (!owner) return;
 
         // Aggregate tool call events into pre-rendered HTML
-        if (event.event === 'TeamToolCallCompleted' || event.event === 'ToolCallCompleted') {
-            const toolName = event.tool?.tool_name?.replace(/_/g, ' ') || 'Unknown Tool';
+        const isCompletedToolEvent =
+            event.event === 'TeamToolCallCompleted' ||
+            event.event === 'ToolCallCompleted' ||
+            (event.type === 'agent_step' && event.step_type === 'tool_end');
+
+        if (isCompletedToolEvent) {
+            const toolPayload = event.tool || null;
+            const toolName = (toolPayload?.tool_name || event.name || 'Unknown Tool').replace(/_/g, ' ');
+            const metadata = getComputerToolMetadata(toolPayload);
+            const previewHtml = metadata ? renderToolPreviewPlaceholder(metadata) : '';
             toolLogsHtml += `
                 <div class="tool-log-entry">
                     <i class="fi fi-tr-wisdom tool-log-icon"></i>
                     <div class="tool-log-details">
                         <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
                     </div>
+                    ${previewHtml}
                     <span class="tool-log-status completed"></span>
                 </div>`;
         }
@@ -994,6 +1406,8 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     if (inlineArtifacts && typeof messageFormatter.applyInlineEnhancements === 'function') {
         messageFormatter.applyInlineEnhancements(targetContainer);
     }
+
+    hydrateComputerToolPreviews(targetContainer);
 
     // Add action buttons to historical messages
     const messageDiv = targetContainer.querySelector('.message-bot');
