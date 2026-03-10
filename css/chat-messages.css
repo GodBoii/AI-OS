@@ -711,6 +711,147 @@
 }
 
 /* ================================================================= */
+/* DELEGATED AGENT FRAMES                                           */
+/* ================================================================= */
+
+.delegation-frame {
+    display: block;
+    width: 100%;
+    margin: 10px 0 14px;
+    padding: 0;
+    border: none;
+}
+
+.delegation-frame-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.delegation-frame-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+
+.delegation-frame-status {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+}
+
+.delegation-frame-shell {
+    border-radius: 14px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.03);
+    position: relative;
+    overflow: hidden;
+}
+
+.delegation-frame-caption {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.delegation-frame-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.delegation-frame-stream .tool-log-entry {
+    margin-bottom: 0;
+    padding: 6px 0;
+}
+
+.delegation-frame-stream .content-block.log-block {
+    margin-bottom: 8px;
+}
+
+.delegation-frame-stream .inner-content {
+    font-size: 0.88rem;
+}
+
+.delegation-frame-coder .delegation-frame-shell {
+    background: linear-gradient(180deg, rgba(7, 16, 14, 0.95) 0%, rgba(10, 21, 18, 0.95) 100%);
+    border-color: rgba(34, 197, 94, 0.32);
+    box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.1);
+}
+
+.delegation-frame-coder .delegation-frame-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+        to bottom,
+        rgba(16, 185, 129, 0.06) 0px,
+        rgba(16, 185, 129, 0.06) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    pointer-events: none;
+}
+
+.delegation-frame-coder .delegation-frame-caption,
+.delegation-frame-coder .tool-log-action,
+.delegation-frame-coder .inner-content {
+    color: #b7f7d2;
+    font-family: var(--font-mono, monospace);
+}
+
+.delegation-frame-computer .delegation-frame-shell {
+    background: radial-gradient(circle at 50% 20%, rgba(255, 248, 220, 0.12), rgba(23, 28, 32, 0.96));
+    border: 2px solid rgba(245, 158, 11, 0.35);
+    border-radius: 18px;
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.45);
+}
+
+.delegation-frame-computer .delegation-frame-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.06) 0px,
+        rgba(255, 255, 255, 0.06) 1px,
+        transparent 1px,
+        transparent 4px
+    );
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.delegation-frame-computer .delegation-frame-caption,
+.delegation-frame-computer .tool-log-action,
+.delegation-frame-computer .inner-content {
+    color: #f3f4f6;
+}
+
+.delegation-state-running .delegation-frame-status {
+    color: #f59e0b;
+}
+
+.delegation-state-completed .delegation-frame-status {
+    color: #10b981;
+}
+
+.delegation-state-failed .delegation-frame-status {
+    color: #ef4444;
+}
+
+.delegation-state-failed .delegation-frame-shell {
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* ================================================================= */
 /* MESSAGE ANIMATIONS                                              */
 /* ================================================================= */
 

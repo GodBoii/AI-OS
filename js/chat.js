@@ -675,15 +675,119 @@ async function attachComputerToolPreview(logEntry, metadata) {
     await hydrateComputerToolPreviews(logEntry);
 }
 
-function findComputerToolLogEntry(messageDiv, messageId, toolName) {
+function normalizeDelegatedAgent(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'coder' || raw === 'computer') {
+        return raw;
+    }
+    return 'coder';
+}
+
+function getDelegationFrameId(messageId, delegationId) {
+    return `delegation-frame-${messageId}-${delegationId}`;
+}
+
+function ensureDelegationFrame(messageDiv, messageId, delegationId, delegatedAgent = 'coder', title = '') {
+    if (!messageDiv || !delegationId) return null;
+
+    const safeAgent = normalizeDelegatedAgent(delegatedAgent);
+    const frameId = getDelegationFrameId(messageId, delegationId);
+    let frame = messageDiv.querySelector(`#${frameId}`);
+    if (frame) {
+        return frame;
+    }
+
+    const logsRoot = messageDiv.querySelector('.detailed-logs');
+    if (!logsRoot) return null;
+
+    const iconClass = safeAgent === 'computer' ? 'fas fa-tv' : 'fas fa-terminal';
+    const label = safeAgent === 'computer' ? 'Computer Agent' : 'Coder Agent';
+    const description = title ? escapeToolPreviewHtml(title) : `Running ${label}`;
+
+    frame = document.createElement('div');
+    frame.id = frameId;
+    frame.className = `tool-log-entry delegation-frame delegation-frame-${safeAgent} delegation-state-running`;
+    frame.dataset.delegationId = String(delegationId);
+    frame.dataset.delegatedAgent = safeAgent;
+    frame.innerHTML = `
+        <div class="delegation-frame-header">
+            <span class="delegation-frame-label">
+                <i class="${iconClass}" aria-hidden="true"></i>
+                <strong>${label}</strong>
+            </span>
+            <span class="delegation-frame-status">Running</span>
+        </div>
+        <div class="delegation-frame-shell">
+            <div class="delegation-frame-caption">${description}</div>
+            <div class="delegation-frame-stream"></div>
+        </div>
+    `;
+    logsRoot.appendChild(frame);
+    return frame;
+}
+
+function setDelegationFrameStatus(messageDiv, messageId, delegationId, status = 'running', errorMessage = '') {
+    if (!messageDiv || !delegationId) return;
+    const frameId = getDelegationFrameId(messageId, delegationId);
+    const frame = messageDiv.querySelector(`#${frameId}`);
+    if (!frame) return;
+
+    frame.classList.remove('delegation-state-running', 'delegation-state-completed', 'delegation-state-failed');
+
+    const statusEl = frame.querySelector('.delegation-frame-status');
+    if (status === 'failed') {
+        frame.classList.add('delegation-state-failed');
+        if (statusEl) {
+            statusEl.textContent = errorMessage ? `Failed: ${errorMessage}` : 'Failed';
+        }
+        return;
+    }
+
+    if (status === 'completed') {
+        frame.classList.add('delegation-state-completed');
+        if (statusEl) {
+            statusEl.textContent = 'Completed';
+        }
+        return;
+    }
+
+    frame.classList.add('delegation-state-running');
+    if (statusEl) {
+        statusEl.textContent = 'Running';
+    }
+}
+
+function getDelegationLogContainer(messageDiv, messageId, delegationId = null, delegatedAgent = null, title = '') {
+    if (!messageDiv) return null;
+    if (!delegationId) {
+        return messageDiv.querySelector('.detailed-logs');
+    }
+
+    const frame = ensureDelegationFrame(
+        messageDiv,
+        messageId,
+        delegationId,
+        delegatedAgent || 'coder',
+        title
+    );
+    return frame?.querySelector('.delegation-frame-stream') || messageDiv.querySelector('.detailed-logs');
+}
+
+function findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId = null) {
     if (!messageDiv) return null;
 
     const normalizedName = String(toolName || '').trim();
     if (!normalizedName) {
+        if (delegationId) {
+            return messageDiv.querySelector(`.tool-log-entry[data-delegation-id="${String(delegationId)}"]:last-of-type`);
+        }
         return messageDiv.querySelector('.tool-log-entry:last-of-type');
     }
 
-    const entries = Array.from(messageDiv.querySelectorAll('.tool-log-entry'));
+    const entries = Array.from(messageDiv.querySelectorAll('.tool-log-entry')).filter((entry) => {
+        if (!delegationId) return true;
+        return entry.dataset.delegationId === String(delegationId);
+    });
     for (let index = entries.length - 1; index >= 0; index -= 1) {
         const entry = entries[index];
         if (entry.dataset.messageId === String(messageId) && entry.dataset.toolName === normalizedName) {
@@ -722,6 +826,8 @@ async function persistComputerToolAttachment(metadata, toolName = 'computer_tool
                 kind: 'computer_tool_output',
                 file_id: metadata.output_id,
                 message_id: metadata.message_id || null,
+                delegation_id: metadata.delegation_id || null,
+                delegated_agent: metadata.delegated_agent || null,
                 action: metadata.action || toolName,
                 filename: metadata.filename || `${toolName}.bin`,
                 name: metadata.title || toolName.replace(/_/g, ' '),
@@ -941,7 +1047,9 @@ function setupIpcListeners() {
                 const contentBlocks = messageDiv.querySelectorAll('.content-block');
                 contentBlocks.forEach(block => {
                     const ownerName = block.dataset.owner;
-                    const streamId = `${messageId}-${ownerName}`;
+                    const delegationId = block.dataset.delegationId || null;
+                    const streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
+                    const streamId = `${messageId}-${streamOwnerKey}`;
                     const finalContent = messageFormatter.getFinalContent(streamId);
                     const innerContentDiv = block.querySelector('.inner-content');
                     if (finalContent && innerContentDiv) {
@@ -1069,10 +1177,24 @@ function setupIpcListeners() {
     });
 
     ipcRenderer.on('agent-step', async (data) => {
-        const { id: messageId, type, name, agent_name, team_name, tool } = data;
+        const {
+            id: messageId,
+            type,
+            name,
+            agent_name,
+            team_name,
+            tool,
+            delegation_id: delegationId = null,
+            delegated_agent: delegatedAgentRaw = null,
+            task_description: delegationTask = '',
+            success,
+            error: delegationError = '',
+        } = data;
         const messageDiv = getStreamMessageDiv(messageId);
         const streamConversationId = getStreamConversationId(messageId);
         if (!messageId || !messageDiv) return;
+
+        const delegatedAgent = delegationId ? normalizeDelegatedAgent(delegatedAgentRaw) : null;
         console.log('[ComputerToolPreview] agent-step received', {
             messageId,
             type,
@@ -1080,14 +1202,52 @@ function setupIpcListeners() {
             owner: agent_name || team_name || null,
             hasTool: !!tool,
             toolName: tool?.tool_name || null,
-            toolOutputType: tool?.tool_output ? typeof tool.tool_output : null
+            toolOutputType: tool?.tool_output ? typeof tool.tool_output : null,
+            delegationId,
+            delegatedAgent,
         });
+
+        if (type === 'delegation_start') {
+            ensureDelegationFrame(
+                messageDiv,
+                messageId,
+                delegationId,
+                delegatedAgent || 'coder',
+                delegationTask || `${(delegatedAgent || 'coder')} task`,
+            );
+            setDelegationFrameStatus(messageDiv, messageId, delegationId, 'running');
+            updateReasoningSummary(messageId);
+            return;
+        }
+
+        if (type === 'delegation_end') {
+            setDelegationFrameStatus(
+                messageDiv,
+                messageId,
+                delegationId,
+                success === false ? 'failed' : 'completed',
+                delegationError || '',
+            );
+            updateReasoningSummary(messageId);
+            return;
+        }
 
         const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
         const ownerName = agent_name || team_name || 'Assistant';
-        const stepId = `step-${messageId}-${ownerName}-${name}`;
+        const ownerKey = String(ownerName).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const stepSuffix = delegationId
+            ? `${messageId}-${delegationId}-${ownerKey}-${name || 'tool'}`
+            : `${messageId}-${ownerKey}-${name || 'tool'}`;
+        const stepId = `step-${stepSuffix}`;
 
-        const logsContainer = messageDiv.querySelector('.detailed-logs');
+        const logsContainer = getDelegationLogContainer(
+            messageDiv,
+            messageId,
+            delegationId,
+            delegatedAgent,
+            delegationTask || `${ownerName} delegated run`,
+        );
+        if (!logsContainer) return;
         const logEntryId = `log-entry-${stepId}`;
         let logEntry = logsContainer.querySelector(`#${logEntryId}`);
 
@@ -1098,6 +1258,10 @@ function setupIpcListeners() {
                 logEntry.className = 'tool-log-entry';
                 logEntry.dataset.messageId = String(messageId);
                 logEntry.dataset.toolName = String(name || '');
+                if (delegationId) {
+                    logEntry.dataset.delegationId = String(delegationId);
+                    logEntry.dataset.delegatedAgent = delegatedAgent || '';
+                }
                 logEntry.innerHTML = `
                     <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
                         <i class="fi fi-tr-wisdom tool-log-icon"></i>
@@ -1157,6 +1321,10 @@ function setupIpcListeners() {
             updateReasoningSummary(messageId);
         }
 
+        if (delegationId) {
+            return;
+        }
+
         const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
         if (!liveStepsContainer) return;
         let liveStepDiv = liveStepsContainer.querySelector(`#${stepId}`);
@@ -1190,11 +1358,17 @@ function setupIpcListeners() {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
-    const appendSandboxToolLog = (messageId, html, logEntryId = null) => {
+    const appendSandboxToolLog = (messageId, html, logEntryId = null, context = {}) => {
         const messageDiv = getStreamMessageDiv(messageId);
         if (!messageDiv) return;
 
-        const logsContainer = messageDiv.querySelector('.detailed-logs');
+        const logsContainer = getDelegationLogContainer(
+            messageDiv,
+            messageId,
+            context.delegationId || null,
+            context.delegatedAgent || null,
+            context.title || '',
+        );
         if (!logsContainer) return;
 
         if (logEntryId) {
@@ -1216,19 +1390,33 @@ function setupIpcListeners() {
         const executionId = data?.execution_id || data?.artifactId;
         const command = String(data?.command || '').trim();
         const streamConversationId = getStreamConversationId(messageId);
+        const delegationId = data?.delegation_id || null;
+        const delegatedAgent = data?.delegated_agent || null;
 
         if (!messageId || !executionId) return;
 
-        if (artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
+        if (delegationId) {
+            const messageDiv = getStreamMessageDiv(messageId);
+            ensureDelegationFrame(
+                messageDiv,
+                messageId,
+                delegationId,
+                delegatedAgent || 'coder',
+                'Sandbox execution',
+            );
+        }
+
+        if (!delegationId && artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
             artifactHandler.showTerminal(executionId);
             artifactHandler.updateCommand(executionId, command);
         }
 
         const safeCommand = escapeHtml(command || 'Command started');
+        const logEntryId = delegationId ? `sandbox-log-${executionId}-${delegationId}` : `sandbox-log-${executionId}`;
         appendSandboxToolLog(
             messageId,
             `
-            <div id="sandbox-log-${executionId}" class="tool-log-entry">
+            <div id="${logEntryId}" class="tool-log-entry" ${delegationId ? `data-delegation-id="${escapeHtml(String(delegationId))}"` : ''}>
                 <i class="fi fi-tr-terminal tool-log-icon"></i>
                 <div class="tool-log-details">
                     <span class="tool-log-action">Sandbox command: <strong>${safeCommand}</strong></span>
@@ -1236,7 +1424,8 @@ function setupIpcListeners() {
                 <span class="tool-log-status in-progress"></span>
             </div>
             `,
-            `sandbox-log-${executionId}`
+            logEntryId,
+            { delegationId, delegatedAgent, title: 'Sandbox execution' }
         );
     });
 
@@ -1246,8 +1435,10 @@ function setupIpcListeners() {
         const command = String(data?.command || '').trim();
         const exitCode = Number.isFinite(Number(data?.exit_code)) ? Number(data.exit_code) : Number(data?.exitCode || 0);
         const streamConversationId = getStreamConversationId(messageId);
+        const delegationId = data?.delegation_id || null;
+        const delegatedAgent = data?.delegated_agent || null;
 
-        if (executionId && artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
+        if (executionId && !delegationId && artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
             artifactHandler.updateTerminalOutput(
                 executionId,
                 data?.stdout || '',
@@ -1259,10 +1450,11 @@ function setupIpcListeners() {
         if (messageId && executionId) {
             const statusClass = exitCode === 0 ? 'completed' : 'failed';
             const safeCommand = escapeHtml(command || 'Sandbox command finished');
+            const logEntryId = delegationId ? `sandbox-log-${executionId}-${delegationId}` : `sandbox-log-${executionId}`;
             appendSandboxToolLog(
                 messageId,
                 `
-                <div id="sandbox-log-${executionId}" class="tool-log-entry">
+                <div id="${logEntryId}" class="tool-log-entry" ${delegationId ? `data-delegation-id="${escapeHtml(String(delegationId))}"` : ''}>
                     <i class="fi fi-tr-terminal tool-log-icon"></i>
                     <div class="tool-log-details">
                         <span class="tool-log-action">Sandbox command: <strong>${safeCommand}</strong> (exit ${exitCode})</span>
@@ -1270,7 +1462,8 @@ function setupIpcListeners() {
                     <span class="tool-log-status ${statusClass}"></span>
                 </div>
                 `,
-                `sandbox-log-${executionId}`
+                logEntryId,
+                { delegationId, delegatedAgent, title: 'Sandbox execution' }
             );
         }
 
@@ -1289,15 +1482,18 @@ function setupIpcListeners() {
         const messageId = data?.id;
         const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
         const streamConversationId = getStreamConversationId(messageId);
+        const delegationId = data?.delegation_id || null;
+        const delegatedAgent = data?.delegated_agent || null;
         if (!messageId || artifacts.length === 0) return;
 
         for (const artifact of artifacts) {
             const artifactId = artifact?.artifact_id || `${messageId}-${artifact?.filename || 'artifact'}`;
             const filename = escapeHtml(String(artifact?.filename || artifact?.file_path || 'Generated file').trim());
+            const logEntryId = delegationId ? `sandbox-artifact-${artifactId}-${delegationId}` : `sandbox-artifact-${artifactId}`;
             appendSandboxToolLog(
                 messageId,
                 `
-                <div id="sandbox-artifact-${artifactId}" class="tool-log-entry">
+                <div id="${logEntryId}" class="tool-log-entry" ${delegationId ? `data-delegation-id="${escapeHtml(String(delegationId))}"` : ''}>
                     <i class="fi fi-tr-file-check tool-log-icon"></i>
                     <div class="tool-log-details">
                         <span class="tool-log-action">Generated file: <strong>${filename}</strong></span>
@@ -1305,7 +1501,8 @@ function setupIpcListeners() {
                     <span class="tool-log-status completed"></span>
                 </div>
                 `,
-                `sandbox-artifact-${artifactId}`
+                logEntryId,
+                { delegationId, delegatedAgent, title: 'Generated artifacts' }
             );
         }
 
@@ -1374,6 +1571,8 @@ function setupIpcListeners() {
             const messageId = data?.id;
             const toolName = data?.tool_name;
             const metadata = data?.metadata;
+            const delegationId = data?.delegation_id || metadata?.delegation_id || null;
+            const delegatedAgent = data?.delegated_agent || metadata?.delegated_agent || null;
             const messageDiv = getStreamMessageDiv(messageId);
             const streamConversationId = getStreamConversationId(messageId);
 
@@ -1390,7 +1589,9 @@ function setupIpcListeners() {
                 toolName: toolName || null,
                 previewType: metadata?.preview_type || null,
                 outputId: metadata?.output_id || null,
-                relativePath: metadata?.relativePath || null
+                relativePath: metadata?.relativePath || null,
+                delegationId,
+                delegatedAgent,
             });
 
             if (!metadata || metadata.kind !== 'computer_tool_output') {
@@ -1401,7 +1602,17 @@ function setupIpcListeners() {
                 return;
             }
 
-            const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName);
+            if (delegationId) {
+                ensureDelegationFrame(
+                    messageDiv,
+                    messageId,
+                    delegationId,
+                    delegatedAgent || 'computer',
+                    'Computer tool output',
+                );
+            }
+
+            const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId);
             if (!logEntry) {
                 console.log('[ComputerToolPreview] Preview event could not find matching log entry', {
                     messageId,
@@ -1547,7 +1758,16 @@ function createBotMessagePlaceholder(messageId) {
 }
 
 function populateBotMessage(data) {
-    const { content, id: messageId, streaming = false, agent_name, team_name, is_log } = data;
+    const {
+        content,
+        id: messageId,
+        streaming = false,
+        agent_name,
+        team_name,
+        is_log,
+        delegation_id: delegationId = null,
+        delegated_agent: delegatedAgent = null,
+    } = data;
     const messageDiv = getStreamMessageDiv(messageId);
     if (!messageDiv) {
         console.warn("Could not find message div for ID:", messageId);
@@ -1558,7 +1778,13 @@ function populateBotMessage(data) {
     if (!ownerName || !content) return;
 
     const targetContainer = is_log
-        ? messageDiv.querySelector(`#logs-${messageId}`)
+        ? getDelegationLogContainer(
+            messageDiv,
+            messageId,
+            delegationId,
+            delegatedAgent,
+            `${ownerName}: delegated run`,
+        )
         : messageDiv.querySelector(`#main-content-${messageId}`);
 
     if (!targetContainer) {
@@ -1566,7 +1792,8 @@ function populateBotMessage(data) {
         return;
     }
 
-    const contentBlockId = `content-block-${messageId}-${ownerName}`;
+    const streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
+    const contentBlockId = `content-block-${messageId}-${streamOwnerKey}`;
     let contentBlock = document.getElementById(contentBlockId);
 
     if (!contentBlock) {
@@ -1574,6 +1801,9 @@ function populateBotMessage(data) {
         contentBlock.id = contentBlockId;
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         contentBlock.dataset.owner = ownerName;
+        if (delegationId) {
+            contentBlock.dataset.delegationId = String(delegationId);
+        }
 
         const innerContent = document.createElement('div');
         innerContent.className = 'inner-content';
@@ -1589,7 +1819,7 @@ function populateBotMessage(data) {
 
     const innerContentDiv = contentBlock.querySelector('.inner-content');
     if (innerContentDiv) {
-        const streamId = `${messageId}-${ownerName}`;
+        const streamId = `${messageId}-${streamOwnerKey}`;
         const inlineArtifacts = isProjectWorkspaceMode();
         if (inlineArtifacts && artifactHandler) {
             artifactHandler.hideArtifact();
