@@ -114,6 +114,16 @@ def _next_utc_day_boundary(now: Optional[datetime] = None) -> datetime:
     return midnight + timedelta(days=1)
 
 
+def _extract_response_data(response: Any, default: Any) -> Any:
+    """
+    The Supabase client can return `None` from execute() in transient edge-cases.
+    Normalize that so callers don't crash on `response.data`.
+    """
+    if response is None:
+        return default
+    return getattr(response, "data", default)
+
+
 def get_plan_catalog() -> list[dict[str, Any]]:
     plans: list[dict[str, Any]] = []
     for key in ("free", "pro", "elite"):
@@ -187,7 +197,7 @@ def get_profile(user_id: str) -> dict[str, Any]:
         .single()
         .execute()
     )
-    data = response.data or {}
+    data = _extract_response_data(response, {}) or {}
     if not data:
         raise ValueError("Profile not found.")
     return data
@@ -204,7 +214,7 @@ def update_profile(user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         .eq("id", str(user_id))
         .execute()
     )
-    updated_rows = response.data or []
+    updated_rows = _extract_response_data(response, []) or []
     return updated_rows[0] if updated_rows else get_profile(user_id)
 
 
@@ -219,7 +229,7 @@ def find_user_id_by_subscription_id(subscription_id: str) -> Optional[str]:
         .maybe_single()
         .execute()
     )
-    data = response.data or {}
+    data = _extract_response_data(response, {}) or {}
     return data.get("id")
 
 
@@ -232,7 +242,7 @@ def read_usage_row(user_id: str) -> dict[str, Any]:
         .maybe_single()
         .execute()
     )
-    return response.data or {
+    return _extract_response_data(response, None) or {
         "user_id": str(user_id),
         "input_tokens": 0,
         "output_tokens": 0,
