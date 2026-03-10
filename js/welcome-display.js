@@ -253,7 +253,19 @@ class WelcomeDisplay {
      */
     shouldShow() {
         const chatMessages = document.getElementById('chat-messages');
-        return !chatMessages || chatMessages.children.length === 0;
+        if (!chatMessages) {
+            return true;
+        }
+
+        const activeThread =
+            chatMessages.querySelector('.conversation-thread.active:not(.hidden)') ||
+            chatMessages.querySelector('.conversation-thread:not(.hidden)');
+
+        if (activeThread) {
+            return activeThread.querySelectorAll('.message').length === 0;
+        }
+
+        return chatMessages.querySelectorAll('.message').length === 0;
     }
 
     /**
