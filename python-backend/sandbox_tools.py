@@ -39,7 +39,9 @@ class SandboxTools(Toolkit):
         message_id: str = None,
         socketio=None,
         sid: str = None,
-        redis_client=None
+        redis_client=None,
+        delegation_id: str = None,
+        delegated_agent: str = None,
     ):
         """
         Initializes the SandboxTools with session-specific information.
@@ -82,6 +84,20 @@ class SandboxTools(Toolkit):
         self.socketio = socketio
         self.sid = sid
         self.redis_client = redis_client
+        self.delegation_id = delegation_id
+        self.delegated_agent = delegated_agent
+
+    def _frontend_room(self) -> Optional[str]:
+        if self.session_id:
+            return f"conv:{self.session_id}"
+        return self.sid
+
+    def _attach_delegation_metadata(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if self.delegation_id:
+            payload["delegation_id"] = self.delegation_id
+        if self.delegated_agent:
+            payload["delegated_agent"] = self.delegated_agent
+        return payload
 
     def _normalize_workspace_path(self, path: str) -> str:
         """
@@ -285,9 +301,8 @@ class SandboxTools(Toolkit):
                 message_id=self.message_id,
             )
 
-            if artifact_id and self.socketio and self.sid:
-                self.socketio.emit(
-                    "sandbox-artifacts-created",
+            if artifact_id and self.socketio and self._frontend_room():
+                payload = self._attach_delegation_metadata(
                     {
                         "id": self.message_id,
                         "execution_id": execution_id,
@@ -299,8 +314,12 @@ class SandboxTools(Toolkit):
                                 "execution_id": execution_id,
                             }
                         ],
-                    },
-                    room=self.sid,
+                    }
+                )
+                self.socketio.emit(
+                    "sandbox-artifacts-created",
+                    payload,
+                    room=self._frontend_room(),
                 )
         except Exception as exc:
             logger.warning("Non-blocking file-tool persistence failed for %s: %s", safe_path, exc)
@@ -878,12 +897,13 @@ class SandboxTools(Toolkit):
                 logger.info(f"Created execution record: {execution_id}")
                 
                 # Emit socket event: command started
-                if self.socketio and self.sid:
-                    self.socketio.emit("sandbox-command-started", {
+                if self.socketio and self._frontend_room():
+                    payload = self._attach_delegation_metadata({
                         "id": self.message_id,
                         "execution_id": execution_id,
                         "command": command
-                    }, room=self.sid)
+                    })
+                    self.socketio.emit("sandbox-command-started", payload, room=self._frontend_room())
                     
             except Exception as e:
                 logger.error(f"Failed to create execution record: {e}")
@@ -908,15 +928,16 @@ class SandboxTools(Toolkit):
                 )
             
             # Emit socket event: command finished (without artifacts - they come later)
-            if self.socketio and self.sid:
-                self.socketio.emit("sandbox-command-finished", {
+            if self.socketio and self._frontend_room():
+                payload = self._attach_delegation_metadata({
                     "id": self.message_id,
                     "execution_id": execution_id,
                     "command": command,
                     "stdout": stdout,
                     "stderr": stderr,
                     "exit_code": exit_code
-                }, room=self.sid)
+                })
+                self.socketio.emit("sandbox-command-finished", payload, room=self._frontend_room())
             
             # Detect and process artifacts AFTER emitting command finished
             # This happens asynchronously so chat isn't blocked
@@ -1337,12 +1358,13 @@ class SandboxTools(Toolkit):
                 return
             
             # Emit separate socket event with artifact data
-            if self.socketio and self.sid:
-                self.socketio.emit("sandbox-artifacts-created", {
+            if self.socketio and self._frontend_room():
+                payload = self._attach_delegation_metadata({
                     "id": self.message_id,
                     "execution_id": execution_id,
                     "artifacts": artifacts_data
-                }, room=self.sid)
+                })
+                self.socketio.emit("sandbox-artifacts-created", payload, room=self._frontend_room())
                 logger.info(f"Emitted artifact event with {len(artifacts_data)} artifacts")
             
         except Exception as e:

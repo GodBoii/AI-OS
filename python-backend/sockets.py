@@ -358,6 +358,15 @@ def on_send_message(data: str):
                 "limit_info": exc.summary,
             }, room=sid)
             return
+        except Exception as exc:
+            # Usage checks should not bring down the message pipeline.
+            logger.error(
+                "Usage limit check failed for user %s conversation %s: %s",
+                str(user.id),
+                conversation_id,
+                exc,
+                exc_info=True,
+            )
 
         turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
         context_session_ids = data.get("context_session_ids", [])
