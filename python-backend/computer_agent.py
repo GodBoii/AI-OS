@@ -27,6 +27,8 @@ def get_computer_agent(
     message_id: Optional[str] = None,
     use_memory: bool = False,
     debug_mode: bool = True,
+    delegation_id: Optional[str] = None,
+    delegated_agent: Optional[str] = None,
 ) -> Agent:
     """
     Dedicated desktop/browser automation agent used for computer workspace mode.
@@ -39,7 +41,12 @@ def get_computer_agent(
     tools: List[Union[Toolkit, callable]] = []
 
     if computer_tools_config:
-        tools.append(ComputerTools(**computer_tools_config))
+        merged_computer_config = dict(computer_tools_config)
+        if delegation_id and "delegation_id" not in merged_computer_config:
+            merged_computer_config["delegation_id"] = delegation_id
+        if delegated_agent and "delegated_agent" not in merged_computer_config:
+            merged_computer_config["delegated_agent"] = delegated_agent
+        tools.append(ComputerTools(**merged_computer_config))
 
     if browser_tools_config:
         device_type = (session_info or {}).get("device_type", "web")

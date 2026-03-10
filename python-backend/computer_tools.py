@@ -41,6 +41,8 @@ class ComputerTools(Toolkit):
         self.redis_client = redis_client
         self.message_id = kwargs.pop("message_id", None)
         self.conversation_id = kwargs.pop("conversation_id", None)
+        self.delegation_id = kwargs.pop("delegation_id", None)
+        self.delegated_agent = kwargs.pop("delegated_agent", None)
 
         super().__init__(
             name="computer_tools",
@@ -87,6 +89,18 @@ class ComputerTools(Toolkit):
             ],
         )
 
+    def _frontend_room(self) -> Optional[str]:
+        if self.conversation_id:
+            return f"conv:{self.conversation_id}"
+        return self.sid
+
+    def _attach_delegation_metadata(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if self.delegation_id:
+            payload["delegation_id"] = self.delegation_id
+        if self.delegated_agent:
+            payload["delegated_agent"] = self.delegated_agent
+        return payload
+
     def _process_screenshot_result(self, result: Dict[str, Any]) -> ToolResult:
         """Process result with screenshot."""
         if result.get("status") == "success" and "screenshot_path" in result:
@@ -122,6 +136,7 @@ class ComputerTools(Toolkit):
             "tool_name": action,
             "metadata": metadata,
         }
+        payload = self._attach_delegation_metadata(payload)
         logger.info(
             "[ComputerToolPreview] Emitting preview event action=%s message_id=%s preview_type=%s output_id=%s",
             action,
@@ -129,7 +144,10 @@ class ComputerTools(Toolkit):
             metadata.get("preview_type"),
             metadata.get("output_id"),
         )
-        self.socketio.emit("computer_tool_result_preview", payload, room=self.sid)
+        room_name = self._frontend_room()
+        if not room_name:
+            return
+        self.socketio.emit("computer_tool_result_preview", payload, room=room_name)
 
     def _send_command_and_wait(self, command_payload: Dict[str, Any]) -> Union[Dict[str, Any], ToolResult]:
         """
@@ -142,6 +160,10 @@ class ComputerTools(Toolkit):
             command_payload['message_id'] = self.message_id
         if self.conversation_id:
             command_payload['conversation_id'] = self.conversation_id
+        if self.delegation_id:
+            command_payload['delegation_id'] = self.delegation_id
+        if self.delegated_agent:
+            command_payload['delegated_agent'] = self.delegated_agent
         action = command_payload.get('action')
         
         response_channel = f"computer-response:{request_id}"
@@ -214,9 +236,13 @@ class ComputerTools(Toolkit):
         message = action_messages.get(action, f"Executed {action.replace('_', ' ')}")
         
         # Emit notification event to client
+        if not self.sid:
+            return
         self.socketio.emit('computer-tool-notification', {
             'action': action,
             'message': message,
+            'delegation_id': self.delegation_id,
+            'delegated_agent': self.delegated_agent,
             'timestamp': str(uuid.uuid4())  # Use as unique ID
         }, room=self.sid)
 
