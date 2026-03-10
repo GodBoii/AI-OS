@@ -512,6 +512,14 @@ def run_agent_and_stream(
             config.COMPOSIO_ENABLE_WHATSAPP,
         )
 
+        # Backward compatibility for legacy frontend key.
+        if "computer_control" in session_config:
+            session_config.setdefault(
+                "enable_computer_control",
+                bool(session_config.get("computer_control")),
+            )
+            session_config.pop("computer_control", None)
+
         # Internal routing metadata should not be forwarded to get_llm_os kwargs.
         session_agent_mode = str(session_config.pop("agent_mode", "default")).strip().lower()
 
