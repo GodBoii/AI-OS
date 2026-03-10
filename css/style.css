@@ -41,6 +41,15 @@ body {
     padding: 0.5rem 0;
 }
 
+.background-chat-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+    align-items: center;
+    padding-top: 0.15rem;
+}
+
 .sidebar-icon {
     position: relative;
     display: flex;
@@ -84,6 +93,61 @@ body {
     box-shadow:
         0 2px 8px rgba(45, 55, 72, 0.12),
         inset 0 1px 3px rgba(45, 55, 72, 0.08);
+}
+
+.background-chat-btn {
+    width: 2.25rem;
+    min-height: 3.3rem;
+    height: auto;
+    padding: 0.35rem 0.25rem;
+    flex-direction: column;
+    gap: 0.18rem;
+    border-color: rgba(var(--accent-color-rgb, 67, 56, 202), 0.18);
+    background: rgba(var(--accent-color-rgb, 67, 56, 202), 0.07);
+}
+
+.background-chat-btn:hover {
+    transform: translateY(-2px);
+}
+
+.background-chat-btn-running {
+    border-color: rgba(245, 158, 11, 0.32);
+    background: rgba(245, 158, 11, 0.09);
+}
+
+.background-chat-btn-completed {
+    border-color: rgba(16, 185, 129, 0.28);
+    background: rgba(16, 185, 129, 0.09);
+}
+
+.background-chat-dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+    flex-shrink: 0;
+}
+
+.background-chat-btn-completed .background-chat-dot {
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+}
+
+.background-chat-label {
+    width: 100%;
+    font-size: 0.5rem;
+    font-weight: 600;
+    line-height: 1.05;
+    text-align: center;
+    word-break: break-word;
+}
+
+.background-chat-state {
+    font-size: 0.48rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.78;
 }
 
 /* --- MODIFICATION: Hover-to-expand top control bar --- */

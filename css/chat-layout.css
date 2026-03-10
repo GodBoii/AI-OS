@@ -74,6 +74,10 @@
     display: none; /* Chrome/Safari/Opera */
 }
 
+.conversation-thread {
+    width: 100%;
+}
+
 /* --- Context Active Indicator --- */
 .context-active-indicator {
     display: none;
