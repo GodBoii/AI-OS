@@ -232,15 +232,21 @@ function renderBackgroundConversationButton(entry) {
 
     const status = entry.status || 'running';
     const label = entry.label || getConversationDisplayLabel(entry.conversationId);
-    const shortStatus = status === 'completed' ? 'Done' : 'Live';
 
     button.className = `sidebar-icon background-chat-btn background-chat-btn-${status}`;
-    button.title = `${label} (${status})`;
-    button.innerHTML = `
-        <span class="background-chat-dot" aria-hidden="true"></span>
-        <span class="background-chat-label">${label}</span>
-        <span class="background-chat-state">${shortStatus}</span>
-    `;
+    button.title = `${label}\nStatus: ${status === 'completed' ? 'Completed' : 'Processing...'}`;
+
+    if (status === 'completed') {
+        button.innerHTML = `
+            <i class="fa-solid fa-check-double bc-icon" aria-hidden="true"></i>
+            <span class="bc-indicator" aria-hidden="true"></span>
+        `;
+    } else {
+        button.innerHTML = `
+            <i class="fa-solid fa-brain bc-icon" aria-hidden="true"></i>
+            <span class="bc-indicator" aria-hidden="true"></span>
+        `;
+    }
 
     updateBackgroundConversationContainerVisibility();
 }
