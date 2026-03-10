@@ -49,6 +49,7 @@ from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
 from image_tools import ImageTools
 from agno.tools.youtube import YouTubeTools
+from agent_delegation_tools import AgentDelegationTools
 
 # Other Imports
 from supabase_client import supabase_client
@@ -144,6 +145,33 @@ def get_llm_os(
     if custom_tool_config:
         direct_tools.append(ImageTools(custom_tool_config=custom_tool_config))
 
+    # Expose explicit delegation tools so Aetheria can spawn dedicated coder/computer runs
+    # while preserving full trace visibility in the reasoning UI.
+    socketio_instance = browser_tools_config.get("socketio") if browser_tools_config else None
+    sid = browser_tools_config.get("sid") if browser_tools_config else None
+    redis_client_instance = browser_tools_config.get("redis_client") if browser_tools_config else None
+    has_socket_context = bool(socketio_instance and sid and session_id and message_id)
+    can_delegate_coder = bool(has_socket_context and coding_assistant)
+    # Computer delegation requires Redis pub/sub for request/response bridging.
+    can_delegate_computer = bool(has_socket_context and enable_computer_control and redis_client_instance)
+    if can_delegate_coder or can_delegate_computer:
+        direct_tools.append(
+            AgentDelegationTools(
+                user_id=user_id,
+                session_info=session_info,
+                session_id=session_id,
+                message_id=message_id,
+                socketio=socketio_instance,
+                sid=sid,
+                redis_client=redis_client_instance,
+                use_memory=use_memory,
+                debug_mode=debug_mode,
+                enable_github=enable_github,
+                enable_coder=can_delegate_coder,
+                enable_computer=can_delegate_computer,
+            )
+        )
+
     main_team_members: List[Union[Agent, Team]] = []
 
     if Planner_Agent:
@@ -185,6 +213,8 @@ def get_llm_os(
                 "- `composio_google_sheets_tools` — **always call `list_google_sheets_actions()` first**, then execute with exact tool_slug",
                 "- `composio_whatsapp_tools` — **always call `list_whatsapp_actions()` first**, then execute with exact tool_slug",
                 "- `DuckDuckGoTools` — web search/ internet search",
+                "- `delegate_to_coder(task_description)` — when available, run dedicated coder agent for coding/build/debug/deployment tasks in main mode",
+                "- `delegate_to_computer(task_description)` — when available, run dedicated computer agent for desktop/browser control tasks in main mode",
                 "</query>",
                 "",
                 "<coding_agent>",
@@ -228,7 +258,8 @@ def get_llm_os(
                 "## Key Rules",
                 "- For simple/conversational queries, reply: `No plan needed — this is a simple query.`",
                 "- Always respect tool ordering: GitHub metadata → Vercel; Browser status → Browser actions; list_actions → execute (Composio)",
-                "- Delegate: coding → `dev_team`, research → `World_Agent`, desktop → `Computer_Agent`",
+                "- In main mode, prefer explicit delegation tools (if available): coding → `delegate_to_coder(...)`, desktop → `delegate_to_computer(...)`",
+                "- You may still use `dev_team` / `World_Agent` when tool-based delegation is unavailable or not appropriate",
                 "- Never skip prerequisite steps (status checks, ID lookups, list calls)",
             ],
             debug_mode=debug_mode,
@@ -349,6 +380,7 @@ def get_llm_os(
         "Access context via session_state['turn_context'].",
         "Users talk directly to you. You have sub-agents and direct tools at your disposal — use them silently and effectively.",
         "ALWAYS consult the 'planner' agent first for any non-trivial query to get a structured execution plan.", 
+        "When delegation tools are available in main mode, use `delegate_to_coder(task_description)` for coding tasks and `delegate_to_computer(task_description)` for desktop/browser control tasks.",
         "Use every available tool and method to fulfil user demands — exhaust all options before giving up.",
         "If a tool or method fails, silently try alternatives. Never surface internal errors or system operations to the user",
         "Never use phrases like 'I will now', 'based on my knowledge', 'I was informed by', 'delegating to', or any language that exposes internal processes.",
@@ -368,6 +400,8 @@ def get_llm_os(
         "• composio_google_sheets_tools — list_google_sheets_actions() first, then execute with exact tool_slug",
         "• composio_whatsapp_tools — list_whatsapp_actions() first, then execute with exact tool_slug",
         "• DuckDuckGoTools — web search",
+        "• delegate_to_coder — dedicated coding-agent execution (available in realtime main-mode sessions)",
+        "• delegate_to_computer — dedicated computer-agent execution (available in realtime main-mode sessions with computer control enabled)",
         "</tools>",
     ]
     # --- CRITICAL CHANGE: Instantiate the standard Team class ---

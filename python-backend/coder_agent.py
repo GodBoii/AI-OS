@@ -30,6 +30,8 @@ def get_coder_agent(
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = True,
+    delegation_id: Optional[str] = None,
+    delegated_agent: Optional[str] = None,
 ) -> Agent:
     """
     Dedicated coding-only Agent used for project workspace mode.
@@ -57,6 +59,8 @@ def get_coder_agent(
             socketio=socketio_instance,
             sid=sid,
             redis_client=redis_client_instance,
+            delegation_id=delegation_id,
+            delegated_agent=delegated_agent,
         )
     ]
 
