@@ -392,8 +392,7 @@ class FileAttachmentHandler {
     }
 
     updateInputPositioning() {
-        const chatMessages = document.getElementById('chat-messages');
-        const hasMessages = chatMessages && chatMessages.children.length > 0;
+        const hasMessages = hasRenderableMessages();
 
         if (hasMessages) {
             this.inputContainer.classList.remove('centered');
@@ -501,6 +500,24 @@ class FileAttachmentHandler {
     }
 }
 
+function getActiveConversationContainer() {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) {
+        return null;
+    }
+
+    return (
+        chatMessages.querySelector('.conversation-thread.active:not(.hidden)') ||
+        chatMessages.querySelector('.conversation-thread:not(.hidden)') ||
+        chatMessages
+    );
+}
+
+function hasRenderableMessages() {
+    const activeContainer = getActiveConversationContainer();
+    return Boolean(activeContainer?.querySelector('.message'));
+}
+
 window.conversationStateManager = {
     hasMessages: false,
     fileHandler: null,
@@ -522,11 +539,11 @@ window.conversationStateManager = {
     },
     init() {
         const chatMessages = document.getElementById('chat-messages');
-        this.hasMessages = chatMessages && chatMessages.children.length > 0;
+        this.hasMessages = hasRenderableMessages();
         this.updateInputPositioning();
         if (chatMessages) {
             const observer = new MutationObserver(() => {
-                const hasMessages = chatMessages.children.length > 0;
+                const hasMessages = hasRenderableMessages();
                 if (hasMessages !== this.hasMessages) {
                     this.hasMessages = hasMessages;
                     this.updateInputPositioning();

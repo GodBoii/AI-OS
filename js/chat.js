@@ -44,6 +44,8 @@ let welcomeDisplay = null;
 let floatingWindowManager = null;
 let audioInputHandler = null;
 let connectionStatus = false;
+const conversationThreads = new Map();
+const conversationLabels = new Map();
 const queuedConversations = new Map();
 const persistedComputerOutputIds = new Set();
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
@@ -58,6 +60,302 @@ const supportedFileTypes = {
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'c': 'text/x-c'
 };
+
+function setCurrentConversationId(conversationId) {
+    currentConversationId = conversationId;
+    window.currentConversationId = conversationId;
+}
+
+function getChatMessagesRoot() {
+    return document.getElementById('chat-messages');
+}
+
+function getConversationThread(conversationId) {
+    return conversationThreads.get(conversationId) || null;
+}
+
+function getOrCreateConversationThread(conversationId) {
+    if (!conversationId) return null;
+
+    let thread = getConversationThread(conversationId);
+    if (thread) {
+        return thread;
+    }
+
+    const chatMessages = getChatMessagesRoot();
+    if (!chatMessages) {
+        return null;
+    }
+
+    thread = document.createElement('div');
+    thread.className = 'conversation-thread';
+    thread.dataset.conversationId = conversationId;
+    chatMessages.appendChild(thread);
+    conversationThreads.set(conversationId, thread);
+    return thread;
+}
+
+function getActiveConversationThread() {
+    return currentConversationId ? getOrCreateConversationThread(currentConversationId) : null;
+}
+
+function getStreamEntry(messageId) {
+    return messageId ? ongoingStreams[messageId] || null : null;
+}
+
+function getStreamMessageDiv(messageId) {
+    const entry = getStreamEntry(messageId);
+    return entry?.element || entry || null;
+}
+
+function getStreamConversationId(messageId) {
+    const entry = getStreamEntry(messageId);
+    return entry?.conversationId || null;
+}
+
+function hasActiveRunForConversation(conversationId) {
+    if (!conversationId) return false;
+    return Object.values(ongoingStreams).some((entry) => {
+        const streamConversationId = entry?.conversationId || null;
+        return streamConversationId === conversationId;
+    });
+}
+
+function isConversationActive(conversationId) {
+    return Boolean(conversationId) && conversationId === currentConversationId;
+}
+
+function threadHasMessages(conversationId) {
+    const thread = getConversationThread(conversationId);
+    return Boolean(thread?.querySelector('.message'));
+}
+
+function scrollActiveConversationToBottom() {
+    const chatMessages = getChatMessagesRoot();
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+function updateConversationStateForActiveThread() {
+    if (!window.conversationStateManager) {
+        return;
+    }
+
+    if (threadHasMessages(currentConversationId)) {
+        window.conversationStateManager.onMessageAdded();
+    } else {
+        window.conversationStateManager.onConversationCleared();
+    }
+}
+
+function getConversationDisplayLabel(conversationId) {
+    const saved = conversationLabels.get(conversationId);
+    if (saved) {
+        return saved;
+    }
+    if (!conversationId) {
+        return 'Background Chat';
+    }
+    return `Chat ${String(conversationId).slice(0, 8)}`;
+}
+
+function updateConversationLabel(conversationId, rawLabel) {
+    if (!conversationId || !rawLabel) return;
+
+    const normalized = String(rawLabel).replace(/\s+/g, ' ').trim();
+    if (!normalized) return;
+
+    const truncated = normalized.length > 34 ? `${normalized.slice(0, 31)}...` : normalized;
+    conversationLabels.set(conversationId, truncated);
+
+    const queueEntry = queuedConversations.get(conversationId);
+    if (queueEntry) {
+        queueEntry.label = truncated;
+        renderBackgroundConversationButton(queueEntry);
+    }
+}
+
+function getBackgroundConversationContainer() {
+    const existing = document.getElementById('background-chat-stack');
+    if (existing) {
+        return existing;
+    }
+
+    const sidebarIcons = document.querySelector('.sidebar-icons');
+    if (!sidebarIcons) {
+        return null;
+    }
+
+    const container = document.createElement('div');
+    container.id = 'background-chat-stack';
+    container.className = 'background-chat-stack hidden';
+
+    const computerWorkspaceIcon = document.getElementById('computer-workspace-icon');
+    if (computerWorkspaceIcon?.parentElement === sidebarIcons) {
+        computerWorkspaceIcon.insertAdjacentElement('afterend', container);
+    } else {
+        sidebarIcons.appendChild(container);
+    }
+
+    return container;
+}
+
+function updateBackgroundConversationContainerVisibility() {
+    const container = getBackgroundConversationContainer();
+    if (!container) return;
+    container.classList.toggle('hidden', queuedConversations.size === 0);
+}
+
+function renderBackgroundConversationButton(entry) {
+    if (!entry?.conversationId) {
+        return;
+    }
+
+    const container = getBackgroundConversationContainer();
+    if (!container) {
+        return;
+    }
+
+    let button = entry.button;
+    if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'sidebar-icon background-chat-btn';
+        button.dataset.conversationId = entry.conversationId;
+        button.addEventListener('click', () => {
+            switchConversation(entry.conversationId);
+        });
+        container.prepend(button);
+        entry.button = button;
+    }
+
+    const status = entry.status || 'running';
+    const label = entry.label || getConversationDisplayLabel(entry.conversationId);
+    const shortStatus = status === 'completed' ? 'Done' : 'Live';
+
+    button.className = `sidebar-icon background-chat-btn background-chat-btn-${status}`;
+    button.title = `${label} (${status})`;
+    button.innerHTML = `
+        <span class="background-chat-dot" aria-hidden="true"></span>
+        <span class="background-chat-label">${label}</span>
+        <span class="background-chat-state">${shortStatus}</span>
+    `;
+
+    updateBackgroundConversationContainerVisibility();
+}
+
+function ensureBackgroundConversation(conversationId, overrides = {}) {
+    if (!conversationId) return null;
+
+    const existing = queuedConversations.get(conversationId) || {
+        conversationId,
+        queuedAt: Date.now(),
+        status: 'running',
+        label: getConversationDisplayLabel(conversationId),
+    };
+
+    Object.assign(existing, overrides);
+    if (!existing.label) {
+        existing.label = getConversationDisplayLabel(conversationId);
+    }
+
+    queuedConversations.set(conversationId, existing);
+    renderBackgroundConversationButton(existing);
+    return existing;
+}
+
+function removeBackgroundConversation(conversationId) {
+    const entry = queuedConversations.get(conversationId);
+    if (!entry) return;
+
+    entry.button?.remove();
+    queuedConversations.delete(conversationId);
+    updateBackgroundConversationContainerVisibility();
+}
+
+function setBackgroundConversationStatus(conversationId, status) {
+    const entry = queuedConversations.get(conversationId);
+    if (!entry) return;
+    entry.status = status;
+    renderBackgroundConversationButton(entry);
+}
+
+function destroyConversationState(conversationId) {
+    removeBackgroundConversation(conversationId);
+
+    const thread = getConversationThread(conversationId);
+    if (thread) {
+        thread.remove();
+        conversationThreads.delete(conversationId);
+    }
+
+    conversationLabels.delete(conversationId);
+}
+
+function reassignConversationThread(previousConversationId, nextConversationId) {
+    if (!previousConversationId || !nextConversationId || previousConversationId === nextConversationId) {
+        return;
+    }
+
+    const existingThread = getConversationThread(previousConversationId);
+    if (existingThread) {
+        conversationThreads.delete(previousConversationId);
+        existingThread.dataset.conversationId = nextConversationId;
+        conversationThreads.set(nextConversationId, existingThread);
+    }
+
+    if (conversationLabels.has(previousConversationId)) {
+        conversationLabels.set(nextConversationId, conversationLabels.get(previousConversationId));
+        conversationLabels.delete(previousConversationId);
+    }
+
+    const queueEntry = queuedConversations.get(previousConversationId);
+    if (queueEntry) {
+        queuedConversations.delete(previousConversationId);
+        queueEntry.conversationId = nextConversationId;
+        if (queueEntry.button) {
+            queueEntry.button.dataset.conversationId = nextConversationId;
+        }
+        queuedConversations.set(nextConversationId, queueEntry);
+        renderBackgroundConversationButton(queueEntry);
+    }
+}
+
+function switchConversation(conversationId) {
+    if (!conversationId) return;
+
+    if (currentConversationId && currentConversationId !== conversationId && hasActiveRunForConversation(currentConversationId)) {
+        ensureBackgroundConversation(currentConversationId, { status: 'running' });
+    }
+
+    setCurrentConversationId(conversationId);
+    const chatMessages = getChatMessagesRoot();
+    const nextThread = getOrCreateConversationThread(conversationId);
+    if (!chatMessages || !nextThread) {
+        return;
+    }
+
+    Array.from(chatMessages.children).forEach((thread) => {
+        const isActiveThread = thread === nextThread;
+        thread.classList.toggle('hidden', !isActiveThread);
+        thread.classList.toggle('active', isActiveThread);
+    });
+
+    removeBackgroundConversation(conversationId);
+    updateConversationStateForActiveThread();
+    if (welcomeDisplay && typeof welcomeDisplay.updateDisplay === 'function') {
+        welcomeDisplay.updateDisplay();
+    }
+    checkAndShowContentButton();
+    scrollActiveConversationToBottom();
+}
+
+function invalidateContentForConversation(conversationId) {
+    if (window.sessionContentViewer && conversationId) {
+        window.sessionContentViewer.invalidateCache(conversationId);
+    }
+}
 
 function resolveAgentMode() {
     const computerCtx = window.computerContext || null;
@@ -397,7 +695,7 @@ function findComputerToolLogEntry(messageDiv, messageId, toolName) {
     return null;
 }
 
-async function persistComputerToolAttachment(metadata, toolName = 'computer_tool') {
+async function persistComputerToolAttachment(metadata, toolName = 'computer_tool', conversationId = null) {
     if (!metadata?.relativePath || !metadata?.output_id || persistedComputerOutputIds.has(metadata.output_id)) {
         console.log('[ComputerOutputDB] Skip persist', {
             hasRelativePath: !!metadata?.relativePath,
@@ -412,7 +710,7 @@ async function persistComputerToolAttachment(metadata, toolName = 'computer_tool
         if (!session?.user?.id) return;
 
         const record = {
-            session_id: metadata.session_id || currentConversationId,
+            session_id: metadata.session_id || conversationId || currentConversationId,
             user_id: session.user.id,
             metadata: {
                 kind: 'computer_tool_output',
@@ -472,27 +770,30 @@ async function startNewConversation() {
     }
 
     if (currentConversationId) {
-        const hasActiveRun = Object.keys(ongoingStreams).length > 0;
+        const previousConversationId = currentConversationId;
+        const hasActiveRun = hasActiveRunForConversation(previousConversationId);
         if (hasActiveRun) {
-            queuedConversations.set(currentConversationId, {
-                queuedAt: Date.now()
+            ensureBackgroundConversation(previousConversationId, {
+                queuedAt: Date.now(),
+                status: 'running',
             });
-            console.log(`[Queue] Conversation ${currentConversationId} moved to local queue (run still in progress)`);
+            console.log(`[Queue] Conversation ${previousConversationId} moved to local queue (run still in progress)`);
             showNotification('Previous run moved to queue and will continue in background.', 'success', 3500);
         } else {
-            terminateSession(currentConversationId);
+            terminateSession(previousConversationId);
+            destroyConversationState(previousConversationId);
         }
     }
 
-    currentConversationId = self.crypto.randomUUID();
-    window.currentConversationId = currentConversationId;
+    const nextConversationId = self.crypto.randomUUID();
+    setCurrentConversationId(nextConversationId);
     console.log(`Starting new conversation with ID: ${currentConversationId}`);
 
-    document.getElementById('chat-messages').innerHTML = '';
+    getOrCreateConversationThread(currentConversationId);
+    switchConversation(currentConversationId);
     document.getElementById('floating-input').disabled = false;
     document.getElementById('send-message').disabled = false;
 
-    ongoingStreams = {};
     if (contextHandler) {
         contextHandler.clearSelectedContext();
         // Invalidate cache so next time context window opens, it shows the new conversation
@@ -504,9 +805,7 @@ async function startNewConversation() {
     hideContentButton();
 
     // Invalidate session content cache
-    if (window.sessionContentViewer) {
-        window.sessionContentViewer.invalidateCache(currentConversationId);
-    }
+    invalidateContentForConversation(currentConversationId);
 
     // Clear error recovery flag
     window.needsNewBackendSession = false;
@@ -595,9 +894,10 @@ function setupIpcListeners() {
         try {
             if (!data) return;
             const { streaming = false, done = false, id: messageId } = data;
+            const streamConversationId = getStreamConversationId(messageId);
+            const messageDiv = getStreamMessageDiv(messageId);
 
-            if (done && messageId && ongoingStreams[messageId]) {
-                const messageDiv = ongoingStreams[messageId];
+            if (done && messageId && messageDiv) {
 
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                 if (thinkingIndicator) {
@@ -663,12 +963,15 @@ function setupIpcListeners() {
 
                 messageFormatter.finishStreamingForAllOwners(messageId);
                 delete ongoingStreams[messageId];
+                if (!isConversationActive(streamConversationId)) {
+                    setBackgroundConversationStatus(streamConversationId, 'completed');
+                }
 
                 // Add action buttons (copy, share) to the completed message
                 addMessageActionButtons(messageDiv);
 
                 // CORRECTED FLOW: Save attachment metadata AFTER AI response completes successfully
-                if (window.pendingAttachmentMetadata) {
+                if (window.pendingAttachmentMetadata && window.pendingAttachmentMetadata.sessionId === streamConversationId) {
                     console.log('[AttachmentDB] AI response completed, now persisting attachment metadata');
                     await persistAttachmentMetadata(
                         window.pendingAttachmentMetadata.sessionId,
@@ -680,14 +983,16 @@ function setupIpcListeners() {
                 }
 
                 // Check if session has content to show button
-                checkAndShowContentButton();
+                if (isConversationActive(streamConversationId)) {
+                    checkAndShowContentButton();
+                }
             }
 
             if (data.content) {
                 populateBotMessage(data);
             }
 
-            if (done || (!streaming && data.content)) {
+            if ((done || (!streaming && data.content)) && (!streamConversationId || isConversationActive(streamConversationId))) {
                 const inputElement = document.getElementById('floating-input');
                 const sendBtn = document.getElementById('send-message');
                 if (inputElement) inputElement.disabled = false;
@@ -711,9 +1016,10 @@ function setupIpcListeners() {
 
     ipcRenderer.on('image_generated', (data) => {
         const { id: messageId, image_base64, artifactId } = data;
+        const messageDiv = getStreamMessageDiv(messageId);
 
         // Filter events by message ID to ensure this client should process it
-        if (!ongoingStreams[messageId]) {
+        if (!messageDiv) {
             return;
         }
 
@@ -722,8 +1028,7 @@ function setupIpcListeners() {
         }
 
         // Add log entry to reasoning dropdown
-        if (messageId && ongoingStreams[messageId]) {
-            const messageDiv = ongoingStreams[messageId];
+        if (messageId && messageDiv) {
             const logsContainer = messageDiv.querySelector('.detailed-logs');
             if (logsContainer) {
                 const logEntry = document.createElement('div');
@@ -759,7 +1064,9 @@ function setupIpcListeners() {
 
     ipcRenderer.on('agent-step', async (data) => {
         const { id: messageId, type, name, agent_name, team_name, tool } = data;
-        if (!messageId || !ongoingStreams[messageId]) return;
+        const messageDiv = getStreamMessageDiv(messageId);
+        const streamConversationId = getStreamConversationId(messageId);
+        if (!messageId || !messageDiv) return;
         console.log('[ComputerToolPreview] agent-step received', {
             messageId,
             type,
@@ -770,7 +1077,6 @@ function setupIpcListeners() {
             toolOutputType: tool?.tool_output ? typeof tool.tool_output : null
         });
 
-        const messageDiv = ongoingStreams[messageId];
         const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
         const ownerName = agent_name || team_name || 'Assistant';
         const stepId = `step-${messageId}-${ownerName}-${name}`;
@@ -825,7 +1131,7 @@ function setupIpcListeners() {
             const metadata = getComputerToolMetadata(tool);
             if (logEntry && metadata) {
                 await attachComputerToolPreview(logEntry, metadata);
-                await persistComputerToolAttachment(metadata, name || 'computer_tool');
+                await persistComputerToolAttachment(metadata, name || 'computer_tool', streamConversationId);
             } else {
                 console.log('[ComputerToolPreview] No metadata attached on tool_end', {
                     messageId,
@@ -835,7 +1141,7 @@ function setupIpcListeners() {
             }
 
             if (name && name.startsWith('interactive_browser') && tool?.tool_output?.screenshot_base_64) {
-                if (artifactHandler && !isProjectWorkspaceMode()) {
+                if (artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
                     console.log("Detected browser tool output. Showing artifact.");
                     artifactHandler.showArtifact('browser_view', tool.tool_output);
                 }
@@ -879,7 +1185,7 @@ function setupIpcListeners() {
         .replace(/'/g, '&#39;');
 
     const appendSandboxToolLog = (messageId, html, logEntryId = null) => {
-        const messageDiv = ongoingStreams[messageId];
+        const messageDiv = getStreamMessageDiv(messageId);
         if (!messageDiv) return;
 
         const logsContainer = messageDiv.querySelector('.detailed-logs');
@@ -903,10 +1209,11 @@ function setupIpcListeners() {
         const messageId = data?.id;
         const executionId = data?.execution_id || data?.artifactId;
         const command = String(data?.command || '').trim();
+        const streamConversationId = getStreamConversationId(messageId);
 
         if (!messageId || !executionId) return;
 
-        if (artifactHandler && !isProjectWorkspaceMode()) {
+        if (artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
             artifactHandler.showTerminal(executionId);
             artifactHandler.updateCommand(executionId, command);
         }
@@ -932,8 +1239,9 @@ function setupIpcListeners() {
         const executionId = data?.execution_id || data?.artifactId;
         const command = String(data?.command || '').trim();
         const exitCode = Number.isFinite(Number(data?.exit_code)) ? Number(data.exit_code) : Number(data?.exitCode || 0);
+        const streamConversationId = getStreamConversationId(messageId);
 
-        if (executionId && artifactHandler && !isProjectWorkspaceMode()) {
+        if (executionId && artifactHandler && isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
             artifactHandler.updateTerminalOutput(
                 executionId,
                 data?.stdout || '',
@@ -961,17 +1269,20 @@ function setupIpcListeners() {
         }
 
         // Invalidate cache when new execution content is added
-        if (window.sessionContentViewer && currentConversationId) {
-            window.sessionContentViewer.invalidateCache(currentConversationId);
+        if (streamConversationId) {
+            invalidateContentForConversation(streamConversationId);
         }
 
         // Check if session has content to show button
-        checkAndShowContentButton();
+        if (isConversationActive(streamConversationId)) {
+            checkAndShowContentButton();
+        }
     });
 
     ipcRenderer.on('sandbox-artifacts-created', (data) => {
         const messageId = data?.id;
         const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
+        const streamConversationId = getStreamConversationId(messageId);
         if (!messageId || artifacts.length === 0) return;
 
         for (const artifact of artifacts) {
@@ -992,13 +1303,15 @@ function setupIpcListeners() {
             );
         }
 
-        if (window.sessionContentViewer && currentConversationId) {
-            window.sessionContentViewer.invalidateCache(currentConversationId);
+        if (streamConversationId) {
+            invalidateContentForConversation(streamConversationId);
         }
         document.dispatchEvent(new CustomEvent('session-content:updated', {
-            detail: { conversationId: currentConversationId, type: 'artifact' }
+            detail: { conversationId: streamConversationId, type: 'artifact' }
         }));
-        checkAndShowContentButton();
+        if (isConversationActive(streamConversationId)) {
+            checkAndShowContentButton();
+        }
     });
 
     ipcRenderer.on('socket-error', (error) => {
@@ -1055,8 +1368,10 @@ function setupIpcListeners() {
             const messageId = data?.id;
             const toolName = data?.tool_name;
             const metadata = data?.metadata;
+            const messageDiv = getStreamMessageDiv(messageId);
+            const streamConversationId = getStreamConversationId(messageId);
 
-            if (!messageId || !ongoingStreams[messageId]) {
+            if (!messageId || !messageDiv) {
                 console.log('[ComputerToolPreview] Preview event ignored: no live message container', {
                     messageId: messageId || null,
                     toolName: toolName || null
@@ -1080,7 +1395,6 @@ function setupIpcListeners() {
                 return;
             }
 
-            const messageDiv = ongoingStreams[messageId];
             const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName);
             if (!logEntry) {
                 console.log('[ComputerToolPreview] Preview event could not find matching log entry', {
@@ -1091,7 +1405,7 @@ function setupIpcListeners() {
             }
 
             await attachComputerToolPreview(logEntry, metadata);
-            await persistComputerToolAttachment(metadata, toolName || 'computer_tool');
+            await persistComputerToolAttachment(metadata, toolName || 'computer_tool', streamConversationId);
         } catch (error) {
             console.error('[ComputerToolPreview] Failed handling preview event:', error);
         }
@@ -1101,7 +1415,9 @@ function setupIpcListeners() {
 }
 
 function addUserMessage(message, turnContextData = null) {
-    const chatMessages = document.getElementById('chat-messages');
+    const activeThread = getActiveConversationThread();
+    if (!activeThread) return;
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message message-user';
     const userMessageContainer = document.createElement('div');
@@ -1129,8 +1445,9 @@ function addUserMessage(message, turnContextData = null) {
     }
 
     messageDiv.appendChild(userMessageContainer);
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    activeThread.appendChild(messageDiv);
+    updateConversationLabel(currentConversationId, message);
+    scrollActiveConversationToBottom();
 
     // Dispatch custom event for welcome display
     document.dispatchEvent(new CustomEvent('messageAdded'));
@@ -1147,7 +1464,7 @@ function addUserMessage(message, turnContextData = null) {
  * This function is called every time a tool starts or an agent responds
  */
 function updateReasoningSummary(messageId) {
-    const messageDiv = ongoingStreams[messageId];
+    const messageDiv = getStreamMessageDiv(messageId);
     if (!messageDiv) return;
 
     const reasoningSummary = messageDiv.querySelector('.reasoning-summary');
@@ -1180,7 +1497,9 @@ function updateReasoningSummary(messageId) {
 }
 
 function createBotMessagePlaceholder(messageId) {
-    const chatMessages = document.getElementById('chat-messages');
+    const activeThread = getActiveConversationThread();
+    if (!activeThread) return;
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message message-bot';
 
@@ -1206,8 +1525,11 @@ function createBotMessagePlaceholder(messageId) {
     mainContentDiv.id = `main-content-${messageId}`;
     messageDiv.appendChild(mainContentDiv);
 
-    chatMessages.appendChild(messageDiv);
-    ongoingStreams[messageId] = messageDiv;
+    activeThread.appendChild(messageDiv);
+    ongoingStreams[messageId] = {
+        conversationId: currentConversationId,
+        element: messageDiv,
+    };
 
     // Add click handler to the summary (even though it's hidden initially)
     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
@@ -1215,12 +1537,12 @@ function createBotMessagePlaceholder(messageId) {
         messageDiv.classList.toggle('expanded');
     });
 
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    scrollActiveConversationToBottom();
 }
 
 function populateBotMessage(data) {
     const { content, id: messageId, streaming = false, agent_name, team_name, is_log } = data;
-    const messageDiv = ongoingStreams[messageId];
+    const messageDiv = getStreamMessageDiv(messageId);
     if (!messageDiv) {
         console.warn("Could not find message div for ID:", messageId);
         return;
@@ -1468,8 +1790,8 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
  * @returns {string} Formatted conversation history
  */
 function extractConversationHistory() {
-    const chatMessages = document.getElementById('chat-messages');
-    const messages = chatMessages.querySelectorAll('.message');
+    const activeThread = getActiveConversationThread();
+    const messages = activeThread?.querySelectorAll('.message') || [];
     let history = '';
 
     messages.forEach(msg => {
@@ -1535,8 +1857,10 @@ async function handleSendMessage() {
     // Check if we need to create a new backend session (after error)
     if (window.needsNewBackendSession) {
         // Generate new conversation ID for backend
-        currentConversationId = self.crypto.randomUUID();
-        window.currentConversationId = currentConversationId;
+        const previousConversationId = currentConversationId;
+        const recoveredConversationId = self.crypto.randomUUID();
+        reassignConversationThread(previousConversationId, recoveredConversationId);
+        setCurrentConversationId(recoveredConversationId);
         console.log(`Creating new backend session after error: ${currentConversationId}`);
 
         // Extract conversation history from DOM
@@ -2039,6 +2363,8 @@ function init() {
     };
     contextHandler = new ContextHandler();
     window.contextHandler = contextHandler;
+    window.startNewConversation = startNewConversation;
+    getBackgroundConversationContainer();
 
     // Start background loading of sessions after a short delay
     // This happens automatically without user interaction
