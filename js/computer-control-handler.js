@@ -441,6 +441,8 @@ class ComputerControlHandler {
             action,
             session_id: commandPayload.conversation_id || null,
             message_id: commandPayload.message_id || null,
+            delegation_id: commandPayload.delegation_id || null,
+            delegated_agent: commandPayload.delegated_agent || null,
             preview_type: 'none',
             title: action.replace(/_/g, ' '),
             inline_safe: true
@@ -655,6 +657,8 @@ class ComputerControlHandler {
                 action: 'take_screenshot',
                 session_id: commandPayload.conversation_id || null,
                 message_id: commandPayload.message_id || null,
+                delegation_id: commandPayload.delegation_id || null,
+                delegated_agent: commandPayload.delegated_agent || null,
                 title: 'Captured screen',
                 preview_type: 'image',
                 filename: path.basename(localSave.relativePath),
