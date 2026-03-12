@@ -14,6 +14,9 @@ let mainWindow;
 
 // --- App Name Setup ---
 app.setName('Aetheria AI');
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.aetheria-ai.desktop');
+}
 
 // --- Protocol Registration ---
 // This tells the OS that our app can handle 'aios://' links.
@@ -112,7 +115,9 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
-        icon: path.join(app.getAppPath(), 'assets/icon.ico'),
+        icon: app.isPackaged
+            ? path.join(process.resourcesPath, 'assets/icon.ico')
+            : path.join(__dirname, '../assets/icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -121,7 +126,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: true,
+        frame: false,
         transparent: true
     });
 
