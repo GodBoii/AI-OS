@@ -1,8 +1,8 @@
 {
   "name": "aetheria-ai",
-  "version": "1.1.4",
-  "description": "Aetheria AI Desktop Assistant: An AI-Powered Desktop Application",
-  "author": "Aetheria AI <support@aetheria-ai.com>",
+  "version": "1.2.0",
+  "description": "**Aetheria AI** (AI-OS) is an advanced, agentic desktop operating system designed to bridge the gap between Large Language Models (LLMs) and real-world execution. Unlike standard chatbots, AI-OS acts as a **system operator**—capable of browsing the web, managing files, executing code in secure sandboxes, and interacting with third-party services.",
+  "author": "Aetheria AI aetheriaai1@gmail.com",
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",
@@ -26,6 +26,10 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "assets/**/*.ico",
+      "assets/**/*.png"
+    ],
     "win": {
       "target": [
         {
@@ -69,6 +73,7 @@
     "audio-decode": "^2.2.2",
     "axios": "^1.11.0",
     "chokidar": "^4.0.3",
+    "convex": "^1.32.0",
     "dompurify": "^3.2.4",
     "dotenv": "^16.4.7",
     "highlight.js": "^11.11.1",
