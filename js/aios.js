@@ -738,6 +738,13 @@ class AIOS {
         }
     }
 
+    _ensureConvexUsageSource(summary) {
+        const source = String(summary?.usage_source || '').toLowerCase();
+        if (source !== 'convex_window') {
+            throw new Error('Usage source is not Convex. Please check backend Convex configuration.');
+        }
+    }
+
     resetSubscriptionUI() {
         this.subscriptionSummary = null;
         if (this.elements.usagePeriodLabel) this.elements.usagePeriodLabel.textContent = 'Current Usage';
@@ -1074,6 +1081,7 @@ class AIOS {
                 return;
             }
 
+            this._ensureConvexUsageSource(summary);
             this.usageView.render(summary.usage || {});
             this.renderSubscriptionSummary(summary);
             if (showNotification) this.showNotification('Usage refreshed', 'success');
