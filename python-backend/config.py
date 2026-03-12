@@ -49,6 +49,12 @@ TURSO_ORG_SLUG = os.getenv("TURSO_ORG_SLUG")
 TURSO_GROUP = os.getenv("TURSO_GROUP")
 DEPLOY_SECRET_KEY = os.getenv("DEPLOY_SECRET_KEY")
 
+# --- Convex Usage Logging Configuration ---
+CONVEX_URL = os.getenv("CONVEX_URL")
+CONVEX_ADMIN_KEY = os.getenv("CONVEX_ADMIN_KEY")
+CONVEX_USAGE_ENABLED = os.getenv("CONVEX_USAGE_ENABLED", "true").lower() == "true"
+USAGE_ADMIN_API_KEY = os.getenv("USAGE_ADMIN_API_KEY")
+
 # --- Razorpay Subscription Configuration ---
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")

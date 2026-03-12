@@ -38,6 +38,8 @@ from subscription_service import (
     UsageLimitExceeded,
     calculate_usage_summary,
     create_razorpay_subscription,
+    get_daily_usage_by_date,
+    get_daily_usage_for_user,
     get_plan_config,
     handle_webhook_event,
     parse_webhook_body,
@@ -220,6 +222,47 @@ def subscription_status():
     except Exception as exc:
         logger.error("subscription/status failed: %s", exc, exc_info=True)
         return jsonify({"ok": False, "error": "failed to load subscription status"}), 500
+
+
+@api_bp.route('/usage/daily', methods=['GET'])
+def usage_daily_for_user():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    day_key = (request.args.get("day") or "").strip() or None
+    limit = request.args.get("limit", default=30, type=int) or 30
+    limit = max(1, min(limit, 365))
+
+    try:
+        rows = get_daily_usage_for_user(str(user.id), day_key=day_key, limit=limit)
+        return jsonify({"ok": True, "rows": rows, "count": len(rows)}), 200
+    except Exception as exc:
+        logger.error("usage/daily failed for user %s: %s", str(user.id), exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to load daily usage"}), 500
+
+
+@api_bp.route('/admin/usage/daily', methods=['GET'])
+def usage_daily_admin():
+    expected_key = str(config.USAGE_ADMIN_API_KEY or "").strip()
+    provided_key = str(request.headers.get("x-usage-admin-key") or "").strip()
+    if not expected_key:
+        return jsonify({"ok": False, "error": "USAGE_ADMIN_API_KEY is not configured"}), 503
+    if provided_key != expected_key:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    day_key = (request.args.get("day") or "").strip()
+    if not day_key:
+        return jsonify({"ok": False, "error": "day query param is required (YYYY-MM-DD)"}), 400
+    limit = request.args.get("limit", default=1000, type=int) or 1000
+    limit = max(1, min(limit, 5000))
+
+    try:
+        rows = get_daily_usage_by_date(day_key=day_key, limit=limit)
+        return jsonify({"ok": True, "day": day_key, "rows": rows, "count": len(rows)}), 200
+    except Exception as exc:
+        logger.error("admin/usage/daily failed for day %s: %s", day_key, exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to load admin daily usage"}), 500
 
 
 @api_bp.route('/subscription/create', methods=['POST'])
