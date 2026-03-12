@@ -1,0 +1,444 @@
+/* Usage Graph - Glassmorphism UI with Fluid Animations */
+
+:root {
+    /* Dark Mode Colors (Default) */
+    --graph-primary: #FFF8E7;
+    --graph-accent: #FFD93D;
+    --graph-secondary: #F6C445;
+    --graph-glass-bg: rgba(255, 248, 231, 0.05);
+    --graph-glass-border: rgba(255, 217, 61, 0.15);
+    --graph-glass-hover: rgba(255, 248, 231, 0.08);
+    --graph-shadow: rgba(255, 217, 61, 0.1);
+    --graph-text-primary: #FFF8E7;
+    --graph-text-secondary: rgba(255, 248, 231, 0.7);
+    --graph-backdrop-blur: 12px;
+}
+
+/* Light Mode Colors */
+[data-theme="light"] {
+    --graph-primary: #1A1A1A;
+    --graph-accent: #E8B923;
+    --graph-secondary: #D4A017;
+    --graph-glass-bg: rgba(26, 26, 26, 0.05);
+    --graph-glass-border: rgba(232, 185, 35, 0.2);
+    --graph-glass-hover: rgba(26, 26, 26, 0.08);
+    --graph-shadow: rgba(232, 185, 35, 0.15);
+    --graph-text-primary: #1A1A1A;
+    --graph-text-secondary: rgba(26, 26, 26, 0.7);
+}
+
+/* Usage Header Enhancements */
+.usage-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Glass Button with Fluid Animations */
+.btn-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--graph-glass-border);
+    border-radius: 10px;
+    background: var(--graph-glass-bg);
+    backdrop-filter: blur(var(--graph-backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--graph-backdrop-blur));
+    color: var(--graph-text-secondary);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.btn-icon::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, var(--graph-accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.btn-icon:hover {
+    background: var(--graph-glass-hover);
+    border-color: var(--graph-accent);
+    color: var(--graph-primary);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 16px var(--graph-shadow);
+}
+
+.btn-icon:hover::before {
+    opacity: 0.1;
+}
+
+.btn-icon:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.btn-icon.active {
+    background: linear-gradient(135deg, var(--graph-accent), var(--graph-secondary));
+    border-color: transparent;
+    color: #1A1A1A;
+    box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px rgba(255, 217, 61, 0.2);
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px rgba(255, 217, 61, 0.2);
+    }
+    50% {
+        box-shadow: 0 4px 24px var(--graph-shadow), 0 0 50px rgba(255, 217, 61, 0.3);
+    }
+}
+
+.btn-icon i {
+    font-size: 15px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-icon:hover i {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.btn-icon.active i {
+    transform: scale(1.15);
+}
+
+/* Graph View Container with Glass Effect */
+.usage-graph-view {
+    padding: 20px 0;
+    animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.usage-graph-view.hidden {
+    display: none;
+}
+
+/* Period Selector - Glassmorphism */
+.usage-graph-period-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    padding: 6px;
+    border-radius: 14px;
+    background: var(--graph-glass-bg);
+    backdrop-filter: blur(var(--graph-backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--graph-backdrop-blur));
+    border: 1px solid var(--graph-glass-border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    animation: slideInDown 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.period-btn {
+    position: relative;
+    flex: 1;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--graph-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.period-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--graph-glass-hover);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.period-btn:hover {
+    color: var(--graph-primary);
+    transform: translateY(-1px);
+}
+
+.period-btn:hover::before {
+    opacity: 1;
+}
+
+.period-btn.active {
+    background: linear-gradient(135deg, var(--graph-accent), var(--graph-secondary));
+    color: #1A1A1A;
+    font-weight: 700;
+    box-shadow: 0 4px 12px var(--graph-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.period-btn.active::before {
+    opacity: 0;
+}
+
+/* Graph Content - Frosted Glass Container */
+.usage-graph-content {
+    position: relative;
+    min-height: 300px;
+    border-radius: 16px;
+    border: 1px solid var(--graph-glass-border);
+    background: var(--graph-glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    animation: scaleIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Loading State with Fluid Animation */
+.usage-graph-loading,
+.usage-graph-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    gap: 12px;
+    color: var(--graph-text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.usage-graph-loading i {
+    font-size: 32px;
+    color: var(--graph-accent);
+    animation: spinPulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spinPulse {
+    0%, 100% {
+        transform: rotate(0deg) scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: rotate(180deg) scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.usage-graph-error {
+    color: #FF6B6B;
+}
+
+.usage-graph-error i {
+    font-size: 32px;
+    animation: shake 0.5s ease;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
+}
+
+/* Canvas Container */
+.usage-graph-canvas-container {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    animation: fadeIn 0.6s ease 0.3s both;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.usage-graph-canvas-container.hidden {
+    display: none;
+}
+
+.usage-graph-canvas-container canvas {
+    max-width: 100%;
+    max-height: 100%;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+}
+
+/* Stats Grid - Glass Cards with Stagger Animation */
+.usage-graph-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.usage-stat-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--graph-glass-border);
+    background: var(--graph-glass-bg);
+    backdrop-filter: blur(var(--graph-backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--graph-backdrop-blur));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    animation: slideInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.usage-stat-item:nth-child(1) { animation-delay: 0.4s; }
+.usage-stat-item:nth-child(2) { animation-delay: 0.5s; }
+.usage-stat-item:nth-child(3) { animation-delay: 0.6s; }
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.usage-stat-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--graph-accent), var(--graph-secondary));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.usage-stat-item:hover {
+    transform: translateY(-4px);
+    border-color: var(--graph-accent);
+    box-shadow: 0 8px 24px var(--graph-shadow);
+}
+
+.usage-stat-item:hover::before {
+    opacity: 1;
+}
+
+.usage-stat-label {
+    color: var(--graph-text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.usage-stat-value {
+    color: var(--graph-primary);
+    font-size: 20px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s ease;
+}
+
+.usage-stat-item:hover .usage-stat-value {
+    color: var(--graph-accent);
+}
+
+/* Summary View Transition */
+.usage-display {
+    animation: fadeInScale 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .usage-graph-content {
+        min-height: 260px;
+        padding: 16px;
+    }
+
+    .usage-graph-canvas-container {
+        height: 260px;
+    }
+
+    .usage-graph-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .period-btn {
+        font-size: 11px;
+        padding: 9px 12px;
+    }
+
+    .btn-icon {
+        width: 34px;
+        height: 34px;
+    }
+
+    .usage-stat-value {
+        font-size: 18px;
+    }
+}
+
+/* Accessibility - Focus States */
+.btn-icon:focus-visible,
+.period-btn:focus-visible {
+    outline: 2px solid var(--graph-accent);
+    outline-offset: 2px;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
