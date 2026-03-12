@@ -127,13 +127,20 @@
 
                         <section class="account-usage-section" aria-labelledby="usage-title">
                             <div class="usage-header">
-                                <h4 class="usage-title" id="usage-title">Usage</h4>
+                                <div class="usage-header-left">
+                                    <h4 class="usage-title" id="usage-title">Usage</h4>
+                                    <button type="button" class="btn-icon usage-graph-toggle" id="usage-graph-toggle" title="Toggle graph view" aria-label="Toggle graph view">
+                                        <i class="fi fi-tr-chart-line-up"></i>
+                                    </button>
+                                </div>
                                 <button type="button" class="btn-secondary usage-refresh-btn" id="refresh-usage-btn">
                                     <i class="fi fi-tr-refresh"></i>
                                     Refresh
                                 </button>
                             </div>
-                            <div class="usage-display">
+
+                            <!-- Summary View (Default) -->
+                            <div class="usage-display" id="usage-summary-view">
                                 <div class="usage-lifetime-label" id="usage-period-label">Current Usage</div>
                                 <div class="usage-total-hero" id="usage-total-tokens">-</div>
                                 <div class="usage-breakdown">
@@ -148,6 +155,46 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Graph View (Hidden by default) -->
+                            <div class="usage-graph-view hidden" id="usage-graph-view">
+                                <div class="usage-graph-period-selector">
+                                    <button type="button" class="period-btn active" data-period="7">7D</button>
+                                    <button type="button" class="period-btn" data-period="14">14D</button>
+                                    <button type="button" class="period-btn" data-period="30">30D</button>
+                                    <button type="button" class="period-btn" data-period="90">90D</button>
+                                </div>
+
+                                <div class="usage-graph-content">
+                                    <div class="usage-graph-loading" id="usage-graph-loading">
+                                        <i class="fi fi-tr-spinner"></i>
+                                        <span>Loading...</span>
+                                    </div>
+                                    <div class="usage-graph-error hidden" id="usage-graph-error">
+                                        <i class="fi fi-tr-exclamation"></i>
+                                        <span id="usage-graph-error-message">Failed to load</span>
+                                    </div>
+                                    <div class="usage-graph-canvas-container hidden" id="usage-graph-canvas-container">
+                                        <canvas id="usage-graph-canvas"></canvas>
+                                    </div>
+                                </div>
+
+                                <div class="usage-graph-stats">
+                                    <div class="usage-stat-item">
+                                        <span class="usage-stat-label">Avg Daily</span>
+                                        <span class="usage-stat-value" id="usage-stat-avg">-</span>
+                                    </div>
+                                    <div class="usage-stat-item">
+                                        <span class="usage-stat-label">Peak</span>
+                                        <span class="usage-stat-value" id="usage-stat-peak">-</span>
+                                    </div>
+                                    <div class="usage-stat-item">
+                                        <span class="usage-stat-label">Total</span>
+                                        <span class="usage-stat-value" id="usage-stat-total">-</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="usage-error" id="usage-error" role="status" aria-live="polite"></div>
                         </section>
 
@@ -676,5 +723,63 @@
             </div>
         </div>
     </div>
+
+    <!-- Usage Graph Modal -->
+    <div id="usage-graph-modal" class="usage-graph-modal hidden" aria-hidden="true">
+        <div class="usage-graph-backdrop" id="usage-graph-backdrop"></div>
+        <div class="usage-graph-dialog" role="dialog" aria-modal="true" aria-labelledby="usage-graph-title">
+            <div class="usage-graph-header">
+                <div>
+                    <div class="usage-graph-kicker">Analytics</div>
+                    <h3 class="usage-graph-title" id="usage-graph-title">Daily Usage Trends</h3>
+                    <p class="usage-graph-message" id="usage-graph-message">Track your token consumption over time</p>
+                </div>
+                <button type="button" class="usage-graph-close" id="usage-graph-close" aria-label="Close usage graph">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="usage-graph-controls">
+                <div class="usage-graph-period-selector">
+                    <button type="button" class="period-btn active" data-period="7">7 Days</button>
+                    <button type="button" class="period-btn" data-period="14">14 Days</button>
+                    <button type="button" class="period-btn" data-period="30">30 Days</button>
+                    <button type="button" class="period-btn" data-period="90">90 Days</button>
+                </div>
+            </div>
+
+            <div class="usage-graph-content">
+                <div class="usage-graph-loading" id="usage-graph-loading">
+                    <i class="fi fi-tr-spinner"></i>
+                    <span>Loading usage data...</span>
+                </div>
+                <div class="usage-graph-error hidden" id="usage-graph-error">
+                    <i class="fi fi-tr-exclamation"></i>
+                    <span id="usage-graph-error-message">Failed to load usage data</span>
+                </div>
+                <div class="usage-graph-canvas-container hidden" id="usage-graph-canvas-container">
+                    <canvas id="usage-graph-canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="usage-graph-footer">
+                <div class="usage-graph-stats">
+                    <div class="usage-stat-item">
+                        <span class="usage-stat-label">Average Daily</span>
+                        <span class="usage-stat-value" id="usage-stat-avg">-</span>
+                    </div>
+                    <div class="usage-stat-item">
+                        <span class="usage-stat-label">Peak Day</span>
+                        <span class="usage-stat-value" id="usage-stat-peak">-</span>
+                    </div>
+                    <div class="usage-stat-item">
+                        <span class="usage-stat-label">Total Period</span>
+                        <span class="usage-stat-value" id="usage-stat-total">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
