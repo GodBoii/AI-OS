@@ -174,6 +174,14 @@ class AIOS {
             usageError: this.elements.usageError,
         });
         this.usageView.setEmpty();
+
+        // Initialize usage graph
+        if (typeof window.AIOSUsageGraph === 'function') {
+            this.usageGraph = new window.AIOSUsageGraph(this);
+            this.usageGraph.init();
+        } else {
+            this.usageGraph = null;
+        }
     }
     
     setupDeploymentDetailModal() {
