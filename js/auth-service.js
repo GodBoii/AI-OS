@@ -380,27 +380,26 @@ class AuthService {
     }
 
     async fetchRequestUsage() {
-        if (!this.supabase) {
-            throw new Error('Supabase client not initialized.');
-        }
-
         const session = await this.getSession();
-        const userId = this.user?.id || session?.user?.id;
-        if (!userId) {
+        const accessToken = session?.access_token;
+        if (!accessToken) {
             throw new Error('User not authenticated.');
         }
 
-        const { data, error } = await this.supabase
-            .from('request_logs')
-            .select('input_tokens, output_tokens, total_tokens, created_at')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-        if (error) {
-            throw new Error(error.message || 'Failed to fetch usage data.');
+        const response = await fetch(`${config.backend.url}/api/subscription/status`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || 'Failed to fetch usage data.');
+        }
+        if (String(payload?.summary?.usage_source || '').toLowerCase() !== 'convex_window') {
+            throw new Error('Usage source is not Convex.');
         }
 
-        return data || null;
+        return payload?.summary?.usage || null;
     }
 
     getCurrentUser() {
