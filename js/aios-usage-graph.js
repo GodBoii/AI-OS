@@ -163,12 +163,12 @@ class AIOSUsageGraph {
             textSecondary: 'rgba(255, 248, 231, 0.7)',
             grid: 'rgba(255, 217, 61, 0.08)'
         } : {
-            primary: '#E8B923',
-            secondary: '#D4A017',
-            tertiary: '#C89116',
+            primary: '#C28E0E',
+            secondary: '#A67C00',
+            tertiary: '#8C6800',
             text: '#1A1A1A',
             textSecondary: 'rgba(26, 26, 26, 0.7)',
-            grid: 'rgba(232, 185, 35, 0.1)'
+            grid: 'rgba(0, 0, 0, 0.06)'
         };
 
         const ctx = this.elements.canvas.getContext('2d');

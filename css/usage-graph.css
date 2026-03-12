@@ -12,19 +12,31 @@
     --graph-text-primary: #FFF8E7;
     --graph-text-secondary: rgba(255, 248, 231, 0.7);
     --graph-backdrop-blur: 12px;
+    --graph-pulse-glow-1: rgba(255, 217, 61, 0.2);
+    --graph-pulse-glow-2: rgba(255, 217, 61, 0.3);
+    --graph-glow-subtle: 0 0 20px rgba(255, 217, 61, 0.1);
+    --graph-glow-strong: 0 0 40px rgba(255, 217, 61, 0.2);
+    --graph-glow-hover: 0 0 60px rgba(255, 217, 61, 0.4);
+    --graph-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Light Mode Colors */
 [data-theme="light"] {
     --graph-primary: #1A1A1A;
-    --graph-accent: #E8B923;
-    --graph-secondary: #D4A017;
-    --graph-glass-bg: rgba(26, 26, 26, 0.05);
-    --graph-glass-border: rgba(232, 185, 35, 0.2);
-    --graph-glass-hover: rgba(26, 26, 26, 0.08);
-    --graph-shadow: rgba(232, 185, 35, 0.15);
+    --graph-accent: #C28E0E;
+    --graph-secondary: #A67C00;
+    --graph-glass-bg: rgba(26, 26, 26, 0.03);
+    --graph-glass-border: rgba(26, 26, 26, 0.12);
+    --graph-glass-hover: rgba(26, 26, 26, 0.06);
+    --graph-shadow: rgba(0, 0, 0, 0.08);
     --graph-text-primary: #1A1A1A;
-    --graph-text-secondary: rgba(26, 26, 26, 0.7);
+    --graph-text-secondary: rgba(26, 26, 26, 0.65);
+    --graph-pulse-glow-1: rgba(194, 142, 14, 0.2);
+    --graph-pulse-glow-2: rgba(194, 142, 14, 0.3);
+    --graph-glow-subtle: none;
+    --graph-glow-strong: none;
+    --graph-glow-hover: 0 0 20px rgba(194, 142, 14, 0.2);
+    --graph-inset-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
 }
 
 /* Usage Header Enhancements */
@@ -83,16 +95,16 @@
     background: linear-gradient(135deg, var(--graph-accent), var(--graph-secondary));
     border-color: transparent;
     color: #1A1A1A;
-    box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px rgba(255, 217, 61, 0.2);
+    box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px var(--graph-pulse-glow-1);
     animation: pulse-glow 2s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
     0%, 100% {
-        box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px rgba(255, 217, 61, 0.2);
+        box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px var(--graph-pulse-glow-1);
     }
     50% {
-        box-shadow: 0 4px 24px var(--graph-shadow), 0 0 50px rgba(255, 217, 61, 0.3);
+        box-shadow: 0 4px 24px var(--graph-shadow), 0 0 50px var(--graph-pulse-glow-2);
     }
 }
 
@@ -213,7 +225,7 @@
     -webkit-backdrop-filter: blur(16px);
     padding: 20px;
     margin-bottom: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), var(--graph-inset-shadow);
     animation: scaleIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
 }
 
