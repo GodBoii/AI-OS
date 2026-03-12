@@ -12,6 +12,8 @@ from extensions import socketio
 from assistant import get_llm_os
 from coder_agent import get_coder_agent
 from computer_agent import get_computer_agent
+from convex_usage_service import get_convex_usage_service
+from subscription_service import get_usage_window_descriptor
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
@@ -279,7 +281,12 @@ def _extract_metrics_from_agno_session(conversation_id: str) -> Dict[str, int]:
     }
 
 
-def _log_request_tokens(user_id: str, conversation_id: str, run_output: TeamRunOutput | None) -> None:
+def _log_request_tokens(
+    user_id: str,
+    conversation_id: str,
+    message_id: str,
+    run_output: TeamRunOutput | None,
+) -> None:
     metrics = _extract_metrics_from_run_output(run_output)
     source = "run_output"
     if metrics["input_tokens"] <= 0 and metrics["output_tokens"] <= 0:
@@ -288,7 +295,7 @@ def _log_request_tokens(user_id: str, conversation_id: str, run_output: TeamRunO
 
     if metrics["input_tokens"] <= 0 and metrics["output_tokens"] <= 0:
         logger.info(
-            f"Skipping request_logs insert for session {conversation_id}: no token metrics found."
+            f"Skipping token usage logging for session {conversation_id}: no token metrics found."
         )
         return
 
@@ -300,116 +307,33 @@ def _log_request_tokens(user_id: str, conversation_id: str, run_output: TeamRunO
         metrics["output_tokens"],
         metrics["total_tokens"],
     )
-
-    # Preferred path: DB function does atomic per-user increment in a single SQL statement.
     try:
-        logger.info(
-            "[TOKENS][DB] RPC upsert_request_log_tokens payload: user_id=%s input=%s output=%s total=%s",
-            user_id,
-            metrics["input_tokens"],
-            metrics["output_tokens"],
-            metrics["total_tokens"],
+        convex_service = get_convex_usage_service()
+        usage_window = get_usage_window_descriptor(user_id=str(user_id), refresh_window=False)
+        convex_result = convex_service.record_token_usage(
+            user_id=str(user_id),
+            conversation_id=str(conversation_id),
+            message_id=str(message_id),
+            metrics=metrics,
+            usage_window=usage_window,
+            source=f"agent_runner:{source}",
         )
-        supabase_client.rpc("upsert_request_log_tokens", {
-            "p_user_id": user_id,
-            "p_input_tokens": metrics["input_tokens"],
-            "p_output_tokens": metrics["output_tokens"],
-            "p_total_tokens": metrics["total_tokens"],
-        }).execute()
-        try:
-            current = (
-                supabase_client
-                .from_("request_logs")
-                .select("id,input_tokens,output_tokens,total_tokens,created_at")
-                .eq("user_id", user_id)
-                .order("created_at", desc=False)
-                .limit(1)
-                .execute()
-                .data
-            ) or []
-            if current:
-                row = current[0]
-                logger.info(
-                    "[TOKENS][DB] Post-RPC row for user %s: id=%s input=%s output=%s total=%s created_at=%s",
-                    user_id,
-                    row.get("id"),
-                    row.get("input_tokens"),
-                    row.get("output_tokens"),
-                    row.get("total_tokens"),
-                    row.get("created_at"),
-                )
-        except Exception as verify_error:
-            logger.warning("[TOKENS][DB] Post-RPC verification read failed: %s", verify_error)
-    except Exception as rpc_error:
-        # Fallback for environments where migration hasn't been applied yet.
-        logger.warning("RPC upsert_request_log_tokens failed; falling back to read-modify-write: %s", rpc_error)
-        existing_rows = (
-            supabase_client
-            .from_("request_logs")
-            .select("id,input_tokens,output_tokens,total_tokens")
-            .eq("user_id", user_id)
-            .order("created_at", desc=False)
-            .execute()
-            .data
-        ) or []
-
-        if existing_rows:
-            primary_row = existing_rows[0]
-            logger.info(
-                "[TOKENS][DB] Fallback pre-update primary row: id=%s input=%s output=%s total=%s",
-                primary_row.get("id"),
-                primary_row.get("input_tokens"),
-                primary_row.get("output_tokens"),
-                primary_row.get("total_tokens"),
-            )
-            new_input = _to_int(primary_row.get("input_tokens")) + metrics["input_tokens"]
-            new_output = _to_int(primary_row.get("output_tokens")) + metrics["output_tokens"]
-            new_total = _to_int(primary_row.get("total_tokens")) + metrics["total_tokens"]
-
-            supabase_client.from_("request_logs").update({
-                "input_tokens": new_input,
-                "output_tokens": new_output,
-                "total_tokens": new_total,
-            }).eq("id", primary_row["id"]).execute()
-            logger.info(
-                "[TOKENS][DB] Fallback updated primary row: id=%s input=%s output=%s total=%s",
-                primary_row.get("id"),
-                new_input,
-                new_output,
-                new_total,
-            )
-
-            # Keep only one row per user if legacy duplicate rows exist.
-            if len(existing_rows) > 1:
-                duplicate_ids = [row["id"] for row in existing_rows[1:] if row.get("id")]
-                if duplicate_ids:
-                    supabase_client.from_("request_logs").delete().in_("id", duplicate_ids).execute()
-                    logger.info(
-                        "[TOKENS][DB] Fallback removed duplicate rows for user %s: %s",
-                        user_id,
-                        duplicate_ids,
-                    )
-        else:
-            supabase_client.from_("request_logs").insert({
-                "user_id": user_id,
-                "input_tokens": metrics["input_tokens"],
-                "output_tokens": metrics["output_tokens"],
-                "total_tokens": metrics["total_tokens"],
-            }).execute()
-            logger.info(
-                "[TOKENS][DB] Fallback inserted first row for user %s with input=%s output=%s total=%s",
-                user_id,
-                metrics["input_tokens"],
-                metrics["output_tokens"],
-                metrics["total_tokens"],
-            )
-    logger.info(
-        "Logged request tokens for session %s: input=%s output=%s total=%s",
-        conversation_id,
-        metrics["input_tokens"],
-        metrics["output_tokens"],
-        metrics["total_tokens"],
-    )
+        logger.info(
+            "[TOKENS][CONVEX] Logged token usage event for user=%s conversation=%s message=%s window=%s result=%s",
+            user_id,
+            conversation_id,
+            message_id,
+            usage_window.get("window_key"),
+            bool(convex_result),
+        )
+    except Exception as convex_error:
+        logger.warning(
+            "[TOKENS][CONVEX] Failed to log token usage for user=%s conversation=%s message=%s: %s",
+            user_id,
+            conversation_id,
+            message_id,
+            convex_error,
+        )
 
 
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
@@ -797,9 +721,14 @@ def run_agent_and_stream(
             }, room=room_name)
 
         try:
-            _log_request_tokens(user_id=user_id, conversation_id=conversation_id, run_output=run_output)
+            _log_request_tokens(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                run_output=run_output,
+            )
         except Exception as e:
-            logger.error(f"Failed to write request_logs for session {conversation_id}: {e}")
+            logger.error(f"Failed to write token usage logs for session {conversation_id}: {e}")
 
     except Exception as e:
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")

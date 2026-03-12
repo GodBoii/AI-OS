@@ -8,6 +8,7 @@ from typing import Any, Optional
 import requests
 
 import config
+from convex_usage_service import get_convex_usage_service
 from supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,67 @@ def _next_utc_day_boundary(now: Optional[datetime] = None) -> datetime:
         tzinfo=timezone.utc,
     )
     return midnight + timedelta(days=1)
+
+
+def _utc_day_start(now: Optional[datetime] = None) -> datetime:
+    current = now or _utc_now()
+    return datetime(
+        year=current.year,
+        month=current.month,
+        day=current.day,
+        tzinfo=timezone.utc,
+    )
+
+
+def _resolve_usage_window_from_profile(profile: dict[str, Any], now: Optional[datetime] = None) -> dict[str, Any]:
+    current = now or _utc_now()
+    plan_type = str(profile.get("plan_type") or "free").strip().lower()
+    status = str(profile.get("subscription_status") or "none").strip().lower()
+    current_period_end = _parse_dt(profile.get("current_period_end"))
+    day_key = current.astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+    if (
+        plan_type in PAID_PLAN_TYPES
+        and _status_grants_paid_access(status, current_period_end)
+    ):
+        if current_period_end and current_period_end > current:
+            window_key = f"{plan_type}:{int(current_period_end.timestamp())}"
+            return {
+                "plan_type": plan_type,
+                "subscription_status": status,
+                "limit_interval": "month",
+                "day_key": day_key,
+                "window_key": window_key,
+                "window_start": None,
+                "window_end": current_period_end,
+            }
+
+        month_start = datetime(year=current.year, month=current.month, day=1, tzinfo=timezone.utc)
+        if current.month == 12:
+            month_end = datetime(year=current.year + 1, month=1, day=1, tzinfo=timezone.utc)
+        else:
+            month_end = datetime(year=current.year, month=current.month + 1, day=1, tzinfo=timezone.utc)
+        return {
+            "plan_type": plan_type,
+            "subscription_status": status,
+            "limit_interval": "month",
+            "day_key": day_key,
+            "window_key": f"{plan_type}:calendar:{month_start.strftime('%Y-%m')}",
+            "window_start": month_start,
+            "window_end": month_end,
+        }
+
+    window_start = _utc_day_start(current)
+    window_end = _next_utc_day_boundary(current)
+    return {
+        "plan_type": "free",
+        "subscription_status": "none" if plan_type == "free" else status,
+        "limit_interval": "day",
+        "day_key": day_key,
+        "window_key": f"free:{window_start.strftime('%Y-%m-%d')}",
+        "window_start": window_start,
+        "window_end": window_end,
+    }
 
 
 def _extract_response_data(response: Any, default: Any) -> Any:
@@ -233,53 +295,84 @@ def find_user_id_by_subscription_id(subscription_id: str) -> Optional[str]:
     return data.get("id")
 
 
-def read_usage_row(user_id: str) -> dict[str, Any]:
-    response = (
-        supabase_client
-        .from_("request_logs")
-        .select("id,user_id,created_at,input_tokens,output_tokens,total_tokens")
-        .eq("user_id", str(user_id))
-        .maybe_single()
-        .execute()
+def get_usage_window_descriptor(user_id: str, refresh_window: bool = True) -> dict[str, Any]:
+    profile = get_profile(user_id)
+    if refresh_window:
+        profile = ensure_usage_window(user_id, profile)
+    window = _resolve_usage_window_from_profile(profile)
+    window.update(
+        {
+            "user_id": str(user_id),
+            "plan_type": str(window.get("plan_type") or "free").lower(),
+            "subscription_status": str(profile.get("subscription_status") or "none").lower(),
+            "current_period_end": _dt_to_iso(_parse_dt(profile.get("current_period_end"))),
+        }
     )
-    return _extract_response_data(response, None) or {
-        "user_id": str(user_id),
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
-        "created_at": None,
-    }
+    return window
+
+
+def _sync_profile_snapshot_to_convex(user_id: str, profile: dict[str, Any]) -> None:
+    service = get_convex_usage_service()
+    if not service.is_enabled():
+        return
+    try:
+        service.upsert_subscription_snapshot(user_id=str(user_id), profile=profile)
+    except Exception as exc:
+        logger.warning("[ConvexUsage] Failed to upsert subscription snapshot for user %s: %s", user_id, exc)
+
+
+def _get_convex_window_usage(user_id: str, window_key: str) -> Optional[dict[str, Any]]:
+    service = get_convex_usage_service()
+    if not service.is_enabled():
+        return None
+    try:
+        response = service.get_window_usage(user_id=str(user_id), window_key=str(window_key))
+        return response if isinstance(response, dict) else None
+    except Exception as exc:
+        logger.warning("[ConvexUsage] Failed to fetch window usage for user %s key %s: %s", user_id, window_key, exc)
+        return None
+
+
+def _get_convex_lifetime_usage(user_id: str) -> Optional[dict[str, Any]]:
+    service = get_convex_usage_service()
+    if not service.is_enabled():
+        return None
+    try:
+        response = service.get_lifetime_usage(user_id=str(user_id))
+        return response if isinstance(response, dict) else None
+    except Exception as exc:
+        logger.warning("[ConvexUsage] Failed to fetch lifetime usage for user %s: %s", user_id, exc)
+        return None
+
+
+def get_daily_usage_for_user(user_id: str, day_key: Optional[str] = None, limit: int = 30) -> list[dict[str, Any]]:
+    service = get_convex_usage_service()
+    if not service.is_enabled():
+        return []
+    try:
+        rows = service.get_daily_usage_for_user(user_id=str(user_id), day_key=day_key, limit=limit)
+        return rows if isinstance(rows, list) else []
+    except Exception as exc:
+        logger.warning("[ConvexUsage] Failed to fetch daily usage for user %s: %s", user_id, exc)
+        return []
+
+
+def get_daily_usage_by_date(day_key: str, limit: int = 500) -> list[dict[str, Any]]:
+    service = get_convex_usage_service()
+    if not service.is_enabled():
+        return []
+    try:
+        rows = service.get_daily_usage_by_date(day_key=day_key, limit=limit)
+        return rows if isinstance(rows, list) else []
+    except Exception as exc:
+        logger.warning("[ConvexUsage] Failed to fetch daily usage for date %s: %s", day_key, exc)
+        return []
 
 
 def reset_usage_for_new_period(user_id: str) -> None:
-    now_iso = _dt_to_iso(_utc_now())
-    row = read_usage_row(user_id)
-    if row.get("id"):
-        (
-            supabase_client
-            .from_("request_logs")
-            .update({
-                "created_at": now_iso,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-            })
-            .eq("id", row["id"])
-            .execute()
-        )
-        return
-
-    (
-        supabase_client
-        .from_("request_logs")
-        .insert({
-            "user_id": str(user_id),
-            "created_at": now_iso,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
-        })
-        .execute()
+    logger.info(
+        "[Subscription] Legacy reset_usage_for_new_period called for user %s. No action taken (totals are immutable).",
+        user_id,
     )
 
 
@@ -399,13 +492,10 @@ def sync_subscription_state(
     source: str,
 ) -> dict[str, Any]:
     now = _utc_now()
-    previous_plan = str(profile.get("plan_type") or "free").strip().lower()
-    previous_period_end = _parse_dt(profile.get("current_period_end"))
-
     status = str(subscription_entity.get("status") or "none").strip().lower()
     plan_type = resolve_plan_type_from_plan_id(subscription_entity.get("plan_id"))
     current_period_end = _unix_to_dt(subscription_entity.get("current_end"))
-    effective_plan = previous_plan
+    effective_plan = str(profile.get("plan_type") or "free").strip().lower()
 
     if plan_type and _status_grants_paid_access(status, current_period_end):
         effective_plan = plan_type
@@ -422,26 +512,7 @@ def sync_subscription_state(
         "current_period_end": _dt_to_iso(current_period_end) if current_period_end else None,
     }
     updated_profile = update_profile(user_id, update_fields)
-
-    should_reset_usage = False
-    if effective_plan in PAID_PLAN_TYPES and previous_plan != effective_plan:
-        should_reset_usage = True
-    elif effective_plan in PAID_PLAN_TYPES and current_period_end:
-        if not previous_period_end or current_period_end > previous_period_end:
-            should_reset_usage = True
-    elif effective_plan == "free" and previous_plan in PAID_PLAN_TYPES:
-        should_reset_usage = True
-
-    if should_reset_usage:
-        logger.info(
-            "[Subscription] Resetting usage for user %s after %s. status=%s plan=%s",
-            user_id,
-            source,
-            status,
-            effective_plan,
-        )
-        reset_usage_for_new_period(user_id)
-
+    _sync_profile_snapshot_to_convex(user_id, updated_profile)
     return updated_profile
 
 
@@ -478,7 +549,6 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
 
     if plan_type == "free":
         if not current_period_end or current_period_end <= now:
-            reset_usage_for_new_period(user_id)
             profile = update_profile(
                 user_id,
                 {
@@ -486,10 +556,10 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
                     "current_period_end": _dt_to_iso(_next_utc_day_boundary(now)),
                 },
             )
+        _sync_profile_snapshot_to_convex(user_id, profile)
         return profile
 
     if plan_type in PAID_PLAN_TYPES and not _status_grants_paid_access(status, current_period_end):
-        reset_usage_for_new_period(user_id)
         profile = update_profile(
             user_id,
             {
@@ -497,10 +567,10 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
                 "current_period_end": _dt_to_iso(_next_utc_day_boundary(now)),
             },
         )
+        _sync_profile_snapshot_to_convex(user_id, profile)
         return profile
 
     if plan_type in PAID_PLAN_TYPES and current_period_end and current_period_end <= now:
-        reset_usage_for_new_period(user_id)
         profile = update_profile(
             user_id,
             {
@@ -508,8 +578,10 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
                 "current_period_end": _dt_to_iso(_next_utc_day_boundary(now)),
             },
         )
+        _sync_profile_snapshot_to_convex(user_id, profile)
         return profile
 
+    _sync_profile_snapshot_to_convex(user_id, profile)
     return profile
 
 
@@ -525,19 +597,60 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
     if refresh_window:
         profile = ensure_usage_window(user_id, profile)
 
-    usage_row = read_usage_row(user_id)
-    input_tokens = _to_int(usage_row.get("input_tokens"))
-    output_tokens = _to_int(usage_row.get("output_tokens"))
-    total_tokens = _to_int(usage_row.get("total_tokens")) or (input_tokens + output_tokens)
+    usage_window = _resolve_usage_window_from_profile(profile)
+    convex_window_usage = _get_convex_window_usage(user_id, str(usage_window.get("window_key")))
+    convex_lifetime_usage = _get_convex_lifetime_usage(user_id)
+
+    usage_source = "convex_window" if isinstance(convex_window_usage, dict) else "convex_window_unavailable"
+    input_tokens = (
+        _to_int(convex_window_usage.get("input_tokens"))
+        if isinstance(convex_window_usage, dict)
+        else 0
+    )
+    output_tokens = (
+        _to_int(convex_window_usage.get("output_tokens"))
+        if isinstance(convex_window_usage, dict)
+        else 0
+    )
+    total_tokens = (
+        _to_int(convex_window_usage.get("total_tokens"))
+        if isinstance(convex_window_usage, dict)
+        else 0
+    )
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+
+    lifetime_input_tokens = (
+        _to_int(convex_lifetime_usage.get("input_tokens"))
+        if isinstance(convex_lifetime_usage, dict)
+        else input_tokens
+    )
+    lifetime_output_tokens = (
+        _to_int(convex_lifetime_usage.get("output_tokens"))
+        if isinstance(convex_lifetime_usage, dict)
+        else output_tokens
+    )
+    lifetime_total_tokens = (
+        _to_int(convex_lifetime_usage.get("total_tokens"))
+        if isinstance(convex_lifetime_usage, dict)
+        else total_tokens
+    )
+    lifetime_created_at = (
+        convex_lifetime_usage.get("updated_at_ms")
+        if isinstance(convex_lifetime_usage, dict)
+        else None
+    )
 
     plan_type = str(profile.get("plan_type") or "free").strip().lower()
     plan = get_plan_config(plan_type)
     limit_tokens = _to_int(plan["limit_tokens"])
     remaining_tokens = max(limit_tokens - total_tokens, 0)
     usage_percent = int(min((total_tokens / limit_tokens) * 100, 100)) if limit_tokens > 0 else 0
-    period_end = _parse_dt(profile.get("current_period_end"))
+    period_end = _parse_dt(usage_window.get("window_end")) or _parse_dt(profile.get("current_period_end"))
     subscription_status = str(profile.get("subscription_status") or "none").strip().lower()
-    access_locked = total_tokens >= limit_tokens
+    is_enforceable = usage_source == "convex_window"
+    access_locked = bool(is_enforceable and total_tokens >= limit_tokens)
+    _sync_profile_snapshot_to_convex(user_id, profile)
 
     summary = {
         "plan_type": plan_type,
@@ -553,11 +666,25 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
         "remaining_tokens": remaining_tokens,
         "usage_percent": usage_percent,
         "is_limit_reached": access_locked,
+        "is_enforceable": is_enforceable,
+        "usage_source": usage_source,
+        "usage_window": {
+            "day_key": usage_window.get("day_key"),
+            "window_key": usage_window.get("window_key"),
+            "window_start": _dt_to_iso(_parse_dt(usage_window.get("window_start"))),
+            "window_end": _dt_to_iso(_parse_dt(usage_window.get("window_end"))),
+        },
         "usage": {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
-            "created_at": usage_row.get("created_at"),
+            "created_at": lifetime_created_at,
+        },
+        "lifetime_usage": {
+            "input_tokens": lifetime_input_tokens,
+            "output_tokens": lifetime_output_tokens,
+            "total_tokens": lifetime_total_tokens,
+            "created_at": lifetime_created_at,
         },
         "plans": get_plan_catalog(),
         "profile": {
