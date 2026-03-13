@@ -3,6 +3,7 @@
 const electron = require('electron');
 const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog } = electron;
 const path = require('path');
+const fs = require('fs');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
 const { EventEmitter } = require('events');
@@ -11,11 +12,14 @@ const ComputerControlHandler = require('./computer-control-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
 
 let mainWindow;
+const WINDOWS_APP_ID = 'com.aetheria-ai.desktop';
+const WINDOWS_DEV_APP_ID = `${WINDOWS_APP_ID}.dev`;
 
 // --- App Name Setup ---
 app.setName('Aetheria AI');
 if (process.platform === 'win32') {
-    app.setAppUserModelId('com.aetheria-ai.desktop');
+    // Keep dev mode isolated from installed shortcut identity to avoid taskbar icon collisions.
+    app.setAppUserModelId(app.isPackaged ? WINDOWS_APP_ID : WINDOWS_DEV_APP_ID);
 }
 
 // --- Protocol Registration ---
@@ -33,6 +37,70 @@ let browserHandler;
 let computerControlHandler;
 let nativeNotificationService;
 let linkWebView = null;
+
+function resolveAppIconPath() {
+    const candidates = app.isPackaged
+        ? [
+            path.join(process.resourcesPath, 'assets', 'icon.ico'),
+            path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.ico'),
+            path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icons', 'icon.ico'),
+            process.execPath
+        ]
+        : [
+            path.join(__dirname, '../assets/icon.ico'),
+            path.join(process.cwd(), 'assets/icon.ico')
+        ];
+
+    const iconPath = candidates.find(candidate => fs.existsSync(candidate));
+    if (!iconPath) {
+        console.warn('[main.js] No icon file found in expected locations:', candidates);
+    }
+    return iconPath;
+}
+
+function ensureWindowsShortcuts() {
+    if (process.platform !== 'win32' || !app.isPackaged) {
+        return;
+    }
+
+    const shortcutName = `${app.getName()}.lnk`;
+    const exePath = process.execPath;
+    const exeDir = path.dirname(exePath);
+    const iconPath = resolveAppIconPath() || exePath;
+
+    const candidateShortcuts = [
+        path.join(app.getPath('desktop'), shortcutName),
+        path.join(app.getPath('startMenu'), shortcutName),
+        path.join(app.getPath('startMenu'), app.getName(), shortcutName),
+        path.join(
+            app.getPath('appData'),
+            'Microsoft',
+            'Internet Explorer',
+            'Quick Launch',
+            'User Pinned',
+            'TaskBar',
+            shortcutName
+        )
+    ];
+
+    const shortcutsToRepair = [...new Set(candidateShortcuts)].filter(shortcutPath => fs.existsSync(shortcutPath));
+    for (const shortcutPath of shortcutsToRepair) {
+        try {
+            const repaired = shell.writeShortcutLink(shortcutPath, 'replace', {
+                target: exePath,
+                cwd: exeDir,
+                icon: iconPath,
+                iconIndex: 0,
+                appUserModelId: WINDOWS_APP_ID
+            });
+            if (!repaired) {
+                console.warn(`[main.js] Failed to repair shortcut icon for: ${shortcutPath}`);
+            }
+        } catch (error) {
+            console.warn(`[main.js] Error repairing shortcut ${shortcutPath}:`, error.message);
+        }
+    }
+}
 
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
 // This function's only job is to receive the URL from the OS and pass it to the UI.
@@ -112,12 +180,11 @@ if (!gotTheLock) {
 
 function createWindow() {
     const mainProcessEmitter = new EventEmitter();
+    const iconPath = resolveAppIconPath();
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
-        icon: app.isPackaged
-            ? path.join(process.resourcesPath, 'assets/icon.ico')
-            : path.join(__dirname, '../assets/icon.ico'),
+        icon: iconPath,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -126,7 +193,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: true,
+        frame: false,
         transparent: true
     });
 
@@ -424,9 +491,8 @@ app.on('open-url', (event, url) => {
     handleDeepLink(url);
 });
 
-const fs = require('fs').promises;
 ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
-ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
+ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.promises.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
 ipcMain.handle('get-path', (event, pathName) => { try { return app.getPath(pathName); } catch (error) { console.error(`Error getting path for ${pathName}:`, error); return null; } });
 ipcMain.handle('get-app-path', () => { return app.getAppPath(); });
 ipcMain.handle('resolve-app-resource', (event, ...segments) => { return path.join(app.getAppPath(), ...segments); });
@@ -444,7 +510,7 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
         });
 
         if (!result.canceled && result.filePath) {
-            await fs.writeFile(result.filePath, content, 'utf8');
+            await fs.promises.writeFile(result.filePath, content, 'utf8');
             event.reply('save-file-result', { success: true, filePath: result.filePath });
         } else {
             event.reply('save-file-result', { canceled: true });
@@ -455,7 +521,10 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
     }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    ensureWindowsShortcuts();
+    createWindow();
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

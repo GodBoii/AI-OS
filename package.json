@@ -1,6 +1,6 @@
 {
   "name": "aetheria-ai",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "**Aetheria AI** (AI-OS) is an advanced, agentic desktop operating system designed to bridge the gap between Large Language Models (LLMs) and real-world execution. Unlike standard chatbots, AI-OS acts as a **system operator**—capable of browsing the web, managing files, executing code in secure sandboxes, and interacting with third-party services.",
   "author": "Aetheria AI aetheriaai1@gmail.com",
   "main": "js/main.js",
@@ -22,7 +22,6 @@
       "css/**/*",
       "*.html",
       "assets/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
     "asar": true,
@@ -39,7 +38,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "icon.ico"
     },
     "mac": {
       "target": "dmg",
@@ -98,6 +97,6 @@
   },
   "devDependencies": {
     "electron": "^37.2.6",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.8.1"
   }
 }
