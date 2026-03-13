@@ -444,11 +444,11 @@
     outline-offset: 2px;
 }
 
-/* Reduced Motion Support */
+/* Reduced Motion Support - Scoped to usage graph elements only */
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
+    .usage-graph-view *,
+    .usage-graph-view *::before,
+    .usage-graph-view *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
