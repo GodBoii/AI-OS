@@ -169,7 +169,7 @@ def get_task_agent(
     task_agent = Agent(
         name="Task_Manager",
         role="Unified task management and execution specialist with Aetheria AI delegation",
-        model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=OpenRouter(id="openrouter/hunter-alpha"),
         tools=[task_tools, user_context_tools, aetheria_bridge],
         instructions=instructions,
         markdown=True,
