@@ -157,9 +157,25 @@ class ComputerWorkspace {
         this.refreshScopeLabel();
     }
 
+    isModeActive() {
+        const ctx = window.computerContext || this.activeContext || null;
+        if (!ctx || typeof ctx !== 'object') {
+            return false;
+        }
+        if (String(ctx.agentMode || '').toLowerCase() === 'computer') {
+            return true;
+        }
+        if (ctx.isDedicatedComputer === true) {
+            return true;
+        }
+        if (String(ctx.mode || '').toLowerCase() === 'computer') {
+            return true;
+        }
+        return false;
+    }
+
     ensureContext() {
-        const ctx = window.computerContext || this.activeContext;
-        if (ctx && typeof ctx === 'object') {
+        if (this.isModeActive()) {
             return;
         }
         this.openComputerWorkspace({});

@@ -127,24 +127,72 @@ class ProjectWorkspace {
         }
     }
 
-    async openProject(project) {
-        window.computerContext = null;
-        if (window.stateManager?.setState) {
-            window.stateManager.setState({ isComputerWorkspaceOpen: false });
-        }
-
-        this.activeProject = {
-            ...project,
+    normalizeProjectContext(project = {}) {
+        const source = project && typeof project === 'object' ? project : {};
+        return {
+            ...source,
             agentMode: 'coder',
             isDedicatedProject: true,
             mode: 'project'
         };
-        window.projectContext = this.activeProject;
+    }
 
-        const label = project?.project_name || project?.slug || 'Project Workspace';
-        const sub = project?.hostname || project?.repo_url || 'Dedicated coding mode';
-        this.el.title.textContent = label;
-        this.el.subtitle.textContent = sub;
+    isModeActive() {
+        const ctx = window.projectContext || window.activeProjectContext || this.activeProject || null;
+        if (!ctx || typeof ctx !== 'object') {
+            return false;
+        }
+        if (String(ctx.agentMode || '').toLowerCase() === 'coder') {
+            return true;
+        }
+        if (ctx.isDedicatedProject === true) {
+            return true;
+        }
+        if (String(ctx.mode || '').toLowerCase() === 'project') {
+            return true;
+        }
+        return false;
+    }
+
+    ensureContext(project = {}, options = {}) {
+        const { syncUi = false } = options;
+        const current =
+            this.activeProject && typeof this.activeProject === 'object'
+                ? this.activeProject
+                : (window.projectContext && typeof window.projectContext === 'object' ? window.projectContext : {});
+
+        this.activeProject = this.normalizeProjectContext({
+            ...current,
+            ...(project && typeof project === 'object' ? project : {})
+        });
+
+        window.projectContext = this.activeProject;
+        window.activeProjectContext = this.activeProject;
+
+        // Keep modes mutually exclusive even when project workspace is opened from sidebar icon.
+        window.computerContext = null;
+        if (window.computerWorkspace) {
+            window.computerWorkspace.activeContext = null;
+        }
+        if (window.stateManager?.getState && window.stateManager?.setState) {
+            const state = window.stateManager.getState();
+            if (state?.isComputerWorkspaceOpen) {
+                window.stateManager.setState({ isComputerWorkspaceOpen: false });
+            }
+        }
+
+        if (syncUi && this.el) {
+            const label = this.activeProject?.project_name || this.activeProject?.slug || 'Project Workspace';
+            const sub = this.activeProject?.hostname || this.activeProject?.repo_url || 'Dedicated coding mode';
+            if (this.el.title) this.el.title.textContent = label;
+            if (this.el.subtitle) this.el.subtitle.textContent = sub;
+        }
+
+        return this.activeProject;
+    }
+
+    async openProject(project) {
+        this.ensureContext(project, { syncUi: true });
         this.setStatus('Project mode active. Messages will route to dedicated coder agent.');
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.hideMainFilePreview();
@@ -433,6 +481,7 @@ class ProjectWorkspace {
     }
 
     async startCoderChat() {
+        this.ensureContext({}, { syncUi: true });
         const intro = this.activeProject?.site_id
             ? `You are in dedicated project mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to workspace, show file tree, and wait for my next coding instruction.`
             : 'You are in dedicated coding mode. Inspect workspace, summarize file tree, and wait for my coding instruction.';
@@ -448,16 +497,14 @@ class ProjectWorkspace {
             return;
         }
 
-        this.activeProject = {
-            ...(this.activeProject || {}),
-            repo_url: repoUrl,
-            branch,
-            source: 'github',
-            isDedicatedProject: true,
-            mode: 'project',
-            agentMode: 'coder'
-        };
-        window.projectContext = this.activeProject;
+        this.ensureContext(
+            {
+                repo_url: repoUrl,
+                branch,
+                source: 'github'
+            },
+            { syncUi: true }
+        );
 
         const cloneInstruction =
             `In dedicated coder mode: clone repository ${repoUrl} (branch ${branch}) into /home/sandboxuser/workspace, ` +
@@ -469,6 +516,7 @@ class ProjectWorkspace {
     exitProjectMode() {
         this.activeProject = null;
         window.projectContext = null;
+        window.activeProjectContext = null;
         this.el.title.textContent = 'Project Workspace';
         this.el.subtitle.textContent = 'No active project';
         this.el.tree.innerHTML = '';
