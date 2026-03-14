@@ -38,7 +38,7 @@
           ]
         }
       ],
-      "icon": "icon.ico"
+      "icon": "assets/icon.ico"
     },
     "mac": {
       "target": "dmg",
