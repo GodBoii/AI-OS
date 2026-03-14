@@ -649,7 +649,7 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
     period_end = _parse_dt(usage_window.get("window_end")) or _parse_dt(profile.get("current_period_end"))
     subscription_status = str(profile.get("subscription_status") or "none").strip().lower()
     is_enforceable = usage_source == "convex_window"
-    access_locked = bool(is_enforceable and total_tokens >= limit_tokens)
+    access_locked = bool(is_enforceable and total_tokens >= (5_000_000_000 if plan_type == "free" else limit_tokens))
     _sync_profile_snapshot_to_convex(user_id, profile)
 
     summary = {
