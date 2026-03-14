@@ -9,6 +9,7 @@ import logging
 from typing import Optional, Dict, Any
 from agno.agent import Agent
 from agno.models.groq import Groq
+from agno.models.openrouter import OpenRouter
 from task_tools import TaskTools
 from user_context_tools import UserContextTools
 from aetheria_tool_bridge import AetheriaToolBridge

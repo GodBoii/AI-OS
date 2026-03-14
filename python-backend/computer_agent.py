@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Union
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.groq import Groq
+from agno.models.openrouter import OpenRouter
 from agno.tools import Toolkit
 
 from browser_tools import BrowserTools
@@ -66,7 +67,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=OpenRouter(id="openrouter/hunter-alpha"),
+        model=OpenRouter(id="openrouter/healer-alpha"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
