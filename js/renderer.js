@@ -303,13 +303,61 @@ class UIManager {
         }
     }
 
+    isProjectModeActive() {
+        if (window.projectWorkspace?.isModeActive) {
+            return window.projectWorkspace.isModeActive();
+        }
+        const ctx = window.projectContext || window.activeProjectContext || null;
+        if (!ctx || typeof ctx !== 'object') return false;
+        if (String(ctx.agentMode || '').toLowerCase() === 'coder') return true;
+        if (ctx.isDedicatedProject === true) return true;
+        if (String(ctx.mode || '').toLowerCase() === 'project') return true;
+        return false;
+    }
+
+    isComputerModeActive() {
+        if (window.computerWorkspace?.isModeActive) {
+            return window.computerWorkspace.isModeActive();
+        }
+        const ctx = window.computerContext || null;
+        if (!ctx || typeof ctx !== 'object') return false;
+        if (String(ctx.agentMode || '').toLowerCase() === 'computer') return true;
+        if (ctx.isDedicatedComputer === true) return true;
+        if (String(ctx.mode || '').toLowerCase() === 'computer') return true;
+        return false;
+    }
+
+    refreshWorkspaceIconStates(projectPanelOpen, computerPanelOpen) {
+        const state = this.state.getState();
+        const projectOpen = typeof projectPanelOpen === 'boolean' ? projectPanelOpen : state.isProjectWorkspaceOpen;
+        const computerOpen = typeof computerPanelOpen === 'boolean' ? computerPanelOpen : state.isComputerWorkspaceOpen;
+        const projectModeActive = this.isProjectModeActive();
+        const computerModeActive = this.isComputerModeActive();
+
+        if (this.elements.projectWorkspaceIcon) {
+            this.elements.projectWorkspaceIcon.classList.toggle('active', projectOpen);
+            this.elements.projectWorkspaceIcon.classList.toggle('workspace-mode-active', projectModeActive);
+            this.elements.projectWorkspaceIcon.classList.toggle('workspace-mode-hidden', projectModeActive && !projectOpen);
+        }
+
+        if (this.elements.computerWorkspaceIcon) {
+            this.elements.computerWorkspaceIcon.classList.toggle('active', computerOpen);
+            this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-active', computerModeActive);
+            this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-hidden', computerModeActive && !computerOpen);
+        }
+    }
+
     updateProjectWorkspaceVisibility(isOpen) {
         document.getElementById('project-workspace-panel')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('project-panel-open', isOpen);
 
-        if (this.elements.projectWorkspaceIcon) {
-            this.elements.projectWorkspaceIcon.classList.toggle('active', isOpen);
+        // Opening from sidebar must also guarantee project routing mode is active.
+        if (isOpen && window.projectWorkspace?.ensureContext) {
+            window.projectWorkspace.ensureContext({}, { syncUi: true });
         }
+
+        this.refreshWorkspaceIconStates(isOpen, this.state.getState().isComputerWorkspaceOpen);
+
         if (window.floatingWindowManager) {
             if (isOpen) window.floatingWindowManager.onWindowOpen('project-workspace');
             else window.floatingWindowManager.onWindowClose('project-workspace');
@@ -320,23 +368,15 @@ class UIManager {
         document.getElementById('computer-workspace-chip')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('computer-panel-open', isOpen);
 
-        // Keep routing context aligned with sidebar workspace visibility.
-        // Without this, messages can route to default llm_os even when the
-        // computer workspace UI is open.
+        // Opening from sidebar must also guarantee computer routing mode is active.
         if (isOpen) {
-            if (!window.computerContext && window.computerWorkspace?.openComputerWorkspace) {
+            if (!this.isComputerModeActive() && window.computerWorkspace?.openComputerWorkspace) {
                 window.computerWorkspace.openComputerWorkspace({});
-            }
-        } else {
-            window.computerContext = null;
-            if (window.computerWorkspace) {
-                window.computerWorkspace.activeContext = null;
             }
         }
 
-        if (this.elements.computerWorkspaceIcon) {
-            this.elements.computerWorkspaceIcon.classList.toggle('active', isOpen);
-        }
+        this.refreshWorkspaceIconStates(this.state.getState().isProjectWorkspaceOpen, isOpen);
+
         if (window.floatingWindowManager) {
             if (isOpen) window.floatingWindowManager.onWindowOpen('computer-workspace');
             else window.floatingWindowManager.onWindowClose('computer-workspace');
