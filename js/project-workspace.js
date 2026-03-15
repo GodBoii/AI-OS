@@ -4,8 +4,9 @@ class ProjectWorkspace {
         this.activeProject = null;
         this.currentTreeSource = null;
         this.selectedFilePath = null;
-        this.initialized = false;
+        this.workspaceStates = new Map();
         this.syncDebounceTimer = null;
+        this.terminalVisible = false;
         this.init();
     }
 
@@ -14,7 +15,7 @@ class ProjectWorkspace {
             await this.waitForElement('project-workspace-panel');
             this.cacheElements();
             this.bindEvents();
-            this.initialized = true;
+            this.updateModeUI();
         } catch (error) {
             console.warn('[ProjectWorkspace] Initialization skipped:', error.message);
         }
@@ -37,6 +38,76 @@ class ProjectWorkspace {
         });
     }
 
+    createDefaultState() {
+        return {
+            workspace_mode: 'cloud',
+            repo_url: null,
+            branch: 'main',
+            local_context: {
+                root_path: null,
+                repo_url: null,
+                branch: 'main',
+                repo_name: null,
+                is_ready: false,
+            },
+            cloud_context: {
+                is_ready: false,
+                site_id: null,
+                deployment_id: null,
+            },
+        };
+    }
+
+    getConversationId() {
+        return window.currentConversationId || null;
+    }
+
+    async ensureConversationId() {
+        const existing = this.getConversationId();
+        if (existing) return existing;
+
+        if (typeof window.startNewConversation === 'function') {
+            await window.startNewConversation();
+            return this.getConversationId();
+        }
+
+        const newChatBtn = document.querySelector('.add-btn');
+        if (newChatBtn) {
+            newChatBtn.click();
+            await new Promise((resolve) => setTimeout(resolve, 160));
+        }
+        return this.getConversationId();
+    }
+
+    getState(conversationId = this.getConversationId(), create = true) {
+        const key = conversationId || '__default__';
+        if (!this.workspaceStates.has(key) && create) {
+            this.workspaceStates.set(key, this.createDefaultState());
+        }
+        return this.workspaceStates.get(key) || null;
+    }
+
+    getExecutionTarget() {
+        return this.getState()?.workspace_mode === 'local' ? 'local' : 'cloud';
+    }
+
+    getWorkspaceContextPayload() {
+        const state = this.getState();
+        if (!state) return null;
+        return {
+            workspace_mode: state.workspace_mode,
+            repo_url: state.repo_url,
+            branch: state.branch,
+            local_context: { ...(state.local_context || {}) },
+            cloud_context: { ...(state.cloud_context || {}) },
+            site_id: this.activeProject?.site_id || null,
+            deployment_id: this.activeProject?.deployment_id || null,
+            project_name: this.activeProject?.project_name || null,
+            slug: this.activeProject?.slug || null,
+            hostname: this.activeProject?.hostname || null,
+        };
+    }
+
     cacheElements() {
         this.el = {
             panel: document.getElementById('project-workspace-panel'),
@@ -56,7 +127,19 @@ class ProjectWorkspace {
             cloneRepoBtn: document.getElementById('project-clone-repo-btn'),
             exitBtn: document.getElementById('project-exit-btn'),
             repoUrlInput: document.getElementById('project-repo-url'),
-            repoBranchInput: document.getElementById('project-repo-branch')
+            repoBranchInput: document.getElementById('project-repo-branch'),
+            modeToggleBtn: document.getElementById('project-mode-toggle-btn'),
+            modeCurrentLabel: document.getElementById('project-mode-current-label'),
+            modeWindow: document.getElementById('project-mode-window'),
+            modeWindowCurrent: document.getElementById('project-mode-window-current'),
+            modeLocalBtn: document.getElementById('project-mode-local-btn'),
+            modeCloudBtn: document.getElementById('project-mode-cloud-btn'),
+            terminalBtn: document.getElementById('project-local-terminal-btn'),
+            terminalOverlay: document.getElementById('project-local-terminal-overlay'),
+            terminalCloseBtn: document.getElementById('project-local-terminal-close'),
+            terminalOutput: document.getElementById('project-local-terminal-output'),
+            terminalInput: document.getElementById('project-local-terminal-input'),
+            terminalSendBtn: document.getElementById('project-local-terminal-send')
         };
     }
 
@@ -67,6 +150,18 @@ class ProjectWorkspace {
         this.el.cloneRepoBtn?.addEventListener('click', () => this.cloneGithubRepo());
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
+        this.el.modeToggleBtn?.addEventListener('click', () => this.toggleModeWindow());
+        this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
+        this.el.modeCloudBtn?.addEventListener('click', () => this.switchToCloudMode());
+        this.el.terminalBtn?.addEventListener('click', () => this.toggleTerminalOverlay());
+        this.el.terminalCloseBtn?.addEventListener('click', () => this.closeTerminalOverlay());
+        this.el.terminalSendBtn?.addEventListener('click', () => this.sendTerminalCommand());
+        this.el.terminalInput?.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                this.sendTerminalCommand();
+            }
+        });
 
         // GitHub dropdown toggle
         const githubToggle = document.getElementById('project-github-toggle');
@@ -84,7 +179,12 @@ class ProjectWorkspace {
         });
 
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && document.body.classList.contains('project-file-preview-active')) {
+            if (event.key !== 'Escape') return;
+            if (this.terminalVisible) {
+                this.closeTerminalOverlay();
+                return;
+            }
+            if (document.body.classList.contains('project-file-preview-active')) {
                 this.hideMainFilePreview();
             }
         });
@@ -106,6 +206,26 @@ class ProjectWorkspace {
                 this.syncWorkspaceTree();
             }, 300);
         });
+
+        window.electron?.ipcRenderer?.on?.('local-workspace-changed', (data) => {
+            if (data?.conversationId !== this.getConversationId()) return;
+            if (this.getExecutionTarget() !== 'local') return;
+            if (this.syncDebounceTimer) {
+                clearTimeout(this.syncDebounceTimer);
+            }
+            this.syncDebounceTimer = setTimeout(() => this.syncWorkspaceTree(), 160);
+        });
+
+        window.electron?.ipcRenderer?.on?.('project-local-terminal-output', (data) => {
+            if (data?.conversationId !== this.getConversationId()) return;
+            this.appendTerminalOutput(String(data?.data || ''), String(data?.stream || 'stdout'));
+        });
+
+        window.electron?.ipcRenderer?.on?.('project-local-terminal-exit', (data) => {
+            if (data?.conversationId !== this.getConversationId()) return;
+            const code = Number.isInteger(data?.code) ? data.code : 0;
+            this.appendTerminalOutput(`\n[process exited with code ${code}]\n`, 'stdout');
+        });
     }
 
     openPanel() {
@@ -118,6 +238,8 @@ class ProjectWorkspace {
     }
 
     closePanel() {
+        this.closeModeWindow();
+        this.closeTerminalOverlay();
         this.hideMainFilePreview();
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isProjectWorkspaceOpen: false });
@@ -183,21 +305,47 @@ class ProjectWorkspace {
 
         if (syncUi && this.el) {
             const label = this.activeProject?.project_name || this.activeProject?.slug || 'Project Workspace';
-            const sub = this.activeProject?.hostname || this.activeProject?.repo_url || 'Dedicated coding mode';
+            const sub = this.activeProject?.hostname
+                || this.activeProject?.repo_url
+                || this.activeProject?.local_root_path
+                || 'Dedicated coding mode';
             if (this.el.title) this.el.title.textContent = label;
             if (this.el.subtitle) this.el.subtitle.textContent = sub;
         }
+
+        const state = this.getState();
+        if (this.activeProject.repo_url) {
+            state.repo_url = this.activeProject.repo_url;
+            state.local_context.repo_url = this.activeProject.repo_url;
+        }
+        if (this.activeProject.branch) {
+            state.branch = this.activeProject.branch;
+            state.local_context.branch = this.activeProject.branch;
+        }
+        if (this.activeProject.site_id) {
+            state.cloud_context.site_id = this.activeProject.site_id;
+            state.cloud_context.deployment_id = this.activeProject.deployment_id || null;
+            state.cloud_context.is_ready = true;
+        }
+
+        this.updateModeUI();
 
         return this.activeProject;
     }
 
     async openProject(project) {
         this.ensureContext(project, { syncUi: true });
-        this.setStatus('Project mode active. Messages will route to dedicated coder agent.');
+        const state = this.getState();
+        state.workspace_mode = 'cloud';
+        this.updateModeUI();
+
+        this.setStatus('Project mode active. Cloud mode enabled by default.');
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.hideMainFilePreview();
 
         this.openPanel();
+        this.closeModeWindow();
+        this.closeTerminalOverlay();
         await this.syncWorkspaceTree();
     }
 
@@ -234,6 +382,39 @@ class ProjectWorkspace {
         }
     }
 
+    updateModeUI() {
+        const mode = this.getExecutionTarget();
+        if (this.el.modeCurrentLabel) {
+            this.el.modeCurrentLabel.textContent = mode === 'local' ? 'Local Mode' : 'Cloud Mode';
+        }
+        if (this.el.modeWindowCurrent) {
+            this.el.modeWindowCurrent.textContent = `Current: ${mode === 'local' ? 'Local' : 'Cloud'}`;
+        }
+        if (this.el.modeLocalBtn) {
+            this.el.modeLocalBtn.classList.toggle('active', mode === 'local');
+        }
+        if (this.el.modeCloudBtn) {
+            this.el.modeCloudBtn.classList.toggle('active', mode === 'cloud');
+        }
+    }
+
+    toggleModeWindow() {
+        if (!this.el.modeWindow) return;
+        this.el.modeWindow.classList.toggle('hidden');
+        this.updateModeUI();
+    }
+
+    closeModeWindow() {
+        this.el.modeWindow?.classList.add('hidden');
+    }
+
+    async callLocalInvoke(channel, payload = {}) {
+        if (!window.electron?.ipcRenderer?.invoke) {
+            return { success: false, error: 'Desktop local bridge is unavailable.' };
+        }
+        return window.electron.ipcRenderer.invoke(channel, payload);
+    }
+
     showMainFilePreview() {
         if (this.el.mainPreview) {
             this.el.mainPreview.classList.remove('hidden');
@@ -251,7 +432,7 @@ class ProjectWorkspace {
     renderTreeFromPaths(paths) {
         const root = {};
         for (const rawPath of paths) {
-            const path = String(rawPath || '').trim();
+            const path = String(rawPath || '').trim().replace(/\\/g, '/');
             if (!path) continue;
             const parts = path.split('/').filter(Boolean);
             let node = root;
@@ -319,44 +500,75 @@ class ProjectWorkspace {
         try {
             this.setStatus('Syncing files...');
 
+            const mode = this.getExecutionTarget();
             let paths = [];
             let source = null;
 
-            if (this.activeProject.site_id) {
-                const query = new URLSearchParams({
-                    site_id: String(this.activeProject.site_id),
-                    ...(this.activeProject.deployment_id
-                        ? { deployment_id: String(this.activeProject.deployment_id) }
-                        : {})
-                });
-                const payload = await this.callApi(`/api/deploy/files?${query.toString()}`, 'GET');
-                const files = Array.isArray(payload?.files) ? payload.files : [];
-                paths = files.map((f) => f.path).filter(Boolean);
-                source = 'deployment';
-            }
+            if (mode === 'local') {
+                const conversationId = await this.ensureConversationId();
+                const state = this.getState(conversationId);
+                const rootPath = state?.local_context?.root_path;
 
-            const conversationId = window.currentConversationId;
-            if (conversationId) {
-                const workspacePayload = await this.callApi('/api/project/workspace/tree', 'POST', {
-                    conversation_id: conversationId
+                if (!state?.local_context?.is_ready || !rootPath) {
+                    this.el.tree.innerHTML = '<div class="project-workspace-status">No local workspace selected.</div>';
+                    this.currentTreeSource = null;
+                    this.setPreviewPlaceholder('Select Local mode and choose a folder.');
+                    this.setStatus('Select a local folder or clone a repository first.');
+                    this.hideMainFilePreview();
+                    return;
+                }
+
+                const localTree = await this.callLocalInvoke('project-local-tree', {
+                    conversationId,
+                    rootPath,
                 });
-                const workspaceFiles = Array.isArray(workspacePayload?.files) ? workspacePayload.files : [];
-                if (workspaceFiles.length > 0) {
-                    paths = workspaceFiles.map((f) => f.path).filter(Boolean);
-                    source = 'workspace';
+                if (!localTree?.success) {
+                    throw new Error(localTree?.error || 'Failed to read local workspace tree');
+                }
+
+                paths = (Array.isArray(localTree?.files) ? localTree.files : [])
+                    .map((file) => file?.path)
+                    .filter(Boolean);
+                source = 'local';
+            } else {
+                if (this.activeProject.site_id) {
+                    const query = new URLSearchParams({
+                        site_id: String(this.activeProject.site_id),
+                        ...(this.activeProject.deployment_id
+                            ? { deployment_id: String(this.activeProject.deployment_id) }
+                            : {})
+                    });
+                    const payload = await this.callApi(`/api/deploy/files?${query.toString()}`, 'GET');
+                    const files = Array.isArray(payload?.files) ? payload.files : [];
+                    paths = files.map((f) => f.path).filter(Boolean);
+                    source = 'deployment';
+                }
+
+                const conversationId = this.getConversationId();
+                if (conversationId) {
+                    const workspacePayload = await this.callApi('/api/project/workspace/tree', 'POST', {
+                        conversation_id: conversationId
+                    });
+                    const workspaceFiles = Array.isArray(workspacePayload?.files) ? workspacePayload.files : [];
+                    if (workspaceFiles.length > 0) {
+                        paths = workspaceFiles.map((f) => f.path).filter(Boolean);
+                        source = 'workspace';
+                    }
                 }
             }
 
             if (!paths.length) {
                 this.el.tree.innerHTML = '<div class="project-workspace-status">No files found yet.</div>';
-                this.setStatus('No files found. Clone repo or run project sync.');
-                this.currentTreeSource = null;
+                this.setStatus(mode === 'local'
+                    ? 'No local files found in selected folder.'
+                    : 'No files found. Clone repo or run project sync.');
+                this.currentTreeSource = mode === 'local' ? 'local' : null;
                 this.setPreviewPlaceholder('Click a file to view its content.');
                 this.hideMainFilePreview();
                 return;
             }
 
-            this.currentTreeSource = source || 'workspace';
+            this.currentTreeSource = source || (mode === 'local' ? 'local' : 'workspace');
             this.selectedFilePath = null;
             this.renderTreeFromPaths(paths);
             this.setPreviewPlaceholder(`Loaded ${paths.length} files. Click a file to preview.`);
@@ -412,7 +624,23 @@ class ProjectWorkspace {
 
         try {
             let payload;
-            if (this.currentTreeSource === 'deployment' && this.activeProject?.site_id) {
+            if (this.currentTreeSource === 'local' || this.getExecutionTarget() === 'local') {
+                const conversationId = await this.ensureConversationId();
+                const state = this.getState(conversationId);
+                const rootPath = state?.local_context?.root_path;
+                if (!rootPath) {
+                    throw new Error('No local workspace selected');
+                }
+
+                payload = await this.callLocalInvoke('project-local-file-content', {
+                    conversationId,
+                    rootPath,
+                    path: String(path),
+                });
+                if (!payload?.success) {
+                    throw new Error(payload?.error || 'Failed to read local file');
+                }
+            } else if (this.currentTreeSource === 'deployment' && this.activeProject?.site_id) {
                 const query = new URLSearchParams({
                     site_id: String(this.activeProject.site_id),
                     path: String(path),
@@ -473,6 +701,8 @@ class ProjectWorkspace {
                 newChatBtn.click();
                 await new Promise((resolve) => setTimeout(resolve, 150));
             }
+        } else {
+            await this.ensureConversationId();
         }
 
         input.value = message;
@@ -482,11 +712,199 @@ class ProjectWorkspace {
 
     async startCoderChat() {
         this.ensureContext({}, { syncUi: true });
-        const intro = this.activeProject?.site_id
-            ? `You are in dedicated project mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to workspace, show file tree, and wait for my next coding instruction.`
-            : 'You are in dedicated coding mode. Inspect workspace, summarize file tree, and wait for my coding instruction.';
+
+        if (this.getExecutionTarget() === 'local') {
+            const state = this.getState();
+            if (!state?.local_context?.is_ready || !state?.local_context?.root_path) {
+                const selected = await this.openLocalFolderSelectionFlow();
+                if (!selected) return;
+            }
+        }
+
+        const mode = this.getExecutionTarget();
+        const localRoot = this.getState()?.local_context?.root_path;
+        const intro = mode === 'local'
+            ? `You are in dedicated project mode using LOCAL workspace at ${localRoot}. Inspect files, summarize tree, and wait for my next coding instruction.`
+            : (this.activeProject?.site_id
+                ? `You are in dedicated project mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to cloud workspace, show file tree, and wait for my next coding instruction.`
+                : 'You are in dedicated coding mode. Inspect cloud workspace, summarize file tree, and wait for my coding instruction.');
+
         await this.sendMessageToChat(intro, true);
-        this.setStatus('Started dedicated coder chat.');
+        this.setStatus(`Started dedicated coder chat (${mode} mode).`);
+    }
+
+    isValidRepoUrl(repoUrl) {
+        return /^https?:\/\/|^git@/i.test(String(repoUrl || '').trim());
+    }
+
+    formatLocalCloneError(rawError) {
+        const text = String(rawError || '').trim();
+        const lower = text.toLowerCase();
+
+        if (lower.includes('not recognized as an internal or external command') || lower.includes('enoent')) {
+            return 'Clone failed: Git is not installed or not available in PATH.';
+        }
+        if (lower.includes('authentication failed') || lower.includes('could not read username') || lower.includes('permission denied (publickey)')) {
+            return 'Clone failed: authentication denied. Check repo permissions or credentials.';
+        }
+        if (lower.includes('remote branch') && lower.includes('not found')) {
+            return 'Clone failed: branch not found. Verify the branch name.';
+        }
+        if (lower.includes('access is denied') || lower.includes('eacces') || lower.includes('operation not permitted')) {
+            return 'Clone failed: selected folder is not writable.';
+        }
+
+        return `Clone failed: ${text || 'Unknown error.'}`;
+    }
+
+    deriveRepoNameFromPath(localPath) {
+        const fromPreload = window.electron?.path?.basename?.(localPath);
+        if (fromPreload) return fromPreload;
+        const normalized = String(localPath || '').replace(/\\/g, '/').replace(/\/+$/, '');
+        return normalized.split('/').pop() || 'workspace';
+    }
+
+    async persistLocalContext(conversationId, context) {
+        if (!conversationId) return;
+        await this.callLocalInvoke('project-local-set-context', {
+            conversationId,
+            context,
+        });
+    }
+
+    async startLocalWatcher(conversationId, rootPath) {
+        if (!conversationId || !rootPath) return;
+        await this.callLocalInvoke('project-watch-local-workspace', {
+            conversationId,
+            rootPath,
+        });
+    }
+
+    async stopLocalWatcher(conversationId) {
+        if (!conversationId) return;
+        await this.callLocalInvoke('project-unwatch-local-workspace', {
+            conversationId,
+        });
+    }
+
+    async switchToLocalMode() {
+        this.closeModeWindow();
+
+        const conversationId = await this.ensureConversationId();
+        if (!conversationId) {
+            this.setStatus('Unable to switch mode: conversation is not ready yet.');
+            return;
+        }
+
+        const state = this.getState(conversationId);
+        if (state.workspace_mode === 'local' && state.local_context?.is_ready) {
+            this.setStatus('Already in local mode.');
+            await this.syncWorkspaceTree();
+            return;
+        }
+
+        if (state.local_context?.is_ready && state.local_context?.root_path) {
+            state.workspace_mode = 'local';
+            this.updateModeUI();
+            await this.startLocalWatcher(conversationId, state.local_context.root_path);
+            this.setStatus(`Local mode active (${state.local_context.root_path}).`);
+            await this.syncWorkspaceTree();
+            return;
+        }
+
+        const selected = await this.openLocalFolderSelectionFlow();
+        if (!selected) {
+            this.setStatus('Stayed in cloud mode. Local folder selection cancelled.');
+        }
+    }
+
+    async switchToCloudMode() {
+        this.closeModeWindow();
+
+        const conversationId = await this.ensureConversationId();
+        const state = this.getState(conversationId);
+
+        if (state.workspace_mode === 'cloud') {
+            this.setStatus('Already in cloud mode.');
+            return;
+        }
+
+        const repoUrl = state.repo_url || state.local_context?.repo_url || this.activeProject?.repo_url || null;
+        const branch = state.branch || state.local_context?.branch || 'main';
+        const proceed = window.confirm(
+            'Switch to cloud mode now? This will ask Aetheria Coder to clone this repository into cloud sandbox.'
+        );
+        if (!proceed) {
+            this.setStatus('Switch to cloud mode cancelled.');
+            return;
+        }
+
+        state.workspace_mode = 'cloud';
+        this.updateModeUI();
+        this.closeTerminalOverlay();
+        this.setStatus('Cloud mode active.');
+
+        await this.syncWorkspaceTree();
+
+        if (repoUrl) {
+            await this.sendCloudClonePrompt(repoUrl, branch, { startNewConversation: false });
+        }
+    }
+
+    async sendCloudClonePrompt(repoUrl, branch = 'main', options = {}) {
+        const { startNewConversation = false } = options;
+        const safeRepo = String(repoUrl || '').trim();
+        if (!safeRepo) return;
+
+        const safeBranch = String(branch || 'main').trim() || 'main';
+        const cloneInstruction =
+            `In dedicated coder mode (cloud workspace): clone repository ${safeRepo} (branch ${safeBranch}) `
+            + 'into /home/sandboxuser/workspace, then list the project tree and prepare for edits.';
+
+        await this.sendMessageToChat(cloneInstruction, startNewConversation);
+        this.setStatus('Cloud clone request sent to dedicated coder via prompt.');
+    }
+
+    async openLocalFolderSelectionFlow() {
+        const conversationId = await this.ensureConversationId();
+        if (!conversationId) {
+            this.setStatus('Unable to open local folder picker without active conversation.');
+            return false;
+        }
+
+        const selection = await this.callLocalInvoke('project-select-local-workspace');
+        if (!selection?.success) {
+            if (!selection?.canceled) {
+                this.setStatus(selection?.error || 'Failed to select local folder.');
+            }
+            return false;
+        }
+
+        const selectedPath = String(selection.selectedPath || '').trim();
+        if (!selectedPath) {
+            this.setStatus('No folder selected.');
+            return false;
+        }
+
+        const state = this.getState(conversationId);
+        const repoName = this.deriveRepoNameFromPath(selectedPath);
+        state.local_context = {
+            root_path: selectedPath,
+            repo_url: state.repo_url || null,
+            branch: state.branch || 'main',
+            repo_name: repoName,
+            is_ready: true,
+        };
+        state.workspace_mode = 'local';
+
+        this.ensureContext({ local_root_path: selectedPath }, { syncUi: true });
+        await this.persistLocalContext(conversationId, state.local_context);
+        await this.startLocalWatcher(conversationId, selectedPath);
+
+        this.updateModeUI();
+        this.setStatus(`Local mode active. Workspace: ${selectedPath}`);
+        await this.syncWorkspaceTree();
+        return true;
     }
 
     async cloneGithubRepo() {
@@ -494,6 +912,10 @@ class ProjectWorkspace {
         const branch = (this.el.repoBranchInput?.value || '').trim() || 'main';
         if (!repoUrl) {
             this.setStatus('Enter a GitHub repo URL first.');
+            return;
+        }
+        if (!this.isValidRepoUrl(repoUrl)) {
+            this.setStatus('Enter a valid repository URL (https://... or git@...).');
             return;
         }
 
@@ -506,26 +928,176 @@ class ProjectWorkspace {
             { syncUi: true }
         );
 
-        const cloneInstruction =
-            `In dedicated coder mode: clone repository ${repoUrl} (branch ${branch}) into /home/sandboxuser/workspace, ` +
-            'then list the project tree and prepare for edits.';
-        await this.sendMessageToChat(cloneInstruction, true);
-        this.setStatus('Clone request sent to dedicated coder.');
+        const conversationId = await this.ensureConversationId();
+        if (!conversationId) {
+            this.setStatus('Cannot clone yet: conversation is not initialized.');
+            return;
+        }
+
+        this.setStatus('Cloning repository locally...');
+        const result = await this.callLocalInvoke('project-local-clone-repo', {
+            conversationId,
+            repoUrl,
+            branch,
+        });
+
+        if (result?.canceled) {
+            this.setStatus('Clone cancelled.');
+            return;
+        }
+
+        if (!result?.success) {
+            this.setStatus(this.formatLocalCloneError(result?.error));
+            return;
+        }
+
+        const state = this.getState(conversationId);
+        state.repo_url = repoUrl;
+        state.branch = branch;
+        state.workspace_mode = 'local';
+        state.local_context = {
+            root_path: result.root_path,
+            repo_url: repoUrl,
+            branch,
+            repo_name: result.repo_name || this.deriveRepoNameFromPath(result.root_path),
+            is_ready: true,
+        };
+
+        this.ensureContext(
+            {
+                repo_url: repoUrl,
+                branch,
+                local_root_path: result.root_path,
+            },
+            { syncUi: true }
+        );
+
+        await this.persistLocalContext(conversationId, state.local_context);
+        await this.startLocalWatcher(conversationId, result.root_path);
+
+        this.updateModeUI();
+        this.closeModeWindow();
+        this.setStatus(`Local clone complete: ${result.repo_name || repoUrl}`);
+        await this.syncWorkspaceTree();
     }
 
-    exitProjectMode() {
+    async toggleTerminalOverlay() {
+        if (this.terminalVisible) {
+            this.closeTerminalOverlay();
+            return;
+        }
+
+        if (this.getExecutionTarget() !== 'local') {
+            this.setStatus('Switch to Local mode to use local terminal.');
+            return;
+        }
+
+        const state = this.getState();
+        if (!state?.local_context?.is_ready || !state?.local_context?.root_path) {
+            const selected = await this.openLocalFolderSelectionFlow();
+            if (!selected) return;
+        }
+
+        const conversationId = await this.ensureConversationId();
+        const latestState = this.getState(conversationId);
+        const cwd = latestState?.local_context?.root_path;
+        if (!conversationId || !cwd) {
+            this.setStatus('Local terminal unavailable: no workspace root configured.');
+            return;
+        }
+
+        const started = await this.callLocalInvoke('project-local-terminal-start', {
+            conversationId,
+            cwd,
+        });
+
+        if (!started?.success) {
+            this.setStatus(`Failed to start terminal: ${started?.error || 'Unknown error'}`);
+            return;
+        }
+
+        if (this.el.terminalOutput && !this.el.terminalOutput.textContent.trim()) {
+            this.el.terminalOutput.textContent = `[local-terminal] Connected at ${cwd}\n`;
+        }
+
+        this.el.terminalOverlay?.classList.remove('hidden');
+        document.body.classList.add('project-terminal-open');
+        this.terminalVisible = true;
+        this.el.terminalInput?.focus();
+    }
+
+    closeTerminalOverlay() {
+        this.el.terminalOverlay?.classList.add('hidden');
+        document.body.classList.remove('project-terminal-open');
+        this.terminalVisible = false;
+    }
+
+    appendTerminalOutput(text, stream = 'stdout') {
+        if (!this.el.terminalOutput) return;
+        const normalized = String(text || '');
+        if (!normalized) return;
+
+        const prefix = stream === 'stderr' ? '[stderr] ' : '';
+        this.el.terminalOutput.textContent += `${prefix}${normalized}`;
+        this.el.terminalOutput.scrollTop = this.el.terminalOutput.scrollHeight;
+    }
+
+    async sendTerminalCommand() {
+        if (this.getExecutionTarget() !== 'local') {
+            this.setStatus('Local terminal works only in Local mode.');
+            return;
+        }
+
+        const command = String(this.el.terminalInput?.value || '').trim();
+        if (!command) return;
+
+        if (this.el.terminalInput) {
+            this.el.terminalInput.value = '';
+        }
+
+        this.appendTerminalOutput(`\n$ ${command}\n`, 'stdout');
+
+        const conversationId = await this.ensureConversationId();
+        const result = await this.callLocalInvoke('project-local-terminal-send', {
+            conversationId,
+            command,
+        });
+
+        if (!result?.success) {
+            this.appendTerminalOutput(`${result?.error || 'Failed to execute command'}\n`, 'stderr');
+        }
+    }
+
+    async stopLocalTerminal(conversationId) {
+        if (!conversationId) return;
+        await this.callLocalInvoke('project-local-terminal-stop', { conversationId });
+    }
+
+    async exitProjectMode() {
+        const conversationId = this.getConversationId();
+        await this.stopLocalWatcher(conversationId);
+        await this.stopLocalTerminal(conversationId);
+
         this.activeProject = null;
         window.projectContext = null;
         window.activeProjectContext = null;
+        const state = this.getState(conversationId, false);
+        if (state) {
+            state.workspace_mode = 'cloud';
+        }
         this.el.title.textContent = 'Project Workspace';
         this.el.subtitle.textContent = 'No active project';
         this.el.tree.innerHTML = '';
+        if (this.el.terminalOutput) {
+            this.el.terminalOutput.textContent = '';
+        }
         this.currentTreeSource = null;
         this.selectedFilePath = null;
         this.hideMainFilePreview();
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.setStatus('Project mode off. Starting a new normal chat session.');
         this.closePanel();
+        this.updateModeUI();
 
         // Force a brand-new chat session so subsequent messages use default llm_os flow.
         const newChatBtn = document.querySelector('.add-btn');
@@ -539,3 +1111,4 @@ const projectWorkspace = new ProjectWorkspace();
 window.projectWorkspace = projectWorkspace;
 
 export default projectWorkspace;
+

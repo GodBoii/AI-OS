@@ -392,6 +392,25 @@ function resolveAgentMode() {
     return 'default';
 }
 
+function resolveCoderExecutionTarget() {
+    if (!isProjectWorkspaceMode()) {
+        return 'cloud';
+    }
+    if (window.projectWorkspace?.getExecutionTarget) {
+        return window.projectWorkspace.getExecutionTarget();
+    }
+    return 'cloud';
+}
+
+function resolveWorkspaceContextPayload() {
+    if (!isProjectWorkspaceMode()) return null;
+    if (window.projectWorkspace?.getWorkspaceContextPayload) {
+        return window.projectWorkspace.getWorkspaceContextPayload();
+    }
+    const fallback = window.projectContext || window.activeProjectContext || null;
+    return fallback && typeof fallback === 'object' ? fallback : null;
+}
+
 function isProjectWorkspaceMode() {
     const ctx = window.projectContext || window.activeProjectContext || null;
     if (!ctx || typeof ctx !== 'object') {
@@ -1517,6 +1536,60 @@ function setupIpcListeners() {
         }
     });
 
+    ipcRenderer.on('local-command-started', (data) => {
+        const messageId = data?.id;
+        const command = String(data?.command || '').trim();
+        const delegationId = data?.delegation_id || null;
+        const delegatedAgent = data?.delegated_agent || null;
+        if (!messageId) return;
+
+        const logEntryId = delegationId
+            ? `local-log-${messageId}-${delegationId}-${Date.now()}`
+            : `local-log-${messageId}-${Date.now()}`;
+        appendSandboxToolLog(
+            messageId,
+            `
+            <div id="${logEntryId}" class="tool-log-entry" ${delegationId ? `data-delegation-id="${escapeHtml(String(delegationId))}"` : ''}>
+                <i class="fi fi-tr-terminal tool-log-icon"></i>
+                <div class="tool-log-details">
+                    <span class="tool-log-action">Local command: <strong>${escapeHtml(command || 'Command started')}</strong></span>
+                </div>
+                <span class="tool-log-status in-progress"></span>
+            </div>
+            `,
+            logEntryId,
+            { delegationId, delegatedAgent, title: 'Local execution' }
+        );
+    });
+
+    ipcRenderer.on('local-command-finished', (data) => {
+        const messageId = data?.id;
+        const command = String(data?.command || '').trim();
+        const exitCode = Number.isFinite(Number(data?.exit_code)) ? Number(data.exit_code) : 1;
+        const delegationId = data?.delegation_id || null;
+        const delegatedAgent = data?.delegated_agent || null;
+        if (!messageId) return;
+
+        const statusClass = exitCode === 0 ? 'completed' : 'failed';
+        const logEntryId = delegationId
+            ? `local-log-finish-${messageId}-${delegationId}-${Date.now()}`
+            : `local-log-finish-${messageId}-${Date.now()}`;
+        appendSandboxToolLog(
+            messageId,
+            `
+            <div id="${logEntryId}" class="tool-log-entry" ${delegationId ? `data-delegation-id="${escapeHtml(String(delegationId))}"` : ''}>
+                <i class="fi fi-tr-terminal tool-log-icon"></i>
+                <div class="tool-log-details">
+                    <span class="tool-log-action">Local command: <strong>${escapeHtml(command || 'Command')}</strong> (exit ${exitCode})</span>
+                </div>
+                <span class="tool-log-status ${statusClass}"></span>
+            </div>
+            `,
+            logEntryId,
+            { delegationId, delegatedAgent, title: 'Local execution' }
+        );
+    });
+
     ipcRenderer.on('socket-error', (error) => {
         console.error('Socket error:', error);
         try {
@@ -2142,6 +2215,8 @@ async function handleSendMessage() {
             context_session_ids: contextSessionIds,
             is_deepsearch: chatConfig.deepsearch,
             agent_mode: resolveAgentMode(),
+            coder_execution_target: resolveCoderExecutionTarget(),
+            workspace_context: resolveWorkspaceContextPayload(),
             accessToken: session.access_token,
             config: { use_memory: chatConfig.memory, ...chatConfig.tools }
         };
@@ -2197,6 +2272,8 @@ async function handleSendMessage() {
         context_session_ids: contextSessionIds,
         is_deepsearch: chatConfig.deepsearch,
         agent_mode: resolveAgentMode(),
+        coder_execution_target: resolveCoderExecutionTarget(),
+        workspace_context: resolveWorkspaceContextPayload(),
         accessToken: session.access_token,
         config: { use_memory: chatConfig.memory, ...chatConfig.tools }
     };
