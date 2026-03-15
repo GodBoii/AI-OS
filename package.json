@@ -6,6 +6,7 @@
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",
+    "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -27,7 +28,8 @@
     "asar": true,
     "asarUnpack": [
       "assets/**/*.ico",
-      "assets/**/*.png"
+      "assets/**/*.png",
+      "node_modules/node-pty/**/*"
     ],
     "win": {
       "target": [
@@ -68,6 +70,7 @@
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@supabase/supabase-js": "^2.49.10",
+    "@xterm/addon-fit": "^0.11.0",
     "active-win": "^9.0.0",
     "audio-decode": "^2.2.2",
     "axios": "^1.11.0",
@@ -83,6 +86,7 @@
     "loudness": "^0.4.2",
     "mammoth": "^1.9.0",
     "marked": "^15.0.6",
+    "node-pty": "^1.1.0",
     "node-wav": "^0.0.2",
     "node-window-manager": "^2.2.4",
     "pdf-parse": "^1.1.1",
@@ -93,9 +97,11 @@
     "turndown": "^7.2.0",
     "uuid": "^11.0.5",
     "whisper": "^0.2.5",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "xterm": "^5.3.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
     "electron": "^37.2.6",
     "electron-builder": "^26.8.1"
   }
