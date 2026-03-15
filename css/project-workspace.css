@@ -617,11 +617,44 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     z-index: 60;
     display: flex;
     flex-direction: column;
+    pointer-events: auto;
     border: 1px solid rgba(148, 163, 184, 0.45);
     border-radius: 12px;
     background: #0f172a;
     color: #e2e8f0;
     box-shadow: 0 20px 48px rgba(2, 6, 23, 0.4);
+}
+
+.project-local-terminal-shell {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 10px 10px;
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+.project-local-terminal-shell .xterm {
+    height: 100%;
+}
+
+.project-local-terminal-shell .xterm-viewport {
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.45);
+}
+
+.project-local-terminal-shell .xterm-viewport::-webkit-scrollbar {
+    width: 10px;
+}
+
+.project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 10px;
+}
+
+.project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.4);
 }
 
 .project-local-terminal-header {
@@ -631,6 +664,9 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     padding: 10px 12px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.3);
     background: rgba(15, 23, 42, 0.95);
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
 }
 
 .project-local-terminal-title {
@@ -660,6 +696,7 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     font-family: Consolas, "Courier New", monospace;
     font-size: 0.74rem;
     line-height: 1.4;
+    pointer-events: auto;
 }
 
 .project-local-terminal-input-row {
@@ -667,6 +704,7 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     gap: 8px;
     padding: 10px 12px;
     border-top: 1px solid rgba(148, 163, 184, 0.3);
+    pointer-events: auto;
 }
 
 .project-local-terminal-input {
@@ -683,7 +721,17 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
 
 body.project-terminal-open #chat-container .chat-messages,
 body.project-terminal-open #chat-container .context-active-indicator,
-body.project-terminal-open #project-main-file-preview,
-body.project-terminal-open #floating-input-container {
+body.project-terminal-open #project-main-file-preview {
     display: none !important;
+}
+
+body.project-terminal-open .floating-input-container,
+body.project-terminal-open .floating-input-container.centered,
+body.project-terminal-open .floating-input-container.welcome-mode {
+    bottom: 20px;
+    transform: translateX(-50%);
+}
+
+body.project-terminal-open .project-local-terminal-overlay {
+    bottom: 110px;
 }
