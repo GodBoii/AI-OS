@@ -5,6 +5,13 @@ const os = require('os');
 const chokidar = require('chokidar');
 const { spawn, exec } = require('child_process');
 const { promisify } = require('util');
+let nodePty = null;
+try {
+    // Optional at runtime; if unavailable we fallback to stdio spawn mode.
+    nodePty = require('node-pty');
+} catch (_error) {
+    nodePty = null;
+}
 
 const execAsync = promisify(exec);
 
@@ -16,6 +23,69 @@ class LocalCoderHandler {
         this.watchers = new Map();
         this.terminals = new Map();
         this.platform = process.platform;
+        this.isShuttingDown = false;
+    }
+
+    _isRendererAvailable() {
+        if (this.isShuttingDown) return false;
+        if (!this.mainWindow || typeof this.mainWindow.isDestroyed !== 'function') return false;
+        if (this.mainWindow.isDestroyed()) return false;
+        const wc = this.mainWindow.webContents;
+        if (!wc || typeof wc.isDestroyed !== 'function') return false;
+        return !wc.isDestroyed();
+    }
+
+    _emitRenderer(channel, payload) {
+        if (!this._isRendererAvailable()) return false;
+        try {
+            this.mainWindow.webContents.send(channel, payload);
+            return true;
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            if (!this.isShuttingDown && !message.includes('object has been destroyed')) {
+                console.warn(`[LocalCoderHandler] Failed to emit '${channel}':`, error.message);
+            }
+            return false;
+        }
+    }
+
+    _resolveTerminalShell() {
+        if (this.platform === 'win32') {
+            const winRoot = process.env.SystemRoot || 'C:\\Windows';
+            const defaultPsPath = path.join(winRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+            return {
+                shell: defaultPsPath,
+                args: ['-NoLogo'],
+            };
+        }
+
+        const shell = process.env.SHELL || '/bin/bash';
+        return {
+            shell,
+            args: ['--login'],
+        };
+    }
+
+    _resolveFallbackTerminalShell(primaryShell) {
+        if (this.platform === 'win32') {
+            const comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe';
+            if (!primaryShell || String(primaryShell).toLowerCase().includes('powershell')) {
+                return {
+                    shell: comspec,
+                    args: [],
+                };
+            }
+
+            return {
+                shell: primaryShell,
+                args: [],
+            };
+        }
+
+        return {
+            shell: primaryShell || (process.env.SHELL || '/bin/bash'),
+            args: ['-i'],
+        };
     }
 
     initialize() {
@@ -174,7 +244,7 @@ class LocalCoderHandler {
         });
 
         watcher.on('all', (event, changedPath) => {
-            this.mainWindow?.webContents?.send('local-workspace-changed', {
+            this._emitRenderer('local-workspace-changed', {
                 conversationId,
                 event,
                 path: changedPath,
@@ -192,7 +262,7 @@ class LocalCoderHandler {
         this.watchers.delete(conversationId);
     }
 
-    async startTerminal(conversationId, cwd) {
+    async startTerminal(conversationId, cwd, options = {}) {
         if (!conversationId) {
             return { success: false, error: 'conversationId is required' };
         }
@@ -202,23 +272,73 @@ class LocalCoderHandler {
 
         const existing = this.terminals.get(conversationId);
         if (existing && existing.proc && !existing.proc.killed) {
-            return { success: true, already_running: true, cwd: existing.cwd };
+            return {
+                success: true,
+                already_running: true,
+                cwd: existing.cwd,
+                mode: existing.mode || 'spawn',
+            };
         }
 
-        const shell = this.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
-        const args = this.platform === 'win32'
-            ? ['-NoLogo', '-NoExit', '-Command', '-']
-            : ['-i'];
+        const requestedCols = Math.max(40, Math.min(Number(options?.cols || 120), 500));
+        const requestedRows = Math.max(10, Math.min(Number(options?.rows || 35), 300));
+        const { shell, args } = this._resolveTerminalShell();
+
+        if (nodePty) {
+            try {
+                const proc = nodePty.spawn(shell, args, {
+                    name: 'xterm-256color',
+                    cols: requestedCols,
+                    rows: requestedRows,
+                    cwd: root.path,
+                    env: process.env,
+                });
+
+                proc.onData((chunk) => {
+                    this._emitRenderer('project-local-terminal-output', {
+                        conversationId,
+                        stream: 'stdout',
+                        data: String(chunk || ''),
+                    });
+                });
+
+                proc.onExit(({ exitCode }) => {
+                    this._emitRenderer('project-local-terminal-exit', {
+                        conversationId,
+                        code: Number.isInteger(exitCode) ? exitCode : null,
+                    });
+                    this.terminals.delete(conversationId);
+                });
+
+                this.terminals.set(conversationId, {
+                    proc,
+                    cwd: root.path,
+                    mode: 'pty',
+                });
+
+                return {
+                    success: true,
+                    cwd: root.path,
+                    mode: 'pty',
+                    cols: requestedCols,
+                    rows: requestedRows,
+                };
+            } catch (error) {
+                // Fallback path maintains functionality even if PTY fails to initialize.
+                console.warn('[LocalCoderHandler] PTY start failed, using spawn fallback:', error.message);
+            }
+        }
 
         try {
-            const proc = spawn(shell, args, {
+            const fallbackShell = this._resolveFallbackTerminalShell(shell);
+            const proc = spawn(fallbackShell.shell, fallbackShell.args, {
                 cwd: root.path,
                 env: process.env,
                 stdio: 'pipe',
             });
 
             proc.stdout.on('data', (chunk) => {
-                this.mainWindow?.webContents?.send('project-local-terminal-output', {
+                this._emitRenderer('project-local-terminal-output', {
                     conversationId,
                     stream: 'stdout',
                     data: String(chunk),
@@ -226,7 +346,7 @@ class LocalCoderHandler {
             });
 
             proc.stderr.on('data', (chunk) => {
-                this.mainWindow?.webContents?.send('project-local-terminal-output', {
+                this._emitRenderer('project-local-terminal-output', {
                     conversationId,
                     stream: 'stderr',
                     data: String(chunk),
@@ -234,30 +354,61 @@ class LocalCoderHandler {
             });
 
             proc.on('close', (code) => {
-                this.mainWindow?.webContents?.send('project-local-terminal-exit', {
+                this._emitRenderer('project-local-terminal-exit', {
                     conversationId,
                     code: Number.isInteger(code) ? code : null,
                 });
                 this.terminals.delete(conversationId);
             });
 
-            this.terminals.set(conversationId, { proc, cwd: root.path });
-            return { success: true, cwd: root.path };
+            this.terminals.set(conversationId, {
+                proc,
+                cwd: root.path,
+                mode: 'spawn',
+            });
+            return { success: true, cwd: root.path, mode: 'spawn' };
         } catch (error) {
             return { success: false, error: error.message };
         }
     }
 
-    async sendTerminalInput(conversationId, command) {
+    async sendTerminalInput(conversationId, inputData) {
         const terminal = this.terminals.get(conversationId);
         if (!terminal?.proc || terminal.proc.killed) {
             return { success: false, error: 'Terminal session not running' };
         }
 
         try {
-            const line = String(command || '');
-            terminal.proc.stdin.write(line.endsWith('\n') ? line : `${line}\n`);
+            const payload = String(inputData || '');
+            if (terminal.mode === 'pty') {
+                terminal.proc.write(payload);
+                return { success: true };
+            }
+
+            // Spawn fallback only supports stdin text writes.
+            terminal.proc.stdin.write(payload);
             return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    resizeTerminal(conversationId, cols, rows) {
+        const terminal = this.terminals.get(conversationId);
+        if (!terminal?.proc || terminal.proc.killed) {
+            return { success: false, error: 'Terminal session not running' };
+        }
+
+        const safeCols = Math.max(40, Math.min(Number(cols || 120), 500));
+        const safeRows = Math.max(10, Math.min(Number(rows || 35), 300));
+
+        if (terminal.mode !== 'pty' || typeof terminal.proc.resize !== 'function') {
+            return { success: true, skipped: true };
+        }
+
+        try {
+            terminal.proc.resize(safeCols, safeRows);
+            return { success: true, cols: safeCols, rows: safeRows };
         } catch (error) {
             return { success: false, error: error.message };
         }
@@ -268,7 +419,11 @@ class LocalCoderHandler {
         if (!terminal?.proc) return { success: true };
 
         try {
-            terminal.proc.kill();
+            if (terminal.mode === 'pty') {
+                terminal.proc.kill();
+            } else {
+                terminal.proc.kill();
+            }
             this.terminals.delete(conversationId);
             return { success: true };
         } catch (error) {
@@ -748,6 +903,7 @@ class LocalCoderHandler {
     }
 
     async cleanup() {
+        this.isShuttingDown = true;
         for (const conversationId of [...this.watchers.keys()]) {
             this.stopWatching(conversationId);
         }
@@ -755,6 +911,7 @@ class LocalCoderHandler {
             this.stopTerminal(conversationId);
         }
         this.workspaceContexts.clear();
+        this.mainWindow = null;
     }
 }
 

@@ -16,6 +16,30 @@ class PythonBridge {
         this.reconnectDelay = config.backend.reconnectDelay;
         this.ongoingStreams = {};
         this.serverUrl = config.backend.url;
+        this.isShuttingDown = false;
+    }
+
+    _canSendToRenderer() {
+        if (this.isShuttingDown) return false;
+        if (!this.mainWindow || typeof this.mainWindow.isDestroyed !== 'function') return false;
+        if (this.mainWindow.isDestroyed()) return false;
+        const wc = this.mainWindow.webContents;
+        if (!wc || typeof wc.isDestroyed !== 'function') return false;
+        return !wc.isDestroyed();
+    }
+
+    _sendToRenderer(channel, payload) {
+        if (!this._canSendToRenderer()) return false;
+        try {
+            this.mainWindow.webContents.send(channel, payload);
+            return true;
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            if (!this.isShuttingDown && !message.includes('object has been destroyed')) {
+                console.warn(`[PythonBridge] Failed to emit '${channel}':`, error.message);
+            }
+            return false;
+        }
     }
 
     /**
@@ -43,6 +67,7 @@ class PythonBridge {
     }
 
     async start() {
+        this.isShuttingDown = false;
         console.log(`Connecting to backend server at ${this.serverUrl}...`);
         this.setupIpcHandlers();
         await this.connectWebSocket();
@@ -65,9 +90,9 @@ class PythonBridge {
 
         ipcMain.on('check-connection-status', () => {
             if (this.socket && this.socket.connected) {
-                this.mainWindow.webContents.send('socket-connection-status', { connected: true });
+                this._sendToRenderer('socket-connection-status', { connected: true });
             } else {
-                this.mainWindow.webContents.send('socket-connection-status', { connected: false });
+                this._sendToRenderer('socket-connection-status', { connected: false });
             }
         });
 
@@ -121,15 +146,19 @@ class PythonBridge {
                 console.log(`Connected to Socket.IO server at ${this.serverUrl}`);
                 this.initialized = true;
                 this.reconnectAttempts = 0;
-                this.mainWindow.webContents.send('socket-connection-status', { connected: true });
+                this._sendToRenderer('socket-connection-status', { connected: true });
                 resolve();
             });
             this.socket.on('connect_error', (error) => {
                 clearTimeout(connectionTimeout);
+                if (this.isShuttingDown) {
+                    reject(error);
+                    return;
+                }
                 if (this.reconnectAttempts <= 1) {
                     console.error('Socket.IO connect error:', error.message);
                 }
-                this.mainWindow.webContents.send('socket-connection-status', {
+                this._sendToRenderer('socket-connection-status', {
                     connected: false,
                     error: error.message
                 });
@@ -142,54 +171,58 @@ class PythonBridge {
     setupSocketHandlers() {
         // This method is mostly unchanged, but the 'browser-command' handler is now functional.
         this.socket.on('response', (data) => {
-            this.mainWindow.webContents.send('chat-response', data);
+            this._sendToRenderer('chat-response', data);
         });
         this.socket.on('agent_step', (data) => {
-            this.mainWindow.webContents.send('agent-step', data);
+            this._sendToRenderer('agent-step', data);
         });
         this.socket.on('error', (error) => {
             console.error('Socket.IO error:', error.message || error);
-            this.mainWindow.webContents.send('socket-error', error);
+            this._sendToRenderer('socket-error', error);
         });
         this.socket.on('status', (data) => {
-            this.mainWindow.webContents.send('socket-status', data);
+            this._sendToRenderer('socket-status', data);
         });
         this.socket.on('disconnect', () => {
+            if (this.isShuttingDown) {
+                this.initialized = false;
+                return;
+            }
             if (this.initialized) {
                 console.log('Socket.IO disconnected');
             }
             this.initialized = false;
-            this.mainWindow.webContents.send('socket-connection-status', { connected: false });
+            this._sendToRenderer('socket-connection-status', { connected: false });
             this.handleReconnection();
         });
 
         this.socket.on('image_generated', (data) => {
-            this.mainWindow.webContents.send('image_generated', data);
+            this._sendToRenderer('image_generated', data);
         });
 
         this.socket.on('task_execution_status', (data) => {
             console.log('PythonBridge: Received task_execution_status:', data);
-            this.mainWindow.webContents.send('task_execution_status', data);
+            this._sendToRenderer('task_execution_status', data);
         });
 
         this.socket.on('sandbox-command-started', (data) => {
-            this.mainWindow.webContents.send('sandbox-command-started', data);
+            this._sendToRenderer('sandbox-command-started', data);
         });
 
         this.socket.on('sandbox-command-finished', (data) => {
-            this.mainWindow.webContents.send('sandbox-command-finished', data);
+            this._sendToRenderer('sandbox-command-finished', data);
         });
 
         this.socket.on('sandbox-artifacts-created', (data) => {
-            this.mainWindow.webContents.send('sandbox-artifacts-created', data);
+            this._sendToRenderer('sandbox-artifacts-created', data);
         });
 
         this.socket.on('local-command-started', (data) => {
-            this.mainWindow.webContents.send('local-command-started', data);
+            this._sendToRenderer('local-command-started', data);
         });
 
         this.socket.on('local-command-finished', (data) => {
-            this.mainWindow.webContents.send('local-command-finished', data);
+            this._sendToRenderer('local-command-finished', data);
         });
 
         // FIX: This handler now correctly forwards the command to the browserController instance.
@@ -239,7 +272,7 @@ class PythonBridge {
                 outputId: data?.metadata?.output_id || null,
                 previewType: data?.metadata?.preview_type || null
             });
-            this.mainWindow.webContents.send('computer-tool-result-preview', data);
+            this._sendToRenderer('computer-tool-result-preview', data);
         });
     }
 
@@ -284,9 +317,10 @@ class PythonBridge {
 
     async handleReconnection() {
         // This method is unchanged.
+        if (this.isShuttingDown) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
-            this.mainWindow.webContents.send('socket-connection-status', {
+            this._sendToRenderer('socket-connection-status', {
                 connected: false,
                 error: 'Max reconnection attempts reached'
             });
@@ -297,7 +331,7 @@ class PythonBridge {
         if (this.reconnectAttempts % 5 === 1 || this.reconnectAttempts === this.maxReconnectAttempts) {
             console.log(`Reconnecting: attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
         }
-        this.mainWindow.webContents.send('socket-connection-status', {
+        this._sendToRenderer('socket-connection-status', {
             connected: false,
             reconnecting: true,
             attempt: this.reconnectAttempts,
@@ -318,7 +352,7 @@ class PythonBridge {
         // This method is unchanged.
         if (!this.socket || !this.socket.connected) {
             console.error('Socket not connected');
-            this.mainWindow.webContents.send('socket-error', {
+            this._sendToRenderer('socket-error', {
                 message: 'Cannot send message, socket not connected'
             });
             return;
@@ -331,7 +365,7 @@ class PythonBridge {
             this.socket.emit('send_message', JSON.stringify(message));
         } catch (error) {
             console.error('Error sending message:', error);
-            this.mainWindow.webContents.send('socket-error', {
+            this._sendToRenderer('socket-error', {
                 message: 'Error sending message: ' + error.message
             });
         }
@@ -339,7 +373,13 @@ class PythonBridge {
 
     cleanup() {
         // This method is unchanged.
+        this.isShuttingDown = true;
         if (this.socket) {
+            try {
+                this.socket.removeAllListeners();
+            } catch (_error) {
+                // no-op
+            }
             this.socket.close();
             this.socket = null;
         }
@@ -348,7 +388,7 @@ class PythonBridge {
     }
 
     stop() {
-        // This method is unchanged.
+        this.isShuttingDown = true;
         this.cleanup();
     }
 }
