@@ -446,12 +446,24 @@ def run_agent_and_stream(
 
         # Internal routing metadata should not be forwarded to get_llm_os kwargs.
         session_agent_mode = str(session_config.pop("agent_mode", "default")).strip().lower()
+        session_coder_target = str(session_config.pop("coder_execution_target", "cloud")).strip().lower()
+        if session_coder_target not in ("local", "cloud"):
+            session_coder_target = "cloud"
 
         requested_mode = str(agent_mode or "").strip().lower()
         if requested_mode not in ("coder", "computer", "default"):
             requested_mode = session_agent_mode
         if requested_mode not in ("coder", "computer", "default"):
             requested_mode = "default"
+
+        requested_coder_target = str(
+            turn_data.get("coder_execution_target")
+            or session_data.get("config", {}).get("coder_execution_target")
+            or session_coder_target
+            or "cloud"
+        ).strip().lower()
+        if requested_coder_target not in ("local", "cloud"):
+            requested_coder_target = "cloud"
 
         if requested_mode == "coder":
             agent = get_coder_agent(
@@ -464,6 +476,7 @@ def run_agent_and_stream(
                 use_memory=session_config.get("use_memory", False),
                 debug_mode=True,
                 enable_github=session_config.get("enable_github", True),
+                coder_execution_target=requested_coder_target,
             )
         elif requested_mode == "computer":
             agent = get_computer_agent(

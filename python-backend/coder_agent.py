@@ -9,6 +9,7 @@ from agno.tools import Toolkit
 from database_tools import DatabaseTools
 from deployed_project_tools import DeployedProjectTools
 from github_tools import GitHubTools
+from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
 
@@ -30,6 +31,7 @@ def get_coder_agent(
     use_memory: bool = False,
     debug_mode: bool = True,
     enable_github: bool = True,
+    coder_execution_target: str = "cloud",
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
 ) -> Agent:
@@ -49,20 +51,43 @@ def get_coder_agent(
     sid = browser_tools_config.get("sid") if browser_tools_config else None
     redis_client_instance = browser_tools_config.get("redis_client") if browser_tools_config else None
 
-    coder_tools: List[Union[Toolkit, callable]] = [
-        SandboxTools(
-            session_info=session_info or {},
-            persistence_service=persistence_service,
-            user_id=user_id,
-            session_id=session_id,
-            message_id=message_id,
-            socketio=socketio_instance,
-            sid=sid,
-            redis_client=redis_client_instance,
-            delegation_id=delegation_id,
-            delegated_agent=delegated_agent,
-        )
-    ]
+    session_config = (session_info or {}).get("config", {}) if isinstance(session_info, dict) else {}
+    workspace_context = session_config.get("workspace_context", {}) if isinstance(session_config, dict) else {}
+    local_context = workspace_context.get("local_context", {}) if isinstance(workspace_context, dict) else {}
+    local_root = local_context.get("root_path")
+
+    normalized_target = str(coder_execution_target or "cloud").strip().lower()
+    if normalized_target not in ("cloud", "local"):
+        normalized_target = "cloud"
+
+    if normalized_target == "local":
+        coder_tools: List[Union[Toolkit, callable]] = [
+            LocalCoderTools(
+                sid=sid,
+                socketio=socketio_instance,
+                redis_client=redis_client_instance,
+                workspace_root=local_root,
+                message_id=message_id,
+                conversation_id=session_id,
+                delegation_id=delegation_id,
+                delegated_agent=delegated_agent,
+            )
+        ]
+    else:
+        coder_tools = [
+            SandboxTools(
+                session_info=session_info or {},
+                persistence_service=persistence_service,
+                user_id=user_id,
+                session_id=session_id,
+                message_id=message_id,
+                socketio=socketio_instance,
+                sid=sid,
+                redis_client=redis_client_instance,
+                delegation_id=delegation_id,
+                delegated_agent=delegated_agent,
+            )
+        ]
 
     if user_id:
         coder_tools.append(DeployedProjectTools(user_id=user_id))
@@ -82,7 +107,7 @@ def get_coder_agent(
             "<system_instructions>",
             "You are Aetheria Coder. Focus only on software engineering tasks.",
             "Use deterministic implementation flow: inspect -> edit -> verify -> summarize.",
-            "Workspace root: /home/sandboxuser/workspace.",
+            "Cloud workspace root: /home/sandboxuser/workspace. In local mode, use provided local workspace root only.",
             "Prefer surgical edits over full-file rewrites.",
             "Before deployment/database operations, resolve project context first.",
             "Never expose provider secrets/tokens in frontend source.",
