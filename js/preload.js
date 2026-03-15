@@ -97,6 +97,7 @@ const validInvokeChannels = [
     'project-unwatch-local-workspace',
     'project-local-terminal-start',
     'project-local-terminal-send',
+    'project-local-terminal-resize',
     'project-local-terminal-stop'
 ];
 

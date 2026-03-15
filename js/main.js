@@ -32,6 +32,7 @@ let computerControlHandler;
 let localCoderHandler;
 let nativeNotificationService;
 let linkWebView = null;
+let isAppQuitting = false;
 
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
 // This function's only job is to receive the URL from the OS and pass it to the UI.
@@ -362,7 +363,10 @@ function createWindow() {
             return { success: false, error: 'Local coder handler not initialized' };
         }
         const body = payload && typeof payload === 'object' ? payload : {};
-        return localCoderHandler.startTerminal(body.conversationId, body.cwd);
+        return localCoderHandler.startTerminal(body.conversationId, body.cwd, {
+            cols: body.cols,
+            rows: body.rows,
+        });
     });
 
     ipcMain.handle('project-local-terminal-send', async (event, payload) => {
@@ -370,7 +374,16 @@ function createWindow() {
             return { success: false, error: 'Local coder handler not initialized' };
         }
         const body = payload && typeof payload === 'object' ? payload : {};
-        return localCoderHandler.sendTerminalInput(body.conversationId, body.command);
+        const data = body.data != null ? body.data : body.command;
+        return localCoderHandler.sendTerminalInput(body.conversationId, data);
+    });
+
+    ipcMain.handle('project-local-terminal-resize', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.resizeTerminal(body.conversationId, body.cols, body.rows);
     });
 
     ipcMain.handle('project-local-terminal-stop', async (event, payload) => {
@@ -588,9 +601,46 @@ app.on('window-all-closed', () => {
     }
 });
 
-app.on('before-quit', async (event) => {
-    if (browserHandler) { await browserHandler.cleanup(); }
-    if (localCoderHandler) { await localCoderHandler.cleanup(); }
-    if (linkWebView) { try { mainWindow.removeBrowserView(linkWebView); linkWebView.webContents.destroy(); linkWebView = null; } catch (error) { console.error('Error cleaning up linkWebView:', error.message); } }
-    if (pythonBridge) { try { pythonBridge.stop(); pythonBridge = null; } catch (error) { console.error('Error stopping Python bridge:', error.message); } }
+app.on('before-quit', async () => {
+    if (isAppQuitting) return;
+    isAppQuitting = true;
+
+    if (browserHandler) {
+        try {
+            await browserHandler.cleanup();
+        } catch (error) {
+            console.error('Error cleaning up BrowserHandler:', error.message);
+        }
+    }
+
+    if (localCoderHandler) {
+        try {
+            await localCoderHandler.cleanup();
+        } catch (error) {
+            console.error('Error cleaning up LocalCoderHandler:', error.message);
+        }
+    }
+
+    if (linkWebView) {
+        try {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.removeBrowserView(linkWebView);
+            }
+            if (linkWebView.webContents && !linkWebView.webContents.isDestroyed()) {
+                linkWebView.webContents.destroy();
+            }
+            linkWebView = null;
+        } catch (error) {
+            console.error('Error cleaning up linkWebView:', error.message);
+        }
+    }
+
+    if (pythonBridge) {
+        try {
+            pythonBridge.stop();
+            pythonBridge = null;
+        } catch (error) {
+            console.error('Error stopping Python bridge:', error.message);
+        }
+    }
 });
