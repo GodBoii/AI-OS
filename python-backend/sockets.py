@@ -52,6 +52,13 @@ def _normalize_agent_mode(raw_value: Any) -> str:
     return "default"
 
 
+def _normalize_coder_execution_target(raw_value: Any) -> str:
+    value = str(raw_value or "").strip().lower()
+    if value == "local":
+        return "local"
+    return "cloud"
+
+
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
     global connection_manager_service, redis_client_instance, run_state_manager_instance
@@ -294,6 +301,34 @@ def handle_computer_command_result(data: Dict[str, Any]):
         logger.warning("Received computer command result with no request_id.")
 
 
+@socketio.on('local-coder-command-result')
+def handle_local_coder_command_result(data: Dict[str, Any]):
+    """
+    Receives local coder bridge command result from desktop client and publishes
+    it back to Redis for waiting toolkit consumers.
+    """
+    if not redis_client_instance:
+        logger.error("Redis client not initialized. Cannot handle local coder command result.")
+        return
+
+    request_id = data.get('request_id')
+    result_payload = data.get('result', {})
+
+    if request_id:
+        response_channel = f"local-coder-response:{request_id}"
+        try:
+            redis_client_instance.publish(response_channel, json.dumps(result_payload))
+            logger.info(
+                "Published local coder result for request_id %s to Redis channel %s",
+                request_id,
+                response_channel,
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish local coder result to Redis for {request_id}: {e}")
+    else:
+        logger.warning("Received local coder command result with no request_id.")
+
+
 @socketio.on("send_message")
 def on_send_message(data: str):
     """The main message handler for incoming chat messages."""
@@ -330,16 +365,37 @@ def on_send_message(data: str):
         requested_agent_mode = _normalize_agent_mode(
             data.get("agent_mode") or (data.get("config", {}) or {}).get("agent_mode")
         )
+        requested_coder_target = _normalize_coder_execution_target(
+            data.get("coder_execution_target") or (data.get("config", {}) or {}).get("coder_execution_target")
+        )
+        workspace_context = data.get("workspace_context")
+        if not isinstance(workspace_context, dict):
+            workspace_context = {}
 
         if not connection_manager_service.get_session(conversation_id):
             device_type = data.get("deviceType", "web")
             session_config = dict(data.get("config", {}))
             session_config["agent_mode"] = requested_agent_mode
+            session_config["coder_execution_target"] = requested_coder_target
+            session_config["workspace_context"] = workspace_context
             connection_manager_service.create_session(
                 conversation_id,
                 str(user.id),
                 session_config,
                 device_type=device_type
+            )
+        else:
+            # Keep routing and workspace state fresh for existing sessions.
+            session_data = connection_manager_service.get_session(conversation_id) or {}
+            session_config = dict(session_data.get("config", {}))
+            session_config["agent_mode"] = requested_agent_mode
+            session_config["coder_execution_target"] = requested_coder_target
+            session_config["workspace_context"] = workspace_context
+            session_data["config"] = session_config
+            connection_manager_service.redis_client.set(
+                f"session:{conversation_id}",
+                json.dumps(session_data),
+                ex=connection_manager_service.SESSION_TTL,
             )
 
             # --- Title Generation for New Sessions ---
@@ -368,7 +424,11 @@ def on_send_message(data: str):
                 exc_info=True,
             )
 
-        turn_data = {"user_message": data.get("message", ""), "files": data.get("files", [])}
+        turn_data = {
+            "user_message": data.get("message", ""),
+            "files": data.get("files", []),
+            "coder_execution_target": requested_coder_target,
+        }
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
 
