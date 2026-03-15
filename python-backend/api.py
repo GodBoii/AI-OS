@@ -8,7 +8,7 @@ import requests
 import redis
 import base64
 from typing import Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from flask import Blueprint, request, jsonify
 
 # Import the utility function from the factory (or a future utils module)
@@ -38,14 +38,17 @@ from subscription_service import (
     UsageLimitExceeded,
     calculate_usage_summary,
     create_razorpay_subscription,
+    enforce_usage_limit,
     get_daily_usage_by_date,
     get_daily_usage_for_user,
+    get_usage_window_descriptor,
     get_plan_config,
     handle_webhook_event,
     parse_webhook_body,
     verify_checkout_and_activate,
     verify_webhook_signature,
 )
+from convex_usage_service import get_convex_usage_service
 
 logger = logging.getLogger(__name__)
 
@@ -706,107 +709,190 @@ def generate_upload_url():
     return jsonify({"signedURL": upload_details['signed_url'], "path": upload_details['path']}), 200
 
 
+def _to_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _extract_assistant_metrics(run_output: Any) -> dict[str, int]:
+    metrics = getattr(run_output, "metrics", None)
+    if not metrics:
+        return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    if isinstance(metrics, dict):
+        input_tokens = _to_int(metrics.get("input_tokens"))
+        output_tokens = _to_int(metrics.get("output_tokens"))
+        total_tokens = _to_int(metrics.get("total_tokens"))
+    else:
+        input_tokens = _to_int(getattr(metrics, "input_tokens", 0))
+        output_tokens = _to_int(getattr(metrics, "output_tokens", 0))
+        total_tokens = _to_int(getattr(metrics, "total_tokens", 0))
+
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _log_assistant_token_usage(
+    *,
+    user_id: str,
+    conversation_id: str,
+    message_id: str,
+    metrics: dict[str, int],
+    source: str = "assistant_http",
+) -> None:
+    if (metrics.get("input_tokens", 0) <= 0) and (metrics.get("output_tokens", 0) <= 0):
+        return
+
+    try:
+        convex_service = get_convex_usage_service()
+        usage_window = get_usage_window_descriptor(user_id=str(user_id), refresh_window=False)
+        convex_service.record_token_usage(
+            user_id=str(user_id),
+            conversation_id=str(conversation_id),
+            message_id=str(message_id),
+            metrics=metrics,
+            usage_window=usage_window,
+            source=source,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to log assistant token usage for user=%s conversation=%s message=%s: %s",
+            user_id,
+            conversation_id,
+            message_id,
+            exc,
+        )
+
+
+def _extract_media_upload_path(url: str) -> Optional[str]:
+    if not url:
+        return None
+    marker = "media-uploads/"
+    if marker not in url:
+        return None
+    relative_path = url.split(marker, 1)[1]
+    relative_path = relative_path.split("?", 1)[0].strip("/")
+    if not relative_path:
+        return None
+    return unquote(relative_path)
+
+
 @api_bp.route('/assistant/upload-link', methods=['POST'])
 def assistant_upload_link():
     """
-    Generate a signed upload URL for Circle to Search images.
-    Stateless - no authentication required for assistant features.
+    Generate a signed upload URL for assistant image analysis.
+    Requires a valid user auth token.
     """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
     try:
         data = request.json or {}
-        file_extension = data.get('extension', 'jpg')
-        
-        # Generate unique filename in temporary assistant folder
+        file_extension = str(data.get('extension', 'jpg')).strip().lower().lstrip(".")
+        if not file_extension.isalnum():
+            file_extension = "jpg"
+
         file_name = f"{uuid.uuid4()}.{file_extension}"
-        file_path = f"assistant-temp/{file_name}"
-        
-        logger.info(f"📤 Generating upload link for: {file_path}")
-        
-        # Create signed upload URL (valid for 5 minutes)
+        file_path = f"{user.id}/assistant-temp/{file_name}"
+
+        logger.info("Generating assistant upload link for user %s path=%s", user.id, file_path)
+
         upload_details = supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
-        
-        # Generate public URL for viewing
         public_url = supabase_client.storage.from_('media-uploads').get_public_url(file_path)
-        
+
         return jsonify({
             "uploadUrl": upload_details['signed_url'],
             "publicUrl": public_url,
             "path": file_path
         }), 200
-        
     except Exception as e:
-        logger.error(f"Error generating upload link: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error("Error generating assistant upload link: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to generate upload link"}), 500
 
 
 @api_bp.route('/assistant/chat', methods=['POST'])
 def assistant_chat():
     """
-    Stateless voice assistant endpoint for Android.
-    Supports text and multimodal (image) inputs.
-    Simple, fast, no authentication or session tracking required.
+    Authenticated voice assistant endpoint for Android native features.
+    Supports text and multimodal (image) inputs with usage enforcement.
     """
     import traceback
     from system_assistant import get_system_assistant
     from agno.media import Image
 
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({
+            "error": error[0],
+            "response": "Please sign in to continue."
+        }), error[1]
+
     try:
-        logger.info("🎙️  Assistant Query")
-        
+        enforce_usage_limit(str(user.id))
+    except UsageLimitExceeded as exc:
+        return jsonify({
+            "error": str(exc),
+            "code": "subscription_limit_exceeded",
+            "limit_info": exc.summary,
+            "response": str(exc),
+        }), 429
+    except Exception as exc:
+        logger.error("Usage limit check failed for assistant_chat user=%s: %s", user.id, exc, exc_info=True)
+
+    try:
         data = request.json or {}
         user_message = data.get('message', '')
-        image_urls = data.get('images', [])  # Array of image URLs
-        
+        image_urls = data.get('images', []) or []
+        conversation_id = str(data.get("session_id") or data.get("conversationId") or uuid.uuid4())
+        message_id = str(data.get("id") or uuid.uuid4())
+
         if not user_message:
             return jsonify({"error": "Message is required", "response": "I didn't catch that. Please try again."}), 400
-        
-        msg_preview = (user_message[:75] + '...') if len(user_message) > 75 else user_message
-        
-        if image_urls:
-            logger.info(f"🖼️  Query with {len(image_urls)} image(s): {msg_preview}")
-        else:
-            logger.info(f"Query: {msg_preview}")
 
-        # Get agent (stateless, no session)
+        msg_preview = (user_message[:75] + '...') if len(user_message) > 75 else user_message
+        logger.info(
+            "Assistant query user=%s conversation=%s images=%s preview=%s",
+            user.id,
+            conversation_id,
+            len(image_urls),
+            msg_preview,
+        )
+
         agent = get_system_assistant()
-        
-        # Execute with optional images
+
         try:
-            # Prepare images with content (to avoid URL accessibility issues with Gemini)
             images = []
             if image_urls:
+                expected_prefix = f"{user.id}/assistant-temp/"
                 for url in image_urls:
                     try:
-                        # Check if this is a Supabase URL we generated (contains assistant-temp)
-                        if "assistant-temp" in url:
-                            # Extract path: find 'assistant-temp' and everything after
-                            path_parts = url.split("assistant-temp")
-                            if len(path_parts) > 1:
-                                # Clean up path (remove queries etc if any, though usually clean)
-                                relative_path = "assistant-temp" + path_parts[1].split('?')[0]
-                                logger.info(f"Downloading internal image from Supabase: {relative_path}")
-                                
-                                # Download directly from Supabase storage
-                                image_bytes = supabase_client.storage.from_('media-uploads').download(relative_path)
-                                images.append(Image(content=image_bytes))
-                                continue
-                        
-                        # Fallback: Download via HTTP (works for external URLs or public Supabase URLs)
-                        logger.info(f"Downloading image from URL: {url}")
+                        relative_path = _extract_media_upload_path(url)
+                        if relative_path and relative_path.startswith(expected_prefix):
+                            logger.info("Downloading assistant image from storage path: %s", relative_path)
+                            image_bytes = supabase_client.storage.from_('media-uploads').download(relative_path)
+                            images.append(Image(content=image_bytes))
+                            continue
+
+                        logger.info("Downloading assistant image via URL: %s", url)
                         resp = requests.get(url, timeout=10)
                         if resp.status_code == 200:
                             images.append(Image(content=resp.content))
                         else:
-                            logger.error(f"Failed to fetch image: {resp.status_code}")
+                            logger.error("Failed to fetch image URL %s status=%s", url, resp.status_code)
                     except Exception as img_err:
-                        logger.error(f"Error processing image {url}: {img_err}")
-                
-                logger.info(f"Prepared {len(images)} images for agent")
-            
-            # Run agent with image content
+                        logger.error("Error processing image %s: %s", url, img_err)
+
             result = agent.run(input=user_message, images=images, stream=False)
-            
-            # Extract response
+
             response_text = ""
             if hasattr(result, 'content') and result.content:
                 response_text = result.content
@@ -815,20 +901,26 @@ def assistant_chat():
                     if hasattr(msg, 'role') and msg.role == 'assistant' and hasattr(msg, 'content'):
                         response_text = msg.content
                         break
-            
+
             if not response_text:
                 response_text = "I processed your request but couldn't generate a response. Please try again."
-            
-            logger.info(f"Response: {response_text[:75]}...")
+
+            metrics = _extract_assistant_metrics(result)
+            _log_assistant_token_usage(
+                user_id=str(user.id),
+                conversation_id=conversation_id,
+                message_id=message_id,
+                metrics=metrics,
+                source="assistant_http",
+            )
+
             return jsonify({"response": response_text}), 200
-                    
         except Exception as agent_error:
-            logger.error(f"Agent error: {agent_error}")
+            logger.error("Assistant agent error for user=%s: %s", user.id, agent_error)
             traceback.print_exc()
             return jsonify({"response": generate_fallback_response(user_message)}), 200
-        
     except Exception as e:
-        logger.error(f"Critical error: {e}")
+        logger.error("Critical assistant_chat error for user=%s: %s", user.id, e)
         traceback.print_exc()
         return jsonify({
             "error": str(e),

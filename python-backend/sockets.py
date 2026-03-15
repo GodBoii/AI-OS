@@ -489,8 +489,8 @@ def on_send_message(data: str):
 @socketio.on("assistant_message")
 def on_assistant_message(data: str):
     """
-    Dedicated message handler for the Android Assistant.
-    Does NOT require an access_token. Uses 'android_assistant' as user_id.
+    Dedicated message handler for Android Assistant clients.
+    Requires access_token so native assistant usage is tied to real users.
     """
     sid = request.sid
     if not connection_manager_service or not redis_client_instance:
@@ -502,6 +502,14 @@ def on_assistant_message(data: str):
             data = json.loads(data)
 
         logger.info(f"[Assistant Socket] Received message: {data}")
+
+        access_token = data.get("accessToken")
+        if not access_token:
+            return socketio.emit("assistant_error", {"message": "Authentication token is missing."}, room=sid)
+
+        user = supabase_client.auth.get_user(jwt=access_token).user
+        if not user:
+            raise AuthApiError("User not found for token.", 401)
 
         user_message = data.get("message", "")
         conversation_id = data.get("conversationId")
@@ -520,7 +528,23 @@ def on_assistant_message(data: str):
         room_name = f"conv:{conversation_id}"
         join_room(room_name)
 
-        user_id = "android_assistant"
+        try:
+            enforce_usage_limit(str(user.id))
+        except UsageLimitExceeded as exc:
+            return socketio.emit("assistant_error", {
+                "message": str(exc),
+                "code": "subscription_limit_exceeded",
+                "limit_info": exc.summary,
+            }, room=sid)
+        except Exception as exc:
+            logger.error(
+                "Usage limit check failed for assistant_message user %s: %s",
+                str(user.id),
+                exc,
+                exc_info=True,
+            )
+
+        user_id = str(user.id)
 
         if not connection_manager_service.get_session(conversation_id):
             connection_manager_service.create_session(
