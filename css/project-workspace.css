@@ -581,3 +581,109 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     bottom: 20px;
     transform: translateX(-50%);
 }
+
+.project-mode-window {
+    margin: 10px 12px;
+    padding: 10px;
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    background: var(--elevated-bg);
+}
+
+.project-mode-window-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.project-mode-window-note,
+.project-mode-window-current,
+.project-mode-window-recommendation {
+    margin-top: 6px;
+    font-size: 0.71rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+}
+
+.project-mode-window-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.project-local-terminal-overlay {
+    position: absolute;
+    inset: 14px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 12px;
+    background: #0f172a;
+    color: #e2e8f0;
+    box-shadow: 0 20px 48px rgba(2, 6, 23, 0.4);
+}
+
+.project-local-terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.95);
+}
+
+.project-local-terminal-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.project-local-terminal-close,
+.project-local-terminal-send {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.8);
+    color: #cbd5e1;
+    cursor: pointer;
+}
+
+.project-local-terminal-output {
+    flex: 1;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.project-local-terminal-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.project-local-terminal-input {
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    padding: 0 10px;
+    background: rgba(15, 23, 42, 0.9);
+    color: #e2e8f0;
+    font-size: 0.74rem;
+}
+
+body.project-terminal-open #chat-container .chat-messages,
+body.project-terminal-open #chat-container .context-active-indicator,
+body.project-terminal-open #project-main-file-preview,
+body.project-terminal-open #floating-input-container {
+    display: none !important;
+}

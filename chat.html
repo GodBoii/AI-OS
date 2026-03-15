@@ -13,6 +13,22 @@
             <pre id="project-main-file-preview-content"
                 class="project-main-file-preview-content">Click a file to view its content.</pre>
         </div>
+        <div id="project-local-terminal-overlay" class="project-local-terminal-overlay hidden">
+            <div class="project-local-terminal-header">
+                <div class="project-local-terminal-title">Local Terminal</div>
+                <button id="project-local-terminal-close" class="project-local-terminal-close" aria-label="Close terminal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <pre id="project-local-terminal-output" class="project-local-terminal-output"></pre>
+            <div class="project-local-terminal-input-row">
+                <input id="project-local-terminal-input" class="project-local-terminal-input" type="text"
+                    placeholder="Type command and press Enter" />
+                <button id="project-local-terminal-send" class="project-local-terminal-send" aria-label="Send command">
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
         <div class="context-active-indicator">
             <i class="fas fa-layer-group"></i>
             <span class="context-label">Context</span>
@@ -49,6 +65,14 @@
     </div>
 
     <div class="project-workspace-actions">
+        <button id="project-mode-toggle-btn" class="project-action-btn">
+            <i class="fas fa-toggle-on"></i>
+            <span id="project-mode-current-label">Cloud Mode</span>
+        </button>
+        <button id="project-local-terminal-btn" class="project-action-btn">
+            <i class="fas fa-terminal"></i>
+            <span>Terminal</span>
+        </button>
         <button id="project-start-chat-btn" class="project-action-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -66,6 +90,19 @@
             </svg>
             <span>Sync Files</span>
         </button>
+    </div>
+
+    <div id="project-mode-window" class="project-mode-window hidden">
+        <div class="project-mode-window-title">Workspace Mode</div>
+        <div class="project-mode-window-note">
+            Local mode: coder works on your computer. Cloud mode: coder works in sandbox.
+        </div>
+        <div class="project-mode-window-actions">
+            <button id="project-mode-local-btn" class="project-action-btn project-action-btn-small">Use Local</button>
+            <button id="project-mode-cloud-btn" class="project-action-btn project-action-btn-small">Use Cloud</button>
+        </div>
+        <div id="project-mode-window-current" class="project-mode-window-current">Current: Cloud</div>
+        <div class="project-mode-window-recommendation">Recommended: Local mode for faster iterative coding.</div>
     </div>
 
     <div class="project-workspace-github">
