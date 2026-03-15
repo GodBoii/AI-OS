@@ -7,6 +7,12 @@ class ProjectWorkspace {
         this.workspaceStates = new Map();
         this.syncDebounceTimer = null;
         this.terminalVisible = false;
+        this.terminal = null;
+        this.terminalFitAddon = null;
+        this.terminalReady = false;
+        this.terminalResizeObserver = null;
+        this.terminalResizeTimer = null;
+        this.terminalSessionMode = null;
         this.init();
     }
 
@@ -136,6 +142,7 @@ class ProjectWorkspace {
             modeCloudBtn: document.getElementById('project-mode-cloud-btn'),
             terminalBtn: document.getElementById('project-local-terminal-btn'),
             terminalOverlay: document.getElementById('project-local-terminal-overlay'),
+            terminalShell: document.getElementById('project-local-terminal-shell'),
             terminalCloseBtn: document.getElementById('project-local-terminal-close'),
             terminalOutput: document.getElementById('project-local-terminal-output'),
             terminalInput: document.getElementById('project-local-terminal-input'),
@@ -154,7 +161,21 @@ class ProjectWorkspace {
         this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
         this.el.modeCloudBtn?.addEventListener('click', () => this.switchToCloudMode());
         this.el.terminalBtn?.addEventListener('click', () => this.toggleTerminalOverlay());
-        this.el.terminalCloseBtn?.addEventListener('click', () => this.closeTerminalOverlay());
+        this.el.terminalCloseBtn?.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        this.el.terminalCloseBtn?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.closeTerminalOverlay();
+        });
+        // Delegated fallback keeps close working even if chat DOM nodes are re-rendered.
+        document.addEventListener('click', (event) => {
+            const closeTarget = event.target?.closest?.('#project-local-terminal-close');
+            if (!closeTarget) return;
+            event.preventDefault();
+            this.closeTerminalOverlay();
+        });
         this.el.terminalSendBtn?.addEventListener('click', () => this.sendTerminalCommand());
         this.el.terminalInput?.addEventListener('keypress', (event) => {
             if (event.key === 'Enter') {
@@ -162,6 +183,15 @@ class ProjectWorkspace {
                 this.sendTerminalCommand();
             }
         });
+        const overlayFocusHandler = (event) => {
+            if (!this.terminalVisible) return;
+            if (this.isTerminalControlTarget(event?.target)) return;
+            this.focusTerminal();
+        };
+        this.el.terminalOverlay?.addEventListener('mousedown', overlayFocusHandler);
+        this.el.terminalOverlay?.addEventListener('click', overlayFocusHandler);
+        this.el.terminalShell?.addEventListener('mousedown', overlayFocusHandler);
+        this.el.terminalShell?.addEventListener('click', overlayFocusHandler);
 
         // GitHub dropdown toggle
         const githubToggle = document.getElementById('project-github-toggle');
@@ -413,6 +443,183 @@ class ProjectWorkspace {
             return { success: false, error: 'Desktop local bridge is unavailable.' };
         }
         return window.electron.ipcRenderer.invoke(channel, payload);
+    }
+
+    getTerminalConstructors() {
+        const terminalModule = window.Terminal;
+        const fitModule = window.FitAddon;
+
+        const TerminalCtor =
+            (terminalModule && terminalModule.Terminal)
+            || terminalModule
+            || null;
+        const FitAddonCtor =
+            (fitModule && fitModule.FitAddon)
+            || fitModule
+            || null;
+
+        if (typeof TerminalCtor !== 'function' || typeof FitAddonCtor !== 'function') {
+            return { ok: false, error: 'xterm runtime is not loaded yet.' };
+        }
+        return { ok: true, TerminalCtor, FitAddonCtor };
+    }
+
+    clearTerminalSurface() {
+        if (this.terminal) {
+            this.terminal.reset();
+        } else if (this.el.terminalOutput) {
+            this.el.terminalOutput.textContent = '';
+        }
+    }
+
+    setTerminalPresentationMode(mode = 'pty') {
+        this.terminalSessionMode = mode;
+        const fallbackInputRow = this.el.terminalInput?.closest('.project-local-terminal-input-row');
+        if (mode === 'pty') {
+            this.el.terminalShell?.classList.remove('hidden');
+            this.el.terminalShell?.setAttribute('aria-hidden', 'false');
+            this.el.terminalOutput?.classList.add('hidden');
+            this.el.terminalOutput?.setAttribute('aria-hidden', 'true');
+            fallbackInputRow?.classList.add('hidden');
+            fallbackInputRow?.setAttribute('aria-hidden', 'true');
+            return;
+        }
+
+        // Spawn fallback (no PTY) keeps classic line-input mode for reliability.
+        this.el.terminalShell?.classList.add('hidden');
+        this.el.terminalShell?.setAttribute('aria-hidden', 'true');
+        this.el.terminalOutput?.classList.remove('hidden');
+        this.el.terminalOutput?.setAttribute('aria-hidden', 'false');
+        fallbackInputRow?.classList.remove('hidden');
+        fallbackInputRow?.setAttribute('aria-hidden', 'false');
+    }
+
+    async ensureTerminalClientReady() {
+        if (this.terminalReady && this.terminal) return true;
+        if (!this.el.terminalShell) return false;
+
+        const constructors = this.getTerminalConstructors();
+        if (!constructors.ok) {
+            this.setTerminalPresentationMode('spawn');
+            this.setStatus('Using basic terminal fallback mode.');
+            return true;
+        }
+
+        const { TerminalCtor, FitAddonCtor } = constructors;
+        this.setTerminalPresentationMode('pty');
+        this.terminal = new TerminalCtor({
+            cursorBlink: true,
+            fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
+            fontSize: 13,
+            lineHeight: 1.35,
+            scrollback: 5000,
+            convertEol: false,
+            allowProposedApi: false,
+            theme: {
+                background: '#0f172a',
+                foreground: '#e2e8f0',
+                cursor: '#38bdf8',
+                selectionBackground: 'rgba(56, 189, 248, 0.25)',
+            },
+        });
+
+        this.terminalFitAddon = new FitAddonCtor();
+        this.terminal.loadAddon(this.terminalFitAddon);
+        this.terminal.open(this.el.terminalShell);
+        this.terminalFitAddon.fit();
+
+        this.terminal.onData((data) => {
+            this.sendTerminalData(data);
+        });
+
+        this.terminal.onResize(({ cols, rows }) => {
+            this.notifyTerminalResize(cols, rows);
+        });
+
+        if (this.terminalResizeObserver) {
+            this.terminalResizeObserver.disconnect();
+        }
+        this.terminalResizeObserver = new ResizeObserver(() => {
+            this.fitTerminal();
+        });
+        this.terminalResizeObserver.observe(this.el.terminalShell);
+
+        this.terminalReady = true;
+        return true;
+    }
+
+    fitTerminal() {
+        if (!this.terminalReady || !this.terminalFitAddon || !this.terminal) return;
+        if (this.terminalResizeTimer) {
+            clearTimeout(this.terminalResizeTimer);
+        }
+        this.terminalResizeTimer = setTimeout(() => {
+            if (!this.terminalReady || !this.terminalFitAddon || !this.terminalVisible) return;
+            this.terminalFitAddon.fit();
+            this.notifyTerminalResize(this.terminal.cols, this.terminal.rows);
+        }, 80);
+    }
+
+    async notifyTerminalResize(cols, rows) {
+        const conversationId = this.getConversationId();
+        if (!conversationId) return;
+        await this.callLocalInvoke('project-local-terminal-resize', {
+            conversationId,
+            cols,
+            rows,
+        });
+    }
+
+    async sendTerminalData(data) {
+        if (this.getExecutionTarget() !== 'local') return;
+        const conversationId = await this.ensureConversationId();
+        if (!conversationId) return;
+        return this.callLocalInvoke('project-local-terminal-send', {
+            conversationId,
+            data,
+        });
+    }
+
+    isTerminalControlTarget(target) {
+        if (!target || typeof target.closest !== 'function') return false;
+        return Boolean(
+            target.closest('button')
+            || target.closest('input')
+            || target.closest('textarea')
+            || target.closest('a')
+            || target.closest('[contenteditable="true"]')
+        );
+    }
+
+    focusTerminal() {
+        if (!this.terminalVisible) return;
+        if (this.terminalSessionMode === 'pty' && this.terminal && typeof this.terminal.focus === 'function') {
+            this.terminal.focus();
+            return;
+        }
+        this.el.terminalInput?.focus();
+    }
+
+    disposeTerminalClient() {
+        if (this.terminalResizeObserver) {
+            this.terminalResizeObserver.disconnect();
+            this.terminalResizeObserver = null;
+        }
+        if (this.terminalResizeTimer) {
+            clearTimeout(this.terminalResizeTimer);
+            this.terminalResizeTimer = null;
+        }
+        if (this.terminal) {
+            try {
+                this.terminal.dispose();
+            } catch (_error) {
+                // no-op
+            }
+        }
+        this.terminal = null;
+        this.terminalFitAddon = null;
+        this.terminalReady = false;
+        this.terminalSessionMode = null;
     }
 
     showMainFilePreview() {
@@ -1006,9 +1213,18 @@ class ProjectWorkspace {
             return;
         }
 
+        const ready = await this.ensureTerminalClientReady();
+        if (!ready) {
+            this.setStatus('Terminal UI failed to initialize.');
+            return;
+        }
+        this.fitTerminal();
+
         const started = await this.callLocalInvoke('project-local-terminal-start', {
             conversationId,
             cwd,
+            cols: this.terminal?.cols || 120,
+            rows: this.terminal?.rows || 35,
         });
 
         if (!started?.success) {
@@ -1016,27 +1232,51 @@ class ProjectWorkspace {
             return;
         }
 
-        if (this.el.terminalOutput && !this.el.terminalOutput.textContent.trim()) {
+        const runtimeMode = started?.mode || this.terminalSessionMode || 'spawn';
+        this.setTerminalPresentationMode(runtimeMode === 'pty' ? 'pty' : 'spawn');
+        if (runtimeMode !== 'pty') {
+            this.setStatus('Terminal is running in compatibility mode (PTY unavailable on this machine).');
+        }
+
+        this.hideMainFilePreview();
+        if (this.terminal && runtimeMode === 'pty') {
+            this.terminal.writeln(`[local-terminal] Connected at ${cwd}`);
+        } else if (this.el.terminalOutput && !this.el.terminalOutput.textContent.trim()) {
             this.el.terminalOutput.textContent = `[local-terminal] Connected at ${cwd}\n`;
         }
 
         this.el.terminalOverlay?.classList.remove('hidden');
         document.body.classList.add('project-terminal-open');
         this.terminalVisible = true;
-        this.el.terminalInput?.focus();
+        if (runtimeMode === 'pty') {
+            this.fitTerminal();
+            requestAnimationFrame(() => this.focusTerminal());
+        } else {
+            requestAnimationFrame(() => this.el.terminalInput?.focus());
+        }
     }
 
     closeTerminalOverlay() {
         this.el.terminalOverlay?.classList.add('hidden');
         document.body.classList.remove('project-terminal-open');
         this.terminalVisible = false;
+        this.terminal?.blur?.();
+        const floatingInput = document.getElementById('floating-input');
+        if (floatingInput && typeof floatingInput.focus === 'function') {
+            floatingInput.focus();
+        }
     }
 
     appendTerminalOutput(text, stream = 'stdout') {
-        if (!this.el.terminalOutput) return;
         const normalized = String(text || '');
         if (!normalized) return;
 
+        if (this.terminal && this.terminalSessionMode === 'pty') {
+            this.terminal.write(normalized);
+            return;
+        }
+
+        if (!this.el.terminalOutput) return;
         const prefix = stream === 'stderr' ? '[stderr] ' : '';
         this.el.terminalOutput.textContent += `${prefix}${normalized}`;
         this.el.terminalOutput.scrollTop = this.el.terminalOutput.scrollHeight;
@@ -1045,6 +1285,11 @@ class ProjectWorkspace {
     async sendTerminalCommand() {
         if (this.getExecutionTarget() !== 'local') {
             this.setStatus('Local terminal works only in Local mode.');
+            return;
+        }
+
+        if (this.terminal && this.terminalSessionMode === 'pty') {
+            await this.sendTerminalData('\r');
             return;
         }
 
@@ -1057,13 +1302,9 @@ class ProjectWorkspace {
 
         this.appendTerminalOutput(`\n$ ${command}\n`, 'stdout');
 
-        const conversationId = await this.ensureConversationId();
-        const result = await this.callLocalInvoke('project-local-terminal-send', {
-            conversationId,
-            command,
-        });
+        const result = await this.sendTerminalData(`${command}\n`);
 
-        if (!result?.success) {
+        if (result && !result?.success) {
             this.appendTerminalOutput(`${result?.error || 'Failed to execute command'}\n`, 'stderr');
         }
     }
@@ -1077,6 +1318,7 @@ class ProjectWorkspace {
         const conversationId = this.getConversationId();
         await this.stopLocalWatcher(conversationId);
         await this.stopLocalTerminal(conversationId);
+        this.disposeTerminalClient();
 
         this.activeProject = null;
         window.projectContext = null;
