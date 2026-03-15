@@ -52,6 +52,11 @@ const validReceiveChannels = [
     'sandbox-command-update',
     'sandbox-command-finished',
     'sandbox-artifacts-created',
+    'local-command-started',
+    'local-command-finished',
+    'local-workspace-changed',
+    'project-local-terminal-output',
+    'project-local-terminal-exit',
     'task_execution_status',
     'computer-tool-result-preview',
 
@@ -82,7 +87,17 @@ const validInvokeChannels = [
     'resolve-app-resource',
     'computer-get-access-state',
     'computer-manual-grant',
-    'computer-select-scope'
+    'computer-select-scope',
+    'project-select-local-workspace',
+    'project-local-clone-repo',
+    'project-local-set-context',
+    'project-local-tree',
+    'project-local-file-content',
+    'project-watch-local-workspace',
+    'project-unwatch-local-workspace',
+    'project-local-terminal-start',
+    'project-local-terminal-send',
+    'project-local-terminal-stop'
 ];
 
 // Expose protected methods to the renderer process

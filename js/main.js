@@ -8,6 +8,7 @@ const http = require('http');
 const { EventEmitter } = require('events');
 const BrowserHandler = require('./browser-handler.js');
 const ComputerControlHandler = require('./computer-control-handler.js');
+const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
 
 let mainWindow;
@@ -28,6 +29,7 @@ if (process.defaultApp) {
 let pythonBridge;
 let browserHandler;
 let computerControlHandler;
+let localCoderHandler;
 let nativeNotificationService;
 let linkWebView = null;
 
@@ -155,6 +157,11 @@ function createWindow() {
     computerControlHandler.initialize();
     pythonBridge.setComputerController(computerControlHandler);
 
+    // Initialize Local Coder Handler
+    localCoderHandler = new LocalCoderHandler(mainProcessEmitter, mainWindow);
+    localCoderHandler.initialize();
+    pythonBridge.setLocalCoderController(localCoderHandler);
+
     nativeNotificationService = new NativeNotificationService();
     nativeNotificationService.setMainWindow(mainWindow);
 
@@ -188,6 +195,9 @@ function createWindow() {
                 pythonBridge.stop();
             }
             pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter);
+            pythonBridge.setBrowserController(browserHandler);
+            pythonBridge.setComputerController(computerControlHandler);
+            pythonBridge.setLocalCoderController(localCoderHandler);
             pythonBridge.start().catch(err => {
                 console.error('Python bridge reconnection failed:', err.message);
             });
@@ -208,6 +218,9 @@ function createWindow() {
     ipcMain.on('restart-python-bridge', () => {
         if (pythonBridge) { pythonBridge.stop(); }
         pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter);
+        pythonBridge.setBrowserController(browserHandler);
+        pythonBridge.setComputerController(computerControlHandler);
+        pythonBridge.setLocalCoderController(localCoderHandler);
         pythonBridge.start().catch(error => {
             console.error('Failed to restart Python bridge:', error);
             mainWindow.webContents.send('socket-connection-status', {
@@ -249,6 +262,123 @@ function createWindow() {
 
         const state = computerControlHandler.setPrimaryScope(result.filePaths[0]);
         return { success: true, state, selectedPath: result.filePaths[0] };
+    });
+
+    ipcMain.handle('project-select-local-workspace', async () => {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Select Local Project Folder',
+            properties: ['openDirectory', 'createDirectory'],
+            buttonLabel: 'Use Folder',
+        });
+
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+            return { success: false, canceled: true };
+        }
+        return { success: true, selectedPath: result.filePaths[0] };
+    });
+
+    ipcMain.handle('project-local-clone-repo', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+
+        const body = payload && typeof payload === 'object' ? payload : {};
+        let selectedFolder = String(body.parentFolder || '').trim();
+        if (!selectedFolder) {
+            const selection = await dialog.showOpenDialog(mainWindow, {
+                title: 'Choose Destination Folder',
+                properties: ['openDirectory', 'createDirectory'],
+                buttonLabel: 'Clone Here',
+            });
+            if (selection.canceled || !selection.filePaths || selection.filePaths.length === 0) {
+                return { success: false, canceled: true };
+            }
+            selectedFolder = selection.filePaths[0];
+        }
+
+        return localCoderHandler.cloneRepo({
+            conversationId: body.conversationId,
+            repoUrl: body.repoUrl,
+            branch: body.branch || 'main',
+            parentFolder: selectedFolder,
+        });
+    });
+
+    ipcMain.handle('project-local-set-context', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+
+        const body = payload && typeof payload === 'object' ? payload : {};
+        if (!body.conversationId) {
+            return { success: false, error: 'conversationId is required' };
+        }
+        const context = localCoderHandler.setWorkspaceContext(body.conversationId, body.context || {});
+        return { success: true, context };
+    });
+
+    ipcMain.handle('project-local-tree', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.listWorkspaceTree({
+            conversationId: body.conversationId,
+            rootPath: body.rootPath,
+        });
+    });
+
+    ipcMain.handle('project-local-file-content', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.readWorkspaceFile({
+            conversationId: body.conversationId,
+            rootPath: body.rootPath,
+            relativePath: body.path,
+        });
+    });
+
+    ipcMain.handle('project-watch-local-workspace', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.startWatching(body.conversationId, body.rootPath);
+    });
+
+    ipcMain.handle('project-unwatch-local-workspace', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        localCoderHandler.stopWatching(body.conversationId);
+        return { success: true };
+    });
+
+    ipcMain.handle('project-local-terminal-start', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.startTerminal(body.conversationId, body.cwd);
+    });
+
+    ipcMain.handle('project-local-terminal-send', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.sendTerminalInput(body.conversationId, body.command);
+    });
+
+    ipcMain.handle('project-local-terminal-stop', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.stopTerminal(body.conversationId);
     });
 
     ipcMain.on('open-webview', (event, url) => {
@@ -460,6 +590,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async (event) => {
     if (browserHandler) { await browserHandler.cleanup(); }
+    if (localCoderHandler) { await localCoderHandler.cleanup(); }
     if (linkWebView) { try { mainWindow.removeBrowserView(linkWebView); linkWebView.webContents.destroy(); linkWebView = null; } catch (error) { console.error('Error cleaning up linkWebView:', error.message); } }
     if (pythonBridge) { try { pythonBridge.stop(); pythonBridge = null; } catch (error) { console.error('Error stopping Python bridge:', error.message); } }
 });
