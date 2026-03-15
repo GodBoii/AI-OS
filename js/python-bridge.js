@@ -8,6 +8,7 @@ class PythonBridge {
         this.eventEmitter = eventEmitter;
         this.browserController = null; // <-- FIX: To hold a reference to the browser controller
         this.computerController = null; // NEW: To hold a reference to the computer control handler
+        this.localCoderController = null; // NEW: local workspace/coder controller
         this.socket = null;
         this.initialized = false;
         this.reconnectAttempts = 0;
@@ -31,6 +32,14 @@ class PythonBridge {
      */
     setComputerController(controller) {
         this.computerController = controller;
+    }
+
+    /**
+     * NEW: Adds the function to link the local coder handler.
+     * @param {LocalCoderHandler} controller - The instance of the local coder handler.
+     */
+    setLocalCoderController(controller) {
+        this.localCoderController = controller;
     }
 
     async start() {
@@ -78,6 +87,12 @@ class PythonBridge {
         this.eventEmitter.on('computer-command-result', (resultPayload) => {
             console.log('PythonBridge: Received computer-command-result from ComputerControlHandler:', resultPayload.request_id);
             this.sendComputerResult(resultPayload);
+        });
+
+        // NEW: Listen for local coder command results
+        this.eventEmitter.on('local-coder-command-result', (resultPayload) => {
+            console.log('PythonBridge: Received local-coder-command-result from LocalCoderHandler:', resultPayload.request_id);
+            this.sendLocalCoderResult(resultPayload);
         });
     }
 
@@ -169,6 +184,14 @@ class PythonBridge {
             this.mainWindow.webContents.send('sandbox-artifacts-created', data);
         });
 
+        this.socket.on('local-command-started', (data) => {
+            this.mainWindow.webContents.send('local-command-started', data);
+        });
+
+        this.socket.on('local-command-finished', (data) => {
+            this.mainWindow.webContents.send('local-command-finished', data);
+        });
+
         // FIX: This handler now correctly forwards the command to the browserController instance.
         this.socket.on('browser-command', (commandPayload) => {
             console.log('PythonBridge: Received browser-command from server:', commandPayload.action);
@@ -189,6 +212,17 @@ class PythonBridge {
                 this.eventEmitter.emit('execute-computer-command', commandPayload);
             } else {
                 console.error('PythonBridge: ComputerController is not linked. Cannot handle computer command.');
+            }
+        });
+
+        // NEW: Handler for local coder commands
+        this.socket.on('local-coder-command', (commandPayload) => {
+            console.log('PythonBridge: Received local-coder-command from server:', commandPayload.action);
+            if (this.localCoderController) {
+                console.log('PythonBridge: Emitting execute-local-coder-command to LocalCoderHandler');
+                this.eventEmitter.emit('execute-local-coder-command', commandPayload);
+            } else {
+                console.error('PythonBridge: LocalCoderController is not linked. Cannot handle local coder command.');
             }
         });
 
@@ -232,6 +266,19 @@ class PythonBridge {
             this.socket.emit('computer-command-result', resultPayload);
         } else {
             console.error('PythonBridge: Cannot send computer result, socket not connected.');
+        }
+    }
+
+    /**
+     * NEW: Relay local coder command result to backend.
+     * @param {object} resultPayload
+     */
+    sendLocalCoderResult(resultPayload) {
+        if (this.socket && this.socket.connected) {
+            console.log('PythonBridge: Relaying local coder command result to server:', resultPayload.request_id);
+            this.socket.emit('local-coder-command-result', resultPayload);
+        } else {
+            console.error('PythonBridge: Cannot send local coder result, socket not connected.');
         }
     }
 
