@@ -7,7 +7,11 @@ import config
 try:
     from convex import ConvexClient
 except Exception:  # pragma: no cover - runtime dependency guard
-    ConvexClient = None
+    try:
+        # Some convex package versions expose the client under convex.client
+        from convex.client import ConvexClient  # type: ignore
+    except Exception:
+        ConvexClient = None
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +60,10 @@ class ConvexUsageService:
             if not self._warned_disabled:
                 self._warned_disabled = True
                 logger.warning(
-                    "[ConvexUsage] Disabled. Ensure CONVEX_USAGE_ENABLED=true, CONVEX_URL set, and convex SDK installed."
+                    "[ConvexUsage] Disabled. CONVEX_USAGE_ENABLED=%s CONVEX_URL_set=%s convex_sdk=%s",
+                    bool(config.CONVEX_USAGE_ENABLED),
+                    bool(config.CONVEX_URL),
+                    bool(ConvexClient),
                 )
             return None
 
@@ -181,12 +188,9 @@ class ConvexUsageService:
             if profile.get("current_period_end")
             else None,
             "current_period_end_ms": _to_unix_ms(profile.get("current_period_end")),
-            "razorpay_customer_id": str(profile.get("razorpay_customer_id"))
-            if profile.get("razorpay_customer_id")
-            else None,
-            "razorpay_subscription_id": str(profile.get("razorpay_subscription_id"))
-            if profile.get("razorpay_subscription_id")
-            else None,
+            # Convex validators in this project expect strings, not null.
+            "razorpay_customer_id": str(profile.get("razorpay_customer_id") or ""),
+            "razorpay_subscription_id": str(profile.get("razorpay_subscription_id") or ""),
         }
         return client.mutation("usage:upsertSubscriptionSnapshot", payload)
 

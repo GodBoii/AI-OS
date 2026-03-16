@@ -4,6 +4,7 @@ import logging
 
 # Agno Imports
 from agno.agent import Agent
+from agno.models.google import Gemini
 from agno.models.openrouter import OpenRouter
 # Tools
 from agno.tools.duckduckgo import DuckDuckGoTools
