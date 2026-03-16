@@ -177,7 +177,7 @@ def get_llm_os(
     if Planner_Agent:
         planner = Agent(
             name="REASONING AGENT",
-            role="Planning agent Ã¢â‚¬â€ analyzes complex queries and outputs a step-by-step execution plan for Aetheria AI. Call this first for any non-trivial task.",
+            role="Planning agent analyzes complex queries and outputs a step-by-step execution plan for Aetheria AI. Call this first for any non-trivial task.",
             model=OpenRouter(id="openrouter/healer-alpha"),
             instructions=[
                 "You are the **Reasoning Agent** in Aetheria AI. Your only job is to analyze complex user queries and output a clean execution plan for Aetheria AI to follow. You do NOT execute tasks or answer questions directly.",
