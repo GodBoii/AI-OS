@@ -3,7 +3,6 @@
 import logging
 import json
 import traceback
-import inspect
 from typing import Dict, Any, List, Tuple
 from redis import Redis
 import requests
@@ -26,36 +25,6 @@ from agno.run.agent import RunEvent
 from agno.run.team import TeamRunEvent, TeamRunOutput
 
 logger = logging.getLogger(__name__)
-
-
-def _filter_kwargs_for_callable(fn: Any, kwargs: Dict[str, Any], label: str = "kwargs") -> Dict[str, Any]:
-    """
-    Keep only keyword arguments accepted by a callable, unless it supports **kwargs.
-    This prevents runtime TypeError when session metadata leaks into agent kwargs.
-    """
-    try:
-        signature = inspect.signature(fn)
-    except (TypeError, ValueError):
-        return dict(kwargs)
-
-    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
-        return dict(kwargs)
-
-    allowed = {
-        name
-        for name, param in signature.parameters.items()
-        if param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-    }
-    filtered = {key: value for key, value in kwargs.items() if key in allowed}
-    dropped = sorted(set(kwargs.keys()) - set(filtered.keys()))
-    if dropped:
-        logger.info(
-            "Dropped unsupported %s for %s: %s",
-            label,
-            getattr(fn, "__name__", str(fn)),
-            dropped,
-        )
-    return filtered
 
 
 def _safe_json_like(value: Any) -> Any:
@@ -521,11 +490,6 @@ def run_agent_and_stream(
                 debug_mode=True,
             )
         else:
-            llm_os_config = _filter_kwargs_for_callable(
-                get_llm_os,
-                session_config,
-                label="session_config keys",
-            )
             agent = get_llm_os(
                 user_id=user_id,
                 session_info=session_data,
@@ -533,7 +497,7 @@ def run_agent_and_stream(
                 custom_tool_config=realtime_tool_config,
                 session_id=conversation_id,  # NEW: For persistence
                 message_id=message_id,  # NEW: For persistence
-                **llm_os_config
+                **session_config
             )
         # --- MODIFICATION END ---
 
