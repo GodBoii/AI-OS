@@ -44,8 +44,15 @@ class MobileTools(Toolkit):
             tools=[
                 self.get_device_state,
                 self.get_active_app_context,
+                self.get_visible_ui_text,
+                self.list_apps,
                 self.open_app,
                 self.open_settings,
+                self.open_notifications,
+                self.open_quick_settings,
+                self.open_recents,
+                self.tap_text,
+                self.input_text,
                 self.tap,
                 self.swipe,
                 self.press_back,
@@ -119,22 +126,43 @@ class MobileTools(Toolkit):
 
     def get_device_state(self) -> ToolResult:
         """
-        Returns battery, network, volume, and basic device status from native layer.
+        Returns practical device state including foreground app context.
         """
         return self._send_command_and_wait({"action": "get_device_state"})
 
     def get_active_app_context(self) -> ToolResult:
         """
-        Returns best-effort active app/window context from the native layer.
+        Returns best-effort active app/window context and visible text.
         """
         return self._send_command_and_wait({"action": "get_active_app_context"})
 
-    def open_app(self, package_name: str) -> ToolResult:
+    def get_visible_ui_text(self, limit: int = 16) -> ToolResult:
         """
-        Opens an app using its Android package name.
+        Returns visible UI text from the current foreground app.
         """
         return self._send_command_and_wait(
-            {"action": "open_app", "package_name": package_name}
+            {"action": "get_visible_ui_text", "limit": max(4, min(limit, 40))}
+        )
+
+    def list_apps(self, query: str = "", limit: int = 12) -> ToolResult:
+        """
+        Lists launchable installed apps, optionally filtered by query.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "list_apps",
+                "query": query,
+                "limit": max(1, min(limit, 40)),
+            }
+        )
+
+    def open_app(self, app_name_or_package: str) -> ToolResult:
+        """
+        Opens an app by natural name or package name.
+        Example: "YouTube", "WhatsApp", "com.whatsapp".
+        """
+        return self._send_command_and_wait(
+            {"action": "open_app", "query": app_name_or_package}
         )
 
     def open_settings(self, setting: str = "general") -> ToolResult:
@@ -145,6 +173,42 @@ class MobileTools(Toolkit):
         return self._send_command_and_wait(
             {"action": "open_settings", "setting": setting}
         )
+
+    def open_notifications(self) -> ToolResult:
+        """
+        Opens the notifications shade.
+        """
+        return self._send_command_and_wait({"action": "open_notifications"})
+
+    def open_quick_settings(self) -> ToolResult:
+        """
+        Opens quick settings panel.
+        """
+        return self._send_command_and_wait({"action": "open_quick_settings"})
+
+    def open_recents(self) -> ToolResult:
+        """
+        Opens Android recent apps view.
+        """
+        return self._send_command_and_wait({"action": "open_recents"})
+
+    def tap_text(self, text: str, partial_match: bool = True) -> ToolResult:
+        """
+        Clicks a visible UI element by text/content description.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "tap_text",
+                "text": text,
+                "partial_match": bool(partial_match),
+            }
+        )
+
+    def input_text(self, text: str) -> ToolResult:
+        """
+        Types text into currently focused input field.
+        """
+        return self._send_command_and_wait({"action": "input_text", "text": text})
 
     def tap(self, x: int, y: int, duration_ms: int = 80) -> ToolResult:
         """

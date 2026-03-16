@@ -54,8 +54,10 @@ def get_system_assistant(
                     "",
                     "MOBILE TOOLING:",
                     "- You can use native mobile tools to inspect and control the phone.",
-                    "- Prefer context-first actions: get_device_state and get_active_app_context.",
-                    "- Use explicit action tools for navigation and control.",
+                    "- Always start with context: get_active_app_context or get_device_state.",
+                    "- For app launching: call list_apps first if app name is ambiguous, then open_app.",
+                    "- Prefer semantic UI actions (tap_text, input_text) before coordinate gestures (tap, swipe).",
+                    "- Use navigation helpers when needed: press_back, go_home, open_notifications, open_quick_settings, open_recents.",
                     "- Keep actions safe and intentional; avoid repetitive destructive loops.",
                 ]
             )
