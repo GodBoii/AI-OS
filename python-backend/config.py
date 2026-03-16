@@ -50,7 +50,12 @@ TURSO_GROUP = os.getenv("TURSO_GROUP")
 DEPLOY_SECRET_KEY = os.getenv("DEPLOY_SECRET_KEY")
 
 # --- Convex Usage Logging Configuration ---
-CONVEX_URL = os.getenv("CONVEX_URL")
+# Prefer backend-specific key, but support common frontend/public key names too.
+CONVEX_URL = (
+    os.getenv("CONVEX_URL")
+    or os.getenv("VITE_CONVEX_URL")
+    or os.getenv("NEXT_PUBLIC_CONVEX_URL")
+)
 CONVEX_ADMIN_KEY = os.getenv("CONVEX_ADMIN_KEY")
 CONVEX_USAGE_ENABLED = os.getenv("CONVEX_USAGE_ENABLED", "true").lower() == "true"
 USAGE_ADMIN_API_KEY = os.getenv("USAGE_ADMIN_API_KEY")

@@ -716,19 +716,97 @@ def _to_int(value: Any) -> int:
         return 0
 
 
+def _read_metric_value(container: Any, *keys: str) -> int:
+    if not container:
+        return 0
+
+    if isinstance(container, dict):
+        for key in keys:
+            if key in container:
+                return _to_int(container.get(key))
+        return 0
+
+    for key in keys:
+        if hasattr(container, key):
+            return _to_int(getattr(container, key))
+
+    return 0
+
+
 def _extract_assistant_metrics(run_output: Any) -> dict[str, int]:
     metrics = getattr(run_output, "metrics", None)
     if not metrics:
         return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
-    if isinstance(metrics, dict):
-        input_tokens = _to_int(metrics.get("input_tokens"))
-        output_tokens = _to_int(metrics.get("output_tokens"))
-        total_tokens = _to_int(metrics.get("total_tokens"))
-    else:
-        input_tokens = _to_int(getattr(metrics, "input_tokens", 0))
-        output_tokens = _to_int(getattr(metrics, "output_tokens", 0))
-        total_tokens = _to_int(getattr(metrics, "total_tokens", 0))
+    input_tokens = _read_metric_value(
+        metrics,
+        "input_tokens",
+        "prompt_tokens",
+        "prompt_token_count",
+        "input_token_count",
+    )
+    output_tokens = _read_metric_value(
+        metrics,
+        "output_tokens",
+        "completion_tokens",
+        "candidate_tokens",
+        "candidates_token_count",
+        "output_token_count",
+    )
+    total_tokens = _read_metric_value(
+        metrics,
+        "total_tokens",
+        "total_token_count",
+    )
+
+    # Some providers keep token data in nested provider/additional metrics fields.
+    if input_tokens <= 0 and output_tokens <= 0:
+        if isinstance(metrics, dict):
+            metric_sources = [metrics.get("provider_metrics"), metrics.get("additional_metrics")]
+        else:
+            metric_sources = [getattr(metrics, "provider_metrics", None), getattr(metrics, "additional_metrics", None)]
+
+        for source in metric_sources:
+            input_tokens = max(
+                input_tokens,
+                _read_metric_value(source, "input_tokens", "prompt_tokens", "prompt_token_count", "input_token_count"),
+            )
+            output_tokens = max(
+                output_tokens,
+                _read_metric_value(
+                    source,
+                    "output_tokens",
+                    "completion_tokens",
+                    "candidate_tokens",
+                    "candidates_token_count",
+                    "output_token_count",
+                ),
+            )
+            total_tokens = max(total_tokens, _read_metric_value(source, "total_tokens", "total_token_count"))
+
+    # Last fallback: usage/token_usage payloads occasionally appear in run metadata.
+    if input_tokens <= 0 and output_tokens <= 0:
+        metadata = getattr(run_output, "metadata", None)
+        usage_blob = None
+        if isinstance(metadata, dict):
+            usage_blob = metadata.get("usage") or metadata.get("token_usage")
+
+        input_tokens = max(
+            input_tokens,
+            _read_metric_value(usage_blob, "input_tokens", "prompt_tokens", "prompt_token_count", "input_token_count"),
+        )
+        output_tokens = max(
+            output_tokens,
+            _read_metric_value(
+                usage_blob,
+                "output_tokens",
+                "completion_tokens",
+                "candidate_tokens",
+                "candidates_token_count",
+                "output_token_count",
+            ),
+        )
+        total_tokens = max(total_tokens, _read_metric_value(usage_blob, "total_tokens", "total_token_count"))
 
     if total_tokens <= 0:
         total_tokens = input_tokens + output_tokens
@@ -749,18 +827,47 @@ def _log_assistant_token_usage(
     source: str = "assistant_http",
 ) -> None:
     if (metrics.get("input_tokens", 0) <= 0) and (metrics.get("output_tokens", 0) <= 0):
+        logger.warning(
+            "Skipping assistant token usage log due to empty metrics: user=%s conversation=%s message=%s source=%s metrics=%s",
+            user_id,
+            conversation_id,
+            message_id,
+            source,
+            metrics,
+        )
         return
 
     try:
         convex_service = get_convex_usage_service()
         usage_window = get_usage_window_descriptor(user_id=str(user_id), refresh_window=False)
-        convex_service.record_token_usage(
+        result = convex_service.record_token_usage(
             user_id=str(user_id),
             conversation_id=str(conversation_id),
             message_id=str(message_id),
             metrics=metrics,
             usage_window=usage_window,
             source=source,
+        )
+        if result is None:
+            logger.warning(
+                "Assistant token usage was not recorded (Convex unavailable): user=%s conversation=%s message=%s source=%s metrics=%s",
+                user_id,
+                conversation_id,
+                message_id,
+                source,
+                metrics,
+            )
+            return
+
+        logger.info(
+            "Assistant token usage recorded: user=%s conversation=%s message=%s source=%s input=%s output=%s total=%s",
+            user_id,
+            conversation_id,
+            message_id,
+            source,
+            metrics.get("input_tokens", 0),
+            metrics.get("output_tokens", 0),
+            metrics.get("total_tokens", 0),
         )
     except Exception as exc:
         logger.warning(
@@ -911,7 +1018,7 @@ def assistant_chat():
                 conversation_id=conversation_id,
                 message_id=message_id,
                 metrics=metrics,
-                source="assistant_http",
+                source="assistant_http_vision" if image_urls else "assistant_http_text",
             )
 
             return jsonify({"response": response_text}), 200
