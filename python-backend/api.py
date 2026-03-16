@@ -13,6 +13,7 @@ from flask import Blueprint, request, jsonify
 
 # Import the utility function from the factory (or a future utils module)
 from utils import get_user_from_token
+from extensions import socketio
 from supabase_client import supabase_client
 import config
 from composio_client import ComposioApiError, ComposioClient
@@ -58,12 +59,75 @@ api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
 # RunStateManager is a module-level singleton injected from the factory via
 # set_run_state_manager() below.
 _run_state_manager = None
+_assistant_mobile_redis_client = None
 
 
 def set_run_state_manager(manager):
     """Called by the factory to inject the shared RunStateManager instance."""
     global _run_state_manager
     _run_state_manager = manager
+
+
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _get_assistant_mobile_redis_client():
+    global _assistant_mobile_redis_client
+    if _assistant_mobile_redis_client is not None:
+        return _assistant_mobile_redis_client
+
+    try:
+        _assistant_mobile_redis_client = redis.from_url(config.REDIS_URL)
+        return _assistant_mobile_redis_client
+    except Exception as exc:
+        logger.error("Failed to initialize assistant mobile Redis client: %s", exc, exc_info=True)
+        return None
+
+
+def _build_assistant_mobile_tools_config(
+    payload: dict,
+    *,
+    conversation_id: str,
+    message_id: str,
+) -> Optional[dict]:
+    """
+    Build realtime bridge context for MobileTools when the caller provides a socket SID.
+    """
+    if not _parse_bool(payload.get("enable_mobile_tools"), default=True):
+        return None
+
+    sid = str(
+        payload.get("assistant_sid")
+        or payload.get("assistantSid")
+        or payload.get("socket_sid")
+        or payload.get("socketSid")
+        or payload.get("sid")
+        or ""
+    ).strip()
+    if not sid:
+        return None
+
+    redis_client = _get_assistant_mobile_redis_client()
+    if redis_client is None:
+        return None
+
+    return {
+        "sid": sid,
+        "socketio": socketio,
+        "redis_client": redis_client,
+        "conversation_id": conversation_id,
+        "message_id": message_id,
+    }
 
 
 # --- Run Status Endpoints (used for reconnect / catch-up) ---
@@ -974,7 +1038,22 @@ def assistant_chat():
             msg_preview,
         )
 
-        agent = get_system_assistant()
+        enable_mobile_tools = _parse_bool(data.get("enable_mobile_tools"), default=True)
+        mobile_tools_config = _build_assistant_mobile_tools_config(
+            data,
+            conversation_id=conversation_id,
+            message_id=message_id,
+        )
+        if enable_mobile_tools and not mobile_tools_config:
+            logger.info(
+                "assistant_chat running without mobile tool bridge context "
+                "(provide assistant_sid/socketSid for realtime mobile tools)."
+            )
+
+        agent = get_system_assistant(
+            mobile_tools_config=mobile_tools_config,
+            enable_mobile_tools=enable_mobile_tools,
+        )
 
         try:
             images = []
