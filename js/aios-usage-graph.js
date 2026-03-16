@@ -151,9 +151,8 @@ class AIOSUsageGraph {
         const outputTokens = sortedData.map(d => d.output_tokens || 0);
         const totalTokens = sortedData.map(d => d.total_tokens || 0);
 
-        // Detect theme
-        const isDark = !document.documentElement.hasAttribute('data-theme') || 
-                       document.documentElement.getAttribute('data-theme') === 'dark';
+        // Detect theme - check for .dark-mode class on body
+        const isDark = document.body.classList.contains('dark-mode');
         
         const colors = isDark ? {
             primary: '#FFD93D',
