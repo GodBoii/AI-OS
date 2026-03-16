@@ -329,6 +329,34 @@ def handle_local_coder_command_result(data: Dict[str, Any]):
         logger.warning("Received local coder command result with no request_id.")
 
 
+@socketio.on('mobile-command-result')
+def handle_mobile_command_result(data: Dict[str, Any]):
+    """
+    Receives a mobile control command result and publishes it to Redis so
+    waiting MobileTools requests can continue.
+    """
+    if not redis_client_instance:
+        logger.error("Redis client not initialized. Cannot handle mobile command result.")
+        return
+
+    request_id = data.get('request_id')
+    result_payload = data.get('result', {})
+
+    if request_id:
+        response_channel = f"mobile-response:{request_id}"
+        try:
+            redis_client_instance.publish(response_channel, json.dumps(result_payload))
+            logger.info(
+                "Published mobile result for request_id %s to Redis channel %s",
+                request_id,
+                response_channel,
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish mobile result to Redis for {request_id}: {e}")
+    else:
+        logger.warning("Received mobile command result with no request_id.")
+
+
 @socketio.on("send_message")
 def on_send_message(data: str):
     """The main message handler for incoming chat messages."""
