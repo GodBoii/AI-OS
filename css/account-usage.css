@@ -2,13 +2,13 @@
 .account-usage-section {
     position: relative;
     margin-top: 18px;
-    border: 1px solid var(--graph-glass-border, rgba(255, 217, 61, 0.15));
+    border: 1px solid var(--graph-glass-border);
     border-radius: 16px;
-    background: var(--graph-glass-bg, rgba(255, 248, 231, 0.03));
+    background: var(--graph-glass-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     padding: 24px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), var(--graph-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.05));
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), var(--graph-inset-shadow);
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     animation: fadeInScale 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
@@ -32,14 +32,14 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--graph-accent, #FFD93D), transparent);
+    background: linear-gradient(90deg, transparent, var(--graph-accent), transparent);
     opacity: 0;
     transition: opacity 0.4s ease;
 }
 
 .account-usage-section:hover {
-    box-shadow: 0 12px 48px var(--graph-shadow, rgba(255, 217, 61, 0.1)), var(--graph-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.05));
-    border-color: var(--graph-accent, #FFD93D);
+    box-shadow: 0 12px 48px var(--graph-shadow), var(--graph-inset-shadow);
+    border-color: var(--graph-accent);
 }
 
 .account-usage-section:hover::before {
@@ -65,16 +65,16 @@
     margin: 0;
     font-size: 18px;
     font-weight: 700;
-    color: var(--graph-primary, #FFF8E7);
+    color: var(--graph-primary);
     letter-spacing: -0.01em;
-    text-shadow: var(--graph-glow-subtle, 0 0 20px rgba(255, 217, 61, 0.1));
+    text-shadow: var(--graph-glow-subtle);
 }
 
 .usage-refresh-btn {
     border-radius: 10px;
-    background: var(--graph-glass-bg, rgba(255, 248, 231, 0.05));
-    border: 1px solid var(--graph-glass-border, rgba(255, 217, 61, 0.15));
-    color: var(--graph-text-secondary, rgba(255, 248, 231, 0.7));
+    background: var(--graph-glass-bg);
+    border: 1px solid var(--graph-glass-border);
+    color: var(--graph-text-secondary);
     padding: 8px 14px;
     font-size: 13px;
     font-weight: 600;
@@ -93,11 +93,11 @@
 }
 
 .usage-refresh-btn:hover {
-    background: var(--graph-glass-hover, rgba(255, 248, 231, 0.08));
-    color: var(--graph-primary, #FFF8E7);
-    border-color: var(--graph-accent, #FFD93D);
+    background: var(--graph-glass-hover);
+    color: var(--graph-primary);
+    border-color: var(--graph-accent);
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px var(--graph-shadow, rgba(255, 217, 61, 0.1));
+    box-shadow: 0 6px 16px var(--graph-shadow);
 }
 
 .usage-refresh-btn:hover i {
@@ -120,7 +120,7 @@
 }
 
 .usage-lifetime-label {
-    color: var(--graph-text-secondary, rgba(255, 248, 231, 0.7));
+    color: var(--graph-text-secondary);
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 1.5px;
@@ -131,22 +131,22 @@
 }
 
 .usage-total-hero {
-    color: var(--graph-primary, #FFF8E7);
+    color: var(--graph-primary);
     font-size: 72px;
     font-weight: 800;
     line-height: 1;
     letter-spacing: -0.04em;
     margin-bottom: 28px;
     font-variant-numeric: tabular-nums;
-    text-shadow: var(--graph-glow-strong, 0 0 40px rgba(255, 217, 61, 0.2));
+    text-shadow: var(--graph-glow-strong);
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: default;
 }
 
 .usage-total-hero:hover {
     transform: scale(1.05);
-    text-shadow: var(--graph-glow-hover, 0 0 60px rgba(255, 217, 61, 0.4));
-    color: var(--graph-accent, #FFD93D);
+    text-shadow: var(--graph-glow-hover);
+    color: var(--graph-accent);
 }
 
 /* Breakdown Row */
@@ -156,18 +156,18 @@
     gap: 24px;
     padding: 16px 36px;
     border-radius: 16px;
-    background: var(--graph-glass-bg, rgba(255, 248, 231, 0.05));
+    background: var(--graph-glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--graph-glass-border, rgba(255, 217, 61, 0.15));
+    border: 1px solid var(--graph-glass-border);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .usage-breakdown:hover {
     transform: translateY(-4px);
-    box-shadow: 0 12px 30px var(--graph-shadow, rgba(255, 217, 61, 0.1));
-    border-color: var(--graph-accent, #FFD93D);
+    box-shadow: 0 12px 30px var(--graph-shadow);
+    border-color: var(--graph-accent);
 }
 
 .usage-breakdown-item {
@@ -182,7 +182,7 @@
 }
 
 .breakdown-label {
-    color: var(--graph-text-secondary, rgba(255, 248, 231, 0.7));
+    color: var(--graph-text-secondary);
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
@@ -190,7 +190,7 @@
 }
 
 .breakdown-value {
-    color: var(--graph-primary, #FFF8E7);
+    color: var(--graph-primary);
     font-size: 20px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -198,13 +198,13 @@
 }
 
 .usage-breakdown-item:hover .breakdown-value {
-    color: var(--graph-accent, #FFD93D);
+    color: var(--graph-accent);
 }
 
 .usage-breakdown-divider {
     width: 2px;
     height: 36px;
-    background: linear-gradient(180deg, transparent, var(--graph-glass-border, rgba(255, 217, 61, 0.15)), transparent);
+    background: linear-gradient(180deg, transparent, var(--graph-glass-border), transparent);
 }
 
 .usage-error {
@@ -238,6 +238,6 @@
     .usage-breakdown-divider {
         width: 100%;
         height: 2px;
-        background: linear-gradient(90deg, transparent, var(--graph-glass-border, rgba(255, 217, 61, 0.15)), transparent);
+        background: linear-gradient(90deg, transparent, var(--graph-glass-border), transparent);
     }
 }
