@@ -50,15 +50,34 @@ const queuedConversations = new Map();
 const persistedComputerOutputIds = new Set();
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
-    'txt': 'text/plain',
-    'js': 'text/javascript',
-    'py': 'text/x-python',
-    'html': 'text/html',
-    'css': 'text/css',
-    'json': 'application/json',
+    // Text / code files
+    'txt': 'text/plain', 'js': 'text/javascript', 'jsx': 'text/javascript',
+    'ts': 'text/typescript', 'tsx': 'text/typescript',
+    'py': 'text/x-python', 'html': 'text/html', 'htm': 'text/html',
+    'css': 'text/css', 'scss': 'text/x-scss', 'sass': 'text/x-sass', 'less': 'text/x-less',
+    'json': 'application/json', 'jsonl': 'application/json',
+    'c': 'text/x-c', 'cpp': 'text/x-c++', 'h': 'text/x-c', 'hpp': 'text/x-c++',
+    'java': 'text/x-java', 'kt': 'text/x-kotlin', 'swift': 'text/x-swift', 'dart': 'text/x-dart',
+    'go': 'text/x-go', 'rs': 'text/x-rust', 'rb': 'text/x-ruby',
+    'php': 'text/x-php', 'lua': 'text/x-lua', 'pl': 'text/x-perl',
+    'r': 'text/x-r', 'scala': 'text/x-scala',
+    'sh': 'text/x-shellscript', 'bash': 'text/x-shellscript', 'bat': 'text/x-bat', 'ps1': 'text/x-powershell',
+    'md': 'text/markdown', 'mdx': 'text/markdown', 'rst': 'text/x-rst',
+    'xml': 'text/xml', 'yaml': 'text/yaml', 'yml': 'text/yaml',
+    'toml': 'text/x-toml', 'ini': 'text/x-ini', 'env': 'text/plain',
+    'sql': 'text/x-sql', 'graphql': 'text/x-graphql',
+    'vue': 'text/x-vue', 'svelte': 'text/x-svelte',
+    'csv': 'text/csv', 'log': 'text/plain', 'diff': 'text/x-diff',
+    'dockerfile': 'text/x-dockerfile', 'makefile': 'text/x-makefile',
+    'proto': 'text/x-protobuf',
+    // Media and Document files
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'c': 'text/x-c'
+    'doc': 'application/msword',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'xls': 'application/vnd.ms-excel',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'ppt': 'application/vnd.ms-powerpoint'
 };
 
 function setCurrentConversationId(conversationId) {

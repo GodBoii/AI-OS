@@ -1,20 +1,71 @@
-// add-files.js (Corrected with proper URL and Race Condition Fix)
+// add-files.js (Corrected with proper URL, Race Condition Fix, and Drag & Drop Support)
 
 class FileAttachmentHandler {
     constructor(socket, supportedFileTypes, maxFileSize) {
         this.supportedFileTypes = supportedFileTypes || {
-            // Text files
-            'txt': 'text/plain', 'js': 'text/javascript', 'py': 'text/x-python', 'html': 'text/html',
-            'css': 'text/css', 'json': 'application/json', 'c': 'text/x-c',
-            // Media and Document files
-            'pdf': 'application/pdf', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            // Text / code files (content sent inline with query)
+            'txt': 'text/plain', 'js': 'text/javascript', 'jsx': 'text/javascript',
+            'ts': 'text/typescript', 'tsx': 'text/typescript',
+            'py': 'text/x-python', 'html': 'text/html', 'htm': 'text/html',
+            'css': 'text/css', 'scss': 'text/x-scss', 'sass': 'text/x-sass', 'less': 'text/x-less',
+            'json': 'application/json', 'jsonl': 'application/json',
+            'c': 'text/x-c', 'cpp': 'text/x-c++', 'h': 'text/x-c', 'hpp': 'text/x-c++',
+            'java': 'text/x-java', 'kt': 'text/x-kotlin', 'kts': 'text/x-kotlin',
+            'swift': 'text/x-swift', 'dart': 'text/x-dart',
+            'go': 'text/x-go', 'rs': 'text/x-rust', 'rb': 'text/x-ruby',
+            'php': 'text/x-php', 'lua': 'text/x-lua', 'pl': 'text/x-perl',
+            'r': 'text/x-r', 'R': 'text/x-r', 'scala': 'text/x-scala',
+            'sh': 'text/x-shellscript', 'bash': 'text/x-shellscript', 'zsh': 'text/x-shellscript',
+            'bat': 'text/x-bat', 'ps1': 'text/x-powershell', 'cmd': 'text/x-bat',
+            'md': 'text/markdown', 'mdx': 'text/markdown', 'rst': 'text/x-rst',
+            'xml': 'text/xml', 'yaml': 'text/yaml', 'yml': 'text/yaml',
+            'toml': 'text/x-toml', 'ini': 'text/x-ini', 'cfg': 'text/x-ini',
+            'conf': 'text/x-ini', 'env': 'text/plain', 'properties': 'text/x-properties',
+            'sql': 'text/x-sql', 'graphql': 'text/x-graphql', 'gql': 'text/x-graphql',
+            'vue': 'text/x-vue', 'svelte': 'text/x-svelte',
+            'csv': 'text/csv', 'tsv': 'text/tab-separated-values',
+            'log': 'text/plain', 'diff': 'text/x-diff', 'patch': 'text/x-diff',
+            'dockerfile': 'text/x-dockerfile', 'makefile': 'text/x-makefile',
+            'cmake': 'text/x-cmake', 'gradle': 'text/x-gradle',
+            'tf': 'text/x-terraform', 'hcl': 'text/x-hcl',
+            'proto': 'text/x-protobuf',
+            // Media and Document files (uploaded to Supabase)
+            'pdf': 'application/pdf',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc': 'application/msword',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls': 'application/vnd.ms-excel',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'ppt': 'application/vnd.ms-powerpoint',
             'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
-            'svg': 'image/svg+xml', 'webp': 'image/webp', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-            'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'webm': 'video/webm',
-            'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska'
+            'svg': 'image/svg+xml', 'webp': 'image/webp', 'bmp': 'image/bmp', 'ico': 'image/x-icon',
+            'tiff': 'image/tiff', 'tif': 'image/tiff',
+            'mp3': 'audio/mpeg', 'wav': 'audio/wav',
+            'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'flac': 'audio/flac', 'aac': 'audio/aac',
+            'mp4': 'video/mp4', 'webm': 'video/webm',
+            'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
+            'zip': 'application/zip', 'tar': 'application/x-tar', 'gz': 'application/gzip',
+            'rar': 'application/vnd.rar', '7z': 'application/x-7z-compressed'
         };
+
+        // Extensions that should use Supabase upload (media, documents, archives)
+        // Everything NOT in this set will be treated as text and read inline
+        this.mediaExtensions = new Set([
+            // Images
+            'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'ico', 'tiff', 'tif',
+            // Audio
+            'mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac',
+            // Video
+            'mp4', 'webm', 'avi', 'mov', 'mkv',
+            // Documents (binary formats)
+            'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt',
+            // Archives
+            'zip', 'tar', 'gz', 'rar', '7z'
+        ]);
+
         this.maxFileSize = maxFileSize || 50 * 1024 * 1024; // 50MB default
         this.attachedFiles = [];
+        this.dragCounter = 0; // Track nested drag events
         this.initialize();
     }
 
@@ -51,6 +102,277 @@ class FileAttachmentHandler {
         }
 
         this.updateInputPositioning();
+
+        // Initialize drag and drop
+        this.setupDragAndDrop();
+    }
+
+    // =========================================================================
+    // DRAG AND DROP
+    // =========================================================================
+
+    setupDragAndDrop() {
+        // Create the drag overlay element
+        this.dragOverlay = this.createDragOverlay();
+
+        // We attach drag listeners to the entire document body so that
+        // dragging files anywhere over the app window triggers the overlay,
+        // but the overlay itself is anchored to the input container.
+        const chatContainer = document.getElementById('chat-container') || document.body;
+
+        chatContainer.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter++;
+            // Only show overlay if dragging files (not text/other drags)
+            if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+                this.showDragOverlay();
+            }
+        });
+
+        chatContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        });
+
+        chatContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter--;
+            if (this.dragCounter <= 0) {
+                this.dragCounter = 0;
+                this.hideDragOverlay();
+            }
+        });
+
+        chatContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.dragCounter = 0;
+            
+            // Trigger success animation
+            if (this.dragOverlay) {
+                this.dragOverlay.classList.add('dropping');
+                setTimeout(() => {
+                    this.hideDragOverlay();
+                }, 600);
+            }
+
+            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+                this.handleDrop(e.dataTransfer.files);
+            }
+        });
+
+        console.log('[FileAttachment] Drag and drop initialized');
+    }
+
+    createDragOverlay() {
+        const overlay = document.createElement('div');
+        overlay.className = 'drag-drop-overlay';
+        overlay.innerHTML = `
+            <div class="drag-drop-background-effect"></div>
+            <canvas class="drag-drop-particles" width="800" height="600"></canvas>
+            <div class="drag-drop-overlay-content">
+                <div class="drag-drop-orbital-system">
+                    <div class="drag-drop-orbit-ring orbit-1"></div>
+                    <div class="drag-drop-orbit-ring orbit-2"></div>
+                    <div class="drag-drop-orbit-ring orbit-3"></div>
+                    <div class="drag-drop-core">
+                        <div class="drag-drop-core-glow"></div>
+                        <div class="drag-drop-icon-container">
+                            <i class="fas fa-cloud-upload-alt drag-drop-icon"></i>
+                            <div class="drag-drop-icon-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="drag-drop-text-container">
+                    <div class="drag-drop-text-primary">
+                        <span class="text-word">Release</span>
+                        <span class="text-word">to</span>
+                        <span class="text-word">Upload</span>
+                    </div>
+                    <div class="drag-drop-text-secondary">
+                        <span class="file-type-indicator">
+                            <i class="fas fa-file-alt"></i>
+                            <i class="fas fa-file-image"></i>
+                            <i class="fas fa-file-code"></i>
+                            <i class="fas fa-file-pdf"></i>
+                        </span>
+                        <span class="supported-text">All file types supported</span>
+                    </div>
+                </div>
+                <div class="drag-drop-progress-ring">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                        <circle class="progress-fill" cx="50" cy="50" r="45"></circle>
+                    </svg>
+                </div>
+            </div>
+            <div class="drag-drop-success-burst">
+                <div class="success-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+            </div>
+        `;
+        // Append to the chat container so it overlays the chat area
+        const chatContainer = document.getElementById('chat-container') || document.body;
+        chatContainer.appendChild(overlay);
+        
+        // Initialize particle system
+        this.initParticleSystem(overlay);
+        
+        // Track mouse movement for magnetic effect
+        this.setupMagneticTracking(overlay);
+        
+        return overlay;
+    }
+
+    showDragOverlay() {
+        if (this.dragOverlay) {
+            this.dragOverlay.classList.add('visible');
+            this.dragOverlay.classList.remove('dropping');
+            // Start particle animation
+            if (this.particleAnimation) {
+                this.particleAnimation.active = true;
+            }
+        }
+    }
+
+    hideDragOverlay() {
+        if (this.dragOverlay) {
+            this.dragOverlay.classList.remove('visible');
+            // Stop particle animation
+            if (this.particleAnimation) {
+                this.particleAnimation.active = false;
+            }
+        }
+    }
+    
+    initParticleSystem(overlay) {
+        const canvas = overlay.querySelector('.drag-drop-particles');
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const particles = [];
+        const particleCount = 40;
+        
+        // Resize canvas to match overlay
+        const resizeCanvas = () => {
+            canvas.width = overlay.offsetWidth;
+            canvas.height = overlay.offsetHeight;
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Create particles
+        for (let i = 0; i < particleCount; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: (Math.random() - 0.5) * 0.5,
+                radius: Math.random() * 2 + 1,
+                opacity: Math.random() * 0.5 + 0.2,
+                pulsePhase: Math.random() * Math.PI * 2
+            });
+        }
+        
+        // Animation loop
+        const animate = () => {
+            if (!this.particleAnimation?.active) {
+                requestAnimationFrame(animate);
+                return;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            particles.forEach((p, i) => {
+                // Update position
+                p.x += p.vx;
+                p.y += p.vy;
+                
+                // Wrap around edges
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.y > canvas.height) p.y = 0;
+                
+                // Pulse effect
+                p.pulsePhase += 0.02;
+                const pulse = Math.sin(p.pulsePhase) * 0.3 + 0.7;
+                
+                // Draw particle
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius * pulse, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(40, 40, 40, ${p.opacity * pulse})`;
+                ctx.fill();
+                
+                // Draw connections to nearby particles
+                particles.slice(i + 1).forEach(p2 => {
+                    const dx = p2.x - p.x;
+                    const dy = p2.y - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = `rgba(254, 249, 195, ${(1 - dist / 120) * 0.2})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                });
+            });
+            
+            requestAnimationFrame(animate);
+        };
+        
+        this.particleAnimation = { active: false };
+        animate();
+    }
+    
+    setupMagneticTracking(overlay) {
+        const content = overlay.querySelector('.drag-drop-overlay-content');
+        if (!content) return;
+        
+        overlay.addEventListener('dragover', (e) => {
+            const rect = overlay.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Calculate offset from center
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const offsetX = (x - centerX) / centerX;
+            const offsetY = (y - centerY) / centerY;
+            
+            // Apply subtle magnetic pull effect
+            const maxOffset = 15;
+            content.style.transform = `translate(${offsetX * maxOffset}px, ${offsetY * maxOffset}px)`;
+        });
+        
+        overlay.addEventListener('dragleave', () => {
+            content.style.transform = 'translate(0, 0)';
+        });
+    }
+
+    async handleDrop(fileList) {
+        const files = Array.from(fileList);
+        if (files.length === 0) return;
+
+        console.log(`[FileAttachment] Dropped ${files.length} file(s)`);
+
+        // Create a fake event-like object compatible with handleFileSelection
+        const fakeEvent = {
+            target: {
+                files: files
+            }
+        };
+
+        await this.handleFileSelection(fakeEvent);
     }
 
     async uploadFileToSupabase(file) {
@@ -121,13 +443,21 @@ class FileAttachmentHandler {
             const extension = file.name.split('.').pop().toLowerCase();
             const isSupported = this.supportedFileTypes[extension] || file.type.startsWith('image/') || file.type.startsWith('audio/') || file.type.startsWith('video/') || file.type === 'application/pdf';
 
-            if (!isSupported) {
+            // For drag-and-drop, be more lenient — allow any file that looks like text
+            const looksLikeText = !isSupported && file.type.startsWith('text/');
+            if (!isSupported && !looksLikeText) {
                 alert(`File type not supported: ${file.name}`);
                 continue;
             }
 
             const fileIndex = this.attachedFiles.length;
-            const isMedia = file.type.startsWith('image/') || file.type.startsWith('audio/') || file.type.startsWith('video/') || file.type === 'application/pdf' || file.type.includes('document');
+            // Use mediaExtensions set for accurate categorization
+            const isMedia = this.mediaExtensions.has(extension) || 
+                (!this.supportedFileTypes[extension] && (
+                    file.type.startsWith('image/') || file.type.startsWith('audio/') || 
+                    file.type.startsWith('video/') || file.type === 'application/pdf' || 
+                    file.type.includes('document')
+                ));
 
             // Generate unique file ID for tracking
             const fileId = crypto.randomUUID();
@@ -199,14 +529,57 @@ class FileAttachmentHandler {
     getFileIcon(fileName) {
         const extension = fileName.split('.').pop().toLowerCase();
         const iconMap = {
-            'js': 'fab fa-js', 'py': 'fab fa-python', 'html': 'fab fa-html5', 'css': 'fab fa-css3',
-            'json': 'fas fa-code', 'txt': 'fas fa-file-alt', 'pdf': 'fas fa-file-pdf',
-            'docx': 'fas fa-file-word', 'c': 'fas fa-file-code', 'jpg': 'fas fa-file-image',
-            'jpeg': 'fas fa-file-image', 'png': 'fas fa-file-image', 'gif': 'fas fa-file-image',
-            'svg': 'fas fa-file-image', 'webp': 'fas fa-file-image', 'mp3': 'fas fa-file-audio',
-            'wav': 'fas fa-file-audio', 'ogg': 'fas fa-file-audio', 'm4a': 'fas fa-file-audio',
+            // JavaScript / TypeScript
+            'js': 'fab fa-js', 'jsx': 'fab fa-react', 'ts': 'fas fa-code', 'tsx': 'fab fa-react',
+            // Python
+            'py': 'fab fa-python',
+            // Web
+            'html': 'fab fa-html5', 'htm': 'fab fa-html5',
+            'css': 'fab fa-css3', 'scss': 'fab fa-sass', 'sass': 'fab fa-sass', 'less': 'fab fa-less',
+            'vue': 'fab fa-vuejs', 'svelte': 'fas fa-fire',
+            // Data / Config
+            'json': 'fas fa-code', 'jsonl': 'fas fa-code',
+            'xml': 'fas fa-code', 'yaml': 'fas fa-cog', 'yml': 'fas fa-cog',
+            'toml': 'fas fa-cog', 'ini': 'fas fa-cog', 'cfg': 'fas fa-cog',
+            'conf': 'fas fa-cog', 'env': 'fas fa-key', 'properties': 'fas fa-cog',
+            'csv': 'fas fa-table', 'tsv': 'fas fa-table',
+            // Programming languages
+            'c': 'fas fa-file-code', 'cpp': 'fas fa-file-code', 'h': 'fas fa-file-code', 'hpp': 'fas fa-file-code',
+            'java': 'fab fa-java', 'kt': 'fas fa-file-code', 'kts': 'fas fa-file-code',
+            'swift': 'fab fa-swift', 'dart': 'fas fa-bullseye',
+            'go': 'fas fa-file-code', 'rs': 'fas fa-file-code', 'rb': 'fas fa-gem',
+            'php': 'fab fa-php', 'lua': 'fas fa-moon', 'pl': 'fas fa-file-code',
+            'r': 'fas fa-chart-line', 'R': 'fas fa-chart-line', 'scala': 'fas fa-file-code',
+            // Shell
+            'sh': 'fas fa-terminal', 'bash': 'fas fa-terminal', 'zsh': 'fas fa-terminal',
+            'bat': 'fas fa-terminal', 'ps1': 'fas fa-terminal', 'cmd': 'fas fa-terminal',
+            // Documentation
+            'txt': 'fas fa-file-alt', 'md': 'fab fa-markdown', 'mdx': 'fab fa-markdown', 'rst': 'fas fa-file-alt',
+            'log': 'fas fa-file-alt', 'diff': 'fas fa-file-alt', 'patch': 'fas fa-file-alt',
+            // Database / query
+            'sql': 'fas fa-database', 'graphql': 'fas fa-project-diagram', 'gql': 'fas fa-project-diagram',
+            // DevOps
+            'dockerfile': 'fab fa-docker', 'makefile': 'fas fa-cogs',
+            'tf': 'fas fa-cloud', 'hcl': 'fas fa-cloud',
+            'proto': 'fas fa-file-code',
+            // Documents (binary)
+            'pdf': 'fas fa-file-pdf',
+            'docx': 'fas fa-file-word', 'doc': 'fas fa-file-word',
+            'xlsx': 'fas fa-file-excel', 'xls': 'fas fa-file-excel',
+            'pptx': 'fas fa-file-powerpoint', 'ppt': 'fas fa-file-powerpoint',
+            // Images
+            'jpg': 'fas fa-file-image', 'jpeg': 'fas fa-file-image', 'png': 'fas fa-file-image',
+            'gif': 'fas fa-file-image', 'svg': 'fas fa-file-image', 'webp': 'fas fa-file-image',
+            'bmp': 'fas fa-file-image', 'ico': 'fas fa-file-image', 'tiff': 'fas fa-file-image', 'tif': 'fas fa-file-image',
+            // Audio
+            'mp3': 'fas fa-file-audio', 'wav': 'fas fa-file-audio', 'ogg': 'fas fa-file-audio',
+            'm4a': 'fas fa-file-audio', 'flac': 'fas fa-file-audio', 'aac': 'fas fa-file-audio',
+            // Video
             'mp4': 'fas fa-file-video', 'webm': 'fas fa-file-video', 'avi': 'fas fa-file-video',
-            'mov': 'fas fa-file-video', 'mkv': 'fas fa-file-video'
+            'mov': 'fas fa-file-video', 'mkv': 'fas fa-file-video',
+            // Archives
+            'zip': 'fas fa-file-archive', 'tar': 'fas fa-file-archive', 'gz': 'fas fa-file-archive',
+            'rar': 'fas fa-file-archive', '7z': 'fas fa-file-archive'
         };
         return iconMap[extension] || 'fas fa-file';
     }
