@@ -55,6 +55,7 @@
     padding: 20px 24px;
     background-color: var(--elevated-bg);
     border-bottom: none;
+    box-shadow: none;
 }
 
 .window-title {
@@ -72,34 +73,53 @@
     font-size: 18px;
     padding: 8px;
     border-radius: 8px;
-    transition: all var(--anim-normal) var(--easing-smooth);
+    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
     display: flex;
     align-items: center;
     justify-content: center;
     width: 36px;
     height: 36px;
+    position: relative;
+}
+
+.close-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--hover-bg);
+    transform: scale(0);
+    opacity: 0;
+    transition: all var(--anim-ios-fast) var(--easing-ios-elastic);
+}
+
+.close-btn:hover::before {
+    transform: scale(1);
+    opacity: 1;
 }
 
 .close-btn:hover {
     color: var(--text-color);
-    background-color: var(--hover-bg);
-    transform: rotate(90deg);
+    transform: rotate(90deg) scale(1.1);
 }
 
 .close-btn:active {
     transform: rotate(90deg) scale(0.9);
+    transition-duration: var(--anim-ios-instant);
 }
 
 .window-content {
     flex: 1;
     overflow: auto;
     padding: 0;
+    border-top: none;
 }
 
 /* Split Layout */
 .split-layout {
     display: flex;
     height: 100%;
+    border-top: none;
 }
 
 /* Left Sidebar */
@@ -123,8 +143,26 @@
     font-size: 14px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all var(--anim-normal) var(--easing-smooth);
+    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
     border-radius: 8px;
+    position: relative;
+}
+
+.tab-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--hover-bg);
+    transform: scaleX(0);
+    transform-origin: left;
+    opacity: 0;
+    transition: all var(--anim-ios-normal) var(--easing-ios-elastic);
+}
+
+.tab-btn:hover::before {
+    transform: scaleX(1);
+    opacity: 1;
 }
 
 .tab-btn i {
@@ -132,17 +170,16 @@
     width: 18px;
     font-size: 16px;
     text-align: center;
-    transition: transform var(--anim-fast) var(--easing-smooth);
+    transition: transform var(--anim-ios-fast) var(--easing-ios-spring);
 }
 
 .tab-btn:hover {
-    background-color: var(--hover-bg);
     color: var(--text-color);
-    transform: translateX(2px);
+    transform: translateX(4px) scale(1.02);
 }
 
 .tab-btn:hover i {
-    transform: scale(1.1);
+    transform: scale(1.15) rotate(5deg);
 }
 
 .tab-btn.active {
@@ -152,7 +189,8 @@
 }
 
 .tab-btn:active {
-    transform: translateX(0) scale(0.98);
+    transform: translateX(2px) scale(0.98);
+    transition-duration: var(--anim-ios-instant);
 }
 
 /* Right Content Area */

@@ -1,0 +1,638 @@
+/* ================================================================= */
+/* iOS 26 FLUID BUBBLE ANIMATION SYSTEM                             */
+/* ================================================================= */
+
+/*
+ * This module provides iOS 26-inspired fluid animations with:
+ * - Spring physics and elastic overshoot
+ * - Momentum-based transitions
+ * - Organic timing and breathing effects
+ * - Liquid morphing and wave propagation
+ * - Magnetic attraction and follow-through
+ */
+
+/* ================================================================= */
+/* ENHANCED EASING FUNCTIONS                                        */
+/* ================================================================= */
+
+:root {
+    /* iOS-Inspired Spring Physics */
+    --easing-ios-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --easing-ios-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --easing-ios-elastic: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+    --easing-ios-fluid: cubic-bezier(0.23, 1, 0.32, 1);
+    --easing-ios-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --easing-ios-anticipate: cubic-bezier(0.36, 0, 0.66, -0.56);
+    --easing-ios-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --easing-ios-gentle: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --easing-ios-momentum: cubic-bezier(0.6, 0.04, 0.98, 0.335);
+    --easing-ios-decelerate: cubic-bezier(0, 0, 0.2, 1);
+    
+    /* Fluid Animation Durations */
+    --anim-ios-instant: 150ms;
+    --anim-ios-fast: 250ms;
+    --anim-ios-normal: 400ms;
+    --anim-ios-slow: 600ms;
+    --anim-ios-slower: 850ms;
+    --anim-ios-slowest: 1200ms;
+    
+    /* Spring Parameters */
+    --spring-tension: 180;
+    --spring-friction: 12;
+    --spring-mass: 1;
+}
+
+/* ================================================================= */
+/* FLUID BUBBLE KEYFRAME ANIMATIONS                                 */
+/* ================================================================= */
+
+/* Bubble Pop In - Elastic entrance with overshoot */
+@keyframes bubblePopIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.3) translateY(20px);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.08) translateY(-5px);
+    }
+    75% {
+        transform: scale(0.95) translateY(2px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Bubble Pop Out - Elastic exit with anticipation */
+@keyframes bubblePopOut {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+    25% {
+        transform: scale(1.05) translateY(-3px);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.3) translateY(20px);
+    }
+}
+
+/* Fluid Slide In - Momentum-based entrance */
+@keyframes fluidSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(-40px) scale(0.92);
+    }
+    60% {
+        opacity: 1;
+        transform: translateX(8px) scale(1.02);
+    }
+    100% {
+        transform: translateX(0) scale(1);
+    }
+}
+
+/* Fluid Slide Up - Elastic vertical entrance */
+@keyframes fluidSlideUp {
+    0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(-5px) scale(1.02);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Breathing Effect - Organic pulsing */
+@keyframes breathe {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.03);
+        opacity: 0.95;
+    }
+}
+
+/* Gentle Breathing - Subtle idle animation */
+@keyframes gentleBreath {
+    0%, 100% {
+        transform: scale(1) translateY(0);
+    }
+    50% {
+        transform: scale(1.01) translateY(-1px);
+    }
+}
+
+/* Fluid Wave - Propagating wave motion */
+@keyframes fluidWave {
+    0% {
+        transform: translateY(0) scaleY(1);
+    }
+    25% {
+        transform: translateY(-3px) scaleY(1.1);
+    }
+    50% {
+        transform: translateY(0) scaleY(0.95);
+    }
+    75% {
+        transform: translateY(2px) scaleY(1.05);
+    }
+    100% {
+        transform: translateY(0) scaleY(1);
+    }
+}
+
+/* Liquid Shimmer - Fluid gradient sweep */
+@keyframes liquidShimmer {
+    0% {
+        background-position: -200% center;
+        transform: skewX(-5deg);
+    }
+    50% {
+        transform: skewX(5deg);
+    }
+    100% {
+        background-position: 200% center;
+        transform: skewX(-5deg);
+    }
+}
+
+/* Elastic Bounce - Spring-based bounce */
+@keyframes elasticBounce {
+    0% {
+        transform: translateY(0);
+    }
+    20% {
+        transform: translateY(-8px);
+    }
+    40% {
+        transform: translateY(4px);
+    }
+    60% {
+        transform: translateY(-2px);
+    }
+    80% {
+        transform: translateY(1px);
+    }
+    100% {
+        transform: translateY(0);
+    }
+}
+
+/* Ripple Expand - Fluid ripple effect */
+@keyframes rippleExpand {
+    0% {
+        transform: scale(0);
+        opacity: 0.8;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(2.5);
+        opacity: 0;
+    }
+}
+
+/* Glow Pulse - Breathing glow effect */
+@keyframes glowPulse {
+    0%, 100% {
+        box-shadow: 
+            0 0 0 0 rgba(var(--accent-color-rgb), 0.4),
+            0 4px 12px rgba(45, 55, 72, 0.15);
+    }
+    50% {
+        box-shadow: 
+            0 0 0 8px rgba(var(--accent-color-rgb), 0),
+            0 8px 24px rgba(45, 55, 72, 0.25);
+    }
+}
+
+/* Magnetic Pull - Attraction effect */
+@keyframes magneticPull {
+    0% {
+        transform: scale(1) translateY(0);
+    }
+    50% {
+        transform: scale(1.02) translateY(-2px);
+    }
+    100% {
+        transform: scale(1.05) translateY(-4px);
+    }
+}
+
+/* Jelly Wobble - Elastic wobble effect */
+@keyframes jellyWobble {
+    0%, 100% {
+        transform: scale(1, 1);
+    }
+    25% {
+        transform: scale(1.05, 0.95);
+    }
+    50% {
+        transform: scale(0.95, 1.05);
+    }
+    75% {
+        transform: scale(1.02, 0.98);
+    }
+}
+
+/* Float Drift - Organic floating motion */
+@keyframes floatDrift {
+    0%, 100% {
+        transform: translateY(0) translateX(0) rotate(0deg);
+    }
+    25% {
+        transform: translateY(-6px) translateX(3px) rotate(1deg);
+    }
+    50% {
+        transform: translateY(-3px) translateX(-2px) rotate(-0.5deg);
+    }
+    75% {
+        transform: translateY(-8px) translateX(1px) rotate(0.5deg);
+    }
+}
+
+/* Stagger Wave - Sequential wave propagation */
+@keyframes staggerWave {
+    0% {
+        opacity: 0;
+        transform: translateY(15px) scale(0.9);
+    }
+    40% {
+        opacity: 1;
+        transform: translateY(-3px) scale(1.02);
+    }
+    70% {
+        transform: translateY(1px) scale(0.99);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Spin Fluid - Smooth rotation with momentum */
+@keyframes spinFluid {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+    50% {
+        transform: rotate(180deg) scale(1.1);
+    }
+    100% {
+        transform: rotate(360deg) scale(1);
+    }
+}
+
+/* Backdrop Blur In - Smooth blur transition */
+@keyframes backdropBlurIn {
+    0% {
+        backdrop-filter: blur(0px);
+        opacity: 0;
+    }
+    100% {
+        backdrop-filter: blur(12px);
+        opacity: 1;
+    }
+}
+
+/* Scale Bounce - Elastic scale animation */
+@keyframes scaleBounce {
+    0% {
+        transform: scale(0.8);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    70% {
+        transform: scale(0.95);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Slide Bounce - Elastic slide with overshoot */
+@keyframes slideBounce {
+    0% {
+        transform: translateX(-100%);
+    }
+    60% {
+        transform: translateX(5%);
+    }
+    80% {
+        transform: translateX(-2%);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+/* ================================================================= */
+/* UTILITY CLASSES FOR FLUID ANIMATIONS                             */
+/* ================================================================= */
+
+/* Bubble Entrance */
+.bubble-pop-in {
+    animation: bubblePopIn var(--anim-ios-normal) var(--easing-ios-elastic);
+}
+
+/* Fluid Slide */
+.fluid-slide-in {
+    animation: fluidSlideIn var(--anim-ios-slow) var(--easing-ios-overshoot);
+}
+
+.fluid-slide-up {
+    animation: fluidSlideUp var(--anim-ios-slow) var(--easing-ios-overshoot);
+}
+
+/* Breathing Effects */
+.breathe {
+    animation: breathe 3s var(--easing-ios-gentle) infinite;
+}
+
+.gentle-breath {
+    animation: gentleBreath 4s var(--easing-ios-gentle) infinite;
+}
+
+/* Wave Motion */
+.fluid-wave {
+    animation: fluidWave 2s var(--easing-ios-fluid) infinite;
+}
+
+/* Elastic Bounce */
+.elastic-bounce {
+    animation: elasticBounce var(--anim-ios-slow) var(--easing-ios-bounce);
+}
+
+/* Jelly Wobble */
+.jelly-wobble {
+    animation: jellyWobble var(--anim-ios-normal) var(--easing-ios-elastic);
+}
+
+/* Float Drift */
+.float-drift {
+    animation: floatDrift 6s var(--easing-ios-gentle) infinite;
+}
+
+/* Glow Pulse */
+.glow-pulse {
+    animation: glowPulse 2s var(--easing-ios-smooth) infinite;
+}
+
+/* Spin Fluid */
+.spin-fluid {
+    animation: spinFluid 1s var(--easing-ios-fluid) infinite;
+}
+
+/* ================================================================= */
+/* HOVER & INTERACTION STATES WITH FLUID PHYSICS                    */
+/* ================================================================= */
+
+/* Magnetic Hover - Elements attracted to cursor */
+.magnetic-hover {
+    transition: transform var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.magnetic-hover:hover {
+    animation: magneticPull var(--anim-ios-fast) var(--easing-ios-spring) forwards;
+}
+
+/* Elastic Press - Spring-back on click */
+.elastic-press {
+    transition: transform var(--anim-ios-fast) var(--easing-ios-elastic);
+}
+
+.elastic-press:active {
+    transform: scale(0.92);
+}
+
+/* Fluid Lift - Smooth elevation on hover */
+.fluid-lift {
+    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.fluid-lift:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 
+        0 12px 32px rgba(45, 55, 72, 0.22),
+        0 6px 16px rgba(45, 55, 72, 0.15),
+        0 0 0 1px rgba(45, 55, 72, 0.08);
+}
+
+/* Ripple Effect Container */
+.ripple-container {
+    position: relative;
+    overflow: hidden;
+}
+
+.ripple-container::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ripple-container:active::after {
+    animation: rippleExpand 0.6s var(--easing-ios-fluid);
+}
+
+/* ================================================================= */
+/* STAGGER ANIMATIONS WITH ORGANIC DELAYS                           */
+/* ================================================================= */
+
+/* Stagger with fluid wave propagation */
+.stagger-fluid {
+    animation: staggerWave var(--anim-ios-slow) var(--easing-ios-overshoot) backwards;
+}
+
+.stagger-fluid:nth-child(1) { animation-delay: 0ms; }
+.stagger-fluid:nth-child(2) { animation-delay: 60ms; }
+.stagger-fluid:nth-child(3) { animation-delay: 110ms; }
+.stagger-fluid:nth-child(4) { animation-delay: 150ms; }
+.stagger-fluid:nth-child(5) { animation-delay: 180ms; }
+.stagger-fluid:nth-child(6) { animation-delay: 200ms; }
+.stagger-fluid:nth-child(7) { animation-delay: 210ms; }
+.stagger-fluid:nth-child(8) { animation-delay: 215ms; }
+.stagger-fluid:nth-child(9) { animation-delay: 218ms; }
+.stagger-fluid:nth-child(10) { animation-delay: 220ms; }
+
+/* Organic stagger with variable timing */
+.stagger-organic {
+    animation: staggerWave var(--anim-ios-slow) var(--easing-ios-elastic) backwards;
+}
+
+.stagger-organic:nth-child(1) { animation-delay: 0ms; }
+.stagger-organic:nth-child(2) { animation-delay: 80ms; }
+.stagger-organic:nth-child(3) { animation-delay: 140ms; }
+.stagger-organic:nth-child(4) { animation-delay: 180ms; }
+.stagger-organic:nth-child(5) { animation-delay: 200ms; }
+.stagger-organic:nth-child(6) { animation-delay: 210ms; }
+.stagger-organic:nth-child(7) { animation-delay: 215ms; }
+.stagger-organic:nth-child(8) { animation-delay: 218ms; }
+
+/* ================================================================= */
+/* PERFORMANCE OPTIMIZATIONS                                         */
+/* ================================================================= */
+
+/* GPU Acceleration for smooth animations */
+.gpu-accelerated {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ================================================================= */
+/* SPECIALIZED FLUID EFFECTS                                         */
+/* ================================================================= */
+
+/* Liquid Morphing - Smooth shape transitions */
+.liquid-morph {
+    transition: 
+        border-radius var(--anim-ios-slow) var(--easing-ios-fluid),
+        transform var(--anim-ios-slow) var(--easing-ios-spring),
+        background var(--anim-ios-slow) var(--easing-ios-smooth);
+}
+
+/* Momentum Scroll - Smooth scrolling with physics */
+.momentum-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Elastic Border - Animated border with spring */
+.elastic-border {
+    position: relative;
+    transition: border-color var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.elastic-border::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(45deg, var(--accent-color), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.elastic-border:hover::before {
+    opacity: 1;
+}
+
+/* Fluid Shadow - Animated shadow with depth */
+.fluid-shadow {
+    transition: box-shadow var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.fluid-shadow:hover {
+    box-shadow: 
+        0 20px 50px rgba(45, 55, 72, 0.25),
+        0 10px 25px rgba(45, 55, 72, 0.18),
+        0 0 0 1px rgba(45, 55, 72, 0.1);
+}
+
+/* ================================================================= */
+/* CONTEXT-SPECIFIC ENHANCEMENTS                                     */
+/* ================================================================= */
+
+/* Modal Backdrop with Fluid Blur */
+.modal-backdrop-fluid {
+    animation: backdropBlurIn var(--anim-ios-slow) var(--easing-ios-smooth);
+}
+
+/* Button with Spring Press */
+.button-spring {
+    transition: all var(--anim-ios-fast) var(--easing-ios-spring);
+}
+
+.button-spring:hover {
+    transform: translateY(-3px) scale(1.02);
+}
+
+.button-spring:active {
+    transform: translateY(-1px) scale(0.98);
+    transition-duration: var(--anim-ios-instant);
+}
+
+/* Card with Fluid Hover */
+.card-fluid {
+    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.card-fluid:hover {
+    transform: translateY(-8px) scale(1.01);
+    box-shadow: 
+        0 16px 40px rgba(45, 55, 72, 0.22),
+        0 8px 20px rgba(45, 55, 72, 0.15),
+        0 0 0 1px rgba(45, 55, 72, 0.08);
+}
+
+/* Input with Elastic Focus */
+.input-elastic {
+    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
+}
+
+.input-elastic:focus {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 
+        0 8px 24px rgba(45, 55, 72, 0.12),
+        0 0 0 3px rgba(var(--accent-color-rgb), 0.15);
+}
+
+/* ================================================================= */
+/* DARK MODE ADJUSTMENTS                                             */
+/* ================================================================= */
+
+.dark-mode .fluid-lift:hover {
+    box-shadow: 
+        0 12px 32px rgba(0, 0, 0, 0.35),
+        0 6px 16px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .fluid-shadow:hover {
+    box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.45),
+        0 10px 25px rgba(0, 0, 0, 0.35),
+        0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .card-fluid:hover {
+    box-shadow: 
+        0 16px 40px rgba(0, 0, 0, 0.4),
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.08);
+}
