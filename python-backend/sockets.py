@@ -332,15 +332,17 @@ def handle_local_coder_command_result(data: Dict[str, Any]):
 @socketio.on('mobile-command-result')
 def handle_mobile_command_result(data: Dict[str, Any]):
     """
-    Receives a mobile control command result and publishes it to Redis so
-    waiting MobileTools requests can continue.
+    Receives mobile command result from native assistant bridge and publishes
+    it to Redis for waiting MobileTools toolkit calls.
     """
     if not redis_client_instance:
         logger.error("Redis client not initialized. Cannot handle mobile command result.")
         return
 
     request_id = data.get('request_id')
-    result_payload = data.get('result', {})
+    result_payload = data.get('result')
+    if result_payload is None:
+        result_payload = data
 
     if request_id:
         response_channel = f"mobile-response:{request_id}"

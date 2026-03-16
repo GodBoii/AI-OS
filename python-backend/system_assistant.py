@@ -3,99 +3,77 @@
 import logging
 from typing import Any, Dict, Optional
 
-# Agno Imports
 from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
 
+from mobile_tools import MobileTools
+
 logger = logging.getLogger(__name__)
-
-try:
-    from mobile_tools import MobileTools
-except Exception as exc:
-    MobileTools = None
-    logger.warning("MobileTools import failed in system_assistant: %s", exc)
-
-
-def _create_mobile_tools(mobile_tools_config: Optional[Dict[str, Any]]):
-    """
-    Build MobileTools only when full realtime bridge context is available.
-    """
-    if not mobile_tools_config:
-        return None
-    if MobileTools is None:
-        logger.warning("Mobile tools requested but MobileTools class is unavailable.")
-        return None
-
-    sid = str(mobile_tools_config.get("sid") or "").strip()
-    socketio = mobile_tools_config.get("socketio")
-    redis_client = mobile_tools_config.get("redis_client")
-
-    if not sid or not socketio or not redis_client:
-        logger.info(
-            "Skipping mobile tools injection due to missing runtime context "
-            "(sid/socketio/redis_client)."
-        )
-        return None
-
-    try:
-        return MobileTools(
-            sid=sid,
-            socketio=socketio,
-            redis_client=redis_client,
-            message_id=mobile_tools_config.get("message_id"),
-            conversation_id=mobile_tools_config.get("conversation_id"),
-        )
-    except Exception as exc:
-        logger.error("Failed to initialize MobileTools: %s", exc, exc_info=True)
-        return None
 
 
 def get_system_assistant(
-    *,
     mobile_tools_config: Optional[Dict[str, Any]] = None,
-    enable_mobile_tools: bool = True,
 ) -> Agent:
     """
     Constructs a lightweight, stateless System Assistant Agent.
 
     Designed for fast, direct responses without session persistence.
+    Perfect for voice assistant and Circle to Search use cases.
     Supports multimodal inputs (text + images).
-    Optionally supports realtime mobile native tools when runtime bridge
-    context (socket + redis + sid) is provided.
     """
     system_instructions = [
         "You are Aetheria, an AI assistant for mobile voice and visual interactions.",
         "",
         "RESPONSE STYLE:",
-        "- Be concise and clear for mobile users.",
-        "- Prefer direct answers over long explanations.",
-        "- Keep language natural and practical.",
+        "- BE CONCISE - users are on mobile devices",
+        "- Direct answers, no lengthy explanations",
+        "- Natural, conversational language",
+        "- Focus on being helpful and accurate",
+        "- Analyze screenshots and images from Circle to Search",
         "",
-        "VISUAL ANALYSIS (Circle to Search / Mindspace):",
-        "- Analyze visible text, UI elements, objects, and context from screenshots.",
-        "- Explain what important UI elements do when relevant.",
-        "- Combine the image context with the user question.",
-        "",
-        "MOBILE TOOL USAGE:",
-        "- Use available mobile tools when the user asks to inspect or control the device.",
-        "- For action tools, execute only what is requested and then report outcome.",
-        "- If a tool fails or times out, explain clearly and suggest the next step.",
+        "VISUAL ANALYSIS (Circle to Search):",
+        "- When provided with a screenshot, analyze what is visible",
+        "- Identify text, UI elements, content, or objects in the image",
+        "- Provide helpful context or explanations about what you see",
+        "- If text is visible, read and explain it",
+        "- If it is a UI element, explain what it does",
+        "- Keep visual descriptions brief and actionable",
+        "- Combine visual context with the user question for best results",
     ]
 
     tools = []
-    if enable_mobile_tools:
-        mobile_tools = _create_mobile_tools(mobile_tools_config)
-        if mobile_tools:
-            tools.append(mobile_tools)
+    if mobile_tools_config:
+        sid = mobile_tools_config.get("sid")
+        socketio = mobile_tools_config.get("socketio")
+        redis_client = mobile_tools_config.get("redis_client")
 
-    agent_kwargs: Dict[str, Any] = {
-        "name": "Aetheria_System_Assistant",
-        "model": OpenRouter(id="openrouter/healer-alpha"),
-        "instructions": system_instructions,
-        "markdown": True,
-        "debug_mode": True,
-    }
-    if tools:
-        agent_kwargs["tools"] = tools
+        if sid and socketio and redis_client:
+            tools.append(MobileTools(**mobile_tools_config))
+            system_instructions.extend(
+                [
+                    "",
+                    "MOBILE TOOLING:",
+                    "- You can use native mobile tools to inspect and control the phone.",
+                    "- Prefer context-first actions: get_device_state and get_active_app_context.",
+                    "- Use explicit action tools for navigation and control.",
+                    "- Keep actions safe and intentional; avoid repetitive destructive loops.",
+                ]
+            )
+        else:
+            logger.warning(
+                "System assistant mobile tools config incomplete. sid=%s socketio=%s redis=%s",
+                bool(sid),
+                bool(socketio),
+                bool(redis_client),
+            )
 
-    return Agent(**agent_kwargs)
+    agent = Agent(
+        name="Aetheria_System_Assistant",
+        model=OpenRouter(id="openrouter/healer-alpha"),
+        instructions=system_instructions,
+        tools=tools,
+        markdown=True,
+        debug_mode=True,
+    )
+
+    return agent
