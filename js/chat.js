@@ -402,6 +402,10 @@ function resolveCoderExecutionTarget() {
     return 'cloud';
 }
 
+function resolveIsCloudMode() {
+    return resolveCoderExecutionTarget() === 'cloud';
+}
+
 function resolveWorkspaceContextPayload() {
     if (!isProjectWorkspaceMode()) return null;
     if (window.projectWorkspace?.getWorkspaceContextPayload) {
@@ -2216,6 +2220,7 @@ async function handleSendMessage() {
             is_deepsearch: chatConfig.deepsearch,
             agent_mode: resolveAgentMode(),
             coder_execution_target: resolveCoderExecutionTarget(),
+            is_cloud_mode: resolveIsCloudMode(),
             workspace_context: resolveWorkspaceContextPayload(),
             accessToken: session.access_token,
             config: { use_memory: chatConfig.memory, ...chatConfig.tools }
@@ -2273,6 +2278,7 @@ async function handleSendMessage() {
         is_deepsearch: chatConfig.deepsearch,
         agent_mode: resolveAgentMode(),
         coder_execution_target: resolveCoderExecutionTarget(),
+        is_cloud_mode: resolveIsCloudMode(),
         workspace_context: resolveWorkspaceContextPayload(),
         accessToken: session.access_token,
         config: { use_memory: chatConfig.memory, ...chatConfig.tools }

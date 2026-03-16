@@ -68,13 +68,70 @@ class ProjectWorkspace {
         return window.currentConversationId || null;
     }
 
+    getScopedConversationId(conversationId = this.getConversationId()) {
+        return conversationId || '__default__';
+    }
+
+    isActiveScopedConversation(conversationId) {
+        if (!conversationId) return false;
+        const activeScoped = this.getScopedConversationId();
+        return conversationId === activeScoped || conversationId === '__default__';
+    }
+
+    adoptDefaultWorkspaceState(conversationId) {
+        if (!conversationId) return;
+        const fallback = this.workspaceStates.get('__default__');
+        if (!fallback) return;
+
+        const hasFallbackContext = Boolean(
+            fallback.local_context?.is_ready
+            || fallback.repo_url
+            || fallback.cloud_context?.is_ready
+            || fallback.workspace_mode === 'local'
+        );
+        if (!hasFallbackContext) return;
+
+        const existing = this.workspaceStates.get(conversationId);
+        if (!existing) {
+            const cloned = JSON.parse(JSON.stringify(fallback));
+            this.workspaceStates.set(conversationId, cloned);
+            this.workspaceStates.delete('__default__');
+            return;
+        }
+
+        if (!existing.local_context?.is_ready && fallback.local_context?.is_ready) {
+            existing.local_context = { ...(fallback.local_context || {}) };
+        }
+        if (!existing.repo_url && fallback.repo_url) {
+            existing.repo_url = fallback.repo_url;
+        }
+        if ((!existing.branch || existing.branch === 'main') && fallback.branch) {
+            existing.branch = fallback.branch;
+        }
+        if (!existing.cloud_context?.is_ready && fallback.cloud_context?.is_ready) {
+            existing.cloud_context = { ...(fallback.cloud_context || {}) };
+        }
+        if (fallback.workspace_mode === 'local' && fallback.local_context?.is_ready) {
+            existing.workspace_mode = 'local';
+        }
+
+        this.workspaceStates.delete('__default__');
+    }
+
     async ensureConversationId() {
         const existing = this.getConversationId();
-        if (existing) return existing;
+        if (existing) {
+            this.adoptDefaultWorkspaceState(existing);
+            return existing;
+        }
 
         if (typeof window.startNewConversation === 'function') {
             await window.startNewConversation();
-            return this.getConversationId();
+            const created = this.getConversationId();
+            if (created) {
+                this.adoptDefaultWorkspaceState(created);
+            }
+            return created;
         }
 
         const newChatBtn = document.querySelector('.add-btn');
@@ -82,7 +139,11 @@ class ProjectWorkspace {
             newChatBtn.click();
             await new Promise((resolve) => setTimeout(resolve, 160));
         }
-        return this.getConversationId();
+        const created = this.getConversationId();
+        if (created) {
+            this.adoptDefaultWorkspaceState(created);
+        }
+        return created;
     }
 
     getState(conversationId = this.getConversationId(), create = true) {
@@ -102,6 +163,8 @@ class ProjectWorkspace {
         if (!state) return null;
         return {
             workspace_mode: state.workspace_mode,
+            is_cloud_mode: state.workspace_mode === 'cloud',
+            is_local_mode: state.workspace_mode === 'local',
             repo_url: state.repo_url,
             branch: state.branch,
             local_context: { ...(state.local_context || {}) },
