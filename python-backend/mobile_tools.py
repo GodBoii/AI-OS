@@ -16,7 +16,7 @@ from agno.tools.function import ToolResult
 
 logger = logging.getLogger(__name__)
 
-MOBILE_COMMAND_TIMEOUT_SECONDS = 20
+MOBILE_COMMAND_TIMEOUT_SECONDS = 35
 
 
 class MobileTools(Toolkit):
@@ -47,6 +47,17 @@ class MobileTools(Toolkit):
                 self.get_visible_ui_text,
                 self.list_apps,
                 self.open_app,
+                self.ensure_location_enabled,
+                self.get_travel_estimate,
+                self.open_navigation,
+                self.prepare_navigation,
+                self.set_alarm,
+                self.set_timer,
+                self.create_note,
+                self.append_note,
+                self.search_notes,
+                self.get_note,
+                self.send_message,
                 self.open_settings,
                 self.open_notifications,
                 self.open_quick_settings,
@@ -163,6 +174,167 @@ class MobileTools(Toolkit):
         """
         return self._send_command_and_wait(
             {"action": "open_app", "query": app_name_or_package}
+        )
+
+    def ensure_location_enabled(self) -> ToolResult:
+        """
+        Checks location status and opens location settings if disabled.
+        """
+        return self._send_command_and_wait({"action": "ensure_location_enabled"})
+
+    def get_travel_estimate(
+        self,
+        destination: str,
+        mode: str = "driving",
+    ) -> ToolResult:
+        """
+        Returns travel distance/time estimate from current location to destination.
+        Mode: driving, walking, bicycling, transit.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "get_travel_estimate",
+                "destination": destination,
+                "mode": mode,
+            }
+        )
+
+    def open_navigation(
+        self,
+        destination: str,
+        mode: str = "driving",
+    ) -> ToolResult:
+        """
+        Opens navigation in maps app for destination.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "open_navigation",
+                "destination": destination,
+                "mode": mode,
+            }
+        )
+
+    def prepare_navigation(
+        self,
+        destination: str,
+        mode: str = "driving",
+    ) -> ToolResult:
+        """
+        Full navigation prep: location readiness + estimate + navigation launch.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "prepare_navigation",
+                "destination": destination,
+                "mode": mode,
+            }
+        )
+
+    def set_alarm(
+        self,
+        hour: int,
+        minute: int,
+        label: str = "",
+        skip_ui: bool = False,
+    ) -> ToolResult:
+        """
+        Sets an alarm in device clock app.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "set_alarm",
+                "hour": hour,
+                "minute": minute,
+                "label": label,
+                "skip_ui": bool(skip_ui),
+            }
+        )
+
+    def set_timer(
+        self,
+        duration_seconds: int,
+        label: str = "",
+        skip_ui: bool = False,
+    ) -> ToolResult:
+        """
+        Sets a countdown timer in device clock app.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "set_timer",
+                "duration_seconds": duration_seconds,
+                "label": label,
+                "skip_ui": bool(skip_ui),
+            }
+        )
+
+    def create_note(self, content: str, title: str = "") -> ToolResult:
+        """
+        Creates a local assistant note.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "create_note",
+                "title": title,
+                "content": content,
+            }
+        )
+
+    def append_note(self, note_id: str, content: str) -> ToolResult:
+        """
+        Appends text to an existing note by note_id.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "append_note",
+                "note_id": note_id,
+                "content": content,
+            }
+        )
+
+    def search_notes(self, query: str, limit: int = 8) -> ToolResult:
+        """
+        Searches local assistant notes.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "search_notes",
+                "query": query,
+                "limit": max(1, min(limit, 30)),
+            }
+        )
+
+    def get_note(self, note_id: str = "", title: str = "") -> ToolResult:
+        """
+        Returns a full note by id or title.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "get_note",
+                "note_id": note_id,
+                "title": title,
+            }
+        )
+
+    def send_message(
+        self,
+        channel: str,
+        recipient: str,
+        message: str,
+        subject: str = "",
+    ) -> ToolResult:
+        """
+        Opens compose/send flow for sms, whatsapp, email, telegram, instagram.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "send_message",
+                "channel": channel,
+                "recipient": recipient,
+                "message": message,
+                "subject": subject,
+            }
         )
 
     def open_settings(self, setting: str = "general") -> ToolResult:
