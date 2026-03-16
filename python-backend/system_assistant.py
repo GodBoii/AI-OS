@@ -4,8 +4,7 @@ import logging
 
 # Agno Imports
 from agno.agent import Agent
-from agno.models.google import Gemini
-
+from agno.models.openrouter import OpenRouter
 # Tools
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.wikipedia import WikipediaTools
@@ -44,7 +43,7 @@ def get_system_assistant() -> Agent:
     # Agent - simple, fast, and multimodal
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=Gemini(id="gemini-2.5-flash-lite"),
+        model=OpenRouter(id="openrouter/healer-alpha"),
         instructions=system_instructions,
         markdown=True,
         debug_mode=True,
