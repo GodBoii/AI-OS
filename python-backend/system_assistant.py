@@ -94,7 +94,6 @@ def get_system_assistant(
         "instructions": system_instructions,
         "markdown": True,
         "debug_mode": True,
-        "show_tool_calls": True,
     }
     if tools:
         agent_kwargs["tools"] = tools
