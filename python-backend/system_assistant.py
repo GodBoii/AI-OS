@@ -58,8 +58,6 @@ def get_system_assistant(
                     "- For app launching: call list_apps first if app name is ambiguous, then open_app.",
                     "- For toggles use act_settings (wifi/bluetooth/location/auto_rotate/dnd where supported).",
                     "- For value changes use modify_settings (volume, brightness, dnd filter).",
-                    "- For notes visibility in settings use open_settings with setting='notes'.",
-                    "- For travel tasks: use prepare_navigation or get_travel_estimate + open_navigation.",
                     "- For reminders/time tasks: use set_alarm and set_timer.",
                     "- For notes tasks: use create_note, search_notes, get_note, append_note.",
                     "- For communication tasks: use send_message with requested channel and recipient.",

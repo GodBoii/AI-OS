@@ -49,9 +49,6 @@ class MobileTools(Toolkit):
                 self.act_settings,
                 self.modify_settings,
                 self.ensure_location_enabled,
-                self.get_travel_estimate,
-                self.open_navigation,
-                self.prepare_navigation,
                 self.set_alarm,
                 self.set_timer,
                 self.create_note,
@@ -182,55 +179,6 @@ class MobileTools(Toolkit):
         """
         return self._send_command_and_wait({"action": "ensure_location_enabled"})
 
-    def get_travel_estimate(
-        self,
-        destination: str,
-        mode: str = "driving",
-    ) -> ToolResult:
-        """
-        Returns travel distance/time estimate from current location to destination.
-        Mode: driving, walking, bicycling, transit.
-        """
-        return self._send_command_and_wait(
-            {
-                "action": "get_travel_estimate",
-                "destination": destination,
-                "mode": mode,
-            }
-        )
-
-    def open_navigation(
-        self,
-        destination: str,
-        mode: str = "driving",
-    ) -> ToolResult:
-        """
-        Opens navigation in maps app for destination.
-        """
-        return self._send_command_and_wait(
-            {
-                "action": "open_navigation",
-                "destination": destination,
-                "mode": mode,
-            }
-        )
-
-    def prepare_navigation(
-        self,
-        destination: str,
-        mode: str = "driving",
-    ) -> ToolResult:
-        """
-        Full navigation prep: location readiness + estimate + navigation launch.
-        """
-        return self._send_command_and_wait(
-            {
-                "action": "prepare_navigation",
-                "destination": destination,
-                "mode": mode,
-            }
-        )
-
     def set_alarm(
         self,
         hour: int,
@@ -340,7 +288,7 @@ class MobileTools(Toolkit):
     def open_settings(self, setting: str = "general") -> ToolResult:
         """
         Opens a settings screen. Supported values:
-        general, wifi, bluetooth, accessibility, apps, sound, display, location, notes.
+        general, wifi, bluetooth, accessibility, apps, sound, display, location.
         """
         return self._send_command_and_wait(
             {"action": "open_settings", "setting": setting}
