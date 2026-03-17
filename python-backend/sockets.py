@@ -402,9 +402,11 @@ def on_send_message(data: str):
         if not isinstance(workspace_context, dict):
             workspace_context = {}
 
+        incoming_config = dict(data.get("config", {}) or {})
+
         if not connection_manager_service.get_session(conversation_id):
             device_type = data.get("deviceType", "web")
-            session_config = dict(data.get("config", {}))
+            session_config = dict(incoming_config)
             session_config["agent_mode"] = requested_agent_mode
             session_config["coder_execution_target"] = requested_coder_target
             session_config["workspace_context"] = workspace_context
@@ -418,6 +420,7 @@ def on_send_message(data: str):
             # Keep routing and workspace state fresh for existing sessions.
             session_data = connection_manager_service.get_session(conversation_id) or {}
             session_config = dict(session_data.get("config", {}))
+            session_config.update(incoming_config)
             session_config["agent_mode"] = requested_agent_mode
             session_config["coder_execution_target"] = requested_coder_target
             session_config["workspace_context"] = workspace_context

@@ -56,12 +56,20 @@ class ConnectionManager:
         # Cleanup old sessions before creating new one (memory optimization)
         self._cleanup_expired_sessions(user_id)
         
-        # Ensure a default set of tools is enabled for a new session
-        agent_config.update({
-            'enable_github': True, 'enable_google_email': True, 'enable_google_drive': True,
-            'enable_browser': True, 'enable_vercel': True, 'enable_supabase': True,
+        # Ensure a default set of tools exists for a new session while preserving
+        # explicit frontend selections (including disabled tools).
+        agent_config = dict(agent_config or {})
+        default_tool_config = {
+            'enable_github': True,
+            'enable_google_email': True,
+            'enable_google_drive': True,
+            'enable_browser': True,
+            'enable_vercel': True,
+            'enable_supabase': True,
             'enable_computer_control': True  # NEW: Enable computer control by default for desktop
-        })
+        }
+        for key, value in default_tool_config.items():
+            agent_config.setdefault(key, value)
         
         session_data = {
             "user_id": user_id,
