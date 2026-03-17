@@ -399,6 +399,20 @@
     background: var(--hover-bg);
 }
 
+.tool-items-list {
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.tool-empty-state {
+    color: var(--text-secondary);
+    cursor: default;
+}
+
+.tool-empty-state:hover {
+    background: transparent;
+}
+
 .tool-item label {
     flex-grow: 1;
     display: flex;

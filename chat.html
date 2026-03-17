@@ -275,21 +275,10 @@
                         <i class="fas fa-chevron-right submenu-indicator" aria-hidden="true"></i>
                         <!-- Tools submenu will be dynamically positioned -->
                         <div class="tools-menu" role="menu" aria-label="Tools options">
-                            <div class="tool-item" role="menuitem">
-                                <input type="checkbox" id="ai_os" aria-describedby="ai_os_desc" />
-                                <label for="ai_os">
-                                    <i class="fa-solid fa-atom" aria-hidden="true"></i>
-                                    AI-OS
-                                </label>
-                                <span id="ai_os_desc" class="sr-only">Enable all AI-OS tools</span>
-                            </div>
-                            <div class="tool-item" role="menuitem">
-                                <input type="checkbox" id="deep_search" aria-describedby="deep_search_desc" />
-                                <label for="deep_search">
-                                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                                    DeepSearch
-                                </label>
-                                <span id="deep_search_desc" class="sr-only">Enable deep search functionality</span>
+                            <div class="tool-items-list" data-role="integration-tools-list"></div>
+                            <div class="tool-item tool-empty-state hidden" data-role="integration-tools-empty" aria-live="polite">
+                                <i class="fa-solid fa-link-slash" aria-hidden="true"></i>
+                                <span>No connected integrations. Connect one in Integrations settings.</span>
                             </div>
                         </div>
                     </div>
