@@ -56,12 +56,15 @@ def get_system_assistant(
                     "- You can use native mobile tools to inspect and control the phone.",
                     "- Always start with context: get_active_app_context or get_device_state.",
                     "- For app launching: call list_apps first if app name is ambiguous, then open_app.",
+                    "- For toggles use act_settings (wifi/bluetooth/location/auto_rotate/dnd where supported).",
+                    "- For value changes use modify_settings (volume, brightness, dnd filter).",
+                    "- For notes visibility in settings use open_settings with setting='notes'.",
                     "- For travel tasks: use prepare_navigation or get_travel_estimate + open_navigation.",
                     "- For reminders/time tasks: use set_alarm and set_timer.",
                     "- For notes tasks: use create_note, search_notes, get_note, append_note.",
                     "- For communication tasks: use send_message with requested channel and recipient.",
                     "- Prefer semantic UI actions (tap_text, input_text) before coordinate gestures (tap, swipe).",
-                    "- Use navigation helpers when needed: press_back, go_home, open_notifications, open_quick_settings, open_recents.",
+                    "- Use navigation helpers when needed: press_back, open_notifications, open_quick_settings, open_recents.",
                     "- Keep actions safe and intentional; avoid repetitive destructive loops.",
                 ]
             )

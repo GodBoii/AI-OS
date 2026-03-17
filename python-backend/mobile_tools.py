@@ -44,9 +44,10 @@ class MobileTools(Toolkit):
             tools=[
                 self.get_device_state,
                 self.get_active_app_context,
-                self.get_visible_ui_text,
                 self.list_apps,
                 self.open_app,
+                self.act_settings,
+                self.modify_settings,
                 self.ensure_location_enabled,
                 self.get_travel_estimate,
                 self.open_navigation,
@@ -67,7 +68,6 @@ class MobileTools(Toolkit):
                 self.tap,
                 self.swipe,
                 self.press_back,
-                self.go_home,
             ],
             **kwargs,
         )
@@ -340,10 +340,36 @@ class MobileTools(Toolkit):
     def open_settings(self, setting: str = "general") -> ToolResult:
         """
         Opens a settings screen. Supported values:
-        general, wifi, bluetooth, accessibility, apps, sound, display.
+        general, wifi, bluetooth, accessibility, apps, sound, display, location, notes.
         """
         return self._send_command_and_wait(
             {"action": "open_settings", "setting": setting}
+        )
+
+    def act_settings(self, setting: str, enabled: bool) -> ToolResult:
+        """
+        Toggles a setting with on/off state (best effort on Android 15/16 policies).
+        Example settings: wifi, bluetooth, location, mobile_data, hotspot, auto_rotate, dnd.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "act_settings",
+                "setting": (setting or "").strip().lower(),
+                "enabled": bool(enabled),
+            }
+        )
+
+    def modify_settings(self, setting: str, value: int) -> ToolResult:
+        """
+        Modifies settings that require numeric value.
+        Example settings: media_volume, ring_volume, alarm_volume, brightness, dnd_filter.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "modify_settings",
+                "setting": (setting or "").strip().lower(),
+                "value": int(value),
+            }
         )
 
     def open_notifications(self) -> ToolResult:
