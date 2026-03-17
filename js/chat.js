@@ -31,9 +31,11 @@ let chatConfig = {
         Planner_Agent: true,
         enable_vercel: true,
         enable_google_drive: true,
+        enable_supabase: true,
+        enable_composio_google_sheets: true,
+        enable_composio_whatsapp: true,
         computer_control: true  // NEW: Computer control enabled by default (desktop only)
-    },
-    deepsearch: false
+    }
 };
 
 let ongoingStreams = {};
@@ -965,20 +967,32 @@ async function startNewConversation() {
     window.needsNewBackendSession = false;
 
     chatConfig = {
-        memory: true, tasks: false,
-        tools: { internet_search: true, Planner_Agent: true, coding_assistant: true, World_Agent: true, enable_vercel: true, enable_github: true, enable_google_email: true, enable_google_drive: true },
-        deepsearch: false
+        memory: true,
+        tasks: false,
+        tools: {
+            internet_search: true,
+            Planner_Agent: true,
+            coding_assistant: true,
+            World_Agent: true,
+            enable_vercel: true,
+            enable_github: true,
+            enable_google_email: true,
+            enable_google_drive: true,
+            enable_supabase: true,
+            enable_composio_google_sheets: true,
+            enable_composio_whatsapp: true,
+            computer_control: true
+        }
     };
-    const aiOsCheckbox = document.getElementById('ai_os');
-    if (aiOsCheckbox) aiOsCheckbox.checked = true;
-
-    const deepSearchCheckbox = document.getElementById('deep_search');
-    if (deepSearchCheckbox) deepSearchCheckbox.checked = false;
 
     // Reset shuffle menu state
     if (shuffleMenuController) {
+        shuffleMenuController.chatConfig = chatConfig;
         shuffleMenuController.activeItems.clear();
         shuffleMenuController.closeMenu();
+        if (typeof shuffleMenuController.resetForNewConversation === 'function') {
+            shuffleMenuController.resetForNewConversation();
+        }
         shuffleMenuController.updateShuffleButtonState();
 
         // Reset shuffle menu item active states
@@ -988,6 +1002,9 @@ async function startNewConversation() {
         // Re-enable memory if it's on by default
         if (chatConfig.memory) {
             shuffleMenuController.updateItemActiveState('memory', true);
+        }
+        if (typeof shuffleMenuController.updateToolsActiveState === 'function') {
+            shuffleMenuController.updateToolsActiveState();
         }
     }
 
@@ -2236,7 +2253,6 @@ async function handleSendMessage() {
             id: messageId,
             files: attachedFiles,
             context_session_ids: contextSessionIds,
-            is_deepsearch: chatConfig.deepsearch,
             agent_mode: resolveAgentMode(),
             coder_execution_target: resolveCoderExecutionTarget(),
             is_cloud_mode: resolveIsCloudMode(),
@@ -2294,7 +2310,6 @@ async function handleSendMessage() {
         id: messageId,
         files: attachedFiles,
         context_session_ids: contextSessionIds,
-        is_deepsearch: chatConfig.deepsearch,
         agent_mode: resolveAgentMode(),
         coder_execution_target: resolveCoderExecutionTarget(),
         is_cloud_mode: resolveIsCloudMode(),

@@ -633,10 +633,20 @@ class AIOS {
     }
 
     async checkIntegrationStatus() {
+        const statusByProvider = {
+            github: false,
+            google: false,
+            vercel: false,
+            supabase: false,
+            composio_google_sheets: false,
+            composio_whatsapp: false
+        };
+
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
             ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
-            return;
+            this.emitIntegrationStatusUpdate(statusByProvider);
+            return statusByProvider;
         }
         try {
             const response = await fetch(`${this.backendBaseUrl}/api/integrations`, {
@@ -645,14 +655,19 @@ class AIOS {
             if (!response.ok) throw new Error('Failed to fetch integration status');
             const data = await response.json();
             const connected = new Set(data.integrations);
-            ['github', 'google', 'vercel', 'supabase'].forEach(p => this.updateIntegrationButton(p, connected.has(p)));
+            ['github', 'google', 'vercel', 'supabase'].forEach(p => {
+                const isConnected = connected.has(p);
+                statusByProvider[p] = isConnected;
+                this.updateIntegrationButton(p, isConnected);
+            });
 
             const composioStatusResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=GOOGLESHEETS`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             if (composioStatusResponse.ok) {
                 const composioStatusData = await composioStatusResponse.json();
-                this.updateIntegrationButton('composio_google_sheets', !!composioStatusData.connected);
+                statusByProvider.composio_google_sheets = !!composioStatusData.connected;
+                this.updateIntegrationButton('composio_google_sheets', statusByProvider.composio_google_sheets);
             } else {
                 this.updateIntegrationButton('composio_google_sheets', false);
             }
@@ -662,14 +677,28 @@ class AIOS {
             });
             if (whatsappStatusResponse.ok) {
                 const whatsappStatusData = await whatsappStatusResponse.json();
-                this.updateIntegrationButton('composio_whatsapp', !!whatsappStatusData.connected);
+                statusByProvider.composio_whatsapp = !!whatsappStatusData.connected;
+                this.updateIntegrationButton('composio_whatsapp', statusByProvider.composio_whatsapp);
             } else {
                 this.updateIntegrationButton('composio_whatsapp', false);
             }
+            this.emitIntegrationStatusUpdate(statusByProvider);
+            return statusByProvider;
         } catch (error) {
             console.error('Error checking integration status:', error);
             ['github', 'google', 'vercel', 'supabase', 'composio_google_sheets', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
+            this.emitIntegrationStatusUpdate(statusByProvider);
+            return statusByProvider;
         }
+    }
+
+    emitIntegrationStatusUpdate(statusByProvider) {
+        window.dispatchEvent(new CustomEvent('aios-integrations-updated', {
+            detail: {
+                statusByProvider,
+                updatedAt: Date.now()
+            }
+        }));
     }
 
     updateIntegrationButton(provider, isConnected) {
