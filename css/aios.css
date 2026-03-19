@@ -9,12 +9,12 @@
     max-width: 92%;
     height: 700px;
     max-height: 92vh;
-    background-color: #ffffff;
+    background-color: var(--elevated-bg);
     border-radius: 16px;
     box-shadow: 
-        0 20px 60px rgba(45, 55, 72, 0.25),
-        0 10px 30px rgba(45, 55, 72, 0.18);
-    border: 2px solid var(--border-primary);
+        0 20px 60px rgba(0, 0, 0, 0.30),
+        0 10px 30px rgba(0, 0, 0, 0.22);
+    border: 1.5px solid var(--border-primary);
     z-index: 1000;
     display: flex;
     flex-direction: column;
