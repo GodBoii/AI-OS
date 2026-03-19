@@ -185,8 +185,9 @@ class AIOS {
     }
     
     setupDeploymentDetailModal() {
-        if (document.getElementById('deployment-detail-modal')) {
-            return;
+        const existingModal = document.getElementById('deployment-detail-modal');
+        if (existingModal) {
+            existingModal.remove(); // Force recreation to ensure new SVG icons load
         }
 
         const modal = document.createElement('div');
@@ -197,7 +198,7 @@ class AIOS {
                 <div class="deployment-detail-header">
                     <div class="deployment-detail-header-left">
                         <div class="deployment-detail-icon">
-                            <i class="fas fa-rocket"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
                         </div>
                         <div class="deployment-detail-title-group">
                             <div class="deployment-detail-title" id="deployment-detail-title">Deployment Details</div>
@@ -205,7 +206,7 @@ class AIOS {
                         </div>
                     </div>
                     <button type="button" class="deployment-detail-close">
-                        <i class="fas fa-times"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
                     </button>
                 </div>
                 <div class="deployment-detail-content">
@@ -215,7 +216,7 @@ class AIOS {
                         </div>
                         <div class="deployment-file-tree-card" id="deployment-file-tree">
                             <div class="deployment-file-tree-header">
-                                <i class="fas fa-folder-tree"></i>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>
                                 <span>File Structure</span>
                             </div>
                             <ul class="deployment-file-tree-list" id="deployment-file-tree-list"></ul>
@@ -225,15 +226,15 @@ class AIOS {
                         <div class="deployment-preview-card">
                             <div class="deployment-preview-header">
                                 <div class="deployment-preview-url-container">
-                                    <i class="fas fa-link"></i>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                     <div class="deployment-preview-url" id="deployment-preview-url">Loading...</div>
                                 </div>
                                 <div class="deployment-preview-actions">
                                     <button class="deployment-preview-btn" id="deployment-preview-refresh" title="Refresh">
-                                        <i class="fas fa-sync-alt"></i>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                                     </button>
                                     <button class="deployment-preview-btn" id="deployment-preview-open" title="Open in Browser">
-                                        <i class="fas fa-external-link-alt"></i>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                     </button>
                                 </div>
                             </div>
@@ -1065,6 +1066,145 @@ class AIOS {
         }
     }
 
+    async showDeploymentDetail(project) {
+        const modal = document.getElementById('deployment-detail-modal');
+        if (!modal) return;
+
+        // Update title and subtitle
+        document.getElementById('deployment-detail-title').textContent = this._safeText(project.project_name, 'Deployment Details');
+        document.getElementById('deployment-detail-subtitle').textContent = `${this._safeText(project.slug)} • v${this._safeText(project.version)}`;
+
+        // Update info cards
+        const infoGrid = document.getElementById('deployment-info-grid');
+        infoGrid.innerHTML = `
+            <div class="deployment-info-card">
+                <div class="deployment-info-card-header">
+                    <i class="fi fi-tr-info"></i>
+                    <span>General Info</span>
+                </div>
+                <div class="deployment-info-card-body">
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Site ID</span>
+                        <span class="deployment-info-value deployment-info-mono">${this._safeText(project.site_id)}</span>
+                    </div>
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Deployment ID</span>
+                        <span class="deployment-info-value deployment-info-mono">${this._safeText(project.deployment_id)}</span>
+                    </div>
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Status</span>
+                        <span class="deployment-info-value">${this._safeText(project.deployment_status, 'unknown')}</span>
+                    </div>
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Version</span>
+                        <span class="deployment-info-value">v${this._safeText(project.version)}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="deployment-info-card">
+                <div class="deployment-info-card-header">
+                    <i class="fi fi-tr-marker"></i>
+                    <span>Hosting Details</span>
+                </div>
+                <div class="deployment-info-card-body">
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Hostname</span>
+                        <span class="deployment-info-value deployment-info-mono">${this._safeText(project.hostname)}</span>
+                    </div>
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">Slug</span>
+                        <span class="deployment-info-value">${this._safeText(project.slug)}</span>
+                    </div>
+                    <div class="deployment-info-row">
+                        <span class="deployment-info-label">R2 Prefix</span>
+                        <span class="deployment-info-value deployment-info-mono">${this._safeText(project.r2_prefix)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Load file tree
+        await this.loadDeploymentFiles(project);
+
+        // Update preview URL and iframe
+        const previewUrl = `https://${this._safeText(project.hostname)}`;
+        document.getElementById('deployment-preview-url').textContent = previewUrl;
+        document.getElementById('deployment-preview-frame').src = previewUrl;
+
+        // Show modal
+        modal.classList.remove('hidden');
+    }
+
+    hideDeploymentDetail() {
+        const modal = document.getElementById('deployment-detail-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            // Clear iframe to stop loading
+            document.getElementById('deployment-preview-frame').src = 'about:blank';
+        }
+    }
+
+    async loadDeploymentFiles(project) {
+        const fileList = document.getElementById('deployment-file-tree-list');
+        if (!fileList) return;
+
+        fileList.innerHTML = '<li class="deployment-file-tree-item"><svg class="fa-spin" style="margin-right:8px;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> Loading files...</li>';
+
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                fileList.innerHTML = '<li class="deployment-file-tree-item"><svg style="margin-right:8px; color:#ef4444;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Authentication required</li>';
+                return;
+            }
+
+            const response = await fetch(
+                `${this.backendBaseUrl}/api/deploy/files?site_id=${project.site_id}&deployment_id=${project.deployment_id}`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            const payload = await response.json();
+
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to load files');
+            }
+
+            const files = Array.isArray(payload.files) ? payload.files : [];
+            
+            if (files.length === 0) {
+                fileList.innerHTML = '<li class="deployment-file-tree-item"><svg style="margin-right:8px;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg> No files found</li>';
+                return;
+            }
+
+            fileList.innerHTML = files.map(file => {
+                const isFolder = file.type === 'folder' || file.path.endsWith('/');
+                const iconSvg = isFolder
+                    ? '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>'
+                    : '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+                const itemClass = isFolder ? 'folder' : 'file';
+                const size = file.size ? this._formatFileSize(file.size) : '';
+                
+                return `
+                    <li class="deployment-file-tree-item ${itemClass}">
+                        ${iconSvg}
+                        <span>${this._escapeHtml(file.path)}</span>
+                        ${size ? `<span class="deployment-file-size">${size}</span>` : ''}
+                    </li>
+                `;
+            }).join('');
+
+        } catch (error) {
+            console.error('Error loading deployment files:', error);
+            fileList.innerHTML = `<li class="deployment-file-tree-item"><svg style="margin-right:8px; color:#ef4444;" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${this._escapeHtml(error.message)}</li>`;
+        }
+    }
+
+    _formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    }
+
     async loadDatabases(showNotification = false) {
         try {
             const token = await this._getAccessToken();
@@ -1332,11 +1472,11 @@ class AIOS {
                     </div>
                     <div class="settings-card-actions">
                         <button class="start-project-coding-btn" title="Start Coding Workspace">
-                            <i class="fas fa-code"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                             <span>Start Coding</span>
                         </button>
                         <button class="expand-deployment-btn" title="View Details" data-project='${JSON.stringify(project).replace(/'/g, "&apos;")}'>
-                            <i class="fas fa-expand-alt"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
                         </button>
                         <span class="settings-badge ${badgeClass}">${this._safeText(project.deployment_status, 'unknown')}</span>
                     </div>

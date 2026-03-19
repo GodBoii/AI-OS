@@ -733,8 +733,13 @@ class ProjectWorkspace {
                 row.className = `project-file-row ${item.dir ? 'dir' : 'file'}`;
                 row.style.paddingLeft = `${6 + depth * 14}px`;
                 row.dataset.path = fullPath;
+                const isDir = item.dir;
+                const pathSvg = isDir
+                    ? '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>'
+                    : '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+
                 row.innerHTML = `
-                    <i class="file-icon fas ${item.dir ? 'fa-folder' : 'fa-file-code'}"></i>
+                    ${pathSvg}
                     <span class="file-name">${this.escapeHtml(key)}</span>
                 `;
                 if (!item.dir) {
