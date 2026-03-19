@@ -458,6 +458,10 @@ class FileAttachmentHandler {
                     file.type.startsWith('video/') || file.type === 'application/pdf' || 
                     file.type.includes('document')
                 ));
+            const normalizedType =
+                (file.type && String(file.type).trim()) ||
+                this.supportedFileTypes[extension] ||
+                (isMedia ? 'application/octet-stream' : 'text/plain');
 
             // Generate unique file ID for tracking
             const fileId = crypto.randomUUID();
@@ -466,7 +470,7 @@ class FileAttachmentHandler {
             const placeholderFileObject = {
                 file_id: fileId,
                 name: file.name,
-                type: file.type,
+                type: normalizedType,
                 size: file.size,
                 previewUrl: URL.createObjectURL(file),
                 status: 'archiving', // New status for dual-action
