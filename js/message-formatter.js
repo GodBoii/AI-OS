@@ -38,7 +38,7 @@ class MessageFormatter {
                     const artifactId = code.trim();
                     artifactHandler.createArtifact(artifactId, 'image');
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
-                        <i class="fas fa-image"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                         View Generated Image
                     </button>`;
                 }
@@ -47,7 +47,7 @@ class MessageFormatter {
                     const artifactId = artifactHandler.createArtifact(code, 'mermaid');
                     artifactHandler.showArtifact('mermaid', code, artifactId);
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
-                        <i class="fas fa-diagram-project"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h6v6H3z"></path><path d="M15 3h6v6h-6z"></path><path d="M9 21h6v6H9z"></path><path d="M6 9v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 14v7"></path></svg>
                         View Mermaid Diagram
                     </button>`;
                 }
@@ -55,7 +55,7 @@ class MessageFormatter {
                 const validLanguage = hljs.getLanguage(language) ? language : 'plaintext';
                 const artifactId = artifactHandler.createArtifact(code, validLanguage);
                 return `<button class="artifact-reference" data-artifact-id="${artifactId}">
-                    <i class="fas fa-code"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                     View ${validLanguage} Code Block
                 </button>`;
             },
@@ -111,7 +111,7 @@ class MessageFormatter {
         return `
             <div class="code-block-wrapper">
                 <button class="code-copy-btn" title="Copy code" aria-label="Copy code">
-                    <i class="fi fi-tr-copy"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 0 0 1 2-2h9a2 0 0 1 2 2v1"></path></svg>
                 </button>
                 <pre class="inline-artifact-code"><code class="language-${language}">${sanitizedCode}</code></pre>
             </div>
@@ -134,11 +134,11 @@ class MessageFormatter {
             <div class="inline-mermaid-block" data-view-mode="preview">
                 <div class="inline-mermaid-header" role="group" aria-label="Diagram view toggle">
                     <button type="button" class="inline-mermaid-toggle active" data-view="preview" aria-pressed="true" title="Preview diagram">
-                        <i class="fas fa-eye" aria-hidden="true"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                         <span class="sr-only">Diagram</span>
                     </button>
                     <button type="button" class="inline-mermaid-toggle" data-view="source" aria-pressed="false" title="View source code">
-                        <i class="fas fa-code" aria-hidden="true"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                         <span class="sr-only">Code</span>
                     </button>
                 </div>
@@ -299,15 +299,12 @@ class MessageFormatter {
                     await navigator.clipboard.writeText(code);
                     
                     // Visual feedback
-                    const icon = btn.querySelector('i');
-                    const originalClass = icon.className;
-                    
                     btn.classList.add('copied');
-                    icon.className = 'fi fi-tr-check';
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
                     
                     setTimeout(() => {
                         btn.classList.remove('copied');
-                        icon.className = originalClass;
+                        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 0 0 1 2-2h9a2 0 0 1 2 2v1"></path></svg>';
                     }, 2000);
                     
                 } catch (error) {
