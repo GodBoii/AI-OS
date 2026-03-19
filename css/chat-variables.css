@@ -88,54 +88,59 @@
     --z-welcome-message: 1002;
 }
 
-/* Dark Mode Theme Overrides */
+/* Dark Mode Theme Overrides — Pure Black Glassmorphism */
 .dark-mode {
-    /* Window & Background Colors */
-    --window-bg: rgba(36, 36, 36, 0.96);
-    --taskbar-bg: rgba(24, 24, 27, 0.92);
-    --elevated-bg: #242424;
-    --input-bg: #1f1f1f;
-    --hover-bg: rgba(243, 244, 246, 0.08);
+    /* Window & Background Colors — Pure Black + Glass */
+    --window-bg:    rgba(12, 12, 12, 0.92);
+    --taskbar-bg:   rgba(10, 10, 10, 0.85);
+    --elevated-bg:  rgba(255, 255, 255, 0.055);
+    --input-bg:     rgba(255, 255, 255, 0.05);
+    --hover-bg:     rgba(255, 255, 255, 0.06);
 
     /* Text Colors */
-    --text-color: #f3f4f6;
-    --text-secondary: #9ca3af;
-    --file-name-color: #f3f4f6;
+    --text-color:       #f0f0f0;
+    --text-secondary:   #a0a0a8;
+    --file-name-color:  #f0f0f0;
 
-    /* Border & Divider Colors */
-    --border-color: #3a3a3a;
+    /* Border & Divider Colors — Frosted Glass */
+    --border-color: rgba(255, 255, 255, 0.09);
 
-    /* Shadow Colors */
-    --shadow-color: rgba(0, 0, 0, 0.3);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
-    --shadow-xl: 0 40px 65px rgba(0, 0, 0, 0.55);
+    /* Shadow Colors — True Black Depth */
+    --shadow-color: rgba(0, 0, 0, 0.60);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.50),
+                 0 1px 2px rgba(0, 0, 0, 0.40);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55),
+                 0 2px 8px  rgba(0, 0, 0, 0.45),
+                 inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.75),
+                 0 12px 32px rgba(0, 0, 0, 0.60),
+                 inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
     /* Accent & Interactive Colors */
-    --accent-color: #d1d5db;
-    --accent-hover: #f3f4f6;
-    --accent-color-rgb: 209, 213, 219;
-    --accent-muted: rgba(209, 213, 219, 0.14);
-    --icon-color: #9ca3af;
+    --accent-color:     rgba(230, 230, 235, 0.95);
+    --accent-hover:     #ffffff;
+    --accent-color-rgb: 230, 230, 235;
+    --accent-muted:     rgba(255, 255, 255, 0.08);
+    --icon-color:       rgba(255, 255, 255, 0.45);
 
     /* Link Colors */
-    --link-color: #d1d5db;
-    --link-hover: #f3f4f6;
+    --link-color: rgba(230, 230, 235, 0.90);
+    --link-hover: #ffffff;
 
-    /* Code & Syntax Colors */
-    --code-bg: #242424;
-    --code-header-bg: #2a2a2a;
-    --code-border: #333333;
-    --code-language-color: #9ca3af;
+    /* Code & Syntax Colors — Glass-tinted */
+    --code-bg:             rgba(255, 255, 255, 0.06);
+    --code-header-bg:      rgba(255, 255, 255, 0.08);
+    --code-border:         rgba(255, 255, 255, 0.08);
+    --code-language-color: rgba(255, 255, 255, 0.40);
 
-    /* Table Colors */
-    --table-border: #3a3a3a;
-    --table-header-bg: #242424;
-    --table-stripe-bg: #1f1f1f;
+    /* Table Colors — Glass-tinted */
+    --table-border:     rgba(255, 255, 255, 0.08);
+    --table-header-bg:  rgba(255, 255, 255, 0.06);
+    --table-stripe-bg:  rgba(255, 255, 255, 0.03);
 
     /* Message Colors */
-    --message-user-bg: #e5e7eb;
-    --message-bot-bg: #242424;
+    --message-user-bg:  rgba(240, 240, 245, 0.95);
+    --message-bot-bg:   rgba(255, 255, 255, 0.055);
 
     /* Animation Variables (same for both themes) */
     --anim-fast: 0.2s;
