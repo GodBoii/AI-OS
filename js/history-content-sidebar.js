@@ -212,7 +212,7 @@ class HistoryContentSidebar {
 
             // Fetch content from backend
             console.log('[HistoryContentSidebar] Fetching from API...');
-            const response = await fetch(`https://api.pawsitivestrides.store/api/sessions/${sessionId}/content`, {
+            const response = await fetch(`http://localhost:8765/api/sessions/${sessionId}/content`, {
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
                 }
