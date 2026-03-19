@@ -27,6 +27,94 @@ from agno.run.team import TeamRunEvent, TeamRunOutput
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_AGNO_FILE_MIME_TYPES = {
+    "application/pdf",
+    "application/x-javascript",
+    "text/javascript",
+    "application/x-python",
+    "text/x-python",
+    "text/plain",
+    "text/html",
+    "text/css",
+    "text/md",
+    "text/csv",
+    "text/xml",
+    "text/rtf",
+}
+
+_EXTENSION_TO_SAFE_TEXT_MIME = {
+    "js": "text/javascript",
+    "mjs": "text/javascript",
+    "cjs": "text/javascript",
+    "py": "text/x-python",
+    "txt": "text/plain",
+    "md": "text/md",
+    "markdown": "text/md",
+    "html": "text/html",
+    "htm": "text/html",
+    "css": "text/css",
+    "csv": "text/csv",
+    "xml": "text/xml",
+    "rtf": "text/rtf",
+}
+
+
+def _file_extension(file_name: str) -> str:
+    if not file_name or "." not in file_name:
+        return ""
+    return file_name.rsplit(".", 1)[-1].strip().lower()
+
+
+def _normalize_agno_mime_type(file_name: str, file_type: Any) -> str:
+    candidate = str(file_type or "").strip().lower()
+    if candidate in _ALLOWED_AGNO_FILE_MIME_TYPES:
+        return candidate
+
+    extension = _file_extension(file_name)
+    if extension == "pdf":
+        return "application/pdf"
+    if extension in _EXTENSION_TO_SAFE_TEXT_MIME:
+        return _EXTENSION_TO_SAFE_TEXT_MIME[extension]
+    if candidate.startswith("text/"):
+        return "text/plain"
+    return "text/plain"
+
+
+def build_inline_text_files_prompt(files_data: List[Dict[str, Any]]) -> str:
+    """
+    Build a deterministic plain-text block for all inline text/code attachments.
+    This block is prepended to the user message so the LLM always sees text files
+    as part of the prompt, regardless of model file-attachment support.
+    """
+    if not files_data:
+        return ""
+
+    entries: List[str] = []
+    for file_data in files_data:
+        if not file_data.get("isText"):
+            continue
+
+        content = file_data.get("content")
+        if content is None:
+            continue
+
+        if isinstance(content, bytes):
+            content_text = content.decode("utf-8", errors="replace")
+        else:
+            content_text = str(content)
+
+        file_name = str(file_data.get("name") or "untitled")
+        entries.append(
+            f"file name :- {file_name}\n"
+            f"content :-\n"
+            f"{content_text}\n"
+        )
+
+    if not entries:
+        return ""
+
+    return "ATTACHED TEXT FILES:\n[\n" + "\n".join(entries) + "]\n"
+
 
 def _filter_kwargs_for_callable(fn: Any, kwargs: Dict[str, Any], label: str = "kwargs") -> Dict[str, Any]:
     """
@@ -370,8 +458,9 @@ def _log_request_tokens(
 def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
     """
     Processes a list of file data from the frontend, downloading media from
-    Supabase storage or encoding text content, and converting them into
-    Agno media objects.
+    Supabase storage and converting them into Agno media objects.
+    Inline text/code attachments are intentionally handled via prompt injection
+    (see build_inline_text_files_prompt) and are skipped here.
     """
     images, audio, videos, other_files = [], [], [], []
     if not files_data:
@@ -379,20 +468,12 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
 
     for file_data in files_data:
         file_name = file_data.get('name', 'untitled')
-        file_type = file_data.get('type', 'application/octet-stream')
+        file_type = str(file_data.get('type') or '').strip()
         is_text_file = bool(file_data.get('isText'))
-        inline_content = file_data.get('content')
         storage_path = str(file_data.get('path') or '').strip()
 
-        # Text/code files are sent inline from the frontend and should be
-        # preferred over storage-path processing.
-        if is_text_file and inline_content is not None:
-            logger.info(f"Processing text file content for: {file_name}")
-            if isinstance(inline_content, bytes):
-                inline_bytes = inline_content
-            else:
-                inline_bytes = str(inline_content).encode('utf-8')
-            other_files.append(File(content=inline_bytes, name=file_name, mime_type=file_type))
+        if is_text_file:
+            logger.info("Queuing inline text file for prompt injection: %s", file_name)
             continue
 
         if storage_path:
@@ -407,15 +488,20 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
                 elif file_type.startswith('video/'):
                     videos.append(Video(content=file_bytes, name=file_name))
                 else:
-                    other_files.append(File(content=file_bytes, name=file_name, mime_type=file_type))
+                    safe_mime_type = _normalize_agno_mime_type(file_name=file_name, file_type=file_type)
+                    if safe_mime_type != file_type:
+                        logger.warning(
+                            "Coerced unsupported mime_type '%s' to '%s' for file %s",
+                            file_type,
+                            safe_mime_type,
+                            file_name,
+                        )
+                    other_files.append(File(content=file_bytes, name=file_name, mime_type=safe_mime_type))
             except Exception as e:
                 logger.error(f"Error downloading file {storage_path} from Supabase: {e}")
             continue
 
-        if is_text_file:
-            logger.warning("Text file %s had no inline content; skipping.", file_name)
-        else:
-            logger.warning("Attachment %s had neither valid path nor inline content; skipping.", file_name)
+        logger.warning("Attachment %s had no valid storage path; skipping.", file_name)
 
     return images, audio, videos, other_files
 
@@ -553,7 +639,9 @@ def run_agent_and_stream(
         # --- MODIFICATION END ---
 
         # 3. Process Input Data
-        images, audio, videos, other_files = process_files(turn_data.get('files', []))
+        incoming_files = turn_data.get('files', []) or []
+        images, audio, videos, other_files = process_files(incoming_files)
+        inline_text_files_prompt = build_inline_text_files_prompt(incoming_files)
         current_session_state = {'turn_context': turn_data}
         user_message = turn_data.get("user_message", "")
         
@@ -611,9 +699,23 @@ def run_agent_and_stream(
         if sandbox_workspace_context:
             contextual_prefix += f"{sandbox_workspace_context}\n"
 
+        composed_user_message = user_message
+        if inline_text_files_prompt:
+            user_message_body = user_message or "(No additional user input message provided.)"
+            inline_text_file_count = sum(
+                1 for file_data in incoming_files
+                if file_data.get('isText') and file_data.get('content') is not None
+            )
+            composed_user_message = (
+                f"{inline_text_files_prompt}\n"
+                f"USER INPUT MESSAGE:\n"
+                f"{user_message_body}"
+            )
+            logger.info("Injected %s inline text file(s) into prompt.", inline_text_file_count)
+
         final_user_message = (
-            f"{contextual_prefix}CURRENT QUESTION:\n{user_message}"
-            if contextual_prefix else user_message
+            f"{contextual_prefix}CURRENT QUESTION:\n{composed_user_message}"
+            if contextual_prefix else composed_user_message
         )
 
         # 5. Run the Agent and Stream Results
