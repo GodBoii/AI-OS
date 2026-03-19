@@ -373,7 +373,6 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     Supabase storage or encoding text content, and converting them into
     Agno media objects.
     """
-    # This function's logic remains correct and does not require changes.
     images, audio, videos, other_files = [], [], [], []
     if not files_data:
         return images, audio, videos, other_files
@@ -381,11 +380,25 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     for file_data in files_data:
         file_name = file_data.get('name', 'untitled')
         file_type = file_data.get('type', 'application/octet-stream')
+        is_text_file = bool(file_data.get('isText'))
+        inline_content = file_data.get('content')
+        storage_path = str(file_data.get('path') or '').strip()
 
-        if 'path' in file_data:
+        # Text/code files are sent inline from the frontend and should be
+        # preferred over storage-path processing.
+        if is_text_file and inline_content is not None:
+            logger.info(f"Processing text file content for: {file_name}")
+            if isinstance(inline_content, bytes):
+                inline_bytes = inline_content
+            else:
+                inline_bytes = str(inline_content).encode('utf-8')
+            other_files.append(File(content=inline_bytes, name=file_name, mime_type=file_type))
+            continue
+
+        if storage_path:
             try:
-                logger.info(f"Downloading file from Supabase storage: {file_data['path']}")
-                file_bytes = supabase_client.storage.from_('media-uploads').download(file_data['path'])
+                logger.info(f"Downloading file from Supabase storage: {storage_path}")
+                file_bytes = supabase_client.storage.from_('media-uploads').download(storage_path)
                 
                 if file_type.startswith('image/'):
                     images.append(Image(content=file_bytes, name=file_name))
@@ -396,11 +409,13 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
                 else:
                     other_files.append(File(content=file_bytes, name=file_name, mime_type=file_type))
             except Exception as e:
-                logger.error(f"Error downloading file {file_data['path']} from Supabase: {e}")
-        
-        elif file_data.get('isText') and 'content' in file_data:
-            logger.info(f"Processing text file content for: {file_name}")
-            other_files.append(File(content=file_data['content'].encode('utf-8'), name=file_name, mime_type=file_type))
+                logger.error(f"Error downloading file {storage_path} from Supabase: {e}")
+            continue
+
+        if is_text_file:
+            logger.warning("Text file %s had no inline content; skipping.", file_name)
+        else:
+            logger.warning("Attachment %s had neither valid path nor inline content; skipping.", file_name)
 
     return images, audio, videos, other_files
 
