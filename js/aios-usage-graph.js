@@ -155,18 +155,18 @@ class AIOSUsageGraph {
         const isDark = document.body.classList.contains('dark-mode');
         
         const colors = isDark ? {
-            primary: '#FFD93D',
-            secondary: '#F6C445',
-            tertiary: '#FFA500',
-            text: '#FFF8E7',
-            textSecondary: 'rgba(255, 248, 231, 0.7)',
-            grid: 'rgba(255, 217, 61, 0.08)'
+            primary: '#e8e8ec',
+            secondary: '#b0b0b8',
+            tertiary: '#787880',
+            text: '#f0f0f0',
+            textSecondary: 'rgba(240, 240, 240, 0.60)',
+            grid: 'rgba(255, 255, 255, 0.06)'
         } : {
-            primary: '#C28E0E',
-            secondary: '#A67C00',
-            tertiary: '#8C6800',
-            text: '#1A1A1A',
-            textSecondary: 'rgba(26, 26, 26, 0.7)',
+            primary: '#2d3748',
+            secondary: '#4a5568',
+            tertiary: '#718096',
+            text: '#1a202c',
+            textSecondary: 'rgba(26, 32, 44, 0.70)',
             grid: 'rgba(0, 0, 0, 0.06)'
         };
 
@@ -188,7 +188,7 @@ class AIOSUsageGraph {
                         pointRadius: 4,
                         pointHoverRadius: 6,
                         pointBackgroundColor: colors.primary,
-                        pointBorderColor: isDark ? '#1A1A1A' : '#FFFFFF',
+                        pointBorderColor: isDark ? '#000000' : '#FFFFFF',
                         pointBorderWidth: 2,
                         pointHoverBorderWidth: 3,
                     },
@@ -203,7 +203,7 @@ class AIOSUsageGraph {
                         pointRadius: 3,
                         pointHoverRadius: 5,
                         pointBackgroundColor: colors.secondary,
-                        pointBorderColor: isDark ? '#1A1A1A' : '#FFFFFF',
+                        pointBorderColor: isDark ? '#000000' : '#FFFFFF',
                         pointBorderWidth: 2,
                     },
                     {
@@ -217,7 +217,7 @@ class AIOSUsageGraph {
                         pointRadius: 3,
                         pointHoverRadius: 5,
                         pointBackgroundColor: colors.tertiary,
-                        pointBorderColor: isDark ? '#1A1A1A' : '#FFFFFF',
+                        pointBorderColor: isDark ? '#000000' : '#FFFFFF',
                         pointBorderWidth: 2,
                     }
                 ]
@@ -260,7 +260,7 @@ class AIOSUsageGraph {
                         }
                     },
                     tooltip: {
-                        backgroundColor: isDark ? 'rgba(26, 26, 26, 0.95)' : 'rgba(255, 248, 231, 0.95)',
+                        backgroundColor: isDark ? 'rgba(8, 8, 8, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                         titleColor: colors.text,
                         bodyColor: colors.textSecondary,
                         borderColor: colors.primary,
