@@ -2649,7 +2649,7 @@ async function checkAndShowContentButton() {
         }
 
         // Fetch content count from backend
-        const response = await fetch(`http://localhost:8765/api/sessions/${currentConversationId}/content`, {
+        const response = await fetch(`https://api.pawsitivestrides.store/api/sessions/${currentConversationId}/content`, {
             headers: {
                 'Authorization': `Bearer ${session.access_token}`
             }
