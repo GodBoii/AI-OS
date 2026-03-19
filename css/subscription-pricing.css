@@ -313,13 +313,35 @@
 }
 
 .pricing-plan-card.is-featured {
-    border-color: rgba(250, 204, 21, 0.55);
-    box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.18) inset;
+    border-color: rgba(250, 204, 21, 0.45);
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    box-shadow: 
+        0 0 0 1px rgba(250, 204, 21, 0.25) inset,
+        0 8px 32px rgba(250, 204, 21, 0.15);
+}
+
+.pricing-plan-card.is-featured:hover {
+    border-color: rgba(250, 204, 21, 0.65);
+    box-shadow: 
+        0 0 0 1px rgba(250, 204, 21, 0.35) inset,
+        0 16px 48px rgba(250, 204, 21, 0.25),
+        0 8px 24px rgba(0, 0, 0, 0.30);
 }
 
 .pricing-plan-card.is-elite {
     border-color: rgba(244, 114, 182, 0.45);
-    box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.12) inset;
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    box-shadow: 
+        0 0 0 1px rgba(244, 114, 182, 0.25) inset,
+        0 8px 32px rgba(244, 114, 182, 0.15);
+}
+
+.pricing-plan-card.is-elite:hover {
+    border-color: rgba(244, 114, 182, 0.65);
+    box-shadow: 
+        0 0 0 1px rgba(244, 114, 182, 0.35) inset,
+        0 16px 48px rgba(244, 114, 182, 0.25),
+        0 8px 24px rgba(0, 0, 0, 0.30);
 }
 
 .pricing-plan-badge {
@@ -426,19 +448,33 @@
 }
 
 .pricing-plan-btn.is-current {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f8fafc;
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+    color: var(--text-color);
 }
 
 .pricing-plan-card.is-current-plan {
-    border-color: rgba(56, 189, 248, 0.56);
-    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18) inset;
+    border-color: rgba(56, 189, 248, 0.50);
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    box-shadow: 
+        0 0 0 1px rgba(56, 189, 248, 0.25) inset,
+        0 8px 32px rgba(56, 189, 248, 0.15);
+}
+
+.pricing-plan-card.is-current-plan:hover {
+    border-color: rgba(56, 189, 248, 0.70);
+    box-shadow: 
+        0 0 0 1px rgba(56, 189, 248, 0.35) inset,
+        0 16px 48px rgba(56, 189, 248, 0.25),
+        0 8px 24px rgba(0, 0, 0, 0.30);
 }
 
 .pricing-modal-footer {
     margin-top: 18px;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
 }
 
 @media (max-width: 900px) {
@@ -468,4 +504,203 @@
     .subscription-manage-btn {
         width: 100%;
     }
+}
+
+/* ================================================================= */
+/* DARK MODE CONTRAST ENHANCEMENTS                                   */
+/* ================================================================= */
+
+.dark-mode .subscription-section {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.60),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .subscription-summary-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.50),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.dark-mode .subscription-meta-item {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .subscription-meta-item:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.50),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .subscription-status-badge {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+.dark-mode .pricing-modal-backdrop {
+    background: rgba(0, 0, 0, 0.85);
+}
+
+.dark-mode .pricing-modal-dialog {
+    background: rgba(18, 18, 18, 0.95);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 
+        0 24px 64px rgba(0, 0, 0, 0.90),
+        0 12px 32px rgba(0, 0, 0, 0.75),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.50);
+}
+
+.dark-mode .pricing-modal-close {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.dark-mode .pricing-modal-close:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.60),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .pricing-plan-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.60),
+        inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.dark-mode .pricing-plan-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 
+        0 16px 48px rgba(0, 0, 0, 0.70),
+        0 8px 24px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.dark-mode .pricing-plan-card.is-featured {
+    background: rgba(250, 204, 21, 0.08);
+    border-color: rgba(250, 204, 21, 0.50);
+    box-shadow: 
+        0 0 0 1px rgba(250, 204, 21, 0.30) inset,
+        0 8px 32px rgba(250, 204, 21, 0.20),
+        0 4px 16px rgba(0, 0, 0, 0.60);
+}
+
+.dark-mode .pricing-plan-card.is-featured:hover {
+    background: rgba(250, 204, 21, 0.12);
+    border-color: rgba(250, 204, 21, 0.70);
+    box-shadow: 
+        0 0 0 1px rgba(250, 204, 21, 0.40) inset,
+        0 16px 48px rgba(250, 204, 21, 0.30),
+        0 8px 24px rgba(0, 0, 0, 0.70);
+}
+
+.dark-mode .pricing-plan-card.is-elite {
+    background: rgba(244, 114, 182, 0.08);
+    border-color: rgba(244, 114, 182, 0.50);
+    box-shadow: 
+        0 0 0 1px rgba(244, 114, 182, 0.30) inset,
+        0 8px 32px rgba(244, 114, 182, 0.20),
+        0 4px 16px rgba(0, 0, 0, 0.60);
+}
+
+.dark-mode .pricing-plan-card.is-elite:hover {
+    background: rgba(244, 114, 182, 0.12);
+    border-color: rgba(244, 114, 182, 0.70);
+    box-shadow: 
+        0 0 0 1px rgba(244, 114, 182, 0.40) inset,
+        0 16px 48px rgba(244, 114, 182, 0.30),
+        0 8px 24px rgba(0, 0, 0, 0.70);
+}
+
+.dark-mode .pricing-plan-card.is-current-plan {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.55);
+    box-shadow: 
+        0 0 0 1px rgba(56, 189, 248, 0.30) inset,
+        0 8px 32px rgba(56, 189, 248, 0.20),
+        0 4px 16px rgba(0, 0, 0, 0.60);
+}
+
+.dark-mode .pricing-plan-card.is-current-plan:hover {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.75);
+    box-shadow: 
+        0 0 0 1px rgba(56, 189, 248, 0.40) inset,
+        0 16px 48px rgba(56, 189, 248, 0.30),
+        0 8px 24px rgba(0, 0, 0, 0.70);
+}
+
+.dark-mode .pricing-plan-badge {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+.dark-mode .pricing-plan-btn {
+    background: rgba(240, 240, 245, 0.95);
+    color: #0a0a0a;
+}
+
+.dark-mode .pricing-plan-btn:hover:not(:disabled) {
+    background: #ffffff;
+    box-shadow: 
+        0 8px 28px rgba(255, 255, 255, 0.20),
+        0 4px 16px rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .pricing-plan-btn.is-current {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.20);
+    color: #f0f0f0;
+}
+
+.dark-mode .pricing-modal-footer {
+    border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .subscription-progress-track {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Enhanced text contrast in dark mode */
+.dark-mode .pricing-modal-title,
+.dark-mode .pricing-plan-name,
+.dark-mode .pricing-plan-price,
+.dark-mode .subscription-current-name {
+    color: #f8fafc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .pricing-modal-message,
+.dark-mode .pricing-modal-footnote,
+.dark-mode .pricing-plan-copy,
+.dark-mode .subscription-subtitle,
+.dark-mode .subscription-progress-copy {
+    color: rgba(226, 232, 240, 0.85);
+}
+
+.dark-mode .pricing-modal-kicker,
+.dark-mode .subscription-summary-label,
+.dark-mode .subscription-meta-label {
+    color: rgba(226, 232, 240, 0.75);
+}
+
+.dark-mode .pricing-plan-limit,
+.dark-mode .subscription-meta-value {
+    color: #e8e8ec;
+}
+
+.dark-mode .pricing-plan-price span {
+    color: rgba(226, 232, 240, 0.70);
 }

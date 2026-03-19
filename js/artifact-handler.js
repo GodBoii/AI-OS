@@ -24,24 +24,24 @@ class ArtifactHandler {
                     <div class="artifact-controls">
                         <div class="artifact-view-toggle hidden" role="group" aria-label="View mode">
                             <button type="button" class="view-toggle-btn active" data-view="preview" aria-pressed="true" title="Preview mode">
-                                <i class="fas fa-eye"></i>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             </button>
                             <button type="button" class="view-toggle-btn" data-view="source" aria-pressed="false" title="Source mode">
-                                <i class="fas fa-code"></i>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                             </button>
                         </div>
                         <button class="copy-artifact-btn" title="Copy to Clipboard">
-                            <i class="fas fa-copy"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                         </button>
                         <button class="download-artifact-btn" title="Download">
-                            <i class="fas fa-download"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </button>
                         <button class="deploy-artifact-btn" title="Deploy HTML Site">
-                            <i class="fas fa-rocket"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
                             <span class="deploy-btn-text">Deploy</span>
                         </button>
                         <button class="close-artifact-btn">
-                            <i class="fas fa-times"></i>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
                 </div>
@@ -68,8 +68,9 @@ class ArtifactHandler {
     }
 
     setupDeployPreviewModal() {
-        if (document.getElementById('deploy-preview-modal')) {
-            return;
+        const existingModal = document.getElementById('deploy-preview-modal');
+        if (existingModal) {
+            existingModal.remove();
         }
 
         const modal = document.createElement('div');
@@ -79,25 +80,27 @@ class ArtifactHandler {
             <div class="deploy-preview-dialog" role="dialog" aria-modal="true" aria-label="Deploy Preview">
                 <div class="deploy-preview-header">
                     <div class="deploy-preview-header-content">
-                        <i class="fas fa-rocket deploy-preview-icon"></i>
+                        <div class="deploy-preview-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
+                        </div>
                         <div class="deploy-preview-title-group">
                             <div class="deploy-preview-title">Deployment Preview</div>
                             <div class="deploy-preview-subtitle">Review files before deploying to production</div>
                         </div>
                     </div>
                     <button type="button" class="deploy-preview-close" aria-label="Close">
-                        <i class="fas fa-times"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
                 <div class="deploy-preview-meta"></div>
                 <div class="deploy-preview-tree"></div>
                 <div class="deploy-preview-actions">
                     <button type="button" class="deploy-preview-cancel">
-                        <i class="fas fa-times-circle"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                         <span>Cancel</span>
                     </button>
                     <button type="button" class="deploy-preview-confirm">
-                        <i class="fas fa-rocket"></i>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
                         <span>Deploy Now</span>
                     </button>
                 </div>
@@ -344,7 +347,7 @@ class ArtifactHandler {
             browserViewContainer.id = 'browser-view-content';
             browserViewContainer.innerHTML = `
                 <div class="browser-view-header">
-                    <i class="fas fa-globe"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                     <span class="browser-view-url" title="Current URL"></span>
                 </div>
                 <div class="browser-view-screenshot">
@@ -609,9 +612,9 @@ class ArtifactHandler {
         const zoomControls = document.createElement('div');
         zoomControls.className = 'mermaid-controls';
         zoomControls.innerHTML = `
-            <button class="zoom-in-btn" title="Zoom In"><i class="fas fa-plus"></i></button>
-            <button class="zoom-out-btn" title="Zoom Out"><i class="fas fa-minus"></i></button>
-            <button class="zoom-reset-btn" title="Reset View"><i class="fas fa-search"></i></button>
+            <button class="zoom-in-btn" title="Zoom In"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <button class="zoom-out-btn" title="Zoom Out"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <button class="zoom-reset-btn" title="Reset View"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
         `;
         container.appendChild(zoomControls);
 
@@ -1243,9 +1246,9 @@ class ArtifactHandler {
                 const entry = obj[key];
                 const safeName = this.escapeHtml(key);
                 if (entry.__file) {
-                    return `<li class="deploy-tree-file"><i class="fas fa-file-code"></i><span>${safeName}</span></li>`;
+                    return `<li class="deploy-tree-file"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 1 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span>${safeName}</span></li>`;
                 }
-                return `<li class="deploy-tree-dir"><i class="fas fa-folder"></i><span>${safeName}</span>${renderNode(entry.__children)}</li>`;
+                return `<li class="deploy-tree-dir"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg><span>${safeName}</span>${renderNode(entry.__children)}</li>`;
             }).join('')}</ul>`;
         };
 
