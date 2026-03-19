@@ -7,7 +7,7 @@ class ArtifactHandler {
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
-        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
+        this.backendBaseUrl = 'http://localhost:8765';
         this.deployInProgress = false;
         this.init();
     }
