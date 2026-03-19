@@ -2,10 +2,11 @@
     margin-top: 18px;
     border: 1.5px solid var(--border-primary);
     border-radius: 16px;
-    background:
-        radial-gradient(circle at top right, rgba(57, 180, 255, 0.18), transparent 36%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    background: var(--glass-bg-subtle, rgba(255, 255, 255, 0.03));
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
     padding: 18px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .subscription-section-header {
@@ -36,9 +37,13 @@
 
 .subscription-summary-card {
     border-radius: 14px;
-    border: 1px solid var(--border-color);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border, var(--border-color));
+    background: var(--glass-bg-low, rgba(255, 255, 255, 0.055));
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
     padding: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .subscription-summary-top {
@@ -74,8 +79,10 @@
     min-width: 90px;
     padding: 8px 12px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.14));
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -103,9 +110,19 @@
 
 .subscription-meta-item {
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+    background: var(--glass-bg-subtle, rgba(255, 255, 255, 0.03));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.subscription-meta-item:hover {
+    background: var(--glass-bg-low, rgba(255, 255, 255, 0.055));
+    border-color: var(--glass-border-hover, rgba(255, 255, 255, 0.15));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .subscription-meta-value {
@@ -156,8 +173,9 @@
 .pricing-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(7, 10, 17, 0.78);
-    backdrop-filter: blur(14px);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
 }
 
 .pricing-modal-dialog {
@@ -166,13 +184,25 @@
     max-height: calc(100vh - 96px);
     overflow: auto;
     border-radius: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background:
-        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 32%),
-        radial-gradient(circle at bottom right, rgba(236, 72, 153, 0.16), transparent 28%),
-        #0d1420;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+    background: var(--elevated-bg, rgba(255, 255, 255, 0.055));
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    box-shadow: 
+        0 24px 64px rgba(0, 0, 0, 0.75),
+        0 12px 32px rgba(0, 0, 0, 0.60),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.30);
     padding: 24px;
+}
+
+/* Light mode specific styling */
+:root .pricing-modal-dialog {
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 
+        0 24px 64px rgba(45, 55, 72, 0.20),
+        0 12px 32px rgba(45, 55, 72, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .pricing-modal-header {
@@ -184,7 +214,8 @@
 }
 
 .pricing-modal-kicker {
-    color: #7dd3fc;
+    color: var(--accent-color);
+    opacity: 0.85;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.14em;
@@ -195,13 +226,14 @@
     margin: 8px 0 6px;
     font-size: 30px;
     line-height: 1.1;
-    color: #f8fafc;
+    font-weight: 800;
+    color: var(--text-color);
 }
 
 .pricing-modal-message,
 .pricing-modal-footnote {
     margin: 0;
-    color: rgba(226, 232, 240, 0.78);
+    color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -209,11 +241,25 @@
 .pricing-modal-close {
     width: 40px;
     height: 40px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.14));
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.04);
-    color: #f8fafc;
+    background: var(--glass-bg-subtle, rgba(255, 255, 255, 0.04));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--text-color);
     cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pricing-modal-close:hover {
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    border-color: var(--glass-border-hover, rgba(255, 255, 255, 0.25));
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.pricing-modal-close:active {
+    transform: scale(0.95);
 }
 
 .pricing-plan-grid {
@@ -228,9 +274,42 @@
     flex-direction: column;
     min-height: 280px;
     border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(9, 14, 24, 0.82);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.09));
+    background: var(--glass-bg-low, rgba(255, 255, 255, 0.055));
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
     padding: 18px;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    overflow: hidden;
+}
+
+.pricing-plan-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent, 
+        rgba(255, 255, 255, 0.2), 
+        transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.pricing-plan-card:hover {
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    border-color: var(--glass-border-hover, rgba(255, 255, 255, 0.20));
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 
+        0 16px 48px rgba(0, 0, 0, 0.40),
+        0 8px 24px rgba(0, 0, 0, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.pricing-plan-card:hover::before {
+    opacity: 1;
 }
 
 .pricing-plan-card.is-featured {
@@ -248,8 +327,11 @@
     align-self: flex-start;
     padding: 6px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(241, 245, 249, 0.92);
+    background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+    color: var(--text-color);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -259,36 +341,38 @@
 .pricing-plan-name {
     margin: 16px 0 8px;
     font-size: 24px;
-    color: #f8fafc;
+    font-weight: 700;
+    color: var(--text-color);
 }
 
 .pricing-plan-price {
     font-size: 34px;
     font-weight: 800;
-    color: #ffffff;
+    color: var(--text-color);
     letter-spacing: -0.03em;
 }
 
 .pricing-plan-price span {
     font-size: 13px;
     font-weight: 500;
-    color: rgba(226, 232, 240, 0.72);
+    color: var(--text-secondary);
     margin-left: 4px;
 }
 
 .pricing-plan-copy {
     min-height: 42px;
     margin: 12px 0 18px;
-    color: rgba(226, 232, 240, 0.78);
+    color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.5;
 }
 
 .pricing-plan-limit {
     margin-top: auto;
-    color: #e2e8f0;
+    color: var(--text-color);
     font-size: 13px;
     font-weight: 600;
+    opacity: 0.9;
 }
 
 .pricing-plan-btn {
@@ -296,16 +380,43 @@
     min-height: 46px;
     border: 0;
     border-radius: 14px;
-    background: linear-gradient(90deg, #38bdf8 0%, #22c55e 100%);
-    color: #04111f;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
     font-size: 14px;
     font-weight: 800;
     cursor: pointer;
-    transition: transform 0.18s ease, opacity 0.18s ease;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.pricing-plan-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, 
+        transparent, 
+        rgba(255, 255, 255, 0.3), 
+        transparent);
+    transition: left 0.5s ease;
+}
+
+.pricing-plan-btn:hover::before {
+    left: 100%;
 }
 
 .pricing-plan-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 
+        0 8px 24px rgba(0, 0, 0, 0.25),
+        0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.pricing-plan-btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
 }
 
 .pricing-plan-btn:disabled,
