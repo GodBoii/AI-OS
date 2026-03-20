@@ -77,7 +77,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="meta-llama/llama-4-scout-17b-16e-instruct"),
+        model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
