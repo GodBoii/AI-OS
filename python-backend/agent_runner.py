@@ -559,10 +559,17 @@ def run_agent_and_stream(
         # 2. Initialize the Agent
         # --- MODIFICATION START: Pass session_id and message_id for persistence ---
         session_config = dict(session_data.get("config", {}))
-        session_config.setdefault(
-            "enable_composio_google_sheets",
-            config.COMPOSIO_ENABLE_GOOGLE_SHEETS,
-        )
+        # Native Google Sheets now follows the same integration pattern as Gmail/Drive.
+        session_config.setdefault("enable_google_sheets", True)
+
+        # Legacy key migration for previously persisted sessions.
+        if "enable_composio_google_sheets" in session_config:
+            session_config.setdefault(
+                "enable_google_sheets",
+                bool(session_config.get("enable_composio_google_sheets")),
+            )
+            session_config.pop("enable_composio_google_sheets", None)
+
         session_config.setdefault(
             "enable_composio_whatsapp",
             config.COMPOSIO_ENABLE_WHATSAPP,

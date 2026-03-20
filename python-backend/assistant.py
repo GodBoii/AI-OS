@@ -17,21 +17,19 @@ from agno.tools import tool
 from agno.run.team import TeamRunEvent
 from agno.run.agent import RunEvent
 from agno.db.postgres import PostgresDb
-from agno.models.google import Gemini
 from agno.models.groq import Groq
+from agno.models.google import Gemini
 
 # Tool Imports
 from agno.tools import Toolkit
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.website import WebsiteTools
-from agno.tools.hackernews import HackerNewsTools
-from agno.tools.wikipedia import WikipediaTools
-from agno.tools.arxiv import ArxivTools
 from sandbox_tools import SandboxTools
 from sandbox_persistence import get_persistence_service
 from github_tools import GitHubTools
 from google_email_tools import GoogleEmailTools
 from google_drive_tools import GoogleDriveTools
+from google_sheets_tools import GoogleSheetsTools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
 from vercel_tools import VercelTools
@@ -39,16 +37,12 @@ from supabase_tools import SupabaseTools
 from database_tools import DatabaseTools
 from deployed_project_tools import DeployedProjectTools
 from composio_tools import (
-    ComposioGoogleSheetsTools,
     ComposioWhatsAppTools,
-    has_active_google_sheets_connection,
     has_active_whatsapp_connection,
 )
-from agno.tools.api import CustomApiTools
 from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
 from image_tools import ImageTools
-from agno.tools.youtube import YouTubeTools
 from agent_delegation_tools import AgentDelegationTools
 
 # Other Imports
@@ -62,7 +56,6 @@ def get_llm_os(
     session_info: Optional[Dict[str, Any]] = None,
     internet_search: bool = False,
     coding_assistant: bool = False,
-    World_Agent: bool = False,
     Planner_Agent: bool = True,
     enable_supabase: bool = False,
     use_memory: bool = False,
@@ -71,7 +64,7 @@ def get_llm_os(
     enable_vercel: bool = False,
     enable_google_email: bool = False,
     enable_google_drive: bool = False,
-    enable_composio_google_sheets: bool = False,
+    enable_google_sheets: bool = False,
     enable_composio_whatsapp: bool = False,
     enable_browser: bool = False,
     enable_computer_control: bool = False,
@@ -101,11 +94,13 @@ def get_llm_os(
 
     if enable_github and user_id:
         direct_tools.append(GitHubTools(user_id=user_id))
-    if (enable_google_email or enable_google_drive) and user_id:
+    if (enable_google_email or enable_google_drive or enable_google_sheets) and user_id:
         if enable_google_email:
             direct_tools.append(GoogleEmailTools(user_id=user_id))
         if enable_google_drive:
             direct_tools.append(GoogleDriveTools(user_id=user_id))
+        if enable_google_sheets:
+            direct_tools.append(GoogleSheetsTools(user_id=user_id))
     if internet_search:
         direct_tools.append(DuckDuckGoTools())
     if enable_browser and browser_tools_config:
@@ -132,11 +127,6 @@ def get_llm_os(
         direct_tools.append(VercelTools(user_id=user_id))
     if enable_supabase and user_id:
         direct_tools.append(SupabaseTools(user_id=user_id))
-    if enable_composio_google_sheets and user_id and os.getenv("COMPOSIO_API_KEY"):
-        if has_active_google_sheets_connection(user_id=user_id):
-            direct_tools.append(ComposioGoogleSheetsTools(user_id=user_id))
-        else:
-            logger.info("Composio Google Sheets not active for user %s. Toolkit not injected.", user_id)
     if enable_composio_whatsapp and user_id and os.getenv("COMPOSIO_API_KEY"):
         if has_active_whatsapp_connection(user_id=user_id):
             direct_tools.append(ComposioWhatsAppTools(user_id=user_id))
@@ -209,8 +199,8 @@ def get_llm_os(
                 "- `SupabaseTools` — manage projects, storage buckets, secrets, edge functions",
                 "- `GoogleEmailTools` — read, send, search, reply, label emails",
                 "- `GoogleDriveTools` — search, read, create, share files",
+                "- `GoogleSheetsTools` — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
                 "- `ImageTools.generate_image(prompt)` — AI image generation",
-                "- `composio_google_sheets_tools` — **always call `list_google_sheets_actions()` first**, then execute with exact tool_slug",
                 "- `composio_whatsapp_tools` — **always call `list_whatsapp_actions()` first**, then execute with exact tool_slug",
                 "- `DuckDuckGoTools` — web search/ internet search",
                 "- `delegate_to_coder(task_description)` — when available, run dedicated coder agent for coding/build/debug/deployment tasks in main mode",
@@ -241,15 +231,6 @@ def get_llm_os(
                 "- **For frontend deployed-site code: NEVER embed DB tokens or call provider APIs directly. Use `runtime_query_endpoint` from `get_db_credentials()` with `{ sql, params }` JSON.**",
                 "</coding_agent>",
                 "",
-                "<world_agent>",
-                "**World_Agent (delegate research tasks)** — has:",
-                "- `WikipediaTools` — general knowledge",
-                "- `ArxivTools` — academic papers",
-                "- `HackerNewsTools` — tech/startup news",
-                "- `YouTubeTools` — video captions and metadata",
-                "- `CustomApiTools.make_request(method, endpoint, ...)` — REST API calls (GET/POST/PUT/DELETE, supports Bearer/Basic/API key auth)",
-                "- `GoogleSearchTools` — general web search",
-                "</world_agent>",
                 "",
                 "<computer_agent>",
                 "**Computer_Agent (delegate desktop control tasks)** — screenshot, mouse/keyboard control, window management, file system, shell commands. Always starts with `request_permission()` then `take_screenshot()`.",
@@ -257,9 +238,9 @@ def get_llm_os(
                 "",
                 "## Key Rules",
                 "- For simple/conversational queries, reply: `No plan needed — this is a simple query.`",
-                "- Always respect tool ordering: GitHub metadata → Vercel; Browser status → Browser actions; list_actions → execute (Composio)",
+                "- Always respect tool ordering: GitHub metadata → Vercel; Browser status → Browser actions; list_actions → execute (Composio WhatsApp)",
                 "- In main mode, prefer explicit delegation tools (if available): coding → `delegate_to_coder(...)`, desktop → `delegate_to_computer(...)`",
-                "- You may still use `dev_team` / `World_Agent` when tool-based delegation is unavailable or not appropriate",
+                "- You may still use `dev_team` when tool-based delegation is unavailable or not appropriate",
                 "- Never skip prerequisite steps (status checks, ID lookups, list calls)",
             ],
             debug_mode=debug_mode,
@@ -343,37 +324,6 @@ def get_llm_os(
         )
         main_team_members.append(dev_team)
 
-    if World_Agent:
-        world_ai = Agent(
-            name="World_Agent",
-            role="Research and information retrieval specialist. Delegate here for fetching, searching, or synthesizing external information Ã¢â‚¬â€ no code execution. Covers Wikipedia, ArXiv, Hacker News, YouTube transcripts, and direct REST API calls.",
-            model=Gemini(id="gemini-2.5-flash-lite"),
-            tools=[WikipediaTools(),HackerNewsTools(),ArxivTools(),CustomApiTools(),YouTubeTools()],
-            instructions=[
-                "You are the World Agent with comprehensive access to global information sources.",
-                "Access context from session_state['turn_context'] for queries.",
-                "", "AVAILABLE TOOLS:",
-                "• WikipediaTools - Encyclopedic knowledge and factual information",
-                "• ArxivTools - Academic papers and research publications",
-                "• HackerNewsTools - Tech news, startup discussions",
-                "• YouTubeTools - Video captions, transcripts, metadata, timestamps",
-                "• CustomApiTools - Make HTTP requests to any external API",
-                "", "TOOL SELECTION LOGIC:",
-                "• General knowledge queries → Wikipedia",
-                "• Academic/research papers → ArXiv",
-                "• Tech news/trends → HackerNews",
-                "• YouTube video analysis/summarization → YouTubeTools",
-                "• External API data fetching → CustomApiTools",
-                "", "OUTPUT:",
-                "• Deliver clear, comprehensive responses",
-                "• Structure information logically",
-                "• Include relevant data points and insights",
-                "• Keep responses concise yet thorough"
-            ],
-            debug_mode=debug_mode,
-        )
-        main_team_members.append(world_ai)
-
     aetheria_instructions = [
         "<system_instructions>",
         "You are Aetheria AI — the most advanced AI system in the world, providing deeply personalized responses using all available user context.",
@@ -396,8 +346,8 @@ def get_llm_os(
         "• BrowserTools — browser automation (always check get_status() first)",
         "• GoogleEmailTools — read, send, search, reply, label emails",
         "• GoogleDriveTools — search, read, create, share files",
+        "• GoogleSheetsTools — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
         "• ImageTools — AI image generation via generate_image(prompt)",
-        "• composio_google_sheets_tools — list_google_sheets_actions() first, then execute with exact tool_slug",
         "• composio_whatsapp_tools — list_whatsapp_actions() first, then execute with exact tool_slug",
         "• DuckDuckGoTools — web search",
         "• delegate_to_coder — dedicated coding-agent execution (available in realtime main-mode sessions)",
@@ -408,7 +358,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Groq(id="moonshotai/kimi-k2-instruct-0905"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=OpenRouter(id="minimax/minimax-m2.7"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
@@ -434,3 +384,4 @@ def get_llm_os(
     )
 
     return llm_os_team
+
