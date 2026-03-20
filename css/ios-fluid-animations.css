@@ -27,7 +27,7 @@
     --easing-ios-gentle: cubic-bezier(0.25, 0.1, 0.25, 1);
     --easing-ios-momentum: cubic-bezier(0.6, 0.04, 0.98, 0.335);
     --easing-ios-decelerate: cubic-bezier(0, 0, 0.2, 1);
-    
+
     /* Fluid Animation Durations */
     --anim-ios-instant: 150ms;
     --anim-ios-fast: 250ms;
@@ -35,7 +35,7 @@
     --anim-ios-slow: 600ms;
     --anim-ios-slower: 850ms;
     --anim-ios-slowest: 1200ms;
-    
+
     /* Spring Parameters */
     --spring-tension: 180;
     --spring-friction: 12;
@@ -52,13 +52,16 @@
         opacity: 0;
         transform: scale(0.3) translateY(20px);
     }
+
     50% {
         opacity: 0.8;
         transform: scale(1.08) translateY(-5px);
     }
+
     75% {
         transform: scale(0.95) translateY(2px);
     }
+
     100% {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -71,9 +74,11 @@
         opacity: 1;
         transform: scale(1) translateY(0);
     }
+
     25% {
         transform: scale(1.05) translateY(-3px);
     }
+
     100% {
         opacity: 0;
         transform: scale(0.3) translateY(20px);
@@ -86,10 +91,12 @@
         opacity: 0;
         transform: translateX(-40px) scale(0.92);
     }
+
     60% {
         opacity: 1;
         transform: translateX(8px) scale(1.02);
     }
+
     100% {
         transform: translateX(0) scale(1);
     }
@@ -101,10 +108,12 @@
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
+
     60% {
         opacity: 1;
         transform: translateY(-5px) scale(1.02);
     }
+
     100% {
         transform: translateY(0) scale(1);
     }
@@ -112,10 +121,13 @@
 
 /* Breathing Effect - Organic pulsing */
 @keyframes breathe {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.03);
         opacity: 0.95;
@@ -124,9 +136,12 @@
 
 /* Gentle Breathing - Subtle idle animation */
 @keyframes gentleBreath {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1) translateY(0);
     }
+
     50% {
         transform: scale(1.01) translateY(-1px);
     }
@@ -137,15 +152,19 @@
     0% {
         transform: translateY(0) scaleY(1);
     }
+
     25% {
         transform: translateY(-3px) scaleY(1.1);
     }
+
     50% {
         transform: translateY(0) scaleY(0.95);
     }
+
     75% {
         transform: translateY(2px) scaleY(1.05);
     }
+
     100% {
         transform: translateY(0) scaleY(1);
     }
@@ -157,9 +176,11 @@
         background-position: -200% center;
         transform: skewX(-5deg);
     }
+
     50% {
         transform: skewX(5deg);
     }
+
     100% {
         background-position: 200% center;
         transform: skewX(-5deg);
@@ -171,18 +192,23 @@
     0% {
         transform: translateY(0);
     }
+
     20% {
         transform: translateY(-8px);
     }
+
     40% {
         transform: translateY(4px);
     }
+
     60% {
         transform: translateY(-2px);
     }
+
     80% {
         transform: translateY(1px);
     }
+
     100% {
         transform: translateY(0);
     }
@@ -194,9 +220,11 @@
         transform: scale(0);
         opacity: 0.8;
     }
+
     50% {
         opacity: 0.4;
     }
+
     100% {
         transform: scale(2.5);
         opacity: 0;
@@ -205,13 +233,16 @@
 
 /* Glow Pulse - Breathing glow effect */
 @keyframes glowPulse {
-    0%, 100% {
-        box-shadow: 
+
+    0%,
+    100% {
+        box-shadow:
             0 0 0 0 rgba(var(--accent-color-rgb), 0.4),
             0 4px 12px rgba(45, 55, 72, 0.15);
     }
+
     50% {
-        box-shadow: 
+        box-shadow:
             0 0 0 8px rgba(var(--accent-color-rgb), 0),
             0 8px 24px rgba(45, 55, 72, 0.25);
     }
@@ -222,9 +253,11 @@
     0% {
         transform: scale(1) translateY(0);
     }
+
     50% {
         transform: scale(1.02) translateY(-2px);
     }
+
     100% {
         transform: scale(1.05) translateY(-4px);
     }
@@ -232,15 +265,20 @@
 
 /* Jelly Wobble - Elastic wobble effect */
 @keyframes jellyWobble {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1, 1);
     }
+
     25% {
         transform: scale(1.05, 0.95);
     }
+
     50% {
         transform: scale(0.95, 1.05);
     }
+
     75% {
         transform: scale(1.02, 0.98);
     }
@@ -248,15 +286,20 @@
 
 /* Float Drift - Organic floating motion */
 @keyframes floatDrift {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0) translateX(0) rotate(0deg);
     }
+
     25% {
         transform: translateY(-6px) translateX(3px) rotate(1deg);
     }
+
     50% {
         transform: translateY(-3px) translateX(-2px) rotate(-0.5deg);
     }
+
     75% {
         transform: translateY(-8px) translateX(1px) rotate(0.5deg);
     }
@@ -268,13 +311,16 @@
         opacity: 0;
         transform: translateY(15px) scale(0.9);
     }
+
     40% {
         opacity: 1;
         transform: translateY(-3px) scale(1.02);
     }
+
     70% {
         transform: translateY(1px) scale(0.99);
     }
+
     100% {
         transform: translateY(0) scale(1);
     }
@@ -285,9 +331,11 @@
     0% {
         transform: rotate(0deg) scale(1);
     }
+
     50% {
         transform: rotate(180deg) scale(1.1);
     }
+
     100% {
         transform: rotate(360deg) scale(1);
     }
@@ -299,6 +347,7 @@
         backdrop-filter: blur(0px);
         opacity: 0;
     }
+
     100% {
         backdrop-filter: blur(12px);
         opacity: 1;
@@ -310,12 +359,15 @@
     0% {
         transform: scale(0.8);
     }
+
     50% {
         transform: scale(1.1);
     }
+
     70% {
         transform: scale(0.95);
     }
+
     100% {
         transform: scale(1);
     }
@@ -326,12 +378,15 @@
     0% {
         transform: translateX(-100%);
     }
+
     60% {
         transform: translateX(5%);
     }
+
     80% {
         transform: translateX(-2%);
     }
+
     100% {
         transform: translateX(0);
     }
@@ -423,7 +478,7 @@
 
 .fluid-lift:hover {
     transform: translateY(-6px) scale(1.02);
-    box-shadow: 
+    box-shadow:
         0 12px 32px rgba(45, 55, 72, 0.22),
         0 6px 16px rgba(45, 55, 72, 0.15),
         0 0 0 1px rgba(45, 55, 72, 0.08);
@@ -462,30 +517,82 @@
     animation: staggerWave var(--anim-ios-slow) var(--easing-ios-overshoot) backwards;
 }
 
-.stagger-fluid:nth-child(1) { animation-delay: 0ms; }
-.stagger-fluid:nth-child(2) { animation-delay: 60ms; }
-.stagger-fluid:nth-child(3) { animation-delay: 110ms; }
-.stagger-fluid:nth-child(4) { animation-delay: 150ms; }
-.stagger-fluid:nth-child(5) { animation-delay: 180ms; }
-.stagger-fluid:nth-child(6) { animation-delay: 200ms; }
-.stagger-fluid:nth-child(7) { animation-delay: 210ms; }
-.stagger-fluid:nth-child(8) { animation-delay: 215ms; }
-.stagger-fluid:nth-child(9) { animation-delay: 218ms; }
-.stagger-fluid:nth-child(10) { animation-delay: 220ms; }
+.stagger-fluid:nth-child(1) {
+    animation-delay: 0ms;
+}
+
+.stagger-fluid:nth-child(2) {
+    animation-delay: 60ms;
+}
+
+.stagger-fluid:nth-child(3) {
+    animation-delay: 110ms;
+}
+
+.stagger-fluid:nth-child(4) {
+    animation-delay: 150ms;
+}
+
+.stagger-fluid:nth-child(5) {
+    animation-delay: 180ms;
+}
+
+.stagger-fluid:nth-child(6) {
+    animation-delay: 200ms;
+}
+
+.stagger-fluid:nth-child(7) {
+    animation-delay: 210ms;
+}
+
+.stagger-fluid:nth-child(8) {
+    animation-delay: 215ms;
+}
+
+.stagger-fluid:nth-child(9) {
+    animation-delay: 218ms;
+}
+
+.stagger-fluid:nth-child(10) {
+    animation-delay: 220ms;
+}
 
 /* Organic stagger with variable timing */
 .stagger-organic {
     animation: staggerWave var(--anim-ios-slow) var(--easing-ios-elastic) backwards;
 }
 
-.stagger-organic:nth-child(1) { animation-delay: 0ms; }
-.stagger-organic:nth-child(2) { animation-delay: 80ms; }
-.stagger-organic:nth-child(3) { animation-delay: 140ms; }
-.stagger-organic:nth-child(4) { animation-delay: 180ms; }
-.stagger-organic:nth-child(5) { animation-delay: 200ms; }
-.stagger-organic:nth-child(6) { animation-delay: 210ms; }
-.stagger-organic:nth-child(7) { animation-delay: 215ms; }
-.stagger-organic:nth-child(8) { animation-delay: 218ms; }
+.stagger-organic:nth-child(1) {
+    animation-delay: 0ms;
+}
+
+.stagger-organic:nth-child(2) {
+    animation-delay: 80ms;
+}
+
+.stagger-organic:nth-child(3) {
+    animation-delay: 140ms;
+}
+
+.stagger-organic:nth-child(4) {
+    animation-delay: 180ms;
+}
+
+.stagger-organic:nth-child(5) {
+    animation-delay: 200ms;
+}
+
+.stagger-organic:nth-child(6) {
+    animation-delay: 210ms;
+}
+
+.stagger-organic:nth-child(7) {
+    animation-delay: 215ms;
+}
+
+.stagger-organic:nth-child(8) {
+    animation-delay: 218ms;
+}
 
 /* ================================================================= */
 /* PERFORMANCE OPTIMIZATIONS                                         */
@@ -501,6 +608,7 @@
 
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -516,7 +624,7 @@
 
 /* Liquid Morphing - Smooth shape transitions */
 .liquid-morph {
-    transition: 
+    transition:
         border-radius var(--anim-ios-slow) var(--easing-ios-fluid),
         transform var(--anim-ios-slow) var(--easing-ios-spring),
         background var(--anim-ios-slow) var(--easing-ios-smooth);
@@ -558,7 +666,7 @@
 }
 
 .fluid-shadow:hover {
-    box-shadow: 
+    box-shadow:
         0 20px 50px rgba(45, 55, 72, 0.25),
         0 10px 25px rgba(45, 55, 72, 0.18),
         0 0 0 1px rgba(45, 55, 72, 0.1);
@@ -594,7 +702,7 @@
 
 .card-fluid:hover {
     transform: translateY(-8px) scale(1.01);
-    box-shadow: 
+    box-shadow:
         0 16px 40px rgba(45, 55, 72, 0.22),
         0 8px 20px rgba(45, 55, 72, 0.15),
         0 0 0 1px rgba(45, 55, 72, 0.08);
@@ -607,7 +715,7 @@
 
 .input-elastic:focus {
     transform: translateY(-2px) scale(1.01);
-    box-shadow: 
+    box-shadow:
         0 8px 24px rgba(45, 55, 72, 0.12),
         0 0 0 3px rgba(var(--accent-color-rgb), 0.15);
 }
@@ -617,21 +725,21 @@
 /* ================================================================= */
 
 .dark-mode .fluid-lift:hover {
-    box-shadow: 
+    box-shadow:
         0 12px 32px rgba(0, 0, 0, 0.35),
         0 6px 16px rgba(0, 0, 0, 0.25),
         0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .dark-mode .fluid-shadow:hover {
-    box-shadow: 
+    box-shadow:
         0 20px 50px rgba(0, 0, 0, 0.45),
         0 10px 25px rgba(0, 0, 0, 0.35),
         0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .dark-mode .card-fluid:hover {
-    box-shadow: 
+    box-shadow:
         0 16px 40px rgba(0, 0, 0, 0.4),
         0 8px 20px rgba(0, 0, 0, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.08);
