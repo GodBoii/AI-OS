@@ -87,7 +87,7 @@
     color: var(--text-color);
     font-family: inherit;
     max-height: var(--input-max-height);
-    font-size: 1.05rem;
+    font-size: calc(1.05rem + 2px);
     min-height: var(--input-min-height);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -731,6 +731,7 @@
         rgba(70, 70, 80, 0.45),
         rgba(60, 60, 70, 0.5)
     );
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;

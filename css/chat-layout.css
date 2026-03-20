@@ -53,6 +53,25 @@
     display: flex;
     flex-direction: column;
     pointer-events: none;
+    position: relative;
+}
+
+/* Blur effect at the top so text doesn't cut off abruptly when scrolling */
+.chat-window::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    height: 80px;
+    z-index: 10;
+    pointer-events: none;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
 }
 
 /* --- Centered Conversation Area --- */
