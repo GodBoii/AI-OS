@@ -63,6 +63,7 @@ class ConnectionManager:
             'enable_github': True,
             'enable_google_email': True,
             'enable_google_drive': True,
+            'enable_google_sheets': True,
             'enable_browser': True,
             'enable_vercel': True,
             'enable_supabase': True,
