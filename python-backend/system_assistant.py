@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
+from agno.models.groq import Groq
 
 from mobile_tools import MobileTools
 
@@ -76,7 +77,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="openrouter/healer-alpha"),
+        model=OpenRouter(id="meta-llama/llama-4-scout-17b-16e-instruct"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
