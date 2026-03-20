@@ -67,7 +67,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=OpenRouter(id="openrouter/healer-alpha"),
+        model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
