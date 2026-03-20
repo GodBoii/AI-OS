@@ -31,8 +31,8 @@ let chatConfig = {
         Planner_Agent: true,
         enable_vercel: true,
         enable_google_drive: true,
+        enable_google_sheets: true,
         enable_supabase: true,
-        enable_composio_google_sheets: true,
         enable_composio_whatsapp: true,
         computer_control: true  // NEW: Computer control enabled by default (desktop only)
     }
@@ -483,21 +483,24 @@ function parseMaybeJson(value) {
 
 function getComputerToolMetadata(tool) {
     const toolOutput = parseMaybeJson(tool?.tool_output);
-    console.log('[ComputerToolPreview] Extract tool metadata', {
+    console.log('[ToolPreview] Extract tool metadata', {
         hasTool: !!tool,
         toolName: tool?.tool_name || null,
         toolOutputType: toolOutput ? typeof toolOutput : null,
         toolOutputKeys: toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput) : null
     });
     const metadata = toolOutput?.metadata;
-    if (!metadata || metadata.kind !== 'computer_tool_output') {
-        console.log('[ComputerToolPreview] No usable metadata found', {
+    const metadataKind = metadata?.kind || null;
+    const isSupportedKind = metadataKind === 'computer_tool_output' || metadataKind === 'google_sheets_tool_output';
+    if (!metadata || !isSupportedKind) {
+        console.log('[ToolPreview] No usable metadata found', {
             metadataKind: metadata?.kind || null,
             metadataKeys: metadata && typeof metadata === 'object' ? Object.keys(metadata) : null
         });
         return null;
     }
-    console.log('[ComputerToolPreview] Metadata found', {
+    console.log('[ToolPreview] Metadata found', {
+        kind: metadata.kind,
         action: metadata.action,
         previewType: metadata.preview_type,
         relativePath: metadata.relativePath || null,
@@ -539,6 +542,169 @@ function formatToolPreviewValue(value) {
     return escapeToolPreviewHtml(String(value));
 }
 
+function buildSheetsLinkMarkup(metadata) {
+    const url = metadata?.spreadsheet_url || '';
+    if (!url) return '';
+    return `
+        <a class="tool-preview-sheets-link" href="${escapeToolPreviewHtml(url)}" target="_blank" rel="noopener noreferrer">
+            Open in Google Sheets
+        </a>
+    `;
+}
+
+function buildSheetsTableMarkup(metadata, inline = {}) {
+    const columns = Array.isArray(inline.columns) ? inline.columns : [];
+    const rows = Array.isArray(inline.rows) ? inline.rows : [];
+    const safeRows = rows.slice(0, 8);
+
+    const headerCells = (columns.length ? columns : ['Column 1']).map(
+        (column) => `<th>${escapeToolPreviewHtml(String(column))}</th>`
+    ).join('');
+    const bodyRows = safeRows.map((row) => {
+        const cells = Array.isArray(row) ? row : [row];
+        return `<tr>${cells.map((cell) => `<td>${escapeToolPreviewHtml(String(cell ?? ''))}</td>`).join('')}</tr>`;
+    }).join('');
+
+    const countRow = Number.isFinite(Number(inline.row_count))
+        ? `<div class="tool-preview-sheets-meta-row">${escapeToolPreviewHtml(String(inline.row_count))} row(s)</div>`
+        : '';
+    const rangeRow = inline.range
+        ? `<div class="tool-preview-sheets-meta-row">Range: <strong>${escapeToolPreviewHtml(String(inline.range))}</strong></div>`
+        : '';
+
+    return `
+        <div class="tool-preview-card tool-preview-sheets">
+            <div class="tool-preview-sheets-title">${escapeToolPreviewHtml(metadata.title || 'Sheets update')}</div>
+            ${metadata.summary ? `<div class="tool-preview-sheets-summary">${escapeToolPreviewHtml(metadata.summary)}</div>` : ''}
+            <div class="tool-preview-sheets-meta">${countRow}${rangeRow}</div>
+            <div class="tool-preview-sheets-table-wrap">
+                <table class="tool-preview-sheets-table">
+                    <thead><tr>${headerCells}</tr></thead>
+                    <tbody>${bodyRows || '<tr><td colspan="999">No preview rows available.</td></tr>'}</tbody>
+                </table>
+            </div>
+            ${buildSheetsLinkMarkup(metadata)}
+        </div>
+    `;
+}
+
+function buildSheetsListMarkup(metadata, inline = {}) {
+    const items = Array.isArray(inline.items) ? inline.items : [];
+    const renderedItems = items.slice(0, 10).map((item) => {
+        if (typeof item === 'string') {
+            return `<li>${escapeToolPreviewHtml(item)}</li>`;
+        }
+        const title = item?.title || item?.name || item?.id || 'Untitled';
+        const detailParts = [];
+        if (item?.row_count != null) detailParts.push(`${item.row_count} rows`);
+        if (item?.column_count != null) detailParts.push(`${item.column_count} cols`);
+        if (item?.modified_time) detailParts.push(String(item.modified_time));
+        const details = detailParts.length ? `<span class="tool-preview-sheets-item-meta">${escapeToolPreviewHtml(detailParts.join(' • '))}</span>` : '';
+        return `<li><span class="tool-preview-sheets-item-title">${escapeToolPreviewHtml(String(title))}</span>${details}</li>`;
+    }).join('');
+
+    return `
+        <div class="tool-preview-card tool-preview-sheets">
+            <div class="tool-preview-sheets-title">${escapeToolPreviewHtml(metadata.title || 'Sheets list')}</div>
+            ${metadata.summary ? `<div class="tool-preview-sheets-summary">${escapeToolPreviewHtml(metadata.summary)}</div>` : ''}
+            ${buildSheetsLinkMarkup(metadata)}
+            <ul class="tool-preview-sheets-list">${renderedItems || '<li>No items found.</li>'}</ul>
+        </div>
+    `;
+}
+
+function buildSheetsInfoMarkup(metadata, inline = {}) {
+    const rows = Object.entries(inline || {})
+        .filter(([, value]) => value !== null && value !== undefined && value !== '')
+        .slice(0, 10)
+        .map(([key, value]) => `
+            <div class="tool-preview-kv-row">
+                <span class="tool-preview-kv-key">${escapeToolPreviewHtml(key.replace(/_/g, ' '))}</span>
+                <span class="tool-preview-kv-value">${formatToolPreviewValue(value)}</span>
+            </div>
+        `)
+        .join('');
+
+    return `
+        <div class="tool-preview-card tool-preview-sheets tool-preview-sheets-info">
+            <div class="tool-preview-sheets-title">${escapeToolPreviewHtml(metadata.title || 'Sheets details')}</div>
+            ${metadata.summary ? `<div class="tool-preview-sheets-summary">${escapeToolPreviewHtml(metadata.summary)}</div>` : ''}
+            ${rows ? `<div class="tool-preview-kv">${rows}</div>` : ''}
+            ${buildSheetsLinkMarkup(metadata)}
+        </div>
+    `;
+}
+
+function shouldAutoOpenSheetsArtifact(metadata) {
+    if (!metadata || metadata.kind !== 'google_sheets_tool_output') return false;
+    const operation = String(metadata.operation || '').toLowerCase();
+    return ['write', 'append', 'batch_write', 'clear'].includes(operation);
+}
+
+function buildSheetsArtifactHtml(metadata, toolName = '') {
+    const inline = metadata?.inline || {};
+    const columns = Array.isArray(inline.columns) ? inline.columns : [];
+    const rows = Array.isArray(inline.rows) ? inline.rows : [];
+    const safeRows = rows.slice(0, 15);
+    const headerCells = (columns.length ? columns : ['Column 1']).map(
+        (column) => `<th>${escapeToolPreviewHtml(String(column))}</th>`
+    ).join('');
+    const bodyRows = safeRows.map((row) => {
+        const cells = Array.isArray(row) ? row : [row];
+        return `<tr>${cells.map((cell) => `<td>${escapeToolPreviewHtml(String(cell ?? ''))}</td>`).join('')}</tr>`;
+    }).join('');
+    const title = metadata?.title || toolName || 'Google Sheets update';
+    const summary = metadata?.summary || '';
+    const range = metadata?.range || inline?.range || '';
+    const rowCount = inline?.row_count ?? '';
+    const url = metadata?.spreadsheet_url || '';
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeToolPreviewHtml(String(title))}</title>
+  <style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; margin: 0; background: #f4f8f6; color: #0f172a; }
+    .wrap { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+    .card { background: #ffffff; border: 1px solid #dbe7e2; border-radius: 14px; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05); overflow: hidden; }
+    .head { padding: 16px; border-bottom: 1px solid #e5efea; background: linear-gradient(90deg, #eaf6ef, #f8fcfa); }
+    h1 { margin: 0; font-size: 1.02rem; }
+    .meta { margin-top: 8px; font-size: 0.88rem; color: #475569; display: flex; gap: 12px; flex-wrap: wrap; }
+    .body { padding: 14px 16px 18px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { border: 1px solid #dbe7e2; padding: 8px 10px; text-align: left; }
+    th { background: #f0f8f4; font-weight: 600; }
+    tr:nth-child(even) td { background: #fbfefc; }
+    .link { margin-top: 12px; display: inline-flex; text-decoration: none; color: #166534; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <h1>${escapeToolPreviewHtml(String(title))}</h1>
+        ${summary ? `<div class="meta"><span>${escapeToolPreviewHtml(summary)}</span></div>` : ''}
+        <div class="meta">
+          ${range ? `<span>Range: <strong>${escapeToolPreviewHtml(String(range))}</strong></span>` : ''}
+          ${rowCount !== '' ? `<span>Rows: <strong>${escapeToolPreviewHtml(String(rowCount))}</strong></span>` : ''}
+        </div>
+      </div>
+      <div class="body">
+        <table>
+          <thead><tr>${headerCells}</tr></thead>
+          <tbody>${bodyRows || '<tr><td colspan="999">No preview rows available.</td></tr>'}</tbody>
+        </table>
+        ${url ? `<a class="link" href="${escapeToolPreviewHtml(url)}" target="_blank" rel="noopener noreferrer">Open this spreadsheet in Google Sheets</a>` : ''}
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+}
+
 function bufferToBase64(buffer) {
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     const chunkSize = 0x8000;
@@ -555,17 +721,31 @@ async function buildToolPreviewMarkup(metadata) {
 
     const inline = metadata.inline || {};
     const previewType = metadata.preview_type || 'none';
-    console.log('[ComputerToolPreview] Build preview markup', {
+    console.log('[ToolPreview] Build preview markup', {
+        kind: metadata.kind || null,
         action: metadata.action,
         previewType,
         relativePath: metadata.relativePath || null,
         hasInline: !!metadata.inline
     });
 
+    if (metadata.kind === 'google_sheets_tool_output') {
+        if (previewType === 'sheet_table') {
+            return buildSheetsTableMarkup(metadata, inline);
+        }
+        if (previewType === 'sheet_list') {
+            return buildSheetsListMarkup(metadata, inline);
+        }
+        if (previewType === 'sheet_info' || previewType === 'text') {
+            return buildSheetsInfoMarkup(metadata, inline);
+        }
+        return buildSheetsInfoMarkup(metadata, inline);
+    }
+
     if (previewType === 'image' && metadata.relativePath) {
         try {
             const exists = await window.electron.fileArchive.fileExists(metadata.relativePath);
-            console.log('[ComputerToolPreview] Image preview file check', {
+            console.log('[ToolPreview] Image preview file check', {
                 relativePath: metadata.relativePath,
                 exists
             });
@@ -585,7 +765,7 @@ async function buildToolPreviewMarkup(metadata) {
                 `;
             }
         } catch (error) {
-            console.warn('[ComputerToolPreview] Failed to load local image preview:', error);
+            console.warn('[ToolPreview] Failed to load local image preview:', error);
         }
 
         return `
@@ -652,7 +832,7 @@ async function hydrateComputerToolPreviews(root) {
     if (!root) return;
 
     const placeholders = root.querySelectorAll('.tool-log-preview[data-tool-metadata]');
-    console.log('[ComputerToolPreview] Hydrating placeholders', {
+    console.log('[ToolPreview] Hydrating placeholders', {
         count: placeholders.length
     });
     for (const placeholder of placeholders) {
@@ -667,7 +847,7 @@ async function hydrateComputerToolPreviews(root) {
         }
 
         const markup = await buildToolPreviewMarkup(metadata);
-        console.log('[ComputerToolPreview] Hydration result', {
+        console.log('[ToolPreview] Hydration result', {
             outputId: metadata.output_id || null,
             hasMarkup: !!markup,
             previewType: metadata.preview_type || null
@@ -683,7 +863,7 @@ async function hydrateComputerToolPreviews(root) {
 
 async function attachComputerToolPreview(logEntry, metadata) {
     if (!logEntry || !metadata) return;
-    console.log('[ComputerToolPreview] Attaching preview to log entry', {
+    console.log('[ToolPreview] Attaching preview to log entry', {
         action: metadata.action,
         previewType: metadata.preview_type,
         outputId: metadata.output_id || null
@@ -978,8 +1158,8 @@ async function startNewConversation() {
             enable_github: true,
             enable_google_email: true,
             enable_google_drive: true,
+            enable_google_sheets: true,
             enable_supabase: true,
-            enable_composio_google_sheets: true,
             enable_composio_whatsapp: true,
             computer_control: true
         }
@@ -1360,12 +1540,31 @@ function setupIpcListeners() {
             const metadata = getComputerToolMetadata(tool);
             if (logEntry && metadata) {
                 await attachComputerToolPreview(logEntry, metadata);
-                await persistComputerToolAttachment(metadata, name || 'computer_tool', streamConversationId);
+                if (metadata.kind === 'computer_tool_output') {
+                    await persistComputerToolAttachment(metadata, name || 'computer_tool', streamConversationId);
+                }
             } else {
-                console.log('[ComputerToolPreview] No metadata attached on tool_end', {
+                console.log('[ToolPreview] No metadata attached on tool_end', {
                     messageId,
                     toolName: name || null,
                     hasLogEntry: !!logEntry
+                });
+            }
+
+            if (
+                metadata &&
+                metadata.kind === 'google_sheets_tool_output' &&
+                shouldAutoOpenSheetsArtifact(metadata) &&
+                artifactHandler &&
+                isConversationActive(streamConversationId) &&
+                !isProjectWorkspaceMode()
+            ) {
+                const artifactHtml = buildSheetsArtifactHtml(metadata, name || 'google_sheets_tool');
+                const artifactId = metadata.output_id || `sheets-preview-${Date.now()}`;
+                artifactHandler.showArtifact('code', artifactHtml, artifactId, {
+                    title: metadata.title || 'Google Sheets update',
+                    language: 'html',
+                    defaultView: 'preview'
                 });
             }
 
