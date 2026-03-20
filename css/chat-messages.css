@@ -662,6 +662,111 @@
     word-break: break-word;
 }
 
+.tool-preview-sheets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-color: rgba(22, 101, 52, 0.28);
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.tool-preview-sheets-title {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.tool-preview-sheets-summary {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.tool-preview-sheets-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.tool-preview-sheets-meta-row strong {
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.tool-preview-sheets-table-wrap {
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.tool-preview-sheets-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 360px;
+    font-size: 0.79rem;
+}
+
+.tool-preview-sheets-table th,
+.tool-preview-sheets-table td {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 6px 8px;
+    text-align: left;
+    color: var(--text-color);
+    vertical-align: top;
+}
+
+.tool-preview-sheets-table th {
+    background: rgba(255, 255, 255, 0.06);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.tool-preview-sheets-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.tool-preview-sheets-list li {
+    color: var(--text-color);
+    font-size: 0.8rem;
+}
+
+.tool-preview-sheets-item-title {
+    font-weight: 600;
+}
+
+.tool-preview-sheets-item-meta {
+    margin-left: 8px;
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+}
+
+.tool-preview-sheets-link {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.12);
+    color: #86efac;
+    text-decoration: none;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.tool-preview-sheets-link:hover {
+    background: rgba(34, 197, 94, 0.2);
+}
+
 .tool-preview-text pre {
     margin: 0;
     white-space: pre-wrap;
