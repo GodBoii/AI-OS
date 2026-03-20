@@ -46,7 +46,6 @@ class AetheriaToolBridge(Toolkit):
             session_info=None,
             internet_search=True,
             coding_assistant=False,
-            World_Agent=True,
             Planner_Agent=False,  # Skip planner for direct execution
             enable_supabase=False,
             use_memory=False,
@@ -68,10 +67,8 @@ class AetheriaToolBridge(Toolkit):
         
         Aetheria has access to:
         - Internet search (DuckDuckGo)
-        - World knowledge (Wikipedia, ArXiv, HackerNews, YouTube)
         - Email operations (read, search, send)
         - Google Drive (search, read, create files)
-        - API calls to external services
         
         Use this when you need information or capabilities beyond task management.
         
@@ -86,7 +83,6 @@ class AetheriaToolBridge(Toolkit):
             ask_aetheria("Search for latest AI news and summarize the top 3 stories")
             ask_aetheria("Find my recent emails about project deadlines")
             ask_aetheria("Research best practices for Python async programming")
-            ask_aetheria("What are the trending topics on HackerNews today?")
         """
         try:
             team = self._get_aetheria_team()
