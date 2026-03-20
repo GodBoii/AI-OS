@@ -23,7 +23,7 @@ class ShuffleMenuController {
                 provider: 'google',
                 label: 'Google',
                 iconClass: 'fa-brands fa-google',
-                configKeys: ['enable_google_email', 'enable_google_drive']
+                configKeys: ['enable_google_email', 'enable_google_drive', 'enable_google_sheets']
             },
             {
                 provider: 'vercel',
@@ -36,12 +36,6 @@ class ShuffleMenuController {
                 label: 'Supabase',
                 iconClass: 'fa-solid fa-database',
                 configKeys: ['enable_supabase']
-            },
-            {
-                provider: 'composio_google_sheets',
-                label: 'Google Sheets',
-                iconClass: 'fa-solid fa-table',
-                configKeys: ['enable_composio_google_sheets']
             },
             {
                 provider: 'composio_whatsapp',
@@ -150,15 +144,7 @@ class ShuffleMenuController {
             });
         }
 
-        const [googleSheetsResponse, whatsappResponse] = await Promise.all([
-            fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=GOOGLESHEETS`, { headers }),
-            fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=WHATSAPP`, { headers })
-        ]);
-
-        if (googleSheetsResponse.ok) {
-            const data = await googleSheetsResponse.json();
-            status.composio_google_sheets = !!data.connected;
-        }
+        const whatsappResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=WHATSAPP`, { headers });
 
         if (whatsappResponse.ok) {
             const data = await whatsappResponse.json();
