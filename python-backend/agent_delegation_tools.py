@@ -150,6 +150,7 @@ class AgentDelegationTools(Toolkit):
                 delegated_agent=delegated_agent,
             )
         else:
+            session_config = self.session_info.get("config", {}) if isinstance(self.session_info, dict) else {}
             child_agent = get_computer_agent(
                 user_id=self.user_id,
                 session_info=self.session_info,
@@ -159,6 +160,9 @@ class AgentDelegationTools(Toolkit):
                 message_id=self.message_id,
                 use_memory=self.use_memory,
                 debug_mode=self.debug_mode,
+                enable_google_email=bool(session_config.get("enable_google_email", True)),
+                enable_google_drive=bool(session_config.get("enable_google_drive", True)),
+                enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
                 delegation_id=delegation_id,
                 delegated_agent=delegated_agent,
             )

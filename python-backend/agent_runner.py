@@ -627,6 +627,9 @@ def run_agent_and_stream(
                 message_id=message_id,
                 use_memory=session_config.get("use_memory", False),
                 debug_mode=True,
+                enable_google_email=bool(session_config.get("enable_google_email", True)),
+                enable_google_drive=bool(session_config.get("enable_google_drive", True)),
+                enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
             )
         else:
             llm_os_config = _filter_kwargs_for_callable(
