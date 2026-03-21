@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from typing import Any, Dict, Optional
@@ -9,44 +8,9 @@ from agno.tools import Toolkit
 
 from coder_agent import get_coder_agent
 from computer_agent import get_computer_agent
+from tool_event_payload import serialize_tool_event
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_json_like(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, (dict, list, int, float, bool)):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return text
-        if text.startswith("{") or text.startswith("["):
-            try:
-                return json.loads(text)
-            except Exception:
-                return value
-        return value
-    return str(value)
-
-
-def _serialize_tool_event(tool_obj: Any) -> Dict[str, Any] | None:
-    if not tool_obj:
-        return None
-
-    tool_name = getattr(tool_obj, "tool_name", None)
-    tool_output = _safe_json_like(getattr(tool_obj, "tool_output", None))
-    tool_args = _safe_json_like(getattr(tool_obj, "tool_args", None))
-
-    payload: Dict[str, Any] = {}
-    if tool_name:
-        payload["tool_name"] = tool_name
-    if tool_args is not None:
-        payload["tool_args"] = tool_args
-    if tool_output is not None:
-        payload["tool_output"] = tool_output
-    return payload or None
 
 
 class AgentDelegationTools(Toolkit):
@@ -204,7 +168,7 @@ class AgentDelegationTools(Toolkit):
                             },
                         )
                 elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
-                    tool_payload = _serialize_tool_event(getattr(chunk, "tool", None))
+                    tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
                     self._emit(
                         "agent_step",
                         {
@@ -219,7 +183,7 @@ class AgentDelegationTools(Toolkit):
                         },
                     )
                 elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
-                    tool_payload = _serialize_tool_event(getattr(chunk, "tool", None))
+                    tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
                     self._emit(
                         "agent_step",
                         {

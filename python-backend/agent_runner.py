@@ -18,6 +18,7 @@ from subscription_service import get_usage_window_descriptor
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
+from tool_event_payload import serialize_tool_event
 import config
 
 # --- Agno Framework Imports ---
@@ -144,45 +145,6 @@ def _filter_kwargs_for_callable(fn: Any, kwargs: Dict[str, Any], label: str = "k
             dropped,
         )
     return filtered
-
-
-def _safe_json_like(value: Any) -> Any:
-    """Best-effort conversion for tool payloads that may already be JSON strings."""
-    if value is None:
-        return None
-    if isinstance(value, (dict, list, int, float, bool)):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return text
-        if text.startswith("{") or text.startswith("["):
-            try:
-                return json.loads(text)
-            except Exception:
-                return value
-        return value
-    return str(value)
-
-
-def _serialize_tool_event(tool_obj: Any) -> Dict[str, Any] | None:
-    """Extract only the frontend-safe parts of an Agno tool event."""
-    if not tool_obj:
-        return None
-
-    tool_name = getattr(tool_obj, "tool_name", None)
-    tool_output = _safe_json_like(getattr(tool_obj, "tool_output", None))
-    tool_args = _safe_json_like(getattr(tool_obj, "tool_args", None))
-
-    payload: Dict[str, Any] = {}
-    if tool_name:
-        payload["tool_name"] = tool_name
-    if tool_args is not None:
-        payload["tool_args"] = tool_args
-    if tool_output is not None:
-        payload["tool_output"] = tool_output
-
-    return payload or None
 
 
 def build_sandbox_workspace_context(session_data: Dict[str, Any]) -> str:
@@ -792,7 +754,7 @@ def run_agent_and_stream(
                 }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
-                tool_payload = _serialize_tool_event(getattr(chunk, "tool", None))
+                tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
                 socketio.emit("agent_step", {
                     "type": "tool_start",
                     "name": tool_name,
@@ -809,9 +771,14 @@ def run_agent_and_stream(
                 })
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
                 tool_name = getattr(chunk.tool, 'tool_name', None)
-                tool_payload = _serialize_tool_event(getattr(chunk, "tool", None))
+                tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
                 tool_output = tool_payload.get("tool_output") if isinstance(tool_payload, dict) else None
-                tool_metadata = tool_output.get("metadata") if isinstance(tool_output, dict) else None
+                if isinstance(tool_output, dict):
+                    tool_metadata = tool_output.get("metadata")
+                elif isinstance(tool_payload, dict):
+                    tool_metadata = tool_payload.get("metadata")
+                else:
+                    tool_metadata = None
                 logger.info(
                     "[ToolEvent] tool_end name=%s owner=%s has_tool_payload=%s has_tool_output=%s has_metadata=%s preview_type=%s",
                     tool_name,
