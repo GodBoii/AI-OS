@@ -10,6 +10,9 @@ from agno.tools import Toolkit
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
 from computer_tools import ComputerTools
+from google_drive_tools import GoogleDriveTools
+from google_email_tools import GoogleEmailTools
+from google_sheets_tools import GoogleSheetsTools
 
 
 def _db_url_sqlalchemy() -> str:
@@ -28,6 +31,9 @@ def get_computer_agent(
     message_id: Optional[str] = None,
     use_memory: bool = False,
     debug_mode: bool = True,
+    enable_google_email: bool = False,
+    enable_google_drive: bool = False,
+    enable_google_sheets: bool = False,
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
 ) -> Agent:
@@ -65,9 +71,17 @@ def get_computer_agent(
                 )
             )
 
+    if user_id and (enable_google_email or enable_google_drive or enable_google_sheets):
+        if enable_google_email:
+            tools.append(GoogleEmailTools(user_id=user_id))
+        if enable_google_drive:
+            tools.append(GoogleDriveTools(user_id=user_id))
+        if enable_google_sheets:
+            tools.append(GoogleSheetsTools(user_id=user_id))
+
     return Agent(
         name="Aetheria_Computer",
-        model=Groq(id="meta-llama/llama-4-scout-17b-16e-instruct"),
+        model=OpenRouter(id="minimax/minimax-m2.7"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
@@ -88,6 +102,9 @@ def get_computer_agent(
             "<tools>",
             "ComputerTools: request_permission, get_status, screenshot/mouse/keyboard/window/system operations.",
             "BrowserTools/ServerBrowserTools: browser status, navigation, interaction, extraction.",
+            "GoogleEmailTools: read/send/search/reply/label emails.",
+            "GoogleDriveTools: search/read/create/share files.",
+            "GoogleSheetsTools: search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets.",
             "</tools>",
         ],
         user_id=user_id,
