@@ -483,13 +483,15 @@ function parseMaybeJson(value) {
 
 function getComputerToolMetadata(tool) {
     const toolOutput = parseMaybeJson(tool?.tool_output);
+    const directMetadata = parseMaybeJson(tool?.metadata);
     console.log('[ToolPreview] Extract tool metadata', {
         hasTool: !!tool,
         toolName: tool?.tool_name || null,
         toolOutputType: toolOutput ? typeof toolOutput : null,
-        toolOutputKeys: toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput) : null
+        toolOutputKeys: toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput) : null,
+        hasDirectMetadata: !!directMetadata
     });
-    const metadata = toolOutput?.metadata;
+    const metadata = toolOutput?.metadata || directMetadata;
     const metadataKind = metadata?.kind || null;
     const isSupportedKind = metadataKind === 'computer_tool_output' || metadataKind === 'google_sheets_tool_output';
     if (!metadata || !isSupportedKind) {
