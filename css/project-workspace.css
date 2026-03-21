@@ -618,19 +618,24 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     display: flex;
     flex-direction: column;
     pointer-events: auto;
-    border: 1px solid rgba(148, 163, 184, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px;
-    background: #0f172a;
-    color: #e2e8f0;
-    box-shadow: 0 20px 48px rgba(2, 6, 23, 0.4);
+    background: #030303;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    color: #e8e8e8;
+    box-shadow: 
+        0 4px 24px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .project-local-terminal-shell {
     flex: 1;
     min-height: 0;
-    padding: 8px 10px 10px;
+    padding: 10px 12px;
     overflow: hidden;
     pointer-events: auto;
+    background: #030303;
 }
 
 .project-local-terminal-shell .xterm {
@@ -641,49 +646,70 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     overflow-y: auto !important;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.45);
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar {
-    width: 10px;
+    width: 6px;
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.45);
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-track {
-    background: rgba(15, 23, 42, 0.4);
+    background: transparent;
 }
 
 .project-local-terminal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
-    background: rgba(15, 23, 42, 0.95);
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     pointer-events: auto;
     position: relative;
     z-index: 2;
 }
 
 .project-local-terminal-title {
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: #d0d0d0;
+    text-transform: uppercase;
+    opacity: 0.7;
 }
 
 .project-local-terminal-close,
 .project-local-terminal-send {
-    width: 28px;
-    height: 28px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 8px;
-    background: rgba(30, 41, 59, 0.8);
-    color: #cbd5e1;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #d0d0d0;
     cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+}
+
+.project-local-terminal-close:hover,
+.project-local-terminal-send:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
 }
 
 .project-local-terminal-output {
@@ -703,20 +729,32 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
     display: flex;
     gap: 8px;
     padding: 10px 12px;
-    border-top: 1px solid rgba(148, 163, 184, 0.3);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     pointer-events: auto;
 }
 
 .project-local-terminal-input {
     flex: 1;
     min-width: 0;
-    height: 30px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 8px;
+    height: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
     padding: 0 10px;
-    background: rgba(15, 23, 42, 0.9);
-    color: #e2e8f0;
-    font-size: 0.74rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: #e0e0e0;
+    font-size: 0.8125rem;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    transition: all 0.15s ease;
+}
+
+.project-local-terminal-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.03);
 }
 
 body.project-terminal-open #chat-container .chat-messages,
