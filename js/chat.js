@@ -3084,3 +3084,49 @@ function init() {
 }
 
 window.chatModule = { init };
+
+// --- Workspace "Know Me" Modal Global bindings ---
+document.addEventListener('click', (e) => {
+    const projBtn = e.target.closest('#project-know-me-btn');
+    const compBtn = e.target.closest('#computer-know-me-btn');
+    const closeBtn = e.target.closest('#know-me-modal-close');
+    const backdrop = e.target.closest('#know-me-backdrop');
+    
+    if (projBtn || compBtn) {
+        const modal = document.getElementById('know-me-modal');
+        const projContent = document.getElementById('know-me-project-content');
+        const compContent = document.getElementById('know-me-computer-content');
+        
+        if (modal && projContent && compContent) {
+            modal.classList.remove('hidden');
+            projContent.classList.add('hidden');
+            compContent.classList.add('hidden');
+            
+            if (projBtn) projContent.classList.remove('hidden');
+            if (compBtn) compContent.classList.remove('hidden');
+            
+            // Re-render mermaid by clearing processed flags and calling init
+            const targetContent = projBtn ? projContent : compContent;
+            const mermaidEls = targetContent.querySelectorAll('.mermaid-code, .mermaid');
+            
+            mermaidEls.forEach(el => {
+                const originalText = el.getAttribute('data-mermaid-src') || el.textContent;
+                el.setAttribute('data-mermaid-src', originalText);
+                el.innerHTML = originalText;
+                el.className = 'mermaid'; // Ensure Mermaid picks it up
+                el.removeAttribute('data-processed');
+            });
+            
+            // Delay slightly to ensure browser composite lets modal be visible for dimension math
+            if (window.mermaid) {
+                setTimeout(() => {
+                    try { window.mermaid.init(undefined, targetContent.querySelectorAll('.mermaid')); } 
+                    catch(err) { console.error('Mermaid render error:', err); }
+                }, 50);
+            }
+        }
+    } else if (closeBtn || backdrop) {
+        const modal = document.getElementById('know-me-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+});
