@@ -97,7 +97,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=OpenRouter(id="nvidia/nemotron-3-super-120b-a12b:free"),
+        model=OpenRouter(id="minimax/minimax-m2.7"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, database, and deployment operations."

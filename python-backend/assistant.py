@@ -168,7 +168,7 @@ def get_llm_os(
         planner = Agent(
             name="REASONING AGENT",
             role="Planning agent analyzes complex queries and outputs a step-by-step execution plan for Aetheria AI. Call this first for any non-trivial task.",
-            model=OpenRouter(id="nvidia/nemotron-3-super-120b-a12b:free"),
+            model=Groq(id="groq/compound"),
             instructions=[
                 "You are the **Reasoning Agent** in Aetheria AI. Your only job is to analyze complex user queries and output a clean execution plan for Aetheria AI to follow. You do NOT execute tasks or answer questions directly.",
                 "",
@@ -273,7 +273,7 @@ def get_llm_os(
         
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="nvidia/nemotron-3-super-120b-a12b:free"),
+            model=OpenRouter(id="minimax/minimax-m2.7"),
             role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a database engine. Delegate all coding, debugging, building, querying, and deployment tasks here.",
             tools=dev_tools,
             instructions=[
@@ -358,7 +358,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Groq(id="moonshotai/kimi-k2-instruct-0905"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=OpenRouter(id="minimax/minimax-m2.7"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
