@@ -1,0 +1,927 @@
+/* =====================================================================
+   GLASS-OVERRIDES.CSS
+   AI-OS — Liquid Glass UI Layer (Dark Mode)
+   
+   Design Direction: Liquid Glass (Apple-esque)
+   Philosophy:  Every opaque/flat container gets a frosted-glass elevated
+                surface. Glass only works because of the pure black (#000)
+                background beneath it — which we already have.
+   
+   Rules followed (per Glass-UI.md & system-instructions.md):
+   ✅ backdrop-filter (NOT filter: blur)
+   ✅ RGBA backgrounds (NOT opacity)
+   ✅ -webkit-backdrop-filter for Safari
+   ✅ inset box-shadow for depth/thickness
+   ✅ outer box-shadow for elevation
+   ✅ border with semi-transparent white for glinting edges
+   ✅ text-shadow for legibility on glass
+   ✅ transform/opacity for 60fps animations
+   
+   DO NOT TOUCH:
+   ❌ .message-user / .message-bot — chat messages (user & AI bubbles)
+   ❌ .chat-input-container / .input-area — chat input box
+   ===================================================================== */
+
+/* =====================================================================
+   SECTION 1 — CSS GLASS VARIABLES (Dark Mode Specific)
+   ===================================================================== */
+.dark-mode {
+  /* Glass surface tiers */
+  --glass-l0: rgba(255, 255, 255, 0.030);   /* Barely-there wash */
+  --glass-l1: rgba(255, 255, 255, 0.055);   /* Subtle panel */
+  --glass-l2: rgba(255, 255, 255, 0.080);   /* Card surface */
+  --glass-l3: rgba(255, 255, 255, 0.110);   /* Elevated card */
+  --glass-l4: rgba(255, 255, 255, 0.150);   /* Active / focused */
+  
+  /* Glass borders */
+  --glass-edge-dim:    rgba(255, 255, 255, 0.07);
+  --glass-edge-mid:    rgba(255, 255, 255, 0.11);
+  --glass-edge-bright: rgba(255, 255, 255, 0.20);
+  --glass-edge-hot:    rgba(255, 255, 255, 0.32);
+  
+  /* Glass top-highlight (inset) */
+  --glass-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-inset-rich: inset 0 1px 0 rgba(255, 255, 255, 0.14),
+                      inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  
+  /* Blur levels */
+  --blur-xs:  blur(8px);
+  --blur-sm:  blur(14px);
+  --blur-md:  blur(20px);
+  --blur-lg:  blur(28px);
+  --blur-xl:  blur(40px);
+  
+  /* Saturate + blur combos */
+  --glass-filter-subtle:  blur(14px) saturate(160%);
+  --glass-filter-std:     blur(20px) saturate(180%);
+  --glass-filter-rich:    blur(28px) saturate(200%);
+  --glass-filter-heavy:   blur(40px) saturate(220%);
+  
+  /* Elevation shadows */
+  --glass-shadow-flat:   0 2px 8px rgba(0,0,0,0.40),
+                         0 1px 3px rgba(0,0,0,0.30);
+  --glass-shadow-card:   0 4px 16px rgba(0,0,0,0.50),
+                         0 2px 8px  rgba(0,0,0,0.35);
+  --glass-shadow-panel:  0 8px 32px rgba(0,0,0,0.60),
+                         0 4px 16px rgba(0,0,0,0.40);
+  --glass-shadow-modal:  0 16px 64px rgba(0,0,0,0.70),
+                         0 8px 32px  rgba(0,0,0,0.55);
+  --glass-shadow-float:  0 24px 80px rgba(0,0,0,0.75),
+                         0 12px 40px rgba(0,0,0,0.60);
+  
+  /* Easing tokens */
+  --glass-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --glass-ease-fluid:  cubic-bezier(0.16, 1, 0.3, 1);
+  --glass-ease-std:    cubic-bezier(0.4, 0, 0.2, 1);
+  --glass-dur-fast:   180ms;
+  --glass-dur-std:    320ms;
+  --glass-dur-slow:   500ms;
+}
+
+/* =====================================================================
+   SECTION 2 — SIDEBAR (Layer 2 — narrow left nav strip)
+   Currently: flat black. Fix: frosted glass strip.
+   ===================================================================== */
+.dark-mode .sidebar {
+  background: rgba(8, 8, 8, 0.60) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border-right: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    2px 0 20px rgba(0, 0, 0, 0.50),
+    var(--glass-inset-top);
+  transition: background var(--glass-dur-std) var(--glass-ease-std),
+              border-color var(--glass-dur-std) var(--glass-ease-std);
+}
+
+/* =====================================================================
+   SECTION 3 — SIDEBAR ICONS (interactive buttons in sidebar)
+   ===================================================================== */
+.dark-mode .sidebar-icon {
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .sidebar-icon:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.50),
+    0 2px 8px  rgba(0, 0, 0, 0.35),
+    var(--glass-inset-top) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+.dark-mode .sidebar-icon.active {
+  background: var(--glass-l3) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.50),
+    var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 4 — WINDOW CONTROLS AREA (top-right hover bar)
+   Already partially glassy — enhance it.
+   ===================================================================== */
+.dark-mode .window-controls-area {
+  background: rgba(6, 6, 6, 0.65) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border-bottom: 1px solid var(--glass-edge-mid) !important;
+  border-left: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    var(--glass-shadow-card),
+    var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 5 — FLOATING WINDOW / AIOS MODAL (Account Settings etc)
+   The big overlay modal. Currently barely translucent.
+   ===================================================================== */
+.dark-mode .floating-window {
+  background: rgba(7, 7, 7, 0.72) !important;
+  -webkit-backdrop-filter: var(--glass-filter-heavy);
+  backdrop-filter: var(--glass-filter-heavy);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    var(--glass-shadow-float),
+    var(--glass-inset-rich) !important;
+  border-radius: 20px !important;
+}
+
+/* Window header — slightly distinct from body */
+.dark-mode .window-header {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* =====================================================================
+   SECTION 6 — TABS SIDEBAR (left nav inside modal)
+   ===================================================================== */
+.dark-mode .tabs-sidebar {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-right: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* Tab button hover/active */
+.dark-mode .tab-btn {
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .tab-btn:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top);
+  border-radius: 10px;
+}
+
+.dark-mode .tab-btn.active {
+  background: var(--glass-l3) !important;
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+  border-radius: 10px !important;
+}
+
+/* Tab content area */
+.dark-mode .tab-content-area {
+  background: transparent !important;
+}
+
+/* =====================================================================
+   SECTION 7 — SETTINGS CARDS (capability cards, deployment cards, etc)
+   Currently: flat var(--elevated-bg). Make them float as glass.
+   ===================================================================== */
+.dark-mode .settings-card {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: 
+    var(--glass-shadow-card),
+    var(--glass-inset-top) !important;
+  border-radius: 16px !important;
+  transition: all var(--glass-dur-slow) var(--glass-ease-fluid) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle shimmer line at top on hover */
+.dark-mode .settings-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent);
+  opacity: 0;
+  transition: opacity var(--glass-dur-std) var(--glass-ease-std);
+  pointer-events: none;
+}
+
+.dark-mode .settings-card:hover::after {
+  opacity: 1;
+}
+
+.dark-mode .settings-card:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: 
+    var(--glass-shadow-panel),
+    var(--glass-inset-rich) !important;
+  transform: translateY(-4px) !important;
+}
+
+/* Card header divider */
+.dark-mode .settings-card-header {
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* =====================================================================
+   SECTION 8 — CONTEXT WINDOW (right session history panel)
+   Currently: flat bg-color. Glass it.
+   ===================================================================== */
+.dark-mode .context-window {
+  background: rgba(5, 5, 5, 0.65) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border-left: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    -4px 0 32px rgba(0, 0, 0, 0.55),
+    -2px 0 12px rgba(0, 0, 0, 0.35),
+    var(--glass-inset-top) !important;
+}
+
+/* Context header */
+.dark-mode .context-header {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* Session items — subtle glass on hover */
+.dark-mode .session-item:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top);
+}
+
+.dark-mode .session-item.selected {
+  background: var(--glass-l2) !important;
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+  border-radius: 8px;
+}
+
+/* Selection controls (bottom of context panel) */
+.dark-mode .selection-controls {
+  background: rgba(5, 5, 5, 0.75) !important;
+  border-top: 1px solid var(--glass-edge-dim) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* Context search input */
+.dark-mode .context-search input {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top);
+  transition: all var(--glass-dur-std) var(--glass-ease-std) !important;
+}
+
+.dark-mode .context-search input:focus {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-hot) !important;
+  box-shadow: 
+    0 0 0 3px rgba(255, 255, 255, 0.06),
+    var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 9 — SESSION HISTORY VIEWER (full-screen history view)
+   ===================================================================== */
+.dark-mode .session-history-viewer {
+  background: rgba(4, 4, 4, 0.70) !important;
+  -webkit-backdrop-filter: var(--glass-filter-heavy);
+  backdrop-filter: var(--glass-filter-heavy);
+}
+
+/* =====================================================================
+   SECTION 10 — HISTORY CONTENT SIDEBAR (left sliding panel)
+   ===================================================================== */
+.dark-mode .history-sidebar-panel {
+  background: rgba(6, 6, 6, 0.70) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border-right: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    4px 0 32px rgba(0, 0, 0, 0.60),
+    var(--glass-inset-top) !important;
+}
+
+/* Panel header */
+.dark-mode .history-sidebar-header {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* Panel tabs area */
+.dark-mode .history-sidebar-tabs {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* Tab buttons inside history sidebar */
+.dark-mode .history-tab-btn {
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .history-tab-btn:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+.dark-mode .history-tab-btn.active {
+  background: var(--glass-l3) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+}
+
+/* History content items */
+.dark-mode .history-content-item {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-inset-top);
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .history-content-item:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+  transform: translateX(5px) !important;
+}
+
+/* =====================================================================
+   SECTION 11 — SELECTED CONTEXT VIEWER (popup modal with file/session preview)
+   ===================================================================== */
+.dark-mode .selected-context-viewer {
+  background: rgba(6, 6, 6, 0.68) !important;
+  -webkit-backdrop-filter: var(--glass-filter-heavy);
+  backdrop-filter: var(--glass-filter-heavy);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: 
+    var(--glass-shadow-float),
+    var(--glass-inset-rich) !important;
+  border-radius: 20px !important;
+}
+
+/* =====================================================================
+   SECTION 12 — MEMORY CARDS
+   ===================================================================== */
+.dark-mode .memory-entry-card {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+  border-radius: 16px !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-fluid) !important;
+}
+
+.dark-mode .memory-entry-card:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-panel), var(--glass-inset-rich) !important;
+}
+
+.dark-mode .memory-compact-card {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+  border-radius: 14px !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-fluid) !important;
+}
+
+.dark-mode .memory-compact-card:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-rich) !important;
+}
+
+.dark-mode .memory-card-collapsed:hover {
+  background: var(--glass-l2) !important;
+}
+
+/* =====================================================================
+   SECTION 13 — TOOLTIP
+   ===================================================================== */
+.dark-mode .tooltip::before {
+  background: rgba(8, 8, 8, 0.82) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-panel) !important;
+  color: rgba(240, 240, 240, 0.95) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.dark-mode .tooltip::after {
+  background: rgba(8, 8, 8, 0.82) !important;
+  border-color: var(--glass-edge-mid) !important;
+}
+
+/* =====================================================================
+   SECTION 14 — FORM INPUTS INSIDE MODAL (settings forms)
+   ===================================================================== */
+.dark-mode .form-group input,
+.dark-mode .form-group textarea,
+.dark-mode .settings-select {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-std) !important;
+}
+
+.dark-mode .form-group input:focus,
+.dark-mode .form-group textarea:focus,
+.dark-mode .settings-select:focus {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-hot) !important;
+  box-shadow: 
+    0 0 0 3px rgba(255, 255, 255, 0.06),
+    var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 15 — USER IDENTITY CARD (profile card in Account tab)
+   ===================================================================== */
+.dark-mode .user-identity-card {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+  border-radius: 16px !important;
+}
+
+/* =====================================================================
+   SECTION 16 — BUTTONS (secondary & icon buttons)
+   Make them glass-tinted.
+   ===================================================================== */
+.dark-mode .btn-secondary {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .btn-secondary:hover {
+  background: var(--glass-l3) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-rich) !important;
+}
+
+.dark-mode .expand-deployment-btn {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .expand-deployment-btn:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+}
+
+/* Auth buttons */
+.dark-mode .auth-btn.social {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top) !important;
+}
+
+.dark-mode .auth-btn.social:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+}
+
+/* Use-selected / clear-selection buttons */
+.dark-mode .clear-selection-btn {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-dim) !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .clear-selection-btn:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-mid) !important;
+}
+
+/* =====================================================================
+   SECTION 17 — HOME SCREEN SUGGESTION CARDS (enhanced)
+   Already somewhat glassy — intensify the effect.
+   ===================================================================== */
+.dark-mode .suggestion-card {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: 
+    var(--glass-shadow-flat),
+    var(--glass-inset-top) !important;
+  border-radius: 16px !important;
+  transition: all 0.35s var(--glass-ease-fluid) !important;
+}
+
+.dark-mode .suggestion-card:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: 
+    var(--glass-shadow-panel),
+    var(--glass-inset-rich) !important;
+  transform: translateY(-5px) !important;
+}
+
+.dark-mode .suggestion-card-icon {
+  background: var(--glass-l2) !important;
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top);
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .suggestion-card:hover .suggestion-card-icon {
+  background: var(--glass-l3) !important;
+  border-color: var(--glass-edge-bright) !important;
+  transform: scale(1.1) !important;
+}
+
+/* =====================================================================
+   SECTION 18 — BACKGROUND CHAT BUTTONS (session buttons in sidebar)
+   ===================================================================== */
+.dark-mode .background-chat-btn:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* =====================================================================
+   SECTION 19 — MEMORY CONFIRM MODAL
+   ===================================================================== */
+.dark-mode .memory-confirm-modal {
+  background: rgba(0, 0, 0, 0.65) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+.dark-mode .memory-confirm-content {
+  background: rgba(8, 8, 8, 0.78) !important;
+  -webkit-backdrop-filter: var(--glass-filter-Heavy);
+  backdrop-filter: var(--glass-filter-heavy);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-float), var(--glass-inset-rich) !important;
+  border-radius: 24px !important;
+}
+
+/* =====================================================================
+   SECTION 20 — WEBVIEW CONTAINER (browser window overlay)
+   ===================================================================== */
+.dark-mode .webview-container {
+  background: rgba(6, 6, 6, 0.68) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-float), var(--glass-inset-rich) !important;
+}
+
+.dark-mode .webview-header {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-bottom-color: var(--glass-edge-mid) !important;
+}
+
+/* =====================================================================
+   SECTION 21 — ICON BUTTONS (global enhancement in dark mode)
+   ===================================================================== */
+.dark-mode .icon-btn:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+}
+
+/* Sync context button */
+.dark-mode .sync-context-btn:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* =====================================================================
+   SECTION 22 — CLOSE BUTTONS
+   ===================================================================== */
+.dark-mode .close-btn:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* =====================================================================
+   SECTION 23 — INLINE MERMAID BLOCK
+   ===================================================================== */
+.dark-mode .inline-mermaid-block {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+}
+
+.dark-mode .inline-mermaid-header {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* =====================================================================
+   SECTION 24 — HISTORY CONTENT BTN (the "View Content" pill button)
+   ===================================================================== */
+.dark-mode .history-content-btn {
+  background: var(--glass-l3) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+  color: rgba(240, 240, 240, 0.92) !important;
+  border-radius: 10px !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .history-content-btn:hover {
+  background: var(--glass-l4) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-rich) !important;
+  transform: translateY(-2px) !important;
+}
+
+.dark-mode .history-content-btn i {
+  color: rgba(240, 240, 240, 0.85) !important;
+}
+
+/* =====================================================================
+   SECTION 25 — HISTORY ITEM ICON CONTAINERS
+   ===================================================================== */
+.dark-mode .history-item-icon {
+  background: var(--glass-l2) !important;
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* =====================================================================
+   SECTION 26 — EMPTY STATES (dashed border boxes)
+   ===================================================================== */
+.dark-mode .empty-state {
+  background: var(--glass-l0) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px dashed var(--glass-edge-mid) !important;
+  border-radius: 16px !important;
+}
+
+/* =====================================================================
+   SECTION 27 — GLASSMORPHISM HOVER ENHANCEMENT ANIMATION
+   Micro-animation: shimmer sweep on glass card hover
+   ===================================================================== */
+@keyframes glassSweep {
+  0%   { left: -120%; }
+  100% { left: 120%;  }
+}
+
+/* Apply shimmer sweep to any glass element on hover */
+.dark-mode .settings-card,
+.dark-mode .memory-entry-card,
+.dark-mode .memory-compact-card,
+.dark-mode .history-content-item,
+.dark-mode .suggestion-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dark-mode .settings-card::before,
+.dark-mode .memory-entry-card::before,
+.dark-mode .memory-compact-card::before,
+.dark-mode .suggestion-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 80%
+  );
+  pointer-events: none;
+  transition: left var(--glass-dur-slow) var(--glass-ease-std);
+  z-index: 1;
+}
+
+.dark-mode .settings-card:hover::before,
+.dark-mode .memory-entry-card:hover::before,
+.dark-mode .memory-compact-card:hover::before,
+.dark-mode .suggestion-card:hover::before {
+  left: 120%;
+}
+
+/* =====================================================================
+   SECTION 28 — SCROLL CONTAINERS WITHIN GLASS PANELS
+   Fade-out top edge for elegance
+   ===================================================================== */
+.dark-mode .context-content {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+}
+
+/* =====================================================================
+   SECTION 29 — TOPIC TAGS (inside memory cards)
+   ===================================================================== */
+.dark-mode .topic-tag {
+  background: var(--glass-l2) !important;
+  border: 1px solid var(--glass-edge-mid) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  box-shadow: var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 30 — CODE BLOCKS INSIDE SETTINGS/MEMORY (detail value)
+   ===================================================================== */
+.dark-mode .memory-detail-value.code {
+  background: var(--glass-l1) !important;
+  border: 1px solid var(--glass-edge-dim) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+/* =====================================================================
+   SECTION 31 — TOOLS MENU & SHUFFLE MENU (dropdown from chat input)
+   NOTE: We enhance these — they are NOT the input area itself.
+   ===================================================================== */
+.dark-mode .tools-menu {
+  background: rgba(7, 7, 7, 0.80) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-modal), var(--glass-inset-rich) !important;
+  border-radius: 14px !important;
+}
+
+.dark-mode .shuffle-menu {
+  background: rgba(7, 7, 7, 0.80) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-modal), var(--glass-inset-rich) !important;
+  border-radius: 14px !important;
+}
+
+.dark-mode .shuffle-item:hover,
+.dark-mode .tool-item:hover {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border-radius: 9px;
+}
+
+/* =====================================================================
+   SECTION 32 — SHARE MODAL (message share popup)
+   ===================================================================== */
+.dark-mode .share-modal-overlay {
+  background: rgba(0, 0, 0, 0.65) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+}
+
+.dark-mode .share-modal {
+  background: rgba(8, 8, 8, 0.80) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-float), var(--glass-inset-rich) !important;
+  border-radius: 20px !important;
+}
+
+.dark-mode .share-modal-header {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+.dark-mode .share-option {
+  background: var(--glass-l1) !important;
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+  border-radius: 10px !important;
+}
+
+.dark-mode .share-option:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   SECTION 33 — FILE PREVIEW SIDEBAR (file attachment viewer)
+   ===================================================================== */
+.dark-mode .file-preview-sidebar {
+  background: rgba(7, 7, 7, 0.78) !important;
+  -webkit-backdrop-filter: var(--glass-filter-rich);
+  backdrop-filter: var(--glass-filter-rich);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-shadow-modal), var(--glass-inset-rich) !important;
+  border-radius: 16px !important;
+}
+
+.dark-mode .file-preview-header {
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-bottom: 1px solid var(--glass-edge-dim) !important;
+}
+
+/* =====================================================================
+   SECTION 34 — GENERIC .card OVERRIDES
+   ===================================================================== */
+.dark-mode .card {
+  background: var(--glass-l1) !important;
+  -webkit-backdrop-filter: var(--glass-filter-std);
+  backdrop-filter: var(--glass-filter-std);
+  border: 1px solid var(--glass-edge-dim) !important;
+  box-shadow: var(--glass-shadow-card), var(--glass-inset-top) !important;
+  border-radius: 14px !important;
+  transition: all var(--glass-dur-slow) var(--glass-ease-fluid) !important;
+}
+
+.dark-mode .card:hover {
+  background: var(--glass-l2) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-panel), var(--glass-inset-rich) !important;
+}
+
+/* =====================================================================
+   SECTION 35 — FILE CHIP (attachment pills in input area)
+   These are part of the input context, not the message area, so ok.
+   ===================================================================== */
+.dark-mode .file-chip,
+.dark-mode .session-chip {
+  background: var(--glass-l2) !important;
+  -webkit-backdrop-filter: var(--glass-filter-subtle);
+  backdrop-filter: var(--glass-filter-subtle);
+  border: 1px solid var(--glass-edge-mid) !important;
+  box-shadow: var(--glass-inset-top) !important;
+  transition: all var(--glass-dur-fast) var(--glass-ease-spring) !important;
+}
+
+.dark-mode .file-chip:hover,
+.dark-mode .session-chip:hover {
+  background: var(--glass-l3) !important;
+  border-color: var(--glass-edge-bright) !important;
+  box-shadow: var(--glass-shadow-flat), var(--glass-inset-top) !important;
+}
+
+/* =====================================================================
+   PERFORMANCE HINTS — will-change only on animated elements
+   ===================================================================== */
+.dark-mode .floating-window,
+.dark-mode .context-window,
+.dark-mode .history-sidebar-panel,
+.dark-mode .selected-context-viewer,
+.dark-mode .session-history-viewer {
+  will-change: transform, opacity;
+}
