@@ -386,3 +386,71 @@ body:not(.dark-mode) .computer-dropdown-item#computer-manual-grant-btn.granted:h
 body:not(.dark-mode) .computer-dropdown-exit:hover {
     background: rgba(239, 68, 68, 0.1);
 }
+
+/* Computer Workspace Glow */
+body.computer-panel-open .app-container::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.12) 0%, transparent 60%);
+    animation: computerAmbientGlow 6s ease-in-out infinite alternate;
+}
+
+@keyframes computerAmbientGlow {
+    0% { opacity: 0.5; filter: blur(25px); }
+    100% { opacity: 1; filter: blur(40px); }
+}
+
+.workspace-know-me-btn.computer-know-me {
+    display: flex;
+    align-items: flex-start;
+    width: calc(100% - 24px);
+    margin: 8px 12px;
+    padding: 10px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.workspace-know-me-btn.computer-know-me:hover {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+}
+
+.workspace-know-me-btn.computer-know-me .know-me-icon {
+    font-size: 1.1rem;
+    color: #34d399;
+    margin-right: 10px;
+    margin-top: 2px;
+    transition: transform 0.3s ease;
+}
+
+.workspace-know-me-btn.computer-know-me:hover .know-me-icon {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.workspace-know-me-btn.computer-know-me .know-me-content {
+    flex: 1;
+}
+
+.workspace-know-me-btn.computer-know-me .know-me-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #a7f3d0;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.workspace-know-me-btn.computer-know-me .know-me-desc {
+    font-size: 0.7rem;
+    color: #6ee7b7;
+    line-height: 1.3;
+}

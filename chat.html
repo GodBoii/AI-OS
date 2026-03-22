@@ -66,6 +66,11 @@
     </div>
 
     <div class="project-workspace-actions">
+        <!-- New Know Me Button inline -->
+        <button id="project-know-me-btn" class="project-action-btn" title="About Project Workspace">
+            <i class="fas fa-info-circle"></i>
+            <span>Know Me</span>
+        </button>
         <button id="project-mode-toggle-btn" class="project-action-btn">
             <i class="fas fa-toggle-on"></i>
             <span id="project-mode-current-label">Cloud Mode</span>
@@ -80,7 +85,7 @@
                 class="lucide lucide-message-square">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            <span>Start Coder Chat</span>
+            <span>Start Coder</span>
         </button>
         <button id="project-sync-files-btn" class="project-action-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -191,6 +196,11 @@
 
         <!-- Dropdown Menu -->
         <div class="computer-chip-dropdown">
+            <button id="computer-know-me-btn" class="computer-dropdown-item" title="About Computer Workspace">
+                <i class="fas fa-info-circle"></i>
+                <span>Know Me</span>
+            </button>
+            <div class="computer-dropdown-divider"></div>
             <button id="computer-manual-grant-btn" class="computer-dropdown-item"
                 aria-label="Grant computer permission">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -399,3 +409,40 @@
         }
     });
 </script>
+
+<div id="know-me-modal" class="know-me-modal hidden">
+    <div class="know-me-modal-backdrop" id="know-me-backdrop"></div>
+    <div class="know-me-modal-content glass-panel">
+        <button id="know-me-modal-close" class="know-me-modal-close"><i class="fas fa-times"></i></button>
+        
+        <!-- Project Context -->
+        <div id="know-me-project-content" class="know-me-content hidden">
+            <h2><i class="fas fa-rocket"></i> Project Workspace</h2>
+            <p>The Project Workspace transforms Aetheria into a dedicated coding agent. It operates directly within your local file system, creating the ultimate pair-programmer experience without tedious copying and pasting.</p>
+            <div class="mermaid-code">
+            graph LR
+                User([You]) -->|Command| AI[Aetheria Coder]
+                AI -->|Modify| FS[(File System)]
+                AI -->|Terminal output| Term[Terminal]
+                Term -.->|Reads state| AI
+            </div>
+            <p><strong><i class="fas fa-check-circle" style="color:#0ea5e9;"></i> Superpowers:</strong> Native file creation, terminal execution, automatic repo cloning, and multi-file refactoring step-by-step.</p>
+        </div>
+
+        <!-- Computer Context -->
+        <div id="know-me-computer-content" class="know-me-content hidden">
+            <h2><i class="fas fa-desktop"></i> Computer Workspace</h2>
+            <p>The Computer Workspace empowers Aetheria to operate your OS like a human. Utilizing screen vision and mouse/keyboard automation, the AI natively interacts with your apps and browsers.</p>
+            <div class="mermaid-code">
+            graph LR
+                AI[Aetheria Agent] -->|Reads| Scr[Screen]
+                AI -->|Clicks & Types| HID[Mouse/Keyboard]
+                HID -->|Drives| App[Desktop Applications]
+                App -.->|Updates UI| Scr
+            </div>
+            <p><strong><i class="fas fa-check-circle" style="color:#10b981;"></i> Superpowers:</strong> Fully autonomous desktop workflows, visual web browsing, system configuration, and software testing.</p>
+        </div>
+    </div>
+</div>
+
+
