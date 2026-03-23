@@ -807,6 +807,33 @@ body.project-panel-open .app-container::before {
     100% { opacity: 1; filter: blur(35px); }
 }
 
+.workspace-know-me-btn .know-me-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #ddd6fe;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.workspace-know-me-btn .know-me-desc {
+    font-size: 0.75rem;
+    color: #a78bfa;
+    line-height: 1.4;
+}
+
+/* App Container Workspace Glow */
+body.project-panel-open .app-container {
+    border: 1px solid rgba(139, 92, 246, 0.4) !important;
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.25), inset 0 0 25px rgba(139, 92, 246, 0.15) !important;
+    transition: box-shadow 0.6s ease, border 0.6s ease;
+}
+
+body:not(.dark-mode).project-panel-open .app-container {
+    border: 1px solid rgba(139, 92, 246, 0.6) !important;
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.2), inset 0 0 25px rgba(139, 92, 246, 0.1) !important;
+}
+
 /* Modals */
 .know-me-modal {
     position: fixed;
@@ -934,6 +961,107 @@ body:not(.dark-mode) .know-me-content h2 i {
 body:not(.dark-mode) .know-me-content .mermaid {
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Feature Grid */
+.know-me-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+}
+
+.feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s, background 0.2s;
+}
+
+.feature-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+#know-me-computer-content .feature-item:hover {
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+body:not(.dark-mode) .feature-item {
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body:not(.dark-mode) .feature-item:hover {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(139, 92, 246, 0.5);
+}
+
+body:not(.dark-mode) #know-me-computer-content .feature-item:hover {
+    border-color: rgba(16, 185, 129, 0.5);
+}
+
+.feature-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+}
+
+.feature-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+#know-me-computer-content .feature-icon {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+body:not(.dark-mode) .feature-icon {
+    background: rgba(139, 92, 246, 0.15);
+    color: #7c3aed;
+}
+
+body:not(.dark-mode) #know-me-computer-content .feature-icon {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+}
+
+.feature-text h4 {
+    margin: 0 0 4px 0;
+    font-size: 0.9rem;
+    color: #f1f5f9;
+}
+
+body:not(.dark-mode) .feature-text h4 {
+    color: #1e293b;
+}
+
+.feature-text p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+body:not(.dark-mode) .feature-text p {
+    color: #64748b;
 }
 
 @keyframes modalScaleIn {
