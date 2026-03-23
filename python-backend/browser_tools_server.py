@@ -11,7 +11,9 @@ import asyncio
 import base64
 import threading
 import time
-from typing import Dict, Any, Literal, Union, Optional
+import os
+from pathlib import Path
+from typing import Dict, Any, Literal, Union, Optional, Tuple, List
 from contextlib import asynccontextmanager
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
@@ -45,6 +47,7 @@ class ServerBrowserTools(Toolkit):
     _dedicated_loop: Optional[asyncio.AbstractEventLoop] = None
     _loop_thread: Optional[threading.Thread] = None
     _loop_init_lock = threading.Lock()
+    _startup_error: Optional[str] = None
     
     def __init__(self, session_id: str, user_id: str, socketio=None, sid: str = None, redis_client=None, message_id: str = None, **kwargs):
         """
@@ -77,6 +80,57 @@ class ServerBrowserTools(Toolkit):
             ],
         )
     
+    @classmethod
+    def _browser_binary_candidates(cls) -> List[Path]:
+        """
+        Return likely Chromium executable locations managed by Playwright.
+        Supports custom PLAYWRIGHT_BROWSERS_PATH and default cache path.
+        """
+        base_paths: List[Path] = []
+        env_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
+        if env_path and env_path.strip() and env_path.strip() != "0":
+            base_paths.append(Path(env_path.strip()))
+        base_paths.append(Path.home() / ".cache" / "ms-playwright")
+
+        seen = set()
+        unique_base_paths: List[Path] = []
+        for base in base_paths:
+            key = str(base.resolve()) if base.exists() else str(base)
+            if key not in seen:
+                seen.add(key)
+                unique_base_paths.append(base)
+
+        candidate_patterns = [
+            "chromium-*/chrome-linux/chrome",
+            "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell",
+            "chromium-*/chrome-win/chrome.exe",
+            "chromium_headless_shell-*/chrome-headless-shell-win64/chrome-headless-shell.exe",
+            "chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+            "chromium_headless_shell-*/chrome-headless-shell-mac/chrome-headless-shell",
+        ]
+
+        candidates: List[Path] = []
+        for base in unique_base_paths:
+            if not base.exists():
+                continue
+            for pattern in candidate_patterns:
+                candidates.extend(base.glob(pattern))
+        return candidates
+
+    @classmethod
+    def _check_browser_installation(cls) -> Tuple[bool, str]:
+        """Return whether Playwright Chromium binary appears installed."""
+        candidates = cls._browser_binary_candidates()
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return True, str(candidate)
+        if not candidates:
+            return False, (
+                "No Playwright Chromium binaries found in PLAYWRIGHT_BROWSERS_PATH "
+                "or default ~/.cache/ms-playwright."
+            )
+        return False, "Playwright binary candidates exist but are not usable."
+
     @classmethod
     def _get_dedicated_loop(cls) -> asyncio.AbstractEventLoop:
         """Get or create a dedicated asyncio event loop running in a background thread.
@@ -114,18 +168,33 @@ class ServerBrowserTools(Toolkit):
         
         async with cls._browser_lock:
             if cls._browser is None or not cls._browser.is_connected():
+                installed, detail = cls._check_browser_installation()
+                if not installed:
+                    cls._startup_error = (
+                        "Playwright Chromium is not installed on the server. "
+                        "Run `playwright install --with-deps chromium` in the backend image. "
+                        f"Details: {detail}"
+                    )
+                    logger.error(cls._startup_error)
+                    raise RuntimeError(cls._startup_error)
+
                 logger.info("Launching Playwright browser...")
-                cls._playwright = await async_playwright().start()
-                cls._browser = await cls._playwright.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu'
-                    ]
-                )
-                logger.info("Browser launched successfully")
+                try:
+                    cls._playwright = await async_playwright().start()
+                    cls._browser = await cls._playwright.chromium.launch(
+                        headless=True,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-gpu'
+                        ]
+                    )
+                    cls._startup_error = None
+                    logger.info("Browser launched successfully")
+                except Exception as e:
+                    cls._startup_error = str(e)
+                    raise
     
     async def _get_or_create_context(self) -> BrowserContext:
         """Get or create browser context for this session."""
@@ -270,6 +339,28 @@ class ServerBrowserTools(Toolkit):
         """Check if browser is ready."""
         try:
             is_ready = self.session_id in self._pages
+            installed, install_detail = self._check_browser_installation()
+            if not installed:
+                return {
+                    "status": "error",
+                    "connected": False,
+                    "ready": False,
+                    "message": (
+                        "Server-side browser dependencies are missing. "
+                        "Playwright Chromium is not installed."
+                    ),
+                    "details": install_detail,
+                }
+
+            if self._startup_error:
+                return {
+                    "status": "error",
+                    "connected": False,
+                    "ready": False,
+                    "message": "Server-side browser failed to start.",
+                    "details": self._startup_error,
+                }
+
             return {
                 "status": "success",
                 "connected": True,
@@ -688,6 +779,7 @@ class ServerBrowserTools(Toolkit):
         cls._browser = None
         cls._playwright = None
         cls._browser_lock = None
+        cls._startup_error = None
         
         # Stop the dedicated event loop
         if cls._dedicated_loop and not cls._dedicated_loop.is_closed():

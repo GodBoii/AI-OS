@@ -19,6 +19,11 @@ COPY python-backend/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright browser binaries in a deterministic location for
+# server-side browser automation used by mobile/web sessions.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium
+
 COPY python-backend/ . 
 
 EXPOSE 8765
