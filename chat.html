@@ -261,16 +261,16 @@
     <!-- NEW: A dedicated toolbar for all buttons -->
     <div class="input-toolbar">
         <div class="toolbar-left">
-            <button class="add-btn">
+            <button class="add-btn" title="Start new conversation">
                 <i class="fas fa-plus"></i>
             </button>
             <input type="file" id="file-input" multiple />
-            <button id="attach-file-btn" class="attach-btn">
+            <button id="attach-file-btn" class="attach-btn" title="Attach files">
                 <i class="fas fa-paperclip"></i>
             </button>
             <!-- NEW: Shuffle button with dropdown menu -->
             <div class="shuffle-btn tool-btn" data-tool="shuffle" role="button" tabindex="0"
-                aria-label="Open shuffle menu" aria-expanded="false" aria-haspopup="true">
+                aria-label="Open shuffle menu" aria-expanded="false" aria-haspopup="true" title="Configure memory and tools">
                 <i class="fas fa-random" aria-hidden="true"></i>
                 <div class="shuffle-menu" role="menu" aria-label="Shuffle menu options">
                     <div class="shuffle-item" data-action="memory" role="menuitem" tabindex="-1"
@@ -295,7 +295,7 @@
                 </div>
             </div>
             <!-- Context button moved to left side as requested -->
-            <button class="tool-btn" data-tool="context">
+            <button class="tool-btn" data-tool="context" title="View chat history">
                 <i class="fa-solid fa-comments"></i>
             </button>
             <button id="view-content-btn" class="tool-btn view-content-btn hidden" title="View session content">
@@ -307,10 +307,10 @@
         </div>
         <div class="toolbar-right">
             <button id="mic-button" class="mic-btn tooltip" data-tooltip="Voice Input (Click to start/stop)"
-                aria-label="Voice Input">
+                aria-label="Voice Input" title="Voice input">
                 <i class="fas fa-microphone"></i>
             </button>
-            <button id="send-message" class="send-btn">
+            <button id="send-message" class="send-btn" title="Send message">
                 <i class="fas fa-paper-plane"></i>
             </button>
         </div>
@@ -323,6 +323,9 @@
     <div class="context-header">
         <div class="header-left">
             <h2 id="context-header-title">Chats</h2>
+            <button class="context-info-btn" id="context-info-btn" title="How to close">
+                <i class="fas fa-info-circle"></i>
+            </button>
         </div>
         <div class="context-search">
             <i class="fas fa-search"></i>
@@ -336,7 +339,12 @@
 <!-- Session History Viewer (Center) -->
 <div id="session-history-viewer" class="session-history-viewer hidden">
     <div class="session-history-header">
-        <h3 class="session-history-title"></h3>
+        <div class="session-history-title-wrapper">
+            <h3 class="session-history-title"></h3>
+            <button class="session-history-info-btn" id="session-history-info-btn" title="How to close">
+                <i class="fas fa-info-circle"></i>
+            </button>
+        </div>
         <div class="session-history-actions">
             <button id="history-view-content-btn" class="history-content-btn hidden" title="View session content">
                 <i class="fas fa-folder-open"></i>
@@ -346,6 +354,23 @@
     </div>
     <div class="session-history-content">
         <!-- Session messages will be rendered here -->
+    </div>
+</div>
+
+<!-- Info Tooltips -->
+<div id="context-info-tooltip" class="info-tooltip hidden">
+    <div class="info-tooltip-arrow"></div>
+    <div class="info-tooltip-content">
+        <p><strong>How to close:</strong></p>
+        <p>Click on "Chats" title to close this sidebar</p>
+    </div>
+</div>
+
+<div id="session-history-info-tooltip" class="info-tooltip hidden">
+    <div class="info-tooltip-arrow"></div>
+    <div class="info-tooltip-content">
+        <p><strong>How to close:</strong></p>
+        <p>Click on the session title to go back</p>
     </div>
 </div>
 
