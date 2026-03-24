@@ -441,105 +441,193 @@
         <button id="know-me-modal-close" class="know-me-modal-close"><i class="fas fa-times"></i></button>
         
         <!-- Project Context -->
-        <div id="know-me-project-content" class="know-me-content hidden">
-            <h2><i class="fas fa-rocket"></i> Project Workspace</h2>
-            <p>The Project Workspace transforms Aetheria into a dedicated coding agent. It operates directly within your local file system, creating the ultimate pair-programmer experience without tedious copying and pasting.</p>
-            <div class="mermaid-code">
-            graph LR
-                User([You]) -->|Command| AI[Aetheria Coder]
-                AI -->|Modify| FS[(File System)]
-                AI -->|Terminal output| Term[Terminal]
-                Term -.->|Reads state| AI
+        <div id="know-me-project-content" class="know-me-content hidden flex-column">
+            
+            <div class="km-hero">
+                <div class="km-badge"><i class="fas fa-bolt"></i> Aetheria Coder</div>
+                <h2 class="km-title">Workspace Environment</h2>
+                <p class="km-subtitle">The ultimate pair-programmer experience. Aetheria operates as a dedicated SWE agent capable of executing code, managing files, and deploying via two distinct execution environments: <strong>Cloud Sandbox</strong> or <strong>Local OS</strong>.</p>
             </div>
-            <div class="know-me-features">
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+
+            <div class="km-architecture">
+                <div class="arch-glow-bg"></div>
+                <div class="arch-container">
+                    
+                    <div class="arch-node user-node">
+                        <div class="node-icon"><i class="fas fa-user-astronaut"></i></div>
+                        <span>You</span>
                     </div>
-                    <div class="feature-text">
-                        <h4>Native Code Generation</h4>
-                        <p>Write directly to local files seamlessly.</p>
+                    
+                    <div class="arch-path path-horizontal">
+                        <span class="path-label">Command & Context</span>
+                        <div class="path-line"><div class="path-dot"></div></div>
+                    </div>
+                    
+                    <div class="arch-node ai-node">
+                        <div class="node-glass"></div>
+                        <div class="node-icon"><i class="fas fa-brain"></i></div>
+                        <span>Aetheria AI</span>
+                        <div class="ai-pulse-rings">
+                            <div class="ring"></div>
+                            <div class="ring" style="animation-delay: 1s;"></div>
+                        </div>
+                    </div>
+
+                    <div class="arch-paths-split">
+                        <div class="path-vertical path-fs">
+                            <span class="path-label">Local System</span>
+                            <div class="path-line vertical"><div class="path-dot"></div><div class="path-dot reverse" style="animation-delay: 0.8s;"></div></div>
+                        </div>
+                        <div class="path-vertical path-term">
+                            <span class="path-label">API Isolation</span>
+                            <div class="path-line vertical"><div class="path-dot" style="animation-delay: 0.4s;"></div><div class="path-dot reverse" style="animation-delay: 1.2s;"></div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="arch-targets">
+                        <div class="arch-node target-node">
+                            <div class="node-icon bg-green"><i class="fas fa-laptop-code"></i></div>
+                            <span>Local OS</span>
+                        </div>
+                        <div class="arch-node target-node">
+                            <div class="node-icon bg-blue"><i class="fas fa-cloud"></i></div>
+                            <span>Cloud Sandbox</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="km-grid">
+                <div class="km-card">
+                    <div class="km-card-glow text-blue"></div>
+                    <div class="km-card-icon text-blue"><i class="fas fa-cloud"></i></div>
+                    <div class="km-card-content">
+                        <h4>Cloud Sandbox Mode</h4>
+                        <p>Isolated Linux container (`/home/sandboxuser`) via <code>SandboxTools</code> with full terminal access, file tools, and dedicated cloud compute.</p>
                     </div>
                 </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                    </div>
-                    <div class="feature-text">
-                        <h4>Terminal Execution</h4>
-                        <p>Run local builds and commands natively.</p>
-                    </div>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                    </div>
-                    <div class="feature-text">
-                        <h4>Workspace Auto-Sync</h4>
-                        <p>Simultaneously scan open files for context.</p>
+                <div class="km-card">
+                    <div class="km-card-glow text-green"></div>
+                    <div class="km-card-icon text-green"><i class="fas fa-laptop-house"></i></div>
+                    <div class="km-card-content">
+                        <h4>Local Desktop Mode</h4>
+                        <p>Direct filesystem access via <code>LocalCoderTools</code> and an Electron bridge. Edits your files and runs commands natively on your machine.</p>
                     </div>
                 </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+                <div class="km-card">
+                    <div class="km-card-glow text-orange"></div>
+                    <div class="km-card-icon text-orange"><i class="fas fa-code-branch"></i></div>
+                    <div class="km-card-content">
+                        <h4>Native Git Control</h4>
+                        <p>Read logs, check status, diff branches, and seamlessly version control your codebase directly from the active environment.</p>
                     </div>
-                    <div class="feature-text">
-                        <h4>Git Version Control</h4>
-                        <p>Manage repo commits and branches natively.</p>
+                </div>
+                <div class="km-card">
+                    <div class="km-card-glow text-purple"></div>
+                    <div class="km-card-icon text-purple"><i class="fas fa-rocket"></i></div>
+                    <div class="km-card-content">
+                        <h4>Project Deployment</h4>
+                        <p>Instantly deploy code from the cloud sandbox to live endpoints and query backend runtime databases using <code>DeployedProjectTools</code>.</p>
                     </div>
                 </div>
             </div>
+            
         </div>
 
         <!-- Computer Context -->
-        <div id="know-me-computer-content" class="know-me-content hidden">
-            <h2><i class="fas fa-desktop"></i> Computer Workspace</h2>
-            <p>The Computer Workspace empowers Aetheria to operate your OS like a human. Utilizing screen vision and mouse/keyboard automation, the AI natively interacts with your apps and browsers.</p>
-            <div class="mermaid-code">
-            graph LR
-                AI[Aetheria Agent] -->|Reads| Scr[Screen]
-                AI -->|Clicks & Types| HID[Mouse/Keyboard]
-                HID -->|Drives| App[Desktop Applications]
-                App -.->|Updates UI| Scr
+        <div id="know-me-computer-content" class="know-me-content hidden flex-column">
+            
+            <div class="km-hero">
+                <div class="km-badge"><i class="fas fa-robot"></i> Computer Agent</div>
+                <h2 class="km-title">Computer Workspace</h2>
+                <p class="km-subtitle">Aetheria operates your OS exactly like a human. Utilizing advanced screen vision and raw hardware-level mouse/keyboard automation, the AI natively orchestrates interactions across any desktop applications.</p>
             </div>
-            <div class="know-me-features">
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><path d="M21 12c-2.4 4-5.4 6-9 6s-6.6-2-9-6c2.4-4 5.4-6 9-6s6.6 2 9 6Z"/><circle cx="12" cy="12" r="3"/></svg>
+
+            <div class="km-architecture">
+                <div class="arch-glow-bg glow-green"></div>
+                <div class="arch-container">
+                    
+                    <div class="arch-node target-node">
+                        <div class="node-icon bg-blue"><i class="fas fa-desktop"></i></div>
+                        <span>Live Desktop</span>
                     </div>
-                    <div class="feature-text">
+
+                    <div class="arch-path path-horizontal">
+                        <span class="path-label text-green" style="color: #34d399;">Screen Vision</span>
+                        <div class="path-line"><div class="path-dot reverse" style="background:#34d399; box-shadow:0 0 10px #34d399; animation-duration: 2s;"></div></div>
+                    </div>
+                    
+                    <div class="arch-node ai-node">
+                        <div class="node-glass"></div>
+                        <div class="node-icon" style="background: linear-gradient(135deg, rgba(52,211,153,0.3), rgba(16,185,129,0.3)); border-color: rgba(52,211,153,0.5); color: #a7f3d0; box-shadow: 0 0 30px rgba(52,211,153,0.4), inset 0 0 20px rgba(52,211,153,0.4);"><i class="fas fa-eye"></i></div>
+                        <span>Aetheria Core</span>
+                        <div class="ai-pulse-rings green-pulse">
+                            <div class="ring"></div>
+                            <div class="ring" style="animation-delay: 1s;"></div>
+                        </div>
+                    </div>
+
+                    <div class="arch-paths-split">
+                        <div class="path-vertical path-hw">
+                            <span class="path-label text-orange" style="color:#fb923c;">Mouse Ctrl</span>
+                            <div class="path-line vertical"><div class="path-dot" style="background:#fb923c; box-shadow:0 0 10px #fb923c;"></div></div>
+                        </div>
+                        <div class="path-vertical path-hw">
+                            <span class="path-label text-purple" style="color:#a78bfa;">Keyboard</span>
+                            <div class="path-line vertical"><div class="path-dot" style="background:#a78bfa; box-shadow:0 0 10px #a78bfa; animation-delay:0.8s;"></div></div>
+                        </div>
+                    </div>
+                    
+                    <div class="arch-targets">
+                        <div class="arch-node target-node">
+                            <div class="node-icon bg-orange"><i class="fas fa-mouse-pointer"></i></div>
+                            <span>Cursor</span>
+                        </div>
+                        <div class="arch-node target-node">
+                            <div class="node-icon bg-purple"><i class="fas fa-keyboard"></i></div>
+                            <span>Input</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="km-grid">
+                <div class="km-card">
+                    <div class="km-card-glow text-blue"></div>
+                    <div class="km-card-icon text-blue"><i class="fas fa-desktop"></i></div>
+                    <div class="km-card-content">
                         <h4>Screen Vision</h4>
-                        <p>Visual UI analysis processes your live desktop surface.</p>
+                        <p>Real-time visual analysis processes your live desktop surface via screenshots to interpret UI states.</p>
                     </div>
                 </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                    </div>
-                    <div class="feature-text">
+                <div class="km-card">
+                    <div class="km-card-glow text-green"></div>
+                    <div class="km-card-icon text-green"><i class="fas fa-mouse"></i></div>
+                    <div class="km-card-content">
                         <h4>Native Mouse Control</h4>
-                        <p>Calculates exact coordinates to hover and click.</p>
+                        <p>Calculates exact pixel coordinates to physically move the cursor, hover, click, and drag dynamically.</p>
                     </div>
                 </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="8" y1="12" x2="8" y2="12"/><line x1="12" y1="12" x2="12" y2="12"/><line x1="16" y1="12" x2="16" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
-                    </div>
-                    <div class="feature-text">
+                <div class="km-card">
+                    <div class="km-card-glow text-orange"></div>
+                    <div class="km-card-icon text-orange"><i class="fas fa-keyboard"></i></div>
+                    <div class="km-card-content">
                         <h4>Keyboard Simulation</h4>
-                        <p>Triggers complex typing flows and shortcuts rapidly.</p>
+                        <p>Rapidly triggers complex typing flows, multi-key shortcuts, and precise string inputs.</p>
                     </div>
                 </div>
-                <div class="feature-item">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><rect x="7" y="7" width="3" height="9"/><rect x="14" y="7" width="3" height="5"/></svg>
-                    </div>
-                    <div class="feature-text">
+                <div class="km-card">
+                    <div class="km-card-glow text-purple"></div>
+                    <div class="km-card-icon text-purple"><i class="fas fa-layer-group"></i></div>
+                    <div class="km-card-content">
                         <h4>App Orchestration</h4>
-                        <p>Executes multi-step workflows bridging varied local apps.</p>
+                        <p>Executes multi-step workflows seamlessly bridging varied local apps (browsers, IDEs, terminals, etc).</p>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
