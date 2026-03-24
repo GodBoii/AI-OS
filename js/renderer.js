@@ -224,8 +224,45 @@ class UIManager {
         const addClickHandler = (el, handler) => el?.addEventListener('click', handler);
         addClickHandler(this.elements.appIcon, () => this.state.setState({ isAIOSOpen: !this.state.getState().isAIOSOpen }));
         addClickHandler(this.elements.toDoListIcon, () => this.state.setState({ isToDoListOpen: !this.state.getState().isToDoListOpen }));
-        addClickHandler(this.elements.projectWorkspaceIcon, () => this.state.setState({ isProjectWorkspaceOpen: !this.state.getState().isProjectWorkspaceOpen }));
-        addClickHandler(this.elements.computerWorkspaceIcon, () => this.state.setState({ isComputerWorkspaceOpen: !this.state.getState().isComputerWorkspaceOpen }));
+
+        // Workspace icons — intercept to warn if another workspace is already active
+        addClickHandler(this.elements.projectWorkspaceIcon, () => {
+            const s = this.state.getState();
+            // If closing the project workspace, always allow
+            if (s.isProjectWorkspaceOpen) {
+                this.state.setState({ isProjectWorkspaceOpen: false });
+                return;
+            }
+            // Opening project workspace — check if computer workspace is active
+            if (s.isComputerWorkspaceOpen) {
+                this.showWorkspaceSwitchWarning('Computer Workspace', 'Project Workspace', () => {
+                    this.state.setState({ isComputerWorkspaceOpen: false });
+                    // Small delay so the closing animation finishes before the new one opens
+                    setTimeout(() => this.state.setState({ isProjectWorkspaceOpen: true }), 180);
+                });
+                return;
+            }
+            this.state.setState({ isProjectWorkspaceOpen: true });
+        });
+
+        addClickHandler(this.elements.computerWorkspaceIcon, () => {
+            const s = this.state.getState();
+            // If closing the computer workspace, always allow
+            if (s.isComputerWorkspaceOpen) {
+                this.state.setState({ isComputerWorkspaceOpen: false });
+                return;
+            }
+            // Opening computer workspace — check if project workspace is active
+            if (s.isProjectWorkspaceOpen) {
+                this.showWorkspaceSwitchWarning('Project Workspace', 'Computer Workspace', () => {
+                    this.state.setState({ isProjectWorkspaceOpen: false });
+                    setTimeout(() => this.state.setState({ isComputerWorkspaceOpen: true }), 180);
+                });
+                return;
+            }
+            this.state.setState({ isComputerWorkspaceOpen: true });
+        });
+
         addClickHandler(this.elements.minimizeBtn, () => ipcRenderer.send('minimize-window'));
         addClickHandler(this.elements.resizeBtn, () => ipcRenderer.send('toggle-maximize-window'));
         addClickHandler(this.elements.closeBtn, () => ipcRenderer.send('close-window'));
@@ -237,6 +274,67 @@ class UIManager {
                 ipcRenderer.send('open-webview', event.target.href);
             }
         });
+    }
+
+    // ── Workspace Switch Warning Modal ──────────────────────────────────
+    showWorkspaceSwitchWarning(activeWorkspace, targetWorkspace, onConfirm) {
+        // Remove any existing modal
+        document.getElementById('workspace-switch-warning')?.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'workspace-switch-warning';
+        modal.className = 'workspace-switch-overlay';
+        modal.innerHTML = `
+            <div class="workspace-switch-modal">
+                <div class="workspace-switch-glow"></div>
+                <div class="workspace-switch-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <h3 class="workspace-switch-title">Workspace Still Active</h3>
+                <p class="workspace-switch-message">
+                    <strong>${activeWorkspace}</strong> is currently active. 
+                    Switching to <strong>${targetWorkspace}</strong> will close the current session.
+                </p>
+                <div class="workspace-switch-actions">
+                    <button class="workspace-switch-btn ws-btn-cancel" id="ws-warn-cancel">Stay Here</button>
+                    <button class="workspace-switch-btn ws-btn-confirm" id="ws-warn-confirm">Switch Workspace</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => modal.classList.add('visible'));
+        });
+
+        const closeModal = () => {
+            modal.classList.remove('visible');
+            modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+            // Fallback removal in case transitionend doesn't fire
+            setTimeout(() => modal.remove(), 500);
+        };
+
+        modal.querySelector('#ws-warn-cancel').addEventListener('click', closeModal);
+        modal.querySelector('#ws-warn-confirm').addEventListener('click', () => {
+            closeModal();
+            onConfirm();
+        });
+
+        // Click backdrop to cancel
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // Escape key to cancel
+        const onEsc = (e) => { if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', onEsc); } };
+        document.addEventListener('keydown', onEsc);
     }
 
     setupStateSubscription() {
@@ -256,12 +354,10 @@ class UIManager {
                         break;
                     case 'isProjectWorkspaceOpen':
                         if (state.isProjectWorkspaceOpen && state.isToDoListOpen) this.state.setState({ isToDoListOpen: false });
-                        if (state.isProjectWorkspaceOpen && state.isComputerWorkspaceOpen) this.state.setState({ isComputerWorkspaceOpen: false });
                         this.updateProjectWorkspaceVisibility(state.isProjectWorkspaceOpen);
                         break;
                     case 'isComputerWorkspaceOpen':
                         if (state.isComputerWorkspaceOpen && state.isToDoListOpen) this.state.setState({ isToDoListOpen: false });
-                        if (state.isComputerWorkspaceOpen && state.isProjectWorkspaceOpen) this.state.setState({ isProjectWorkspaceOpen: false });
                         this.updateComputerWorkspaceVisibility(state.isComputerWorkspaceOpen);
                         break;
                 }

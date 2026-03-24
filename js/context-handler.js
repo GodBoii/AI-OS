@@ -31,7 +31,11 @@ class ContextHandler {
             syncBtn: contextWindow?.querySelector('.sync-context-btn'),
             sessionsContainer: contextWindow?.querySelector('.context-content'),
             indicator: document.querySelector('.context-active-indicator'),
-            contextViewer: document.getElementById('selected-context-viewer')
+            contextViewer: document.getElementById('selected-context-viewer'),
+            contextInfoBtn: document.getElementById('context-info-btn'),
+            contextInfoTooltip: document.getElementById('context-info-tooltip'),
+            sessionHistoryInfoBtn: document.getElementById('session-history-info-btn'),
+            sessionHistoryInfoTooltip: document.getElementById('session-history-info-tooltip')
         };
         if (this.elements.indicator) {
             this.elements.indicator.style.cursor = 'pointer';
@@ -43,6 +47,9 @@ class ContextHandler {
         if (closeViewerBtn) {
             closeViewerBtn.addEventListener('click', () => this.hideContextViewer());
         }
+        
+        // Setup info button tooltips
+        this.setupInfoTooltips();
     }
 
     bindEvents() {
@@ -62,6 +69,9 @@ class ContextHandler {
             headerTitle.addEventListener('click', () => {
                 this.isWindowOpen = false;
                 this.elements.contextWindow?.classList.add('hidden');
+                
+                // CRITICAL FIX: Close session history viewer when context window closes
+                this.closeSessionHistoryViewer();
                 
                 if (window.floatingWindowManager) {
                     window.floatingWindowManager.onWindowClose('context');
@@ -166,10 +176,16 @@ class ContextHandler {
         // Hide history viewer
         if (historyViewer) historyViewer.classList.add('hidden');
         
-        // Show chat interface elements
-        if (welcomeContainer) welcomeContainer.style.display = '';
-        if (floatingInput) floatingInput.style.display = '';
-        if (chatMessages) chatMessages.style.display = '';
+        // Only show chat interface elements if chat sidebar is actually open
+        // Check the global state to avoid showing elements when chat is closed
+        const isChatOpen = window.stateManager?.getState()?.isChatOpen ?? true;
+        
+        if (isChatOpen) {
+            // Show chat interface elements only if chat sidebar is open
+            if (welcomeContainer) welcomeContainer.style.display = '';
+            if (floatingInput) floatingInput.style.display = '';
+            if (chatMessages) chatMessages.style.display = '';
+        }
     }
 
     /**
@@ -971,6 +987,73 @@ class ContextHandler {
     
     hideContextViewer() {
         if (this.elements.contextViewer) this.elements.contextViewer.classList.remove('visible');
+    }
+
+    /**
+     * Setup info button tooltips for context window and session history viewer
+     */
+    setupInfoTooltips() {
+        // Context window info button
+        if (this.elements.contextInfoBtn && this.elements.contextInfoTooltip) {
+            let contextTooltipTimeout = null;
+            
+            this.elements.contextInfoBtn.addEventListener('mouseenter', (e) => {
+                clearTimeout(contextTooltipTimeout);
+                
+                // Position tooltip below the button
+                const btnRect = this.elements.contextInfoBtn.getBoundingClientRect();
+                this.elements.contextInfoTooltip.style.top = `${btnRect.bottom + 8}px`;
+                this.elements.contextInfoTooltip.style.left = `${btnRect.left - 20}px`;
+                
+                this.elements.contextInfoTooltip.classList.remove('hidden');
+            });
+            
+            this.elements.contextInfoBtn.addEventListener('mouseleave', () => {
+                contextTooltipTimeout = setTimeout(() => {
+                    this.elements.contextInfoTooltip.classList.add('hidden');
+                }, 200);
+            });
+            
+            // Keep tooltip open when hovering over it
+            this.elements.contextInfoTooltip.addEventListener('mouseenter', () => {
+                clearTimeout(contextTooltipTimeout);
+            });
+            
+            this.elements.contextInfoTooltip.addEventListener('mouseleave', () => {
+                this.elements.contextInfoTooltip.classList.add('hidden');
+            });
+        }
+        
+        // Session history info button
+        if (this.elements.sessionHistoryInfoBtn && this.elements.sessionHistoryInfoTooltip) {
+            let historyTooltipTimeout = null;
+            
+            this.elements.sessionHistoryInfoBtn.addEventListener('mouseenter', (e) => {
+                clearTimeout(historyTooltipTimeout);
+                
+                // Position tooltip below the button
+                const btnRect = this.elements.sessionHistoryInfoBtn.getBoundingClientRect();
+                this.elements.sessionHistoryInfoTooltip.style.top = `${btnRect.bottom + 8}px`;
+                this.elements.sessionHistoryInfoTooltip.style.left = `${btnRect.left - 20}px`;
+                
+                this.elements.sessionHistoryInfoTooltip.classList.remove('hidden');
+            });
+            
+            this.elements.sessionHistoryInfoBtn.addEventListener('mouseleave', () => {
+                historyTooltipTimeout = setTimeout(() => {
+                    this.elements.sessionHistoryInfoTooltip.classList.add('hidden');
+                }, 200);
+            });
+            
+            // Keep tooltip open when hovering over it
+            this.elements.sessionHistoryInfoTooltip.addEventListener('mouseenter', () => {
+                clearTimeout(historyTooltipTimeout);
+            });
+            
+            this.elements.sessionHistoryInfoTooltip.addEventListener('mouseleave', () => {
+                this.elements.sessionHistoryInfoTooltip.classList.add('hidden');
+            });
+        }
     }
 
     /**
