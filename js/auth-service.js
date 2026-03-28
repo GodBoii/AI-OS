@@ -339,6 +339,93 @@ class AuthService {
         };
     }
 
+    async renameSessionTitle(sessionId, newTitle, sessionCreatedAt = null) {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        const normalizedSessionId = String(sessionId || '').trim();
+        const normalizedTitle = String(newTitle || '').trim();
+
+        if (!normalizedSessionId) {
+            throw new Error('Session ID is required.');
+        }
+        if (!normalizedTitle) {
+            throw new Error('Title cannot be empty.');
+        }
+        if (normalizedTitle.length > 120) {
+            throw new Error('Title is too long.');
+        }
+
+        const payload = {
+            session_id: normalizedSessionId,
+            user_id: userId,
+            tittle: normalizedTitle
+        };
+
+        if (typeof sessionCreatedAt === 'number' && Number.isFinite(sessionCreatedAt)) {
+            payload.session_created_at = sessionCreatedAt;
+        }
+
+        const { error } = await this.supabase
+            .from('session_titles')
+            .upsert(payload, { onConflict: 'session_id' });
+
+        if (error) {
+            console.error('Error renaming session title:', error);
+            throw new Error(error.message || 'Failed to rename session title.');
+        }
+
+        return true;
+    }
+
+    async deleteSession(sessionId) {
+        if (!this.supabase) {
+            throw new Error('Supabase client not initialized.');
+        }
+
+        const session = await this.getSession();
+        const userId = this.user?.id || session?.user?.id;
+        if (!userId) {
+            throw new Error('User not authenticated.');
+        }
+
+        const normalizedSessionId = String(sessionId || '').trim();
+        if (!normalizedSessionId) {
+            throw new Error('Session ID is required.');
+        }
+
+        const { error: titleDeleteError } = await this.supabase
+            .from('session_titles')
+            .delete()
+            .eq('session_id', normalizedSessionId)
+            .eq('user_id', userId);
+
+        if (titleDeleteError) {
+            console.error('Error deleting session title:', titleDeleteError);
+            throw new Error(titleDeleteError.message || 'Failed to delete session title.');
+        }
+
+        const { error: sessionDeleteError } = await this.supabase
+            .from('agno_sessions')
+            .delete()
+            .eq('session_id', normalizedSessionId)
+            .eq('user_id', userId);
+
+        if (sessionDeleteError) {
+            console.error('Error deleting session:', sessionDeleteError);
+            throw new Error(sessionDeleteError.message || 'Failed to delete session.');
+        }
+
+        return true;
+    }
+
     /**
      * Legacy method - kept for backward compatibility
      * Now uses the optimized fetchSessionTitles internally

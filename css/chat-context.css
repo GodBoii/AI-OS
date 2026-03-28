@@ -232,6 +232,48 @@
     cursor: pointer;
 }
 
+.session-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s var(--easing-standard);
+}
+
+.session-item:hover .session-actions,
+.session-item:focus-within .session-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.session-action-btn {
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--anim-fast) var(--easing-standard);
+}
+
+.session-action-btn:hover {
+    color: var(--text-color);
+    background: var(--hover-bg);
+}
+
+.session-action-btn:active {
+    transform: scale(0.94);
+}
+
+.delete-session-btn:hover {
+    color: #ef4444;
+}
+
 .session-content h3 {
     font-weight: var(--font-normal);
     color: var(--text-color);
