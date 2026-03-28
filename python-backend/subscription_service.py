@@ -350,8 +350,178 @@ def get_daily_usage_for_user(user_id: str, day_key: Optional[str] = None, limit:
     if not service.is_enabled():
         return []
     try:
-        rows = service.get_daily_usage_for_user(user_id=str(user_id), day_key=day_key, limit=limit)
-        return rows if isinstance(rows, list) else []
+        rows: list[dict[str, Any]] = []
+        try:
+            daily_response = service.get_daily_usage_for_user(user_id=str(user_id), day_key=day_key, limit=limit)
+            rows = daily_response if isinstance(daily_response, list) else []
+        except Exception as exc:
+            logger.warning(
+                "[ConvexUsage] Primary usage_daily fetch failed for user=%s day_key=%s limit=%s err=%s",
+                user_id,
+                day_key,
+                limit,
+                exc,
+            )
+
+        normalized_rows = rows if isinstance(rows, list) else []
+        if normalized_rows:
+            logger.info(
+                "[ConvexUsage] Daily graph source=usage_daily user=%s rows=%s day_key=%s limit=%s",
+                user_id,
+                len(normalized_rows),
+                day_key,
+                limit,
+            )
+            return normalized_rows
+
+        event_limit = max(500, min(int(limit or 30) * 200, 10000))
+        events: list[dict[str, Any]] = []
+        try:
+            event_response = service.get_usage_events_for_user(user_id=str(user_id), limit=event_limit)
+            events = event_response if isinstance(event_response, list) else []
+        except Exception as exc:
+            logger.warning(
+                "[ConvexUsage] usage_events fallback fetch failed for user=%s limit=%s err=%s",
+                user_id,
+                event_limit,
+                exc,
+            )
+        event_rows = events if isinstance(events, list) else []
+        if not event_rows:
+            logger.info(
+                "[ConvexUsage] usage_events fallback has no rows user=%s day_key=%s limit=%s",
+                user_id,
+                day_key,
+                limit,
+            )
+
+        aggregated: dict[str, dict[str, Any]] = {}
+        for event in event_rows:
+            raw_day_key = str(event.get("day_key") or "").strip().strip('"')
+            if not raw_day_key:
+                continue
+            day_row = aggregated.get(raw_day_key)
+            if day_row is None:
+                day_row = {
+                    "user_id": str(user_id),
+                    "day_key": raw_day_key,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "first_event_at_ms": None,
+                    "last_event_at_ms": None,
+                    "created_at_ms": None,
+                    "updated_at_ms": None,
+                }
+                aggregated[raw_day_key] = day_row
+
+            input_tokens = _to_int(event.get("input_tokens"))
+            output_tokens = _to_int(event.get("output_tokens"))
+            total_tokens = _to_int(event.get("total_tokens")) or (input_tokens + output_tokens)
+            created_at_ms = _to_int(event.get("created_at_ms"))
+
+            day_row["input_tokens"] = _to_int(day_row.get("input_tokens")) + input_tokens
+            day_row["output_tokens"] = _to_int(day_row.get("output_tokens")) + output_tokens
+            day_row["total_tokens"] = _to_int(day_row.get("total_tokens")) + total_tokens
+
+            first_event = day_row.get("first_event_at_ms")
+            last_event = day_row.get("last_event_at_ms")
+            if created_at_ms > 0:
+                day_row["first_event_at_ms"] = created_at_ms if not first_event else min(_to_int(first_event), created_at_ms)
+                day_row["last_event_at_ms"] = created_at_ms if not last_event else max(_to_int(last_event), created_at_ms)
+                day_row["created_at_ms"] = day_row.get("created_at_ms") or day_row["first_event_at_ms"]
+                day_row["updated_at_ms"] = day_row["last_event_at_ms"]
+
+        daily_rows = sorted(
+            aggregated.values(),
+            key=lambda row: str(row.get("day_key") or ""),
+            reverse=True,
+        )
+        if day_key:
+            daily_rows = [row for row in daily_rows if str(row.get("day_key")) == str(day_key)]
+        else:
+            daily_rows = daily_rows[: max(1, min(int(limit or 30), 365))]
+
+        logger.warning(
+            "[ConvexUsage] Daily graph source=fallback_usage_events user=%s rows=%s day_key=%s limit=%s event_rows=%s",
+            user_id,
+            len(daily_rows),
+            day_key,
+            limit,
+            len(event_rows),
+        )
+        if daily_rows:
+            return daily_rows
+
+        # Final fallback for free-plan daily graphing:
+        # derive each day from existing usage_windows keys: free:YYYY-MM-DD
+        # using already-deployed getWindowUsage query.
+        normalized_limit = max(1, min(int(limit or 30), 365))
+
+        def _build_recent_day_keys(max_days: int) -> list[str]:
+            today = _utc_now().astimezone(timezone.utc).date()
+            keys: list[str] = []
+            for offset in range(max_days):
+                day = today - timedelta(days=offset)
+                keys.append(day.strftime("%Y-%m-%d"))
+            return keys
+
+        if day_key:
+            candidate_day_keys = [str(day_key).strip()]
+        else:
+            candidate_day_keys = _build_recent_day_keys(normalized_limit)
+
+        windows_rows: list[dict[str, Any]] = []
+        for dk in candidate_day_keys:
+            window_key = f"free:{dk}"
+            try:
+                win = service.get_window_usage(user_id=str(user_id), window_key=window_key)
+            except Exception as exc:
+                logger.warning(
+                    "[ConvexUsage] Window fallback query failed user=%s day_key=%s window_key=%s err=%s",
+                    user_id,
+                    dk,
+                    window_key,
+                    exc,
+                )
+                continue
+
+            if not isinstance(win, dict):
+                continue
+            input_tokens = _to_int(win.get("input_tokens"))
+            output_tokens = _to_int(win.get("output_tokens"))
+            total_tokens = _to_int(win.get("total_tokens")) or (input_tokens + output_tokens)
+            if total_tokens <= 0 and input_tokens <= 0 and output_tokens <= 0:
+                continue
+
+            updated_at_ms = _to_int(win.get("updated_at_ms"))
+            windows_rows.append(
+                {
+                    "user_id": str(user_id),
+                    "day_key": dk,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                    "first_event_at_ms": updated_at_ms or None,
+                    "last_event_at_ms": updated_at_ms or None,
+                    "created_at_ms": updated_at_ms or None,
+                    "updated_at_ms": updated_at_ms or None,
+                }
+            )
+
+        windows_rows = sorted(
+            windows_rows,
+            key=lambda row: str(row.get("day_key") or ""),
+            reverse=True,
+        )
+        logger.warning(
+            "[ConvexUsage] Daily graph source=fallback_usage_windows user=%s rows=%s day_key=%s limit=%s",
+            user_id,
+            len(windows_rows),
+            day_key,
+            limit,
+        )
+        return windows_rows
     except Exception as exc:
         logger.warning("[ConvexUsage] Failed to fetch daily usage for user %s: %s", user_id, exc)
         return []
