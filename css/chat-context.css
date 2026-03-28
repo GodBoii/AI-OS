@@ -1731,7 +1731,8 @@
     padding: 12px 16px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     z-index: 10000;
-    max-width: 280px;
+    max-width: 380px;
+    min-width: 320px;
     opacity: 0;
     transform: translateY(-8px);
     transition: opacity 0.2s var(--easing-standard), 
@@ -1761,7 +1762,8 @@
     border-right: 8px solid transparent;
     border-bottom: 8px solid var(--elevated-bg);
     top: -8px;
-    left: 20px;
+    right: 20px;
+    left: auto;
 }
 
 .dark-mode .info-tooltip-arrow {
@@ -1791,4 +1793,31 @@
 .info-tooltip-content p:last-child {
     color: var(--text-secondary);
     font-size: 0.85rem;
+}
+
+.info-tooltip-list {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+    list-style: none;
+}
+
+.info-tooltip-list li {
+    margin: 6px 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    position: relative;
+}
+
+.info-tooltip-list li::before {
+    content: "•";
+    position: absolute;
+    left: -15px;
+    color: var(--accent-color);
+    font-weight: bold;
+}
+
+.info-tooltip-list li strong {
+    color: var(--text-color);
+    font-weight: var(--font-semibold);
 }
