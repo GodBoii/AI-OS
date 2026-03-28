@@ -1232,10 +1232,14 @@ class ContextHandler {
             this.elements.contextInfoBtn.addEventListener('mouseenter', (e) => {
                 clearTimeout(contextTooltipTimeout);
                 
-                // Position tooltip below the button
+                // Position tooltip to the left of the button to avoid overflow
                 const btnRect = this.elements.contextInfoBtn.getBoundingClientRect();
+                const tooltipWidth = 380; // max-width from CSS
+                
+                // Position to the left of the button
                 this.elements.contextInfoTooltip.style.top = `${btnRect.bottom + 8}px`;
-                this.elements.contextInfoTooltip.style.left = `${btnRect.left - 20}px`;
+                this.elements.contextInfoTooltip.style.left = 'auto';
+                this.elements.contextInfoTooltip.style.right = `${window.innerWidth - btnRect.right + 10}px`;
                 
                 this.elements.contextInfoTooltip.classList.remove('hidden');
             });
