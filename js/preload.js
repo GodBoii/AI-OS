@@ -274,9 +274,12 @@ contextBridge.exposeInMainWorld(
             return session;
         },
         fetchUserSessions: async (limit) => await authService.fetchUserSessions(limit),
-        fetchSessionTitles: async (limit) => await authService.fetchSessionTitles(limit),
+        fetchSessionTitles: async (limit, offset = 0) => await authService.fetchSessionTitles(limit, offset),
         fetchSessionData: async (sessionId) => await authService.fetchSessionData(sessionId),
         fetchSessionAttachments: async (sessionId) => await authService.fetchSessionAttachments(sessionId),
+        renameSessionTitle: async (sessionId, newTitle, sessionCreatedAt = null) =>
+            await authService.renameSessionTitle(sessionId, newTitle, sessionCreatedAt),
+        deleteSession: async (sessionId) => await authService.deleteSession(sessionId),
         fetchRequestUsage: async () => await authService.fetchRequestUsage(),
         onAuthChange: (callback) => {
             const wrappedCallback = (user) => {

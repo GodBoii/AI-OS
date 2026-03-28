@@ -17,6 +17,7 @@ class ContextHandler {
         this.loadMoreCount = 7;
         this.hasMoreSessions = true;
         this.isLoadingMore = false;
+        this.currentHistorySessionId = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -168,6 +169,7 @@ class ContextHandler {
     }
     
     closeSessionHistoryViewer() {
+        this.currentHistorySessionId = null;
         const historyViewer = document.getElementById('session-history-viewer');
         const welcomeContainer = document.querySelector('.welcome-container');
         const floatingInput = document.getElementById('floating-input-container');
@@ -375,6 +377,7 @@ class ContextHandler {
         sessionItem.className = 'session-item';
         sessionItem.dataset.sessionId = session.session_id;
         sessionItem.dataset.sessionTitle = session.session_title || '';
+        sessionItem.dataset.sessionCreatedAt = session.created_at || '';
         
         // Use title from session_titles table if available
         let sessionName = session.session_title?.trim();
@@ -404,12 +407,16 @@ class ContextHandler {
         }
 
         sessionItem.innerHTML = this.getSessionItemHTML(session, sessionName, formattedDate);
+        this.bindSessionActions(sessionItem, session);
         
         // Single click opens details, double click selects
         let clickCount = 0;
         let clickTimer = null;
         
         sessionItem.addEventListener('click', (e) => {
+            if (e.target.closest('.session-action-btn')) {
+                return;
+            }
             clickCount++;
             
             if (clickCount === 1) {
@@ -442,7 +449,153 @@ class ContextHandler {
                     <span class="session-date">${formattedDate}</span>
                 </div>
             </div>
+            <div class="session-actions">
+                <button type="button" class="session-action-btn rename-session-btn" title="Rename chat" aria-label="Rename chat">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button type="button" class="session-action-btn delete-session-btn" title="Delete chat" aria-label="Delete chat">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
         `;
+    }
+
+    bindSessionActions(sessionItem, session) {
+        const renameBtn = sessionItem.querySelector('.rename-session-btn');
+        const deleteBtn = sessionItem.querySelector('.delete-session-btn');
+
+        renameBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await this.handleRenameSession(sessionItem, session);
+        });
+
+        deleteBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await this.handleDeleteSession(sessionItem, session);
+        });
+    }
+
+    async handleRenameSession(sessionItem, session) {
+        try {
+            const sessionId = session?.session_id || sessionItem?.dataset?.sessionId;
+            if (!sessionId) {
+                return;
+            }
+
+            const currentTitle = (sessionItem?.dataset?.sessionTitle || session?.session_title || '').trim();
+            const proposed = window.prompt('Rename this chat:', currentTitle);
+            if (proposed === null) {
+                return;
+            }
+
+            const normalizedTitle = proposed.trim();
+            if (!normalizedTitle) {
+                this.showNotification('Chat title cannot be empty', 'error');
+                return;
+            }
+            if (normalizedTitle.length > 120) {
+                this.showNotification('Chat title is too long', 'error');
+                return;
+            }
+
+            await window.electron.auth.renameSessionTitle(
+                sessionId,
+                normalizedTitle,
+                Number(session?.created_at || sessionItem?.dataset?.sessionCreatedAt) || null
+            );
+
+            this.applySessionTitleUpdate(sessionId, normalizedTitle);
+            this.showNotification('Chat renamed', 'success');
+        } catch (error) {
+            console.error('[ContextHandler] Error renaming session:', error);
+            this.showNotification(`Failed to rename chat: ${error.message}`, 'error');
+        }
+    }
+
+    async handleDeleteSession(sessionItem, session) {
+        try {
+            const sessionId = session?.session_id || sessionItem?.dataset?.sessionId;
+            if (!sessionId) {
+                return;
+            }
+
+            const title = (sessionItem?.dataset?.sessionTitle || session?.session_title || `Session ${sessionId.substring(0, 8)}`).trim();
+            const confirmed = window.confirm(`Delete this chat permanently?\n\n"${title}"`);
+            if (!confirmed) {
+                return;
+            }
+
+            await window.electron.auth.deleteSession(sessionId);
+            this.removeSessionFromUI(sessionId);
+            this.showNotification('Chat deleted', 'success');
+        } catch (error) {
+            console.error('[ContextHandler] Error deleting session:', error);
+            this.showNotification(`Failed to delete chat: ${error.message}`, 'error');
+        }
+    }
+
+    applySessionTitleUpdate(sessionId, newTitle) {
+        const normalized = String(newTitle || '').trim();
+        if (!normalized) {
+            return;
+        }
+
+        this.loadedSessions = (this.loadedSessions || []).map((entry) => {
+            if (entry.session_id === sessionId) {
+                return {
+                    ...entry,
+                    session_title: normalized,
+                    has_title: true
+                };
+            }
+            return entry;
+        });
+
+        const sessionItem = this.elements.sessionsContainer?.querySelector(`.session-item[data-session-id="${sessionId}"]`);
+        if (sessionItem) {
+            sessionItem.dataset.sessionTitle = normalized;
+            const titleEl = sessionItem.querySelector('.session-content h3');
+            if (titleEl) {
+                const displayTitle = normalized.length > 60 ? `${normalized.substring(0, 60)}...` : normalized;
+                const updatedSession = this.loadedSessions.find((entry) => entry.session_id === sessionId);
+                const attachmentIcon = updatedSession?.has_attachments
+                    ? ' <i class="fas fa-paperclip session-attachment-icon" title="Has attachments"></i>'
+                    : '';
+                titleEl.innerHTML = `${displayTitle}${attachmentIcon}`;
+            }
+        }
+
+        if (this.currentHistorySessionId === sessionId) {
+            const historyTitle = document.querySelector('.session-history-title');
+            if (historyTitle) {
+                historyTitle.textContent = normalized.length > 60 ? `${normalized.substring(0, 60)}...` : normalized;
+            }
+        }
+    }
+
+    removeSessionFromUI(sessionId) {
+        this.loadedSessions = (this.loadedSessions || []).filter((entry) => entry.session_id !== sessionId);
+
+        const sessionItem = this.elements.sessionsContainer?.querySelector(`.session-item[data-session-id="${sessionId}"]`);
+        if (sessionItem) {
+            sessionItem.remove();
+        }
+
+        this.selectedContextSessions = this.selectedContextSessions.filter((entry) => entry.session_id !== sessionId);
+        this.updateSelectionUI();
+        this.updateContextIndicator();
+
+        if (this.currentHistorySessionId === sessionId) {
+            this.currentHistorySessionId = null;
+            this.closeSessionHistoryViewer();
+        }
+
+        const visibleItems = this.elements.sessionsContainer?.querySelectorAll('.session-item') || [];
+        if (visibleItems.length === 0) {
+            this.elements.sessionsContainer.innerHTML = '<div class="empty-state">No sessions found.</div>';
+        }
     }
     
     toggleSessionSelection(sessionItem) {
@@ -551,6 +704,7 @@ class ContextHandler {
 
     async showSessionDetails(sessionId) {
         try {
+            this.currentHistorySessionId = sessionId;
             // Get the center viewer
             const historyViewer = document.getElementById('session-history-viewer');
             const historyTitle = historyViewer.querySelector('.session-history-title');
@@ -749,6 +903,7 @@ class ContextHandler {
         } catch (error) {
             console.error('[ContextHandler] Error loading session details:', error);
             this.showNotification('Failed to load session details: ' + error.message, 'error');
+            this.currentHistorySessionId = null;
             this.closeSessionHistoryViewer();
         }
     }
