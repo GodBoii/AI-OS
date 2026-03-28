@@ -197,6 +197,22 @@ export const getDailyUsageForUser = query({
   },
 });
 
+export const getUsageEventsForUser = query({
+  args: {
+    user_id: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(toSafeInt(args.limit ?? 2000), 10000));
+    const rows = await ctx.db
+      .query("usage_events")
+      .withIndex("by_user_created_at", (q) => q.eq("user_id", args.user_id))
+      .order("desc")
+      .take(limit);
+    return rows;
+  },
+});
+
 export const getDailyUsageByDate = query({
   args: {
     day_key: v.string(),

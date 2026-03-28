@@ -56,11 +56,13 @@ class AIOSUsageGraph {
         this.isGraphView = !this.isGraphView;
 
         if (this.isGraphView) {
+            console.log('[UsageGraph] toggle=open period=%s', this.currentPeriod);
             this.elements.summaryView?.classList.add('hidden');
             this.elements.graphView?.classList.remove('hidden');
             this.elements.toggleBtn?.classList.add('active');
             await this.loadData(this.currentPeriod);
         } else {
+            console.log('[UsageGraph] toggle=close');
             this.elements.summaryView?.classList.remove('hidden');
             this.elements.graphView?.classList.add('hidden');
             this.elements.toggleBtn?.classList.remove('active');
@@ -69,6 +71,7 @@ class AIOSUsageGraph {
 
     async changePeriod(period) {
         this.currentPeriod = period;
+        console.log('[UsageGraph] period-change=%s', period);
 
         this.elements.periodBtns?.forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.period, 10) === period);
@@ -83,7 +86,8 @@ class AIOSUsageGraph {
     }
 
     _parseDayKey(dayKey) {
-        const parts = String(dayKey || '').split('-');
+        const cleaned = String(dayKey || '').trim().replace(/^"+|"+$/g, '');
+        const parts = cleaned.split('-');
         if (parts.length !== 3) return null;
         const year = parseInt(parts[0], 10);
         const month = parseInt(parts[1], 10);
@@ -155,17 +159,27 @@ class AIOSUsageGraph {
 
     async loadData(days) {
         this.showLoading();
+        console.log('[UsageGraph] load-start days=%s', days);
 
         try {
             const response = await this.aios._callAuthorizedApi(`/api/usage/daily?limit=${days}`);
             if (!response || !response.ok || !Array.isArray(response.rows)) {
                 throw new Error('No usage data available');
             }
+            console.log('[UsageGraph] api-rows=%s', response.rows.length);
 
             this.dailyData = this._normalizeRows(response.rows);
             this.chartData = this._buildContinuousSeries(response.rows, days);
+            console.log(
+                '[UsageGraph] normalized-days=%s chart-days=%s first=%o last=%o',
+                this.dailyData.length,
+                this.chartData.length,
+                this.chartData[0] || null,
+                this.chartData[this.chartData.length - 1] || null,
+            );
 
             if (!this.dailyData.length) {
+                console.warn('[UsageGraph] no-usable-daily-data days=%s', days);
                 this.showError('No usage data for this period');
                 return;
             }
@@ -208,6 +222,7 @@ class AIOSUsageGraph {
             return false;
         }
         if (!window.Chart) {
+            console.error('[UsageGraph] Chart.js is unavailable');
             this.showError('Chart library failed to load');
             return false;
         }
@@ -245,6 +260,7 @@ class AIOSUsageGraph {
         };
 
         const ctx = this.elements.canvas.getContext('2d');
+        console.log('[UsageGraph] render points=%s', labels.length);
         this.chart = new Chart(ctx, {
             type: 'line',
             data: {
