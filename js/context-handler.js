@@ -485,7 +485,7 @@ class ContextHandler {
             }
 
             const currentTitle = (sessionItem?.dataset?.sessionTitle || session?.session_title || '').trim();
-            const proposed = window.prompt('Rename this chat:', currentTitle);
+            const proposed = await this.promptForSessionTitle(currentTitle);
             if (proposed === null) {
                 return;
             }
@@ -512,6 +512,79 @@ class ContextHandler {
             console.error('[ContextHandler] Error renaming session:', error);
             this.showNotification(`Failed to rename chat: ${error.message}`, 'error');
         }
+    }
+
+    promptForSessionTitle(currentTitle = '') {
+        return new Promise((resolve) => {
+            const existingModal = document.querySelector('.session-rename-modal-overlay');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            const overlay = document.createElement('div');
+            overlay.className = 'session-rename-modal-overlay';
+            overlay.innerHTML = `
+                <div class="session-rename-modal" role="dialog" aria-modal="true" aria-label="Rename chat">
+                    <div class="session-rename-modal-title">Rename Chat</div>
+                    <input
+                        type="text"
+                        class="session-rename-input"
+                        maxlength="120"
+                        placeholder="Enter new chat title"
+                    />
+                    <div class="session-rename-actions">
+                        <button type="button" class="session-rename-btn session-rename-cancel">Cancel</button>
+                        <button type="button" class="session-rename-btn session-rename-save">Save</button>
+                    </div>
+                </div>
+            `;
+
+            const modal = overlay.querySelector('.session-rename-modal');
+            const input = overlay.querySelector('.session-rename-input');
+            const cancelBtn = overlay.querySelector('.session-rename-cancel');
+            const saveBtn = overlay.querySelector('.session-rename-save');
+
+            const cleanup = () => {
+                document.removeEventListener('keydown', onKeyDown);
+                overlay.remove();
+            };
+
+            const handleResolve = (value) => {
+                cleanup();
+                resolve(value);
+            };
+
+            const onKeyDown = (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    handleResolve(null);
+                    return;
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleResolve(input.value);
+                }
+            };
+
+            overlay.addEventListener('click', (event) => {
+                if (event.target === overlay) {
+                    handleResolve(null);
+                }
+            });
+
+            modal.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+
+            cancelBtn.addEventListener('click', () => handleResolve(null));
+            saveBtn.addEventListener('click', () => handleResolve(input.value));
+            document.addEventListener('keydown', onKeyDown);
+
+            document.body.appendChild(overlay);
+            input.value = currentTitle;
+            input.focus();
+            input.select();
+        });
     }
 
     async handleDeleteSession(sessionItem, session) {
@@ -560,10 +633,14 @@ class ContextHandler {
             if (titleEl) {
                 const displayTitle = normalized.length > 60 ? `${normalized.substring(0, 60)}...` : normalized;
                 const updatedSession = this.loadedSessions.find((entry) => entry.session_id === sessionId);
-                const attachmentIcon = updatedSession?.has_attachments
-                    ? ' <i class="fas fa-paperclip session-attachment-icon" title="Has attachments"></i>'
-                    : '';
-                titleEl.innerHTML = `${displayTitle}${attachmentIcon}`;
+                titleEl.textContent = displayTitle;
+                if (updatedSession?.has_attachments) {
+                    titleEl.appendChild(document.createTextNode(' '));
+                    const icon = document.createElement('i');
+                    icon.className = 'fas fa-paperclip session-attachment-icon';
+                    icon.title = 'Has attachments';
+                    titleEl.appendChild(icon);
+                }
             }
         }
 

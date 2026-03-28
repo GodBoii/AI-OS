@@ -274,6 +274,74 @@
     color: #ef4444;
 }
 
+.session-rename-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.session-rename-modal {
+    width: min(460px, 100%);
+    background: var(--surface-color);
+    border: 1px solid var(--divider-color);
+    border-radius: 14px;
+    box-shadow: 0 20px 55px rgba(2, 6, 23, 0.32);
+    padding: 16px;
+}
+
+.session-rename-modal-title {
+    font-size: var(--text-base);
+    font-weight: var(--font-semibold);
+    color: var(--text-color);
+    margin-bottom: 10px;
+}
+
+.session-rename-input {
+    width: 100%;
+    border: 1px solid var(--divider-color);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: var(--text-sm);
+    padding: 10px 12px;
+    outline: none;
+}
+
+.session-rename-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.session-rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.session-rename-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.session-rename-cancel {
+    background: var(--hover-bg);
+    color: var(--text-secondary);
+}
+
+.session-rename-save {
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
+}
+
 .session-content h3 {
     font-weight: var(--font-normal);
     color: var(--text-color);
