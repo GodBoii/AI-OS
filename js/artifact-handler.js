@@ -964,9 +964,51 @@ class ArtifactHandler {
             .replace(/[^a-z0-9-]+/g, '-')
             .replace(/-{2,}/g, '-')
             .replace(/^-+|-+$/g, '');
-        const root = base || 'site';
+        const root = (base || 'site').slice(0, 56);
         const suffix = Math.random().toString(36).slice(2, 8);
-        return `${root}-${suffix}`.slice(0, 50);
+        return `${root}-${suffix}`.slice(0, 63);
+    }
+
+    normalizeSlugInput(input) {
+        return String(input || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, '-')
+            .replace(/-{2,}/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 63);
+    }
+
+    validateDeploySlug(slug) {
+        const candidate = String(slug || '').trim().toLowerCase();
+        const reserved = new Set([
+            'www',
+            'api',
+            'app',
+            'admin',
+            'mail',
+            'smtp',
+            'imap',
+            'pop',
+            'ftp',
+            'cdn',
+            'status',
+            'ns1',
+            'ns2'
+        ]);
+
+        if (!candidate) {
+            return { ok: false, error: 'Slug is required.' };
+        }
+        if (!/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/.test(candidate)) {
+            return {
+                ok: false,
+                error: 'Use 3-63 chars: lowercase letters, numbers, dashes; no leading/trailing dash.'
+            };
+        }
+        if (reserved.has(candidate)) {
+            return { ok: false, error: 'This slug is reserved. Choose another one.' };
+        }
+        return { ok: true, slug: candidate };
     }
 
     async deployApi(path, token, body = null, method = 'POST') {
@@ -1255,9 +1297,9 @@ class ArtifactHandler {
         return renderNode(root);
     }
 
-    async confirmDeployPreview({ files, rootPrefix, candidateCount }) {
+    async confirmDeployPreview({ files, rootPrefix, candidateCount, proposedSlug }) {
         const modal = document.getElementById('deploy-preview-modal');
-        if (!modal) return files;
+        if (!modal) return { files, slug: proposedSlug };
 
         const metaEl = modal.querySelector('.deploy-preview-meta');
         const treeEl = modal.querySelector('.deploy-preview-tree');
@@ -1277,6 +1319,12 @@ class ArtifactHandler {
             <div><strong>${fileCount}</strong> file${fileCount === 1 ? '' : 's'} will be deployed.</div>
             <div>${rootInfo}</div>
             <div>${candidateInfo}</div>
+            <div style="margin-top: 12px; display: grid; gap: 6px;">
+                <label for="deploy-slug-input" style="font-weight: 600;">Subdomain Slug</label>
+                <input id="deploy-slug-input" type="text" value="${this.escapeHtml(proposedSlug || 'site')}" placeholder="your-site-name" style="height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.18); color: inherit; padding: 0 10px;" />
+                <div id="deploy-slug-helper" style="font-size: 12px; opacity: 0.85;">Edit this to choose your public site name.</div>
+                <div id="deploy-slug-error" style="font-size: 12px; color: #f87171; min-height: 16px;"></div>
+            </div>
         `;
 
         treeEl.innerHTML = `
@@ -1307,7 +1355,36 @@ class ArtifactHandler {
             el.addEventListener('change', rebuildTree);
             el.addEventListener('input', rebuildTree);
         });
+
+        const slugInput = modal.querySelector('#deploy-slug-input');
+        const slugHelper = modal.querySelector('#deploy-slug-helper');
+        const slugError = modal.querySelector('#deploy-slug-error');
+        const syncSlugState = () => {
+            const normalized = this.normalizeSlugInput(slugInput?.value || '');
+            if (slugInput && slugInput.value !== normalized) {
+                slugInput.value = normalized;
+            }
+            const verdict = this.validateDeploySlug(normalized);
+            if (slugHelper) {
+                slugHelper.textContent = normalized
+                    ? `Final slug: ${normalized}`
+                    : 'Enter a slug to continue.';
+            }
+            if (slugError) {
+                slugError.textContent = verdict.ok ? '' : verdict.error;
+            }
+            if (confirmBtn) {
+                confirmBtn.disabled = !verdict.ok;
+                confirmBtn.style.opacity = verdict.ok ? '1' : '0.6';
+                confirmBtn.style.cursor = verdict.ok ? 'pointer' : 'not-allowed';
+            }
+            return verdict;
+        };
+        slugInput?.addEventListener('input', syncSlugState);
+        slugInput?.addEventListener('change', syncSlugState);
+
         rebuildTree();
+        syncSlugState();
         modal.classList.remove('hidden');
 
         return new Promise((resolve) => {
@@ -1320,6 +1397,10 @@ class ArtifactHandler {
             };
 
             const onConfirm = () => {
+                const slugVerdict = syncSlugState();
+                if (!slugVerdict.ok) {
+                    return;
+                }
                 const rows = Array.from(treeEl.querySelectorAll('.deploy-editor-row'));
                 const selected = rows
                     .filter((row) => row.querySelector('.deploy-editor-include')?.checked)
@@ -1336,7 +1417,10 @@ class ArtifactHandler {
                     .filter(Boolean);
 
                 cleanup();
-                resolve(selected);
+                resolve({
+                    files: selected,
+                    slug: slugVerdict.slug
+                });
             };
 
             const onCancel = () => {
@@ -1417,7 +1501,7 @@ class ArtifactHandler {
 
         const siteId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `site-${Date.now()}`;
         const slugSource = artifact.title || 'generated-site';
-        const slug = this.slugify(slugSource);
+        const generatedSlug = this.slugify(slugSource);
 
         this.deployInProgress = true;
         this.showNotification('Deploy started...', 'info');
@@ -1431,17 +1515,19 @@ class ArtifactHandler {
                 throw new Error('No deployable files found in this session');
             }
 
-            const editedFiles = await this.confirmDeployPreview({
+            const deploySelection = await this.confirmDeployPreview({
                 files: filesToDeploy,
                 rootPrefix: draft.rootPrefix,
-                candidateCount: draft.candidateCount
+                candidateCount: draft.candidateCount,
+                proposedSlug: generatedSlug
             });
-            if (!editedFiles) {
+            if (!deploySelection) {
                 this.showNotification('Deploy canceled', 'info');
                 return;
             }
 
-            filesToDeploy = editedFiles;
+            filesToDeploy = deploySelection.files;
+            const slug = deploySelection.slug;
             const hasIndexHtml = filesToDeploy.some((file) => String(file.path || '').toLowerCase() === 'index.html');
             if (!hasIndexHtml) {
                 throw new Error('Deployment must include index.html');

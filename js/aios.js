@@ -746,7 +746,7 @@ class AIOS {
 
     resetSubscriptionUI() {
         this.subscriptionSummary = null;
-        if (this.elements.usagePeriodLabel) this.elements.usagePeriodLabel.textContent = 'Current Usage';
+        if (this.elements.usagePeriodLabel) this.elements.usagePeriodLabel.textContent = 'Lifetime Usage';
         if (this.elements.subscriptionSubtitle) this.elements.subscriptionSubtitle.textContent = 'Track your plan and upgrade when you need more headroom.';
         if (this.elements.currentPlanName) this.elements.currentPlanName.textContent = 'Core';
         if (this.elements.subscriptionStatusBadge) {
@@ -793,11 +793,8 @@ class AIOS {
             : (planType === 'free' ? 'Daily reset' : 'Awaiting confirmation');
         const statusLabel = String(data.status_label || planName).toUpperCase();
 
-        if (this.elements.usagePeriodLabel) {
-            this.elements.usagePeriodLabel.textContent = data.period_label || 'Current Usage';
-        }
         if (this.elements.subscriptionSubtitle) {
-            this.elements.subscriptionSubtitle.textContent = `${planName} plan · ${data.limit_label || ''}`;
+            this.elements.subscriptionSubtitle.textContent = `${planName} plan - ${data.limit_label || ''}`;
         }
         if (this.elements.currentPlanName) this.elements.currentPlanName.textContent = planName;
         if (this.elements.subscriptionStatusBadge) {
@@ -1220,7 +1217,11 @@ class AIOS {
             }
 
             this._ensureConvexUsageSource(summary);
-            this.usageView.render(summary.usage || {});
+            const lifetimeUsage = summary.lifetime_usage || summary.usage || {};
+            this.usageView.render(lifetimeUsage);
+            if (this.elements.usagePeriodLabel) {
+                this.elements.usagePeriodLabel.textContent = 'Lifetime Usage';
+            }
             this.renderSubscriptionSummary(summary);
             if (showNotification) this.showNotification('Usage refreshed', 'success');
         } catch (error) {
