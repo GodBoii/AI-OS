@@ -240,6 +240,13 @@ def usage_daily_for_user():
 
     try:
         rows = get_daily_usage_for_user(str(user.id), day_key=day_key, limit=limit)
+        logger.info(
+            "usage/daily user=%s day_key=%s limit=%s rows=%s",
+            str(user.id),
+            day_key,
+            limit,
+            len(rows),
+        )
         return jsonify({"ok": True, "rows": rows, "count": len(rows)}), 200
     except Exception as exc:
         logger.error("usage/daily failed for user %s: %s", str(user.id), exc, exc_info=True)

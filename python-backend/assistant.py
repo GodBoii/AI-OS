@@ -273,7 +273,7 @@ def get_llm_os(
         
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="minimax/minimax-m2.7"),
+            model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
             role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a database engine. Delegate all coding, debugging, building, querying, and deployment tasks here.",
             tools=dev_tools,
             instructions=[
@@ -358,7 +358,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=Gemini(id="gemini-2.5-flash"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=Groq(id="moonshotai/kimi-k2-instruct-0905"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,
