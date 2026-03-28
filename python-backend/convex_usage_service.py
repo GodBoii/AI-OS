@@ -143,12 +143,31 @@ class ConvexUsageService:
         client = self._get_client()
         if client is None:
             return None
+        args: dict[str, Any] = {
+            "user_id": str(user_id),
+            "limit": max(min(int(limit or 30), 365), 1),
+        }
+        if day_key:
+            args["day_key"] = str(day_key)
         return client.query(
             "usage:getDailyUsageForUser",
+            args,
+        )
+
+    def get_usage_events_for_user(
+        self,
+        *,
+        user_id: str,
+        limit: int = 2000,
+    ) -> Optional[list[dict[str, Any]]]:
+        client = self._get_client()
+        if client is None:
+            return None
+        return client.query(
+            "usage:getUsageEventsForUser",
             {
                 "user_id": str(user_id),
-                "day_key": str(day_key) if day_key else None,
-                "limit": max(min(int(limit or 30), 365), 1),
+                "limit": max(min(int(limit or 2000), 10000), 1),
             },
         )
 
