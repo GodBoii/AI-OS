@@ -236,15 +236,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s var(--easing-standard);
-}
-
-.session-item:hover .session-actions,
-.session-item:focus-within .session-actions {
     opacity: 1;
     pointer-events: auto;
+    position: relative;
 }
 
 .session-action-btn {
@@ -270,7 +264,74 @@
     transform: scale(0.94);
 }
 
+.session-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 140px;
+    z-index: 10000;
+    overflow: hidden;
+    pointer-events: auto;
+    isolation: isolate;
+}
+
+.session-menu.hidden {
+    display: none;
+    pointer-events: none;
+}
+
+/* Disable pointer events on all session items when any menu is open */
+.context-content:has(.session-menu:not(.hidden)) .session-item {
+    pointer-events: none;
+}
+
+/* But keep pointer events enabled for the session item that owns the open menu */
+.context-content:has(.session-menu:not(.hidden)) .session-item:has(.session-menu:not(.hidden)) {
+    pointer-events: auto;
+}
+
+.session-menu-item {
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    font-size: 14px;
+    text-align: left;
+    pointer-events: auto;
+    position: relative;
+    z-index: 10001;
+}
+
+.session-menu-item:hover {
+    background: var(--hover-bg);
+}
+
+.session-menu-item i {
+    width: 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.session-menu-item:hover i {
+    color: var(--text-color);
+}
+
 .delete-session-btn:hover {
+    color: #ef4444;
+}
+
+.delete-session-btn:hover i {
     color: #ef4444;
 }
 

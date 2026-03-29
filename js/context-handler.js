@@ -414,9 +414,19 @@ class ContextHandler {
         let clickTimer = null;
         
         sessionItem.addEventListener('click', (e) => {
-            if (e.target.closest('.session-action-btn')) {
+            // Ignore clicks on action buttons, menu items, or anywhere inside any menu
+            if (e.target.closest('.session-action-btn') || 
+                e.target.closest('.session-menu-item') || 
+                e.target.closest('.session-menu')) {
                 return;
             }
+            
+            // Also ignore if clicking on a session item while ANY menu is open
+            const anyMenuOpen = document.querySelector('.session-menu:not(.hidden)');
+            if (anyMenuOpen) {
+                return;
+            }
+            
             clickCount++;
             
             if (clickCount === 1) {
@@ -450,29 +460,65 @@ class ContextHandler {
                 </div>
             </div>
             <div class="session-actions">
-                <button type="button" class="session-action-btn rename-session-btn" title="Rename chat" aria-label="Rename chat">
-                    <i class="fas fa-pen"></i>
+                <button type="button" class="session-action-btn session-menu-btn" title="More options" aria-label="More options">
+                    <i class="fas fa-ellipsis-v"></i>
                 </button>
-                <button type="button" class="session-action-btn delete-session-btn" title="Delete chat" aria-label="Delete chat">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <div class="session-menu hidden">
+                    <button type="button" class="session-menu-item rename-session-btn" aria-label="Rename chat">
+                        <i class="fas fa-pen"></i>
+                        <span>Rename</span>
+                    </button>
+                    <button type="button" class="session-menu-item delete-session-btn" aria-label="Delete chat">
+                        <i class="fas fa-trash"></i>
+                        <span>Delete</span>
+                    </button>
+                </div>
             </div>
         `;
     }
 
     bindSessionActions(sessionItem, session) {
+        const menuBtn = sessionItem.querySelector('.session-menu-btn');
+        const menu = sessionItem.querySelector('.session-menu');
         const renameBtn = sessionItem.querySelector('.rename-session-btn');
         const deleteBtn = sessionItem.querySelector('.delete-session-btn');
+
+        // Toggle menu on three-dots click
+        menuBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Close other open menus
+            document.querySelectorAll('.session-menu').forEach(m => {
+                if (m !== menu) m.classList.add('hidden');
+            });
+            
+            menu.classList.toggle('hidden');
+        });
+
+        // Prevent menu clicks from bubbling to session item
+        menu?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!sessionItem.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
 
         renameBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
+            menu.classList.add('hidden');
             await this.handleRenameSession(sessionItem, session);
         });
 
         deleteBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
+            menu.classList.add('hidden');
             await this.handleDeleteSession(sessionItem, session);
         });
     }
