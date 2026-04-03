@@ -1,342 +1,582 @@
 /* ================================================================= */
-/* HOME SCREEN SUGGESTION CARDS                                     */
+/* WELCOME OVERVIEW CARDS                                            */
 /* ================================================================= */
 
-/*
- * Styles for the home screen suggestion/action cards that appear
- * below the input container in welcome mode. These cards provide
- * context, guides, and quick-start prompts.
- *
- * Dependencies: design-system.css, chat-variables.css
- * Used by: welcome-display.js
- */
-
-/* --- Suggestions Grid Wrapper --- */
 .home-suggestions-wrapper {
     position: fixed;
     left: 50%;
+    bottom: 2.2%;
     transform: translateX(-50%);
-    bottom: 6%;
-    width: 56%;
-    max-width: 860px;
+    width: min(80%, 1100px);
     z-index: var(--z-welcome-message, 998);
     pointer-events: auto;
     opacity: 0;
     visibility: hidden;
     transition:
-        opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-        transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-        visibility 0s 0.5s;
+        opacity 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s 0.62s;
 }
 
 .home-suggestions-wrapper.visible {
     opacity: 1;
     visibility: visible;
     transition:
-        opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s,
-        transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s,
+        opacity 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s,
+        transform 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s,
         visibility 0s 0s;
 }
 
 .home-suggestions-wrapper.hidden {
     opacity: 0;
     visibility: hidden;
-    transform: translateX(-50%) translateY(12px);
+    transform: translateX(-50%) translateY(18px);
 }
 
-/* --- Grid Layout --- */
-.home-suggestions-grid {
+.welcome-chip-rail {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    padding: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
 }
 
-/* --- Individual Suggestion Card --- */
-.suggestion-card {
-    position: relative;
+.welcome-chip-item {
+    min-height: 315px;
+    animation: welcomeOverviewRise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.welcome-chip-item:nth-child(1) {
+    animation-delay: 0.08s;
+}
+
+.welcome-chip-item:nth-child(2) {
+    animation-delay: 0.16s;
+}
+
+.welcome-chip-item:nth-child(3) {
+    animation-delay: 0.24s;
+}
+
+.welcome-chip {
+    height: 100%;
+    max-height: 315px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 16px 14px;
-    border-radius: 14px;
-    cursor: pointer;
-    overflow: hidden;
-    min-height: 110px;
-    /* Glassmorphism base */
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 10px;
+    padding: 12px;
+    border-radius: 20px;
+    border: 1px solid;
     box-shadow:
-        0 2px 8px rgba(0, 0, 0, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    /* Transitions */
-    transition:
-        transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-        border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-        background 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    /* Stagger entrance */
-    opacity: 0;
-    animation: cardSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.suggestion-card:nth-child(1) {
-    animation-delay: 0.1s;
-}
-
-.suggestion-card:nth-child(2) {
-    animation-delay: 0.18s;
-}
-
-.suggestion-card:nth-child(3) {
-    animation-delay: 0.26s;
-}
-
-.suggestion-card:nth-child(4) {
-    animation-delay: 0.34s;
-}
-
-/* --- Card Hover State --- */
-.suggestion-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(var(--accent-color-rgb), 0.35);
-    box-shadow:
-        0 8px 24px rgba(0, 0, 0, 0.12),
-        0 2px 8px rgba(0, 0, 0, 0.06),
+        0 20px 46px rgba(0, 0, 0, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(26px) saturate(165%);
+    -webkit-backdrop-filter: blur(26px) saturate(165%);
+    transition:
+        transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.suggestion-card:active {
-    transform: translateY(-1px) scale(0.985);
-    transition-duration: 0.1s;
+.welcome-chip:hover {
+    transform: translateY(-4px);
 }
 
-/* --- Subtle glow line at top of card on hover --- */
-.suggestion-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 10%;
-    right: 10%;
-    height: 1px;
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(var(--accent-color-rgb), 0.4),
-            transparent);
-    opacity: 0;
-    transition: opacity 0.35s ease;
+.dark-mode .welcome-chip {
+    background: rgba(20, 20, 22, 0.88);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -8px 18px rgba(255, 255, 255, 0.02);
 }
 
-.suggestion-card:hover::before {
-    opacity: 1;
+.dark-mode .welcome-chip:hover {
+    background: rgba(26, 26, 28, 0.92);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow:
+        0 28px 62px rgba(0, 0, 0, 0.52),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* --- Card Icon --- */
-.suggestion-card-icon {
-    width: 32px;
-    height: 32px;
+body:not(.dark-mode) .welcome-chip {
+    background: rgba(247, 242, 233, 0.92);
+    border-color: rgba(44, 36, 28, 0.12);
+    box-shadow:
+        0 20px 44px rgba(73, 58, 38, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body:not(.dark-mode) .welcome-chip:hover {
+    background: rgba(250, 245, 236, 0.97);
+    border-color: rgba(44, 36, 28, 0.18);
+    box-shadow:
+        0 24px 50px rgba(73, 58, 38, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+.welcome-chip-header {
     display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid;
+}
+
+.dark-mode .welcome-chip-header {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+body:not(.dark-mode) .welcome-chip-header {
+    border-color: rgba(44, 36, 28, 0.1);
+}
+
+.welcome-chip-badge {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    width: 100%;
+}
+
+.welcome-chip-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
-    font-size: 14px;
     flex-shrink: 0;
-    background: rgba(var(--accent-color-rgb), 0.1);
-    color: var(--accent-color);
-    border: 1px solid rgba(var(--accent-color-rgb), 0.12);
-    transition: all 0.3s ease;
+    font-size: 0.95rem;
 }
 
-.suggestion-card:hover .suggestion-card-icon {
-    background: rgba(var(--accent-color-rgb), 0.18);
-    transform: scale(1.08);
+.dark-mode .welcome-chip-icon {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* --- Card Title --- */
-.suggestion-card-title {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-color);
-    line-height: 1.3;
-    letter-spacing: -0.01em;
+body:not(.dark-mode) .welcome-chip-icon {
+    background: rgba(44, 36, 28, 0.06);
+    color: rgba(20, 17, 12, 0.92);
+    border: 1px solid rgba(44, 36, 28, 0.1);
+}
+
+.welcome-chip-heading {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.welcome-chip-title {
     margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.015em;
 }
 
-/* --- Card Description --- */
-.suggestion-card-desc {
+.dark-mode .welcome-chip-title {
+    color: rgba(255, 255, 255, 0.96);
+}
+
+body:not(.dark-mode) .welcome-chip-title {
+    color: rgba(19, 17, 14, 0.96);
+}
+
+.welcome-chip-description {
+    margin: 0;
     font-size: 0.72rem;
-    color: var(--text-secondary);
     line-height: 1.45;
-    margin: 0;
-    opacity: 0.85;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    font-weight: 500;
+}
+
+.dark-mode .welcome-chip-description {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+body:not(.dark-mode) .welcome-chip-description {
+    color: rgba(44, 36, 28, 0.62);
+}
+
+.welcome-chip-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
-/* --- Prompt Arrow (visible on hover) --- */
-.suggestion-card-arrow {
-    position: absolute;
-    bottom: 12px;
-    right: 12px;
-    width: 20px;
-    height: 20px;
+.welcome-chip-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.welcome-card-action {
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 9px 13px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.welcome-card-action:hover {
+    transform: translateY(-1px);
+}
+
+.dark-mode .welcome-card-action {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.94);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .welcome-card-action:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.dark-mode .welcome-card-action.secondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+body:not(.dark-mode) .welcome-card-action {
+    background: rgba(44, 36, 28, 0.06);
+    color: rgba(19, 17, 14, 0.92);
+    border-color: rgba(44, 36, 28, 0.12);
+}
+
+body:not(.dark-mode) .welcome-card-action:hover {
+    background: rgba(44, 36, 28, 0.1);
+    border-color: rgba(44, 36, 28, 0.18);
+}
+
+body:not(.dark-mode) .welcome-card-action.secondary {
+    background: rgba(44, 36, 28, 0.03);
+    color: rgba(44, 36, 28, 0.7);
+}
+
+.welcome-card-footnote {
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.dark-mode .welcome-card-footnote {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+body:not(.dark-mode) .welcome-card-footnote {
+    color: rgba(44, 36, 28, 0.56);
+}
+
+.welcome-card-empty,
+.welcome-prompt-block {
+    height: 100%;
+    min-height: 0;
+    border-radius: 14px;
+    border: 1px solid;
+    padding: 10px 12px;
+}
+
+.dark-mode .welcome-card-empty,
+.dark-mode .welcome-prompt-block {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+body:not(.dark-mode) .welcome-card-empty,
+body:not(.dark-mode) .welcome-prompt-block {
+    background: rgba(44, 36, 28, 0.035);
+    border-color: rgba(44, 36, 28, 0.1);
+}
+
+.welcome-card-empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: rgba(var(--accent-color-rgb), 0.1);
-    color: var(--accent-color);
-    font-size: 10px;
-    opacity: 0;
-    transform: translateX(-4px);
+    text-align: center;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.dark-mode .welcome-card-empty {
+    color: rgba(255, 255, 255, 0.66);
+}
+
+body:not(.dark-mode) .welcome-card-empty {
+    color: rgba(44, 36, 28, 0.66);
+}
+
+.welcome-prompt-block {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.welcome-prompt-meta {
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.dark-mode .welcome-prompt-meta {
+    color: rgba(255, 255, 255, 0.48);
+}
+
+body:not(.dark-mode) .welcome-prompt-meta {
+    color: rgba(44, 36, 28, 0.52);
+}
+
+.welcome-prompt-text {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.dark-mode .welcome-prompt-text {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+body:not(.dark-mode) .welcome-prompt-text {
+    color: rgba(16, 14, 11, 0.92);
+}
+
+.welcome-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+    overflow-y: auto;
+    /* Hide scrollbar while maintaining scroll functionality */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.welcome-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.welcome-list-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid;
+    border-radius: 13px;
+    padding: 9px 10px;
+    cursor: pointer;
+    text-align: left;
     transition:
-        opacity 0.3s ease,
-        transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        transform 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
-.suggestion-card:hover .suggestion-card-arrow {
-    opacity: 1;
-    transform: translateX(0);
+.welcome-list-item:hover {
+    transform: translateX(3px);
 }
 
-/* ================================================================= */
-/* ENTRANCE ANIMATION                                                */
-/* ================================================================= */
+.dark-mode .welcome-list-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+}
 
-@keyframes cardSlideUp {
-    0% {
+.dark-mode .welcome-list-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+}
+
+.welcome-prompt-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.welcome-prompt-suggestions-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.dark-mode .welcome-prompt-suggestions-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+body:not(.dark-mode) .welcome-prompt-suggestions-label {
+    color: rgba(44, 36, 28, 0.6);
+}
+
+.welcome-prompt-suggestions-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 2px;
+    /* Hide scrollbar while maintaining scroll functionality */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.welcome-prompt-suggestions-list::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+.welcome-prompt-chip {
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    white-space: normal;
+    text-align: left;
+    transition:
+        transform 0.18s ease,
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.welcome-prompt-chip:hover {
+    transform: translateY(-1px);
+}
+
+.dark-mode .welcome-prompt-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .welcome-prompt-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+body:not(.dark-mode) .welcome-prompt-chip {
+    background: rgba(44, 36, 28, 0.05);
+    border-color: rgba(44, 36, 28, 0.12);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+body:not(.dark-mode) .welcome-prompt-chip:hover {
+    background: rgba(44, 36, 28, 0.1);
+    border-color: rgba(44, 36, 28, 0.18);
+}
+
+body:not(.dark-mode) .welcome-list-item {
+    background: rgba(44, 36, 28, 0.035);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.94);
+}
+
+body:not(.dark-mode) .welcome-list-item:hover {
+    background: rgba(44, 36, 28, 0.08);
+    border-color: rgba(44, 36, 28, 0.15);
+    box-shadow: 0 10px 22px rgba(73, 58, 38, 0.1);
+}
+
+.welcome-list-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.welcome-list-title {
+    font-size: 0.79rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.welcome-list-meta {
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.dark-mode .welcome-list-meta {
+    color: rgba(255, 255, 255, 0.56);
+}
+
+body:not(.dark-mode) .welcome-list-meta {
+    color: rgba(44, 36, 28, 0.62);
+}
+
+@keyframes welcomeOverviewRise {
+    from {
         opacity: 0;
-        transform: translateY(16px);
+        transform: translateY(18px);
     }
 
-    100% {
+    to {
         opacity: 1;
         transform: translateY(0);
     }
 }
 
-/* ================================================================= */
-/* LIGHT MODE OVERRIDES                                              */
-/* ================================================================= */
-
-:root .suggestion-card {
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(45, 55, 72, 0.1);
-    box-shadow:
-        0 2px 8px rgba(45, 55, 72, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-:root .suggestion-card:hover {
-    background: rgba(255, 255, 255, 0.75);
-    border-color: rgba(45, 55, 72, 0.2);
-    box-shadow:
-        0 8px 28px rgba(45, 55, 72, 0.1),
-        0 2px 8px rgba(45, 55, 72, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
-:root .suggestion-card::before {
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(45, 55, 72, 0.15),
-            transparent);
-}
-
-/* ================================================================= */
-/* DARK MODE OVERRIDES                                               */
-/* ================================================================= */
-
-.dark-mode .suggestion-card {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow:
-        0 2px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.dark-mode .suggestion-card:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(209, 213, 219, 0.18);
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 2px 8px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.dark-mode .suggestion-card::before {
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(209, 213, 219, 0.2),
-            transparent);
-}
-
-.dark-mode .suggestion-card-icon {
-    background: rgba(209, 213, 219, 0.08);
-    border-color: rgba(209, 213, 219, 0.1);
-}
-
-.dark-mode .suggestion-card:hover .suggestion-card-icon {
-    background: rgba(209, 213, 219, 0.14);
-}
-
-/* ================================================================= */
-/* RESPONSIVE DESIGN                                                 */
-/* ================================================================= */
-
 @media (max-width: 1200px) {
     .home-suggestions-wrapper {
-        width: 65%;
+        width: min(88%, 1100px);
+        bottom: 2%;
     }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
     .home-suggestions-wrapper {
-        width: 80%;
+        width: min(92%, 1100px);
+        bottom: 1.6%;
     }
 
-    .home-suggestions-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
+    .welcome-chip-rail {
+        grid-template-columns: 1fr;
     }
 
-    .suggestion-card {
-        min-height: 90px;
+    .welcome-chip-item {
+        min-height: 290px;
+    }
+
+    .welcome-chip {
+        max-height: 290px;
     }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
     .home-suggestions-wrapper {
-        width: 92%;
-        bottom: 4%;
+        width: 96%;
+        bottom: 1.2%;
     }
 
-    .home-suggestions-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
+    .welcome-chip {
+        padding: 12px;
+        border-radius: 16px;
+        max-height: 270px;
     }
 
-    .suggestion-card {
-        padding: 12px 10px;
-        min-height: 80px;
-    }
-
-    .suggestion-card-icon {
-        width: 28px;
-        height: 28px;
-        font-size: 12px;
-    }
-
-    .suggestion-card-title {
-        font-size: 0.78rem;
-    }
-
-    .suggestion-card-desc {
-        font-size: 0.68rem;
+    .welcome-chip-item {
+        min-height: 270px;
     }
 }
