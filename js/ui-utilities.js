@@ -125,7 +125,7 @@ async function handleShareMessage(messageDiv) {
         // Use a cross-platform approach: save to file and show options
         if (window.electron && window.electron.ipcRenderer) {
             // Show share options modal
-            showShareModal(textContent);
+            showShareModal({ content: textContent, messageDiv });
         } else {
             // Fallback for web version: try Web Share API, then clipboard
             if (navigator.share && navigator.canShare && navigator.canShare({ text: textContent })) {
@@ -156,9 +156,12 @@ async function handleShareMessage(messageDiv) {
 
 /**
  * Shows a share modal with multiple sharing options
- * @param {string} content - The content to share
+ * @param {{ content: string, messageDiv: HTMLElement }} options - Share options payload
  */
-function showShareModal(content) {
+function showShareModal(options) {
+    const content = options?.content || '';
+    const messageDiv = options?.messageDiv || null;
+
     // Remove existing modal if any
     const existingModal = document.querySelector('.share-modal-overlay');
     if (existingModal) existingModal.remove();
@@ -186,6 +189,10 @@ function showShareModal(content) {
                 <button class="share-option" data-action="save-md">
                     <i class="fi fi-tr-file-edit"></i>
                     <span>Save as Markdown</span>
+                </button>
+                <button class="share-option" data-action="export-pdf">
+                    <i class="fi fi-tr-file-export"></i>
+                    <span>Share Entire Conversation (PDF)</span>
                 </button>
             </div>
         </div>
@@ -268,6 +275,9 @@ function showShareModal(content) {
                         showNotification('Response downloaded', 'success', 3000);
                         closeModal();
                     }
+                } else if (action === 'export-pdf') {
+                    await exportEntireConversationPdf(messageDiv);
+                    closeModal();
                 }
             } catch (error) {
                 console.error('Share action failed:', error);
@@ -278,6 +288,362 @@ function showShareModal(content) {
 
     // Show modal with animation
     setTimeout(() => overlay.classList.add('visible'), 10);
+}
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function parseMessageContext(messageDiv) {
+    if (!messageDiv || !messageDiv.dataset?.context) return null;
+    try {
+        return JSON.parse(messageDiv.dataset.context);
+    } catch (error) {
+        console.warn('Failed to parse message context:', error);
+        return null;
+    }
+}
+
+function getConversationThreadFromMessage(messageDiv) {
+    return (
+        messageDiv?.closest?.('.conversation-thread') ||
+        document.querySelector('.conversation-thread.active') ||
+        document.querySelector('#chat-messages .conversation-thread')
+    );
+}
+
+function sanitizeAssistantMessageHtml(contentNode) {
+    if (!contentNode) return '';
+
+    const clone = contentNode.cloneNode(true);
+    clone.querySelectorAll('.message-actions, .code-copy-btn, button, .view-turn-context-btn').forEach((node) => {
+        node.remove();
+    });
+
+    // Blob URLs from renderer context won't reliably load in the hidden print window.
+    clone.querySelectorAll('img').forEach((img) => {
+        const src = String(img.getAttribute('src') || '');
+        if (src.startsWith('blob:')) {
+            const replacement = document.createElement('div');
+            replacement.className = 'pdf-image-placeholder';
+            replacement.textContent = '[Image omitted in export]';
+            img.replaceWith(replacement);
+        }
+    });
+
+    return clone.innerHTML.trim();
+}
+
+function extractConversationTurns(thread) {
+    if (!thread) return [];
+
+    const turns = [];
+    const messages = thread.querySelectorAll('.message');
+
+    messages.forEach((message) => {
+        if (message.classList.contains('message-user')) {
+            const text = (message.querySelector('.user-message-text')?.textContent || '').trim();
+            if (!text) return;
+
+            const context = parseMessageContext(message) || {};
+            const files = Array.isArray(context.files) ? context.files : [];
+            const attachments = files
+                .map((file) => ({
+                    name: String(file?.name || '').trim(),
+                    type: String(file?.type || '').trim()
+                }))
+                .filter((file) => file.name);
+
+            turns.push({
+                role: 'user',
+                text,
+                attachments
+            });
+            return;
+        }
+
+        if (message.classList.contains('message-bot')) {
+            const contentNode = message.querySelector('.message-content');
+            const html = sanitizeAssistantMessageHtml(contentNode);
+            const plain = (contentNode?.textContent || '').trim();
+
+            if (!html && !plain) return;
+
+            turns.push({
+                role: 'assistant',
+                html
+            });
+        }
+    });
+
+    return turns;
+}
+
+function buildConversationPdfHtml(turns) {
+    const content = turns.map((turn) => {
+        if (turn.role === 'user') {
+            const attachmentsHtml = (turn.attachments && turn.attachments.length > 0)
+                ? `
+                    <div class="turn-attachments">
+                        ${turn.attachments.map((attachment) => `
+                            <div class="attachment-pill">
+                                <span class="attachment-name">${escapeHtml(attachment.name)}</span>
+                                ${attachment.type ? `<span class="attachment-type">${escapeHtml(attachment.type)}</span>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+                : '';
+
+            return `
+                <section class="turn turn-user">
+                    <div class="turn-label">You</div>
+                    <div class="turn-body">
+                        <p>${escapeHtml(turn.text)}</p>
+                        ${attachmentsHtml}
+                    </div>
+                </section>
+            `;
+        }
+
+        return `
+            <section class="turn turn-assistant">
+                <div class="turn-label">Aetheria AI</div>
+                <div class="turn-body assistant-rich">
+                    ${turn.html || ''}
+                </div>
+            </section>
+        `;
+    }).join('');
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aetheria Conversation</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.5;
+    }
+    .document {
+      max-width: 840px;
+      margin: 0 auto;
+    }
+    .turn {
+      margin-bottom: 16px;
+      border: 1px solid #dbe3ef;
+      border-radius: 12px;
+      page-break-inside: avoid;
+      overflow: hidden;
+    }
+    .turn-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 9px 12px;
+      border-bottom: 1px solid #dbe3ef;
+    }
+    .turn-user .turn-label {
+      color: #0c4a6e;
+      background: #e6f4ff;
+    }
+    .turn-assistant .turn-label {
+      color: #1e293b;
+      background: #f8fafc;
+    }
+    .turn-body {
+      padding: 12px 14px;
+      font-size: 13px;
+      word-break: break-word;
+      white-space: normal;
+    }
+    .turn-user .turn-body {
+      white-space: pre-wrap;
+    }
+    .turn-body p {
+      margin: 0 0 8px;
+    }
+    .turn-body p:last-child {
+      margin-bottom: 0;
+    }
+    .turn-attachments {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .attachment-pill {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      font-size: 11px;
+      color: #1e3a8a;
+    }
+    .attachment-type {
+      opacity: 0.8;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    .assistant-rich pre {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border: 1px solid #dbe3ef;
+      border-radius: 10px;
+      background: #f8fafc;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 11px;
+      line-height: 1.5;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    .assistant-rich code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      background: #eef2ff;
+      border: 1px solid #dbe3ef;
+      border-radius: 6px;
+      padding: 1px 5px;
+    }
+    .assistant-rich pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+    }
+    .assistant-rich ul, .assistant-rich ol {
+      margin: 8px 0 8px 20px;
+      padding: 0;
+    }
+    .assistant-rich blockquote {
+      margin: 10px 0;
+      padding: 8px 12px;
+      border-left: 4px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+    }
+    .assistant-rich table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 12px;
+    }
+    .assistant-rich th, .assistant-rich td {
+      border: 1px solid #dbe3ef;
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+    .assistant-rich th {
+      background: #f1f5f9;
+      font-weight: 700;
+    }
+    .assistant-rich img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #dbe3ef;
+      margin-top: 8px;
+    }
+    .pdf-image-placeholder {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px dashed #94a3b8;
+      border-radius: 8px;
+      color: #475569;
+      font-size: 11px;
+      background: #f8fafc;
+    }
+  </style>
+</head>
+<body>
+  <main class="document">
+    ${content}
+  </main>
+</body>
+</html>
+    `;
+}
+
+function sanitizeFilenameSegment(value) {
+    const normalized = String(value || '')
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return normalized.slice(0, 120) || 'aetheria-conversation';
+}
+
+async function createPdfFilename(thread) {
+    const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
+    if (conversationId && window.electron?.auth?.fetchSessionData) {
+        try {
+            const session = await window.electron.auth.fetchSessionData(conversationId);
+            const title = String(session?.session_title || '').trim();
+            if (title) {
+                return `${sanitizeFilenameSegment(title)}.pdf`;
+            }
+        } catch (error) {
+            console.warn('Could not fetch session title for PDF filename:', error);
+        }
+    }
+
+    const now = new Date();
+    const iso = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    return `aetheria-conversation-${iso}.pdf`;
+}
+
+async function exportEntireConversationPdf(messageDiv) {
+    const thread = getConversationThreadFromMessage(messageDiv);
+    if (!thread) {
+        showNotification('Could not find conversation to export', 'error', 3000);
+        return;
+    }
+
+    const turns = extractConversationTurns(thread);
+    if (!turns.length) {
+        showNotification('No conversation messages found to export', 'error', 3000);
+        return;
+    }
+
+    const html = buildConversationPdfHtml(turns);
+
+    if (!window.electron?.ipcRenderer?.invoke) {
+        showNotification('PDF export is available in desktop app only', 'error', 3000);
+        return;
+    }
+
+    const result = await window.electron.ipcRenderer.invoke('export-conversation-pdf', {
+        html,
+        defaultPath: await createPdfFilename(thread)
+    });
+
+    if (result?.success) {
+        showNotification('Conversation PDF exported successfully', 'success', 3000);
+        return;
+    }
+
+    if (result?.canceled) {
+        return;
+    }
+
+    showNotification(result?.error || 'Failed to export conversation PDF', 'error', 3000);
 }
 
 /**
