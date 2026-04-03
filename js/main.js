@@ -565,6 +565,56 @@ app.on('open-url', (event, url) => {
 const fs = require('fs').promises;
 ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
 ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
+ipcMain.handle('export-conversation-pdf', async (event, payload) => {
+    const html = String(payload?.html || '').trim();
+    const defaultPath = String(payload?.defaultPath || 'aetheria-conversation.pdf').trim() || 'aetheria-conversation.pdf';
+
+    if (!html) {
+        return { success: false, error: 'No conversation HTML provided.' };
+    }
+
+    let exportWindow = null;
+    try {
+        const saveResult = await dialog.showSaveDialog(mainWindow, {
+            defaultPath,
+            filters: [
+                { name: 'PDF Files', extensions: ['pdf'] }
+            ]
+        });
+
+        if (saveResult.canceled || !saveResult.filePath) {
+            return { canceled: true };
+        }
+
+        exportWindow = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
+            }
+        });
+
+        await exportWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
+        const pdfBuffer = await exportWindow.webContents.printToPDF({
+            printBackground: true,
+            preferCSSPageSize: true,
+            pageSize: 'A4',
+            marginsType: 1,
+            landscape: false
+        });
+
+        await fs.writeFile(saveResult.filePath, pdfBuffer);
+        return { success: true, filePath: saveResult.filePath };
+    } catch (error) {
+        console.error('Error exporting conversation PDF:', error);
+        return { success: false, error: error.message || 'Failed to export PDF.' };
+    } finally {
+        if (exportWindow && !exportWindow.isDestroyed()) {
+            exportWindow.destroy();
+        }
+    }
+});
 ipcMain.handle('get-path', (event, pathName) => { try { return app.getPath(pathName); } catch (error) { console.error(`Error getting path for ${pathName}:`, error); return null; } });
 ipcMain.handle('get-app-path', () => { return app.getAppPath(); });
 ipcMain.handle('resolve-app-resource', (event, ...segments) => { return path.join(app.getAppPath(), ...segments); });

@@ -82,6 +82,7 @@ const validReceiveChannels = [
 const validInvokeChannels = [
     'show-save-dialog',
     'save-file',
+    'export-conversation-pdf',
     'get-path',
     'get-app-path',
     'resolve-app-resource',
