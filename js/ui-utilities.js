@@ -384,7 +384,22 @@ function extractConversationTurns(thread) {
     return turns;
 }
 
-function buildConversationPdfHtml(turns) {
+function buildConversationPdfHtml(turns, metadata = {}) {
+    const { title = 'Untitled Conversation', timestamp = new Date() } = metadata;
+    
+    const formattedDate = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    }).format(timestamp);
+    
+    const formattedTime = new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    }).format(timestamp);
+
     const content = turns.map((turn) => {
         if (turn.role === 'user') {
             const attachmentsHtml = (turn.attachments && turn.attachments.length > 0)
@@ -392,8 +407,13 @@ function buildConversationPdfHtml(turns) {
                     <div class="turn-attachments">
                         ${turn.attachments.map((attachment) => `
                             <div class="attachment-pill">
-                                <span class="attachment-name">${escapeHtml(attachment.name)}</span>
-                                ${attachment.type ? `<span class="attachment-type">${escapeHtml(attachment.type)}</span>` : ''}
+                                <svg class="attachment-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                                </svg>
+                                <div class="attachment-info">
+                                    <span class="attachment-name">${escapeHtml(attachment.name)}</span>
+                                    ${attachment.type ? `<span class="attachment-type">${escapeHtml(attachment.type)}</span>` : ''}
+                                </div>
                             </div>
                         `).join('')}
                     </div>
@@ -401,23 +421,40 @@ function buildConversationPdfHtml(turns) {
                 : '';
 
             return `
-                <section class="turn turn-user">
-                    <div class="turn-label">You</div>
-                    <div class="turn-body">
+                <div class="turn turn-user">
+                    <div class="turn-header">
+                        <div class="turn-avatar turn-avatar-user">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <div class="turn-label">You</div>
+                    </div>
+                    <div class="turn-body user-body">
                         <p>${escapeHtml(turn.text)}</p>
                         ${attachmentsHtml}
                     </div>
-                </section>
+                </div>
             `;
         }
 
         return `
-            <section class="turn turn-assistant">
-                <div class="turn-label">Aetheria AI</div>
+            <div class="turn turn-assistant">
+                <div class="turn-header">
+                    <div class="turn-avatar turn-avatar-assistant">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                            <path d="M12 12 2.1 12"/>
+                            <path d="M12 12l8.5-4.5"/>
+                        </svg>
+                    </div>
+                    <div class="turn-label">Aetheria AI</div>
+                </div>
                 <div class="turn-body assistant-rich">
                     ${turn.html || ''}
                 </div>
-            </section>
+            </div>
         `;
     }).join('');
 
@@ -427,156 +464,338 @@ function buildConversationPdfHtml(turns) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aetheria Conversation</title>
+  <title>${escapeHtml(title)} - Aetheria AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4; margin: 16mm; }
-    * { box-sizing: border-box; }
+    :root {
+      --color-brand: #6366f1;
+      --color-brand-dark: #4f46e5;
+      --color-text-primary: #0f172a;
+      --color-text-secondary: #475569;
+      --color-text-tertiary: #64748b;
+      --color-surface: #ffffff;
+      --color-surface-user: #f8fafc;
+      --color-surface-assistant: #ffffff;
+      --color-border: #e2e8f0;
+      
+      --font-display: 'Outfit', -apple-system, sans-serif;
+      --font-body: 'Inter', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    @page { margin: 24mm 20mm; size: A4; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      margin: 0;
-      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-      color: #0f172a;
-      background: #ffffff;
-      line-height: 1.5;
+      font-family: var(--font-body);
+      color: var(--color-text-primary);
+      background: var(--color-surface);
+      line-height: 1.6;
+      font-size: 14px;
     }
-    .document {
-      max-width: 840px;
-      margin: 0 auto;
+
+    /* Document Header */
+    .document-header {
+      padding-bottom: 24px;
+      margin-bottom: 36px;
+      border-bottom: 2px solid var(--color-brand);
+      page-break-after: avoid;
     }
-    .turn {
-      margin-bottom: 16px;
-      border: 1px solid #dbe3ef;
-      border-radius: 12px;
-      page-break-inside: avoid;
-      overflow: hidden;
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
     }
-    .turn-label {
-      font-size: 12px;
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 24px;
       font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 9px 12px;
-      border-bottom: 1px solid #dbe3ef;
+      color: var(--color-text-primary);
+      letter-spacing: -0.02em;
     }
-    .turn-user .turn-label {
-      color: #0c4a6e;
-      background: #e6f4ff;
+
+    .conversation-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: 12px;
+      line-height: 1.3;
     }
-    .turn-assistant .turn-label {
-      color: #1e293b;
-      background: #f8fafc;
-    }
-    .turn-body {
-      padding: 12px 14px;
+
+    .conversation-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
       font-size: 13px;
-      word-break: break-word;
-      white-space: normal;
+      color: var(--color-text-tertiary);
+      font-weight: 500;
     }
-    .turn-user .turn-body {
+
+    .meta-item { display: flex; align-items: center; gap: 6px; }
+
+    /* Main Body */
+    .document-body {
+      max-width: 100%;
+    }
+
+    .turn {
+      margin-bottom: 36px;
+    }
+
+    .turn-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      page-break-after: avoid;
+    }
+
+    .turn-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .turn-avatar-user {
+      background: #475569;
+    }
+
+    .turn-avatar-assistant {
+      background: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark));
+    }
+
+    .turn-label {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .turn-body {
+      padding: 0 0 0 44px; /* Align with text, after avatar */
+    }
+
+    .user-body {
+      font-size: 15px;
+      color: var(--color-text-primary);
       white-space: pre-wrap;
+      line-height: 1.7;
     }
-    .turn-body p {
-      margin: 0 0 8px;
-    }
-    .turn-body p:last-child {
-      margin-bottom: 0;
-    }
+
+    /* Attachments */
     .turn-attachments {
-      margin-top: 10px;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 12px;
+      margin-top: 16px;
     }
+
     .attachment-pill {
-      display: inline-flex;
-      gap: 8px;
+      display: flex;
       align-items: center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid #bfdbfe;
-      background: #eff6ff;
-      font-size: 11px;
-      color: #1e3a8a;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--color-surface-user);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
     }
+
+    .attachment-icon { color: var(--color-text-tertiary); flex-shrink: 0; }
+
+    .attachment-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .attachment-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
     .attachment-type {
-      opacity: 0.8;
-      font-family: Consolas, "Courier New", monospace;
-    }
-    .assistant-rich pre {
-      margin: 10px 0;
-      padding: 10px 12px;
-      border: 1px solid #dbe3ef;
-      border-radius: 10px;
-      background: #f8fafc;
-      overflow: hidden;
-      white-space: pre-wrap;
-      word-break: break-word;
       font-size: 11px;
-      line-height: 1.5;
-      font-family: Consolas, "Courier New", monospace;
+      font-family: var(--font-mono);
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
+
+    /* Assistant Rich Content */
+    .assistant-rich {
+      font-size: 14.5px;
+      line-height: 1.75;
+      color: var(--color-text-secondary);
+    }
+
+    .assistant-rich p { margin-bottom: 16px; }
+    .assistant-rich p:last-child { margin-bottom: 0; }
+
+    .assistant-rich h1, .assistant-rich h2, .assistant-rich h3, .assistant-rich h4 {
+      font-family: var(--font-display);
+      color: var(--color-text-primary);
+      margin: 24px 0 12px;
+      font-weight: 600;
+    }
+    
+    .assistant-rich h1 { font-size: 20px; }
+    .assistant-rich h2 { font-size: 18px; }
+    .assistant-rich h3 { font-size: 16px; }
+
     .assistant-rich code {
-      font-family: Consolas, "Courier New", monospace;
-      font-size: 11px;
-      background: #eef2ff;
-      border: 1px solid #dbe3ef;
-      border-radius: 6px;
-      padding: 1px 5px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--color-surface-user);
+      border: 1px solid var(--color-border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #b91c1c;
     }
+
+    .assistant-rich pre {
+      background: var(--color-surface-user);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
     .assistant-rich pre code {
       background: transparent;
       border: none;
       padding: 0;
+      color: var(--color-text-primary);
+      font-size: 13px;
     }
+
     .assistant-rich ul, .assistant-rich ol {
-      margin: 8px 0 8px 20px;
+      margin: 16px 0 16px 24px;
       padding: 0;
+      color: var(--color-text-secondary);
     }
-    .assistant-rich blockquote {
-      margin: 10px 0;
-      padding: 8px 12px;
-      border-left: 4px solid #cbd5e1;
-      background: #f8fafc;
-      color: #334155;
-    }
-    .assistant-rich table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 10px 0;
-      font-size: 12px;
-    }
-    .assistant-rich th, .assistant-rich td {
-      border: 1px solid #dbe3ef;
-      padding: 6px 8px;
-      text-align: left;
-      vertical-align: top;
-      word-break: break-word;
-    }
-    .assistant-rich th {
-      background: #f1f5f9;
-      font-weight: 700;
-    }
+    .assistant-rich li { margin-bottom: 8px; }
+    
     .assistant-rich img {
       max-width: 100%;
       height: auto;
       border-radius: 8px;
-      border: 1px solid #dbe3ef;
-      margin-top: 8px;
+      border: 1px solid var(--color-border);
+      margin: 16px 0;
+      display: block;
     }
+
     .pdf-image-placeholder {
-      margin-top: 8px;
-      padding: 8px 10px;
-      border: 1px dashed #94a3b8;
+      margin: 16px 0;
+      padding: 16px;
+      border: 1px dashed var(--color-text-tertiary);
       border-radius: 8px;
-      color: #475569;
-      font-size: 11px;
-      background: #f8fafc;
+      color: var(--color-text-tertiary);
+      font-size: 13px;
+      background: var(--color-surface-user);
+      text-align: center;
+      font-style: italic;
+    }
+
+    .assistant-rich blockquote {
+      margin: 16px 0;
+      padding: 12px 20px;
+      border-left: 4px solid var(--color-brand);
+      background: var(--color-surface-user);
+      color: var(--color-text-secondary);
+      font-style: italic;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .assistant-rich table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .assistant-rich th, .assistant-rich td {
+      border: 1px solid var(--color-border);
+      padding: 12px;
+      text-align: left;
+    }
+
+    .assistant-rich th {
+      background: var(--color-surface-user);
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    /* Footer */
+    .document-footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--color-border);
+      text-align: center;
+      color: var(--color-text-tertiary);
+      font-size: 12px;
+      font-family: var(--font-display);
+      page-break-inside: avoid;
     }
   </style>
 </head>
 <body>
-  <main class="document">
+  <div class="document-header">
+    <div class="brand-section">
+      <div class="brand-name">Aetheria AI</div>
+    </div>
+    <div class="conversation-title">${escapeHtml(title)}</div>
+    <div class="conversation-meta">
+      <div class="meta-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span>${formattedDate}</span>
+      </div>
+      <div class="meta-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>${formattedTime}</span>
+      </div>
+    </div>
+  </div>
+
+  <main class="document-body">
     ${content}
   </main>
+
+  <footer class="document-footer">
+    Generated by Aetheria AI • Premium Export
+  </footer>
 </body>
 </html>
     `;
@@ -622,7 +841,25 @@ async function exportEntireConversationPdf(messageDiv) {
         return;
     }
 
-    const html = buildConversationPdfHtml(turns);
+    // Fetch conversation metadata
+    const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
+    let title = 'Untitled Conversation';
+    
+    if (conversationId && window.electron?.auth?.fetchSessionData) {
+        try {
+            const session = await window.electron.auth.fetchSessionData(conversationId);
+            title = String(session?.session_title || '').trim() || title;
+        } catch (error) {
+            console.warn('Could not fetch session title for PDF:', error);
+        }
+    }
+
+    const metadata = {
+        title,
+        timestamp: new Date()
+    };
+
+    const html = buildConversationPdfHtml(turns, metadata);
 
     if (!window.electron?.ipcRenderer?.invoke) {
         showNotification('PDF export is available in desktop app only', 'error', 3000);
