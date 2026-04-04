@@ -151,11 +151,51 @@ function threadHasMessages(conversationId) {
     return Boolean(thread?.querySelector('.message'));
 }
 
+// --- Sticky Scroll System (like ChatGPT/Claude) ---
+// When user scrolls up manually, stop auto-scrolling.
+// When user sends a new message, re-enable auto-scrolling.
+let userHasScrolledUp = false;
+let lastAutoScrollTime = 0;
+const AUTO_SCROLL_THROTTLE_MS = 80;
+
 function scrollActiveConversationToBottom() {
     const chatMessages = getChatMessagesRoot();
     if (chatMessages) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
+        userHasScrolledUp = false;
     }
+}
+
+/** Scroll during streaming — only if user hasn't scrolled up */
+function autoScrollIfSticky() {
+    if (userHasScrolledUp) return;
+    const now = Date.now();
+    if (now - lastAutoScrollTime < AUTO_SCROLL_THROTTLE_MS) return;
+    lastAutoScrollTime = now;
+    const chatMessages = getChatMessagesRoot();
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+/** Detect when user scrolls up manually */
+function setupScrollDetection() {
+    const chatMessages = getChatMessagesRoot();
+    if (!chatMessages) return;
+    chatMessages.addEventListener('scroll', () => {
+        // If we're near the bottom (within 150px), consider it "at bottom"
+        const distanceFromBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
+        if (distanceFromBottom > 150) {
+            userHasScrolledUp = true;
+        } else {
+            userHasScrolledUp = false;
+        }
+    }, { passive: true });
+}
+
+/** Re-engage auto-scroll when user sends a new message */
+function resetScrollState() {
+    userHasScrolledUp = false;
 }
 
 function updateConversationStateForActiveThread() {
@@ -1978,6 +2018,7 @@ function addUserMessage(message, turnContextData = null) {
     messageDiv.appendChild(userMessageContainer);
     activeThread.appendChild(messageDiv);
     updateConversationLabel(currentConversationId, message);
+    resetScrollState();
     scrollActiveConversationToBottom();
 
     // Dispatch custom event for welcome display
@@ -2158,6 +2199,9 @@ function populateBotMessage(data) {
             addCopyButtonsToCodeBlocks(innerContentDiv);
         }
     }
+
+    // Auto-scroll during streaming (like ChatGPT/Claude)
+    autoScrollIfSticky();
 }
 
 /**
@@ -3039,6 +3083,9 @@ function init() {
     elements.sendBtn.addEventListener('click', handleSendMessage);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
+
+    // Set up scroll detection for sticky-scroll behavior (like ChatGPT/Claude)
+    setupScrollDetection();
 
     elements.newChatBtn.addEventListener('click', startNewConversation);
 

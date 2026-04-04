@@ -217,6 +217,7 @@
 
 .message-user {
     margin-left: auto;
+    max-width: 75%;
     
     /* Glassmorphism Surface */
     background: rgba(255, 255, 255, 0.4);
@@ -279,8 +280,19 @@
 }
 
 .user-message-text {
-    text-align: right;
+    /* Left-align text like ChatGPT/Claude - bubble is already right-aligned via margin-left: auto */
+    text-align: left;
     word-break: break-word;
+    /* Preserve whitespace and line breaks like ChatGPT/Claude */
+    white-space: pre-wrap;
+    /* Improve readability with proper line spacing */
+    line-height: 1.7;
+    /* Ensure text wraps at word boundaries */
+    overflow-wrap: break-word;
+    /* Clean, readable font sizing for long prompts */
+    font-size: 0.95em;
+    /* Full width within the constrained bubble */
+    width: 100%;
 }
 
 .view-turn-context-btn {
