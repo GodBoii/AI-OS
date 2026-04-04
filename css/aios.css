@@ -656,11 +656,7 @@ button.secondary:hover {
 
 .btn-secondary i {
     font-size: 14px;
-    transition: transform 0.3s ease;
-}
-
-.btn-secondary:hover i {
-    transform: rotate(180deg);
+    transition: transform 0.2s ease;
 }
 
 .settings-select {
