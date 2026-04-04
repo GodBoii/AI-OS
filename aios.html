@@ -354,40 +354,32 @@
                 </div>
 
                 <div class="tab-content" id="database-tab">
-                    <h3 class="tab-heading">Files</h3>
-                    <div class="settings-section-header">
-                        <p class="integration-description">
+                    <h3 class="tab-heading" style="margin-bottom: 8px;">Files</h3>
+                    <div class="settings-section-header" style="margin-bottom: 12px;">
+                        <p class="integration-description" style="margin-bottom: 0;">
                             Upload and manage your personal files. Aetheria AI can access these files using vault tools.
                         </p>
-                        <button class="btn-secondary" id="refresh-databases-btn">
-                            <i class="fi fi-tr-refresh"></i>
-                            Refresh
-                        </button>
                     </div>
-                    <div class="form-group">
-                        <label for="database-project-filter">File Type</label>
-                        <select id="database-project-filter" class="settings-select">
-                            <option value="all">All Files</option>
-                            <option value="image">Images</option>
-                            <option value="audio">Audio</option>
-                            <option value="video">Video</option>
-                            <option value="text">Text</option>
-                            <option value="application">Documents</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="user-files-search">Search</label>
-                        <input type="text" id="user-files-search" placeholder="Search by file name">
-                    </div>
-                    <div class="form-group">
-                        <label for="user-files-upload-input">Upload Files</label>
-                        <input type="file" id="user-files-upload-input" multiple>
-                    </div>
-                    <div class="form-actions">
-                        <button class="btn-secondary" id="user-files-upload-btn">
-                            <i class="fi fi-tr-upload"></i>
-                            Upload Selected Files
-                        </button>
+                    <div class="files-action-bar" style="display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 20px; background: var(--bg-secondary); padding: 12px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="search-wrapper" style="flex: 1; position: relative;">
+                            <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none;"></i>
+                            <input type="text" id="user-files-search" placeholder="Search by file name" style="width: 100%; margin: 0; padding-left: 36px; height: 38px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); transition: border-color 0.2s;">
+                        </div>
+                        <div class="action-buttons-wrapper" style="display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
+                            <input type="file" id="user-files-upload-input" multiple style="display: none;">
+                            <button class="btn-primary" id="trigger-file-select-btn" type="button" title="Upload" style="margin: 0; width: 38px; height: 38px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+                                <i class="fas fa-upload" style="font-size: 16px; color: var(--button-primary-text);"></i>
+                            </button>
+                            <button class="btn-secondary hidden" id="user-files-upload-btn" type="button"></button>
+                            <button class="btn-secondary" id="refresh-databases-btn" title="Refresh" style="margin: 0; width: 38px; height: 38px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+                                <i class="fas fa-sync-alt" style="font-size: 16px; color: var(--text-primary);"></i>
+                            </button>
+                            <!-- View Toggle -->
+                            <div class="view-toggle" style="display: flex; gap: 4px; padding: 4px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color); margin-left: 8px;">
+                                <button class="icon-btn active" id="view-mode-detailed" title="Detailed View" style="margin: 0; width: 30px; height: 30px; padding: 0; border-radius: 6px; background: var(--hover-bg);"><i class="fas fa-list" style="font-size: 14px;"></i></button>
+                                <button class="icon-btn" id="view-mode-preview" title="Preview View" style="margin: 0; width: 30px; height: 30px; padding: 0; border-radius: 6px;"><i class="fas fa-th-large" style="font-size: 14px;"></i></button>
+                            </div>
+                        </div>
                     </div>
                     <div id="databases-empty" class="empty-state hidden">No files found.</div>
                     <div id="databases-list" class="settings-list"></div>

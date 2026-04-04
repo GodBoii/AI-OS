@@ -371,7 +371,38 @@ class AIOS {
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
         addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadUserFiles(true));
+
+        const triggerBtn = document.getElementById('trigger-file-select-btn');
+        if (triggerBtn && this.elements.userFilesUploadInput) {
+            triggerBtn.addEventListener('click', () => {
+                this.elements.userFilesUploadInput.click();
+            });
+            this.elements.userFilesUploadInput.addEventListener('change', () => {
+                if (this.elements.userFilesUploadInput.files.length > 0) {
+                    this.handleUserFilesUpload();
+                }
+            });
+        }
+        
+        const viewDetailedBtn = document.getElementById('view-mode-detailed');
+        const viewPreviewBtn = document.getElementById('view-mode-preview');
+        if (viewDetailedBtn && viewPreviewBtn) {
+            viewDetailedBtn.addEventListener('click', () => {
+                this.fileViewMode = 'detailed';
+                viewDetailedBtn.style.background = 'var(--hover-bg)';
+                viewPreviewBtn.style.background = 'transparent';
+                this.renderUserFiles(this.userFilesCache); // Assume cache holds current file list
+            });
+            viewPreviewBtn.addEventListener('click', () => {
+                this.fileViewMode = 'preview';
+                viewPreviewBtn.style.background = 'var(--hover-bg)';
+                viewDetailedBtn.style.background = 'transparent';
+                this.renderUserFiles(this.userFilesCache); // Assume cache holds current file list
+            });
+        }
+        
         addClickHandler(this.elements.userFilesUploadBtn, () => this.handleUserFilesUpload());
+        
         addClickHandler(this.elements.refreshMemoriesBtn, () => this.loadMemories(true));
         addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
         addClickHandler(this.elements.manageSubscriptionBtn, () => this.openPricingModal());
@@ -1622,6 +1653,8 @@ class AIOS {
         const empty = this.elements.databasesEmpty;
         if (!list || !empty) return;
 
+        this.fileViewMode = this.fileViewMode || 'detailed';
+
         const selectedType = this.selectedFileType || 'all';
         const search = (this.userFileSearch || '').trim().toLowerCase();
         const items = (Array.isArray(files) ? files : []).filter((row) => {
@@ -1640,42 +1673,99 @@ class AIOS {
         }
         empty.classList.add('hidden');
 
+        if (this.fileViewMode === 'preview') {
+            list.style.display = 'grid';
+            list.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+            list.style.gap = '16px';
+        } else {
+            list.style.display = 'flex';
+            list.style.flexDirection = 'column';
+            list.style.gap = '12px';
+        }
+
         items.forEach((row) => {
             const mimeType = this._safeText(row.mime_type, 'application/octet-stream');
             const primaryType = String(mimeType).split('/')[0] || 'file';
-            const badgeClass = primaryType === 'image'
-                ? 'status-active'
-                : primaryType === 'text'
-                    ? 'status-draft'
-                    : '';
+            const badgeClass = primaryType === 'image' ? 'status-active' : primaryType === 'text' ? 'status-draft' : '';
             const created = this._formatDate(row.created_at);
             const size = this._formatFileSize(Number(row.size_bytes || 0));
             const fileId = this._safeText(row.id);
             
             const card = document.createElement('div');
-            card.className = 'settings-card';
-            card.innerHTML = `
-                <div class="settings-card-header">
-                    <h4>${this._safeText(row.file_name, 'Untitled')}</h4>
-                    <div class="settings-card-actions">
-                        <button class="start-project-coding-btn user-file-open-btn" data-file-id="${fileId}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span>Open</span>
-                        </button>
-                        <button class="expand-deployment-btn user-file-delete-btn" title="Delete File" data-file-id="${fileId}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
-                        </button>
-                        <span class="settings-badge ${badgeClass}">${this._safeText(primaryType, 'file')}</span>
+            card.className = 'settings-card file-card';
+            
+            if (this.fileViewMode === 'preview') {
+                const isImage = primaryType === 'image';
+                const isText = primaryType === 'text' || (primaryType === 'application' && (mimeType.includes('json') || mimeType.includes('javascript') || mimeType.includes('xml')));
+                let previewArea = '';
+                
+                if (isImage) {
+                    previewArea = `<div class="file-preview-content" data-preview-id="${fileId}" data-preview-type="image" style="height: 140px; background-size: cover; background-position: center; border-bottom: 1px solid var(--border-color); background-color: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; position: relative;"><i class="fas fa-image" style="opacity: 0.1; font-size: 48px; position: absolute; z-index: 0;"></i></div>`;
+                } else if (isText) {
+                    previewArea = `<div class="file-preview-content" data-preview-id="${fileId}" data-preview-type="text" style="height: 140px; overflow: hidden; position: relative; border-bottom: 1px solid var(--border-color); background-color: var(--bg-tertiary); display: flex; align-items: stretch; justify-content: center;">
+                                       <i class="fas fa-file-alt" style="opacity: 0.05; font-size: 48px; position: absolute; z-index: 0; top: 50%; transform: translateY(-50%);"></i>
+                                       <div class="file-preview-text" style="font-family: 'JetBrains Mono', monospace; font-size: 9px; line-height: 1.4; color: var(--text-secondary); padding: 10px 12px; width: 100%; white-space: pre-wrap; word-break: break-all; opacity: 0.85; text-align: left; z-index: 1;">
+                                            <span style="opacity: 0.5;">Loading text preview...</span>
+                                       </div>
+                                       <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(transparent, var(--bg-tertiary)); z-index: 2;"></div>
+                                   </div>`;
+                } else {
+                    let faIcon = 'fa-file';
+                    if (primaryType === 'video') faIcon = 'fa-file-video';
+                    else if (primaryType === 'audio') faIcon = 'fa-file-audio';
+                    else if (primaryType === 'application' && mimeType.includes('pdf')) faIcon = 'fa-file-pdf';
+                    
+                    previewArea = `<div class="file-preview-content" style="height: 140px; display: flex; align-items: center; justify-content: center; font-size: 48px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary);"><i class="fas ${faIcon}"></i></div>`;
+                }
+
+                card.style.padding = '0';
+                card.style.overflow = 'hidden';
+                card.innerHTML = `
+                    ${previewArea}
+                    <div style="padding: 12px; display: flex; align-items: center; justify-content: space-between; background: var(--elevated-bg);">
+                        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+                            <i class="fas fa-file" style="color: var(--text-secondary); font-size: 14px; flex-shrink: 0;"></i>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this._safeText(row.file_name)}">${this._safeText(row.file_name, 'Untitled')}</h4>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <button class="icon-btn user-file-open-btn" data-file-id="${fileId}" style="padding: 4px; width: 26px; height: 26px; color: var(--text-secondary);" title="Open"><i class="fas fa-external-link-alt" style="font-size: 12px;"></i></button>
+                            <button class="icon-btn user-file-delete-btn" data-file-id="${fileId}" style="padding: 4px; width: 26px; height: 26px; color: var(--danger-color);" title="Delete"><i class="fas fa-trash" style="font-size: 12px;"></i></button>
+                        </div>
                     </div>
-                </div>
-                <div class="settings-meta-grid">
-                    <div><strong>File ID</strong><span>${fileId}</span></div>
-                    <div><strong>Type</strong><span>${mimeType}</span></div>
-                    <div><strong>Size</strong><span>${size}</span></div>
-                    <div><strong>Created</strong><span>${created}</span></div>
-                    <div><strong>Path</strong><span>${this._safeText(row.storage_path)}</span></div>
-                </div>
-            `;
+                `;
+            } else {
+                card.style.padding = '16px';
+                card.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                                <div style="width: 38px; height: 38px; border-radius: 8px; background: var(--hover-bg); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: var(--text-primary); flex-shrink: 0;">
+                                    <i class="fas ${primaryType === 'image' ? 'fa-image' : 'fa-file-alt'}"></i>
+                                </div>
+                                <h4 style="margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    ${this._safeText(row.file_name, 'Untitled')}
+                                    <span class="settings-badge ${badgeClass}" style="font-size: 9px; padding: 2px 6px;">${this._safeText(primaryType, 'file')}</span>
+                                </h4>
+                            </div>
+                            <div class="settings-card-actions" style="display: flex; gap: 8px; flex-shrink: 0;">
+                                <button class="btn-secondary user-file-open-btn" style="padding: 6px 12px; font-size: 13px; height: auto;" data-file-id="${fileId}">
+                                    <i class="fas fa-external-link-alt" style="margin-right: 4px;"></i> Open
+                                </button>
+                                <button class="btn-secondary user-file-delete-btn" title="Delete File" data-file-id="${fileId}" style="padding: 6px 12px; font-size: 13px; height: auto; color: var(--danger-color); border-color: rgba(239, 68, 68, 0.3);">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--text-secondary); background: var(--bg-tertiary); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--hover-bg);">
+                            <div style="display: flex; align-items: center; gap: 6px;"><strong>ID:</strong> <code style="font-family: inherit; font-size: 11px;">${fileId}</code></div>
+                            <div style="display: flex; align-items: center; gap: 6px;"><strong>Type:</strong> ${mimeType}</div>
+                            <div style="display: flex; align-items: center; gap: 6px;"><strong>Size:</strong> ${size}</div>
+                            <div style="display: flex; align-items: center; gap: 6px;"><strong>Created:</strong> ${created}</div>
+                            <div style="display: flex; align-items: center; gap: 6px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Path:</strong> <code style="font-family: inherit; font-size: 11px;">${this._safeText(row.storage_path)}</code></div>
+                        </div>
+                    </div>
+                `;
+            }
             const openBtn = card.querySelector('.user-file-open-btn');
             openBtn?.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -1690,6 +1780,45 @@ class AIOS {
             });
             list.appendChild(card);
         });
+
+        if (this.fileViewMode === 'preview') {
+            setTimeout(async () => {
+                try {
+                    const token = await this._getAccessToken();
+                    if (!token) return;
+                    const previews = list.querySelectorAll('.file-preview-content[data-preview-id]');
+                    for (let i = 0; i < previews.length; i++) {
+                        const el = previews[i];
+                        const fId = el.getAttribute('data-preview-id');
+                        const pType = el.getAttribute('data-preview-type');
+                        if (!fId) continue;
+                        try {
+                            const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fId)}/download`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (response.ok) {
+                                const blob = await response.blob();
+                                if (pType === 'image') {
+                                    const blobUrl = URL.createObjectURL(blob);
+                                    el.style.backgroundImage = `url('${blobUrl}')`;
+                                    el.querySelector('i')?.remove();
+                                } else if (pType === 'text') {
+                                    const text = await blob.text();
+                                    const textContainer = el.querySelector('.file-preview-text');
+                                    if (textContainer) {
+                                        textContainer.textContent = text.substring(0, 1000);
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Failed loading preview', err);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching previews', e);
+                }
+            }, 0);
+        }
     }
 
     renderMemories(memories) {
