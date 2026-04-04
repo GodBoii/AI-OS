@@ -59,6 +59,7 @@ def get_llm_os(
     Planner_Agent: bool = True,
     enable_supabase: bool = False,
     use_memory: bool = False,
+    use_session_summaries: bool = False,
     debug_mode: bool = True,
     enable_github: bool = False,
     enable_vercel: bool = False,
@@ -155,6 +156,7 @@ def get_llm_os(
                 sid=sid,
                 redis_client=redis_client_instance,
                 use_memory=use_memory,
+                use_session_summaries=use_session_summaries,
                 debug_mode=debug_mode,
                 enable_github=enable_github,
                 enable_coder=can_delegate_coder,
@@ -366,7 +368,7 @@ def get_llm_os(
         db=db,  # This now controls persistence
         enable_agentic_memory=use_memory,
         enable_user_memories=use_memory,
-        enable_session_summaries=use_memory,
+        enable_session_summaries=use_session_summaries,
         stream_intermediate_steps=True,
         search_knowledge=use_memory,
         events_to_skip=[

@@ -536,6 +536,8 @@ def run_agent_and_stream(
             "enable_composio_whatsapp",
             config.COMPOSIO_ENABLE_WHATSAPP,
         )
+        # Session summaries are expensive and disabled by default unless explicitly requested.
+        session_config.setdefault("use_session_summaries", False)
 
         # Backward compatibility for legacy frontend key.
         if "computer_control" in session_config:
@@ -575,6 +577,7 @@ def run_agent_and_stream(
                 session_id=conversation_id,
                 message_id=message_id,
                 use_memory=session_config.get("use_memory", False),
+                use_session_summaries=session_config.get("use_session_summaries", False),
                 debug_mode=True,
                 enable_github=session_config.get("enable_github", True),
                 coder_execution_target=requested_coder_target,
@@ -588,6 +591,7 @@ def run_agent_and_stream(
                 session_id=conversation_id,
                 message_id=message_id,
                 use_memory=session_config.get("use_memory", False),
+                use_session_summaries=session_config.get("use_session_summaries", False),
                 debug_mode=True,
                 enable_google_email=bool(session_config.get("enable_google_email", True)),
                 enable_google_drive=bool(session_config.get("enable_google_drive", True)),
