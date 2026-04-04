@@ -15,6 +15,14 @@ class AIOS {
         this.editingMemoryId = null;
         this.selectedFileType = 'all';
         this.userFileSearch = '';
+        this.fileViewMode = 'detailed';
+        this.userFilesLocalDir = null;
+        this.userFilesManifestPath = null;
+        this.localFileManifest = {};
+        this.localPreviewUrls = new Map();
+        this.backgroundDownloadInFlight = new Set();
+        this.backgroundDownloadQueue = [];
+        this.backgroundDownloadWorkerActive = false;
         this.usageView = null;
         this.subscriptionSummary = null;
         this.activeCheckoutPlan = null;
@@ -57,6 +65,25 @@ class AIOS {
             if (!window.electron.fs.existsSync(this.userDataPath)) {
                 window.electron.fs.mkdirSync(this.userDataPath, { recursive: true });
             }
+        }
+
+        try {
+            this.userFilesLocalDir = window.electron.path.join(this.userDataPath, 'file-vault-cache');
+            if (!window.electron.fs.existsSync(this.userFilesLocalDir)) {
+                window.electron.fs.mkdirSync(this.userFilesLocalDir, { recursive: true });
+            }
+            this.userFilesManifestPath = window.electron.path.join(this.userFilesLocalDir, 'manifest.json');
+            if (window.electron.fs.existsSync(this.userFilesManifestPath)) {
+                const raw = window.electron.fs.readFileSync(this.userFilesManifestPath, 'utf8');
+                const parsed = JSON.parse(raw);
+                this.localFileManifest = parsed && typeof parsed === 'object' ? parsed : {};
+            } else {
+                this.localFileManifest = {};
+                window.electron.fs.writeFileSync(this.userFilesManifestPath, JSON.stringify({}, null, 2), 'utf8');
+            }
+        } catch (error) {
+            console.error('Failed to initialize local file vault cache:', error);
+            this.localFileManifest = {};
         }
     }
 
@@ -144,6 +171,7 @@ class AIOS {
             userFilesSearch: document.getElementById('user-files-search'),
             userFilesUploadInput: document.getElementById('user-files-upload-input'),
             userFilesUploadBtn: document.getElementById('user-files-upload-btn'),
+            openFilesCacheFolderBtn: document.getElementById('open-files-cache-folder-btn'),
 
             // Memory Tab
             refreshMemoriesBtn: document.getElementById('refresh-memories-btn'),
@@ -371,6 +399,7 @@ class AIOS {
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
         addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadUserFiles(true));
+        addClickHandler(this.elements.openFilesCacheFolderBtn, () => this.openFilesCacheFolder());
 
         const triggerBtn = document.getElementById('trigger-file-select-btn');
         if (triggerBtn && this.elements.userFilesUploadInput) {
@@ -1037,6 +1066,204 @@ class AIOS {
         }
     }
 
+    _sanitizeFilenameForDisk(value) {
+        const raw = String(value || 'file').trim();
+        const cleaned = raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim();
+        return cleaned || 'file';
+    }
+
+    _persistLocalFileManifest() {
+        if (!this.userFilesManifestPath) return;
+        try {
+            window.electron.fs.writeFileSync(
+                this.userFilesManifestPath,
+                JSON.stringify(this.localFileManifest || {}, null, 2),
+                'utf8'
+            );
+        } catch (error) {
+            console.error('Failed to persist local file manifest:', error);
+        }
+    }
+
+    _getLocalFilePath(file) {
+        if (!this.userFilesLocalDir) return null;
+        const fileId = this._safeText(file?.id, '');
+        if (!fileId) return null;
+        const originalName = this._sanitizeFilenameForDisk(this._safeText(file?.file_name, 'file'));
+        return window.electron.path.join(this.userFilesLocalDir, `${fileId}__${originalName}`);
+    }
+
+    _isTextPreviewFile(file) {
+        const mimeType = String(file?.mime_type || '').toLowerCase();
+        const fileName = String(file?.file_name || '').toLowerCase();
+        if (mimeType.startsWith('text/')) return true;
+        return ['.md', '.markdown', '.txt', '.json', '.js', '.html', '.htm'].some((ext) => fileName.endsWith(ext));
+    }
+
+    _isImageFile(file) {
+        const mimeType = String(file?.mime_type || '').toLowerCase();
+        return mimeType.startsWith('image/');
+    }
+
+    _localFileExists(file) {
+        const fileId = this._safeText(file?.id, '');
+        const record = this.localFileManifest?.[fileId];
+        if (!record || !record.local_path) return false;
+        try {
+            return window.electron.fs.existsSync(record.local_path);
+        } catch (error) {
+            return false;
+        }
+    }
+
+    _recordLocalFile(file, localPath) {
+        const fileId = this._safeText(file?.id, '');
+        if (!fileId || !localPath) return;
+        this.localFileManifest[fileId] = {
+            local_path: localPath,
+            file_name: this._safeText(file?.file_name, 'file'),
+            mime_type: this._safeText(file?.mime_type, 'application/octet-stream'),
+            size_bytes: Number(file?.size_bytes || 0),
+            updated_at: Date.now(),
+        };
+        this._persistLocalFileManifest();
+    }
+
+    async _downloadAndCacheFile(file) {
+        const fileId = this._safeText(file?.id, '');
+        if (!fileId || !this.userFilesLocalDir) return false;
+        if (this._localFileExists(file)) return true;
+
+        const token = await this._getAccessToken();
+        if (!token) return false;
+        const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}/download`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) return false;
+
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        const localPath = this._getLocalFilePath(file);
+        if (!localPath) return false;
+        await window.electron.fs.promises.writeFile(localPath, bytes);
+        this._recordLocalFile(file, localPath);
+        return true;
+    }
+
+    _enqueueBackgroundDownload(file) {
+        const fileId = this._safeText(file?.id, '');
+        if (!fileId) return;
+        if (this._localFileExists(file)) return;
+        if (this.backgroundDownloadInFlight.has(fileId)) return;
+        if (this.backgroundDownloadQueue.some((item) => this._safeText(item?.id, '') === fileId)) return;
+        this.backgroundDownloadQueue.push(file);
+        this._runBackgroundDownloadWorker();
+    }
+
+    async _runBackgroundDownloadWorker() {
+        if (this.backgroundDownloadWorkerActive) return;
+        this.backgroundDownloadWorkerActive = true;
+        try {
+            while (this.backgroundDownloadQueue.length > 0) {
+                const next = this.backgroundDownloadQueue.shift();
+                const fileId = this._safeText(next?.id, '');
+                if (!fileId || this.backgroundDownloadInFlight.has(fileId)) continue;
+                this.backgroundDownloadInFlight.add(fileId);
+                try {
+                    const ok = await this._downloadAndCacheFile(next);
+                    if (ok && this.currentTab === 'database' && this.fileViewMode === 'preview') {
+                        this.renderUserFiles(this.userFilesCache);
+                    }
+                } catch (error) {
+                    console.error('Background local cache download failed:', error);
+                } finally {
+                    this.backgroundDownloadInFlight.delete(fileId);
+                }
+            }
+        } finally {
+            this.backgroundDownloadWorkerActive = false;
+        }
+    }
+
+    _releaseLocalPreviewUrls() {
+        for (const [, url] of this.localPreviewUrls.entries()) {
+            try {
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                // no-op
+            }
+        }
+        this.localPreviewUrls.clear();
+    }
+
+    async _applyLocalPreviewToElement(el, file) {
+        if (!el || !file || !this._localFileExists(file)) return;
+        const fileId = this._safeText(file?.id, '');
+        const record = this.localFileManifest?.[fileId];
+        if (!record?.local_path) return;
+
+        try {
+            if (this._isImageFile(file)) {
+                const imgBytes = await window.electron.fs.promises.readFile(record.local_path);
+                const blob = new Blob([imgBytes], { type: file.mime_type || 'image/png' });
+                const blobUrl = URL.createObjectURL(blob);
+                const imageReady = await new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve(true);
+                    img.onerror = () => resolve(false);
+                    img.src = blobUrl;
+                });
+                if (!imageReady) {
+                    try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+                    return;
+                }
+                const old = this.localPreviewUrls.get(fileId);
+                if (old) {
+                    try { URL.revokeObjectURL(old); } catch (e) {}
+                }
+                this.localPreviewUrls.set(fileId, blobUrl);
+                el.style.backgroundImage = `url('${blobUrl}')`;
+                const icon = el.querySelector('i');
+                if (icon) icon.remove();
+                return;
+            }
+
+            if (this._isTextPreviewFile(file)) {
+                const textBytes = await window.electron.fs.promises.readFile(record.local_path);
+                const text = new TextDecoder('utf-8').decode(textBytes);
+                const textContainer = el.querySelector('.file-preview-text');
+                if (textContainer) {
+                    textContainer.textContent = text.substring(0, 1000);
+                }
+            }
+        } catch (error) {
+            console.error('Failed applying local preview:', error);
+        }
+    }
+
+    async openFilesCacheFolder() {
+        try {
+            if (!this.userFilesLocalDir) {
+                this.showNotification('Local files folder is not initialized', 'error');
+                return;
+            }
+            const folderPath = this.userFilesLocalDir;
+            if (window.electron?.shell?.openPath) {
+                const result = await window.electron.shell.openPath(folderPath);
+                if (typeof result === 'string' && result.length > 0) {
+                    throw new Error(result);
+                }
+                return;
+            }
+
+            const normalized = folderPath.replace(/\\/g, '/');
+            await window.electron.shell.openExternal(`file:///${normalized}`);
+        } catch (error) {
+            console.error('Failed to open files cache folder:', error);
+            this.showNotification(error.message || 'Failed to open files folder', 'error');
+        }
+    }
+
     async loadDeployments(showNotification = false) {
         try {
             const token = await this._getAccessToken();
@@ -1213,6 +1440,14 @@ class AIOS {
 
     async loadUserFiles(showNotification = false) {
         try {
+            if (!showNotification && Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
+                this.renderUserFiles(this.userFilesCache);
+                for (const file of this.userFilesCache) {
+                    this._enqueueBackgroundDownload(file);
+                }
+                return;
+            }
+
             const token = await this._getAccessToken();
             if (!token) {
                 this.userFilesCache = [];
@@ -1230,6 +1465,9 @@ class AIOS {
             }
 
             this.userFilesCache = Array.isArray(payload.files) ? payload.files : [];
+            for (const file of this.userFilesCache) {
+                this._enqueueBackgroundDownload(file);
+            }
             this.renderUserFiles(this.userFilesCache);
             if (showNotification) this.showNotification('Files refreshed', 'success');
         } catch (error) {
@@ -1581,6 +1819,29 @@ class AIOS {
                 if (!uploadRes.ok || !uploadPayload.ok) {
                     throw new Error(uploadPayload.error || `Failed to upload ${file.name}`);
                 }
+
+                const uploadedFileMeta = uploadPayload.file || {};
+                const localPath = this._getLocalFilePath({
+                    id: uploadedFileMeta.id,
+                    file_name: uploadedFileMeta.file_name || file.name,
+                });
+                if (localPath) {
+                    try {
+                        const localBytes = new Uint8Array(await file.arrayBuffer());
+                        await window.electron.fs.promises.writeFile(localPath, localBytes);
+                        this._recordLocalFile(
+                            {
+                                id: uploadedFileMeta.id,
+                                file_name: uploadedFileMeta.file_name || file.name,
+                                mime_type: uploadedFileMeta.mime_type || file.type || 'application/octet-stream',
+                                size_bytes: uploadedFileMeta.size_bytes || file.size || 0,
+                            },
+                            localPath
+                        );
+                    } catch (localWriteError) {
+                        console.warn('Local cache write after upload failed:', localWriteError);
+                    }
+                }
             }
 
             this.showNotification(`Uploaded ${files.length} file(s)`, 'success');
@@ -1595,6 +1856,22 @@ class AIOS {
     async openUserFile(fileId) {
         if (!fileId) return;
         try {
+            const file = (this.userFilesCache || []).find((item) => String(item.id) === String(fileId));
+            const record = this.localFileManifest?.[String(fileId)];
+
+            if (record?.local_path && window.electron.fs.existsSync(record.local_path)) {
+                if (window.electron?.shell?.openPath) {
+                    const result = await window.electron.shell.openPath(record.local_path);
+                    if (typeof result === 'string' && result.length > 0) {
+                        throw new Error(result);
+                    }
+                    return;
+                }
+                const normalized = String(record.local_path).replace(/\\/g, '/');
+                await window.electron.shell.openExternal(`file:///${normalized}`);
+                return;
+            }
+
             const token = await this._getAccessToken();
             if (!token) {
                 this.showNotification('Please log in to open files', 'error');
@@ -1614,7 +1891,34 @@ class AIOS {
                 throw new Error(message);
             }
 
-            const blob = await response.blob();
+            const arrayBuffer = await response.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const resolved = file || { id: fileId, file_name: `file-${fileId}`, mime_type: 'application/octet-stream', size_bytes: bytes.length };
+            const localPath = this._getLocalFilePath(resolved);
+            if (localPath) {
+                await window.electron.fs.promises.writeFile(localPath, bytes);
+                this._recordLocalFile(
+                    {
+                        id: resolved.id,
+                        file_name: resolved.file_name,
+                        mime_type: resolved.mime_type,
+                        size_bytes: resolved.size_bytes || bytes.length,
+                    },
+                    localPath
+                );
+                if (window.electron?.shell?.openPath) {
+                    const result = await window.electron.shell.openPath(localPath);
+                    if (typeof result === 'string' && result.length > 0) {
+                        throw new Error(result);
+                    }
+                    return;
+                }
+                const normalized = String(localPath).replace(/\\/g, '/');
+                await window.electron.shell.openExternal(`file:///${normalized}`);
+                return;
+            }
+
+            const blob = new Blob([bytes], { type: resolved.mime_type || 'application/octet-stream' });
             const blobUrl = URL.createObjectURL(blob);
             window.open(blobUrl, '_blank', 'noopener,noreferrer');
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60 * 1000);
@@ -1640,6 +1944,19 @@ class AIOS {
             if (!response.ok || !payload.ok) {
                 throw new Error(payload.error || 'Failed to delete file');
             }
+
+            const record = this.localFileManifest?.[String(fileId)];
+            if (record?.local_path) {
+                try {
+                    if (window.electron.fs.existsSync(record.local_path)) {
+                        await window.electron.fs.promises.unlink(record.local_path);
+                    }
+                } catch (e) {
+                    // no-op
+                }
+            }
+            delete this.localFileManifest[String(fileId)];
+            this._persistLocalFileManifest();
             this.showNotification('File deleted', 'success');
             await this.loadUserFiles();
         } catch (error) {
@@ -1654,6 +1971,7 @@ class AIOS {
         if (!list || !empty) return;
 
         this.fileViewMode = this.fileViewMode || 'detailed';
+        this._releaseLocalPreviewUrls();
 
         const selectedType = this.selectedFileType || 'all';
         const search = (this.userFileSearch || '').trim().toLowerCase();
@@ -1705,7 +2023,7 @@ class AIOS {
                     previewArea = `<div class="file-preview-content" data-preview-id="${fileId}" data-preview-type="text" style="height: 140px; overflow: hidden; position: relative; border-bottom: 1px solid var(--border-color); background-color: var(--bg-tertiary); display: flex; align-items: stretch; justify-content: center;">
                                        <i class="fas fa-file-alt" style="opacity: 0.05; font-size: 48px; position: absolute; z-index: 0; top: 50%; transform: translateY(-50%);"></i>
                                        <div class="file-preview-text" style="font-family: 'JetBrains Mono', monospace; font-size: 9px; line-height: 1.4; color: var(--text-secondary); padding: 10px 12px; width: 100%; white-space: pre-wrap; word-break: break-all; opacity: 0.85; text-align: left; z-index: 1;">
-                                            <span style="opacity: 0.5;">Loading text preview...</span>
+                                            <span style="opacity: 0.5;">Preview available after local download...</span>
                                        </div>
                                        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(transparent, var(--bg-tertiary)); z-index: 2;"></div>
                                    </div>`;
@@ -1784,38 +2102,20 @@ class AIOS {
         if (this.fileViewMode === 'preview') {
             setTimeout(async () => {
                 try {
-                    const token = await this._getAccessToken();
-                    if (!token) return;
                     const previews = list.querySelectorAll('.file-preview-content[data-preview-id]');
                     for (let i = 0; i < previews.length; i++) {
                         const el = previews[i];
                         const fId = el.getAttribute('data-preview-id');
-                        const pType = el.getAttribute('data-preview-type');
                         if (!fId) continue;
-                        try {
-                            const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fId)}/download`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (response.ok) {
-                                const blob = await response.blob();
-                                if (pType === 'image') {
-                                    const blobUrl = URL.createObjectURL(blob);
-                                    el.style.backgroundImage = `url('${blobUrl}')`;
-                                    el.querySelector('i')?.remove();
-                                } else if (pType === 'text') {
-                                    const text = await blob.text();
-                                    const textContainer = el.querySelector('.file-preview-text');
-                                    if (textContainer) {
-                                        textContainer.textContent = text.substring(0, 1000);
-                                    }
-                                }
-                            }
-                        } catch (err) {
-                            console.error('Failed loading preview', err);
+                        const file = items.find((x) => String(x.id) === String(fId));
+                        if (!file) continue;
+                        await this._applyLocalPreviewToElement(el, file);
+                        if (!this._localFileExists(file)) {
+                            this._enqueueBackgroundDownload(file);
                         }
                     }
                 } catch (e) {
-                    console.error('Error fetching previews', e);
+                    console.error('Error resolving local previews', e);
                 }
             }, 0);
         }

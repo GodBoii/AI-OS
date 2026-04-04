@@ -181,7 +181,9 @@ contextBridge.exposeInMainWorld(
 
     // Shell operations
     shell: {
-        openExternal: async (url) => await shell.openExternal(url)
+        openExternal: async (url) => await shell.openExternal(url),
+        openPath: async (targetPath) => await shell.openPath(targetPath),
+        showItemInFolder: (fullPath) => shell.showItemInFolder(fullPath)
     },
 
     // Child process operations
