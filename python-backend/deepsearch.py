@@ -24,6 +24,7 @@ def get_deepsearch(
     shell_tools: bool = False,
     python_assistant: bool = False,
     use_memory: bool = False,
+    use_session_summaries: bool = False,
     user_id: Optional[str] = None,
     run_id: Optional[str] = None,
     debug_mode: bool = True,
@@ -51,7 +52,7 @@ def get_deepsearch(
             summarizer=MemorySummarizer(model=Gemini(id="gemini-2.0-flash")),
             db=SqliteMemoryDb(table_name="ai_os_agent_memory", db_file="storage/tmp/aios_memory.db"),
             create_user_memories=True,
-            create_session_summary=True
+            create_session_summary=use_session_summaries
         )
         instructions.append("Use the `search_knowledge_base` tool to search your memory for relevant information.")
     else:
@@ -181,7 +182,8 @@ def get_deepsearch(
         "calculator": calculator,
         "shell_tools": shell_tools,
         "python_assistant": python_assistant,
-        "use_memory": use_memory
+        "use_memory": use_memory,
+        "use_session_summaries": use_session_summaries,
     }, agent=AI_OS, debug_mode=debug_mode)
 
 class DeepSearch:
@@ -220,6 +222,7 @@ class DeepSearch:
             shell_tools=config.get("shell_tools", False),
             python_assistant=config.get("python_assistant", False),
             use_memory=config.get("use_memory", False),
+            use_session_summaries=config.get("use_session_summaries", False),
             debug_mode=self.debug_mode
         )
         
