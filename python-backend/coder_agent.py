@@ -4,9 +4,10 @@ from typing import Any, Dict, List, Optional, Union
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.openrouter import OpenRouter
+from agno.models.groq import Groq
 from agno.tools import Toolkit
 
-from database_tools import DatabaseTools
+from user_file_vault_tools import UserFileVaultTools
 from deployed_project_tools import DeployedProjectTools
 from github_tools import GitHubTools
 from local_coder_tools import LocalCoderTools
@@ -92,7 +93,7 @@ def get_coder_agent(
 
     if user_id:
         coder_tools.append(DeployedProjectTools(user_id=user_id))
-        coder_tools.append(DatabaseTools(user_id=user_id))
+        coder_tools.append(UserFileVaultTools(user_id=user_id))
         if enable_github:
             coder_tools.append(GitHubTools(user_id=user_id))
 
@@ -101,7 +102,7 @@ def get_coder_agent(
         model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
         role=(
             "Dedicated software engineering agent for project mode. "
-            "Executes coding, repository, sandbox, database, and deployment operations."
+            "Executes coding, repository, sandbox, file-vault, and deployment operations."
         ),
         tools=coder_tools,
         instructions=[
@@ -110,9 +111,8 @@ def get_coder_agent(
             "Use deterministic implementation flow: inspect -> edit -> verify -> summarize.",
             "Cloud workspace root: /home/sandboxuser/workspace. In local mode, use provided local workspace root only.",
             "Prefer surgical edits over full-file rewrites.",
-            "Before deployment/database operations, resolve project context first.",
-            "Never expose provider secrets/tokens in frontend source.",
-            "For deployed frontend DB calls, use runtime_query_endpoint with JSON { sql, params }.",
+            "Before deployment operations, resolve project context first.",
+            "For persistent user documents/assets, use UserFileVaultTools list/get/read methods.",
             "For deployed-site changes: copy_deployed_project -> edit -> redeploy_project.",
             "Keep responses concise, implementation-first, and verifiable.",
             "</system_instructions>",
