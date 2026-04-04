@@ -34,7 +34,7 @@ from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
 from vercel_tools import VercelTools
 from supabase_tools import SupabaseTools
-from database_tools import DatabaseTools
+from user_file_vault_tools import UserFileVaultTools
 from deployed_project_tools import DeployedProjectTools
 from composio_tools import (
     ComposioWhatsAppTools,
@@ -135,6 +135,8 @@ def get_llm_os(
             logger.info("Composio WhatsApp not active for user %s. Toolkit not injected.", user_id)
     if custom_tool_config:
         direct_tools.append(ImageTools(custom_tool_config=custom_tool_config))
+    if user_id:
+        direct_tools.append(UserFileVaultTools(user_id=user_id))
 
     # Expose explicit delegation tools so Aetheria can spawn dedicated coder/computer runs
     # while preserving full trace visibility in the reasoning UI.
@@ -210,7 +212,7 @@ def get_llm_os(
                 "</query>",
                 "",
                 "<coding_agent>",
-                "**dev_team (delegate coding/database/deployment tasks)** — has three toolkits:",
+                "**dev_team (delegate coding/file/deployment tasks)** — has three toolkits:",
                 "",
                 "`SandboxTools` — code execution & file management:",
                 "- `get_workspace_overview()` → `search_code()` / `read_file()` → `edit_file()` / `write_file()` → `execute_in_sandbox(command)`",
@@ -224,13 +226,12 @@ def get_llm_os(
                 "- `get_file_content(path, site_id?, deployment_id?)` — read a deployed file's source",
                 "- **Always call `get_deployed_projects()` then `select_project()` first before any deployment action**",
                 "",
-                "`DatabaseTools` — per-site database (Turso/SQLite) provisioning & operations:",
-                "- `create_database(site_id?)` — provision a new database for a site",
-                "- `run_query(sql, site_id?, params?)` — execute a SELECT/INSERT/UPDATE/DELETE (positional `?` params)",
-                "- `migrate_database(migration_sql, site_id?)` — apply semicolon-separated DDL/DML migration",
-                "- `get_db_credentials(site_id?, include_secrets?)` — get hostname, URL, runtime_query_endpoint",
-                "- `delete_database(site_id?)` — remove database from provider and metadata",
-                "- **For frontend deployed-site code: NEVER embed DB tokens or call provider APIs directly. Use `runtime_query_endpoint` from `get_db_credentials()` with `{ sql, params }` JSON.**",
+                "`UserFileVaultTools` — persistent user-managed files (Google Drive-style):",
+                "- `list_user_files(search?, file_type?, limit?)` — list uploaded files available to the user",
+                "- `get_file_details(file_id)` — fetch metadata and download link for one file",
+                "- `read_user_file(file_id, max_chars?)` — read text/UTF-8 content preview (binary-safe)",
+                "- `delete_user_file(file_id, confirm?)` — delete a file from user vault",
+                "- **Use these tools for persistent file retrieval. Do not assume only turn attachments are available.**",
                 "</coding_agent>",
                 "",
                 "",
@@ -271,12 +272,12 @@ def get_llm_os(
         ]
         if user_id:
             dev_tools.append(DeployedProjectTools(user_id=user_id))
-            dev_tools.append(DatabaseTools(user_id=user_id))
+            dev_tools.append(UserFileVaultTools(user_id=user_id))
         
         dev_team = Agent(
             name="dev_team",
             model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
-            role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a database engine. Delegate all coding, debugging, building, querying, and deployment tasks here.",
+            role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a persistent user file vault. Delegate all coding, debugging, building, file operations, and deployment tasks here.",
             tools=dev_tools,
             instructions=[
                 "<system_instructions>",
@@ -285,12 +286,10 @@ def get_llm_os(
                 "Workspace root: /home/sandboxuser/workspace — keep all project files here.",
                 "Deterministic edit contract: get_workspace_overview → search_code → read_file → edit_file/write_file → execute_in_sandbox.",
                 "Prefer edit_file for surgical changes. Avoid full-file rewrites unless truly necessary.",
-                "Before any database or deployment action: call get_deployed_projects() then select_project(site_id|slug|hostname|url|default) to lock project context.",
-                "If a site is not yet deployed/live, do NOT add runtime database integration code to frontend files.",
-                "NEVER call provider endpoints (e.g. api.turso.*) directly from frontend. NEVER embed DB tokens in frontend files.",
-                "For deployed frontend DB calls: use runtime_query_endpoint from get_db_credentials() with JSON { sql, params }. Keep all auth server-side.",
+                "Before deployment action: call get_deployed_projects() then select_project(site_id|slug|hostname|url|default) to lock project context.",
+                "For persistent user documents/assets, prefer UserFileVaultTools (list/get/read) over ephemeral assumptions.",
                 "For deployed-site edits: copy_deployed_project(site_id, deployment_id?, target_dir) → edit files → redeploy_project(site_id, project_directory).",
-                "For follow-up DB work: always re-resolve the correct project context before applying changes.",
+                "For follow-up deployment work: always re-resolve the correct project context before applying changes.",
                 "Keep responses under 300 words unless the implementation genuinely requires more.",
                 "</system_instructions>",
                 "",
@@ -311,7 +310,7 @@ def get_llm_os(
                 "Use environment variables for secrets and config — never hardcode credentials.",
                 "Handle errors explicitly: use try/except (Python) or try/catch (JS), return meaningful error messages.",
                 "For APIs: follow REST conventions — correct HTTP methods, status codes, and JSON response shapes.",
-                "For database work: always use parameterized queries. Run migrations before runtime code changes.",
+                "For data/file operations: always validate inputs and keep user ownership checks strict.",
                 "Log meaningfully — enough to debug, not so much it's noise.",
                 "Test critical paths: run execute_in_sandbox to verify behavior before reporting done.",
                 "</backend>",
@@ -319,7 +318,7 @@ def get_llm_os(
                 "<tools>",
                 "SandboxTools: get_workspace_overview, search_code, read_file, write_file, edit_file, execute_in_sandbox",
                 "DeployedProjectTools: get_deployed_projects, select_project, get_deployment, get_file_structure, get_file_content",
-                "DatabaseTools: create_database, run_query (positional ? params), migrate_database, get_db_credentials, delete_database",
+                "UserFileVaultTools: list_user_files, get_file_details, read_user_file, delete_user_file",
                 "</tools>",
             ],
             debug_mode=debug_mode

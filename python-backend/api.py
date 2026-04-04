@@ -35,6 +35,14 @@ from deploy_platform import (
     upload_site_files,
     upsert_site_manifest,
 )
+from user_file_vault import (
+    create_user_file_upload_link,
+    delete_user_file,
+    get_user_file,
+    list_user_files,
+    read_user_file_text,
+    register_user_file,
+)
 from subscription_service import (
     UsageLimitExceeded,
     calculate_usage_summary,
@@ -713,8 +721,177 @@ def generate_upload_url():
     file_path = f"{user.id}/{uuid.uuid4()}/{file_name}"
     
     upload_details = supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
-    
+
     return jsonify({"signedURL": upload_details['signed_url'], "path": upload_details['path']}), 200
+
+
+@api_bp.route('/user-files/upload-link', methods=['POST'])
+def user_files_upload_link():
+    """
+    Generate a signed upload URL for persistent user file vault uploads.
+    body: { fileName, mimeType?, sizeBytes? }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    file_name = body.get("fileName")
+    mime_type = body.get("mimeType")
+    size_bytes = body.get("sizeBytes")
+    if not file_name:
+        return jsonify({"error": "fileName is required"}), 400
+
+    try:
+        result = create_user_file_upload_link(
+            user_id=str(user.id),
+            file_name=str(file_name),
+            mime_type=str(mime_type or "application/octet-stream"),
+            size_bytes=int(size_bytes or 0),
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "uploadUrl": result["upload_url"],
+                "path": result["path"],
+                "bucket": result["bucket"],
+                "fileName": result["file_name"],
+                "mimeType": result["mime_type"],
+                "sizeBytes": result["size_bytes"],
+            }
+        ), 200
+    except PermissionError as e:
+        return jsonify({"ok": False, "error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error("user-files/upload-link failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to generate upload link"}), 500
+
+
+@api_bp.route('/user-files/register', methods=['POST'])
+def user_files_register():
+    """
+    Register a successfully uploaded file into user vault metadata.
+    body: { path, fileName?, mimeType?, sizeBytes?, tags? }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    path = body.get("path")
+    if not path:
+        return jsonify({"error": "path is required"}), 400
+
+    try:
+        tags = body.get("tags")
+        if tags is None:
+            tags = []
+        if not isinstance(tags, list):
+            return jsonify({"ok": False, "error": "tags must be an array"}), 400
+
+        row = register_user_file(
+            user_id=str(user.id),
+            path=str(path),
+            file_name=body.get("fileName"),
+            mime_type=body.get("mimeType"),
+            size_bytes=body.get("sizeBytes"),
+            tags=tags,
+        )
+        return jsonify({"ok": True, "file": row}), 200
+    except PermissionError as e:
+        return jsonify({"ok": False, "error": str(e)}), 403
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error("user-files/register failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to register uploaded file"}), 500
+
+
+@api_bp.route('/user-files', methods=['GET'])
+def user_files_list():
+    """
+    List persistent user vault files.
+    Query params: limit, search, file_type
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        limit = request.args.get("limit", default=100, type=int) or 100
+        search = (request.args.get("search") or "").strip()
+        file_type = (request.args.get("file_type") or "all").strip().lower()
+        rows = list_user_files(
+            user_id=str(user.id),
+            limit=limit,
+            search=search,
+            file_type=file_type,
+            signed_url_expiry=3600,
+        )
+        return jsonify({"ok": True, "files": rows, "count": len(rows)}), 200
+    except Exception as e:
+        logger.error("user-files list failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to list user files"}), 500
+
+
+@api_bp.route('/user-files/<file_id>/content', methods=['GET'])
+def user_files_content(file_id):
+    """
+    Read text content preview for a user vault file.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        max_chars = request.args.get("max_chars", default=40000, type=int) or 40000
+        row = read_user_file_text(user_id=str(user.id), file_id=str(file_id), max_chars=max_chars)
+        return jsonify({"ok": True, "file": row}), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error("user-files content failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to read file content"}), 500
+
+
+@api_bp.route('/user-files/<file_id>', methods=['GET'])
+def user_files_get(file_id):
+    """
+    Get metadata for one user vault file.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        row = get_user_file(user_id=str(user.id), file_id=str(file_id), include_signed_url=True)
+        return jsonify({"ok": True, "file": row}), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error("user-files get failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to load file details"}), 500
+
+
+@api_bp.route('/user-files/<file_id>', methods=['DELETE'])
+def user_files_delete(file_id):
+    """
+    Delete a user vault file and metadata.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        result = delete_user_file(user_id=str(user.id), file_id=str(file_id))
+        return jsonify({"ok": True, **result}), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error("user-files delete failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to delete file"}), 500
 
 
 def _to_int(value: Any) -> int:
