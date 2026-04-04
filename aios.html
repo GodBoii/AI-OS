@@ -22,8 +22,8 @@
                     <span>Deployments</span>
                 </button>
                 <button class="tab-btn" data-tab="database">
-                    <i class="fa-solid fa-database"></i>
-                    <span>Database</span>
+                    <i class="fa-solid fa-folder-tree"></i>
+                    <span>Files</span>
                 </button>
                 <button class="tab-btn" data-tab="memory">
                     <i class="fa-solid fa-brain"></i>
@@ -354,10 +354,10 @@
                 </div>
 
                 <div class="tab-content" id="database-tab">
-                    <h3 class="tab-heading">Database</h3>
+                    <h3 class="tab-heading">Files</h3>
                     <div class="settings-section-header">
                         <p class="integration-description">
-                            Site databases provisioned by deploy pipeline. Select a project to filter when multiple databases exist.
+                            Upload and manage your personal files. Aetheria AI can access these files using vault tools.
                         </p>
                         <button class="btn-secondary" id="refresh-databases-btn">
                             <i class="fi fi-tr-refresh"></i>
@@ -365,12 +365,31 @@
                         </button>
                     </div>
                     <div class="form-group">
-                        <label for="database-project-filter">Project</label>
+                        <label for="database-project-filter">File Type</label>
                         <select id="database-project-filter" class="settings-select">
-                            <option value="all">All Projects</option>
+                            <option value="all">All Files</option>
+                            <option value="image">Images</option>
+                            <option value="audio">Audio</option>
+                            <option value="video">Video</option>
+                            <option value="text">Text</option>
+                            <option value="application">Documents</option>
                         </select>
                     </div>
-                    <div id="databases-empty" class="empty-state hidden">No databases found.</div>
+                    <div class="form-group">
+                        <label for="user-files-search">Search</label>
+                        <input type="text" id="user-files-search" placeholder="Search by file name">
+                    </div>
+                    <div class="form-group">
+                        <label for="user-files-upload-input">Upload Files</label>
+                        <input type="file" id="user-files-upload-input" multiple>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-secondary" id="user-files-upload-btn">
+                            <i class="fi fi-tr-upload"></i>
+                            Upload Selected Files
+                        </button>
+                    </div>
+                    <div id="databases-empty" class="empty-state hidden">No files found.</div>
                     <div id="databases-list" class="settings-list"></div>
                 </div>
 
@@ -457,11 +476,11 @@
                                     </div>
                                 </div>
                                 <h4 class="module-title">Development Agent</h4>
-                                <p class="module-description">Full-stack development with Ubuntu terminal access. Build and deploy live websites, manage databases, and execute system commands seamlessly.</p>
+                                <p class="module-description">Full-stack development with Ubuntu terminal access. Build and deploy live websites, manage persistent file vaults, and execute system commands seamlessly.</p>
                                 <div class="module-tags">
                                     <span class="tag">Terminal</span>
                                     <span class="tag">Deploy</span>
-                                    <span class="tag">Database</span>
+                                    <span class="tag">Files</span>
                                 </div>
                             </div>
 

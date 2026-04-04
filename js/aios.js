@@ -10,10 +10,11 @@ class AIOS {
         this.authService = null;
         this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.deploymentsCache = [];
-        this.databasesCache = [];
+        this.userFilesCache = [];
         this.memoriesCache = [];
         this.editingMemoryId = null;
-        this.selectedDatabaseProject = 'all';
+        this.selectedFileType = 'all';
+        this.userFileSearch = '';
         this.usageView = null;
         this.subscriptionSummary = null;
         this.activeCheckoutPlan = null;
@@ -140,6 +141,9 @@ class AIOS {
             databasesList: document.getElementById('databases-list'),
             databasesEmpty: document.getElementById('databases-empty'),
             databaseProjectFilter: document.getElementById('database-project-filter'),
+            userFilesSearch: document.getElementById('user-files-search'),
+            userFilesUploadInput: document.getElementById('user-files-upload-input'),
+            userFilesUploadBtn: document.getElementById('user-files-upload-btn'),
 
             // Memory Tab
             refreshMemoriesBtn: document.getElementById('refresh-memories-btn'),
@@ -366,7 +370,8 @@ class AIOS {
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
-        addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadDatabases(true));
+        addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadUserFiles(true));
+        addClickHandler(this.elements.userFilesUploadBtn, () => this.handleUserFilesUpload());
         addClickHandler(this.elements.refreshMemoriesBtn, () => this.loadMemories(true));
         addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
         addClickHandler(this.elements.manageSubscriptionBtn, () => this.openPricingModal());
@@ -381,8 +386,12 @@ class AIOS {
         });
         addClickHandler(this.elements.memoryCancelEditBtn, () => this.resetMemoryForm());
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
-            this.selectedDatabaseProject = e.target.value || 'all';
-            this.renderDatabases(this.databasesCache);
+            this.selectedFileType = e.target.value || 'all';
+            this.renderUserFiles(this.userFilesCache);
+        });
+        this.elements.userFilesSearch?.addEventListener('input', (e) => {
+            this.userFileSearch = String(e.target.value || '').trim().toLowerCase();
+            this.renderUserFiles(this.userFilesCache);
         });
         window.addEventListener('subscription-limit-reached', (event) => {
             const detail = event?.detail || {};
@@ -411,16 +420,16 @@ class AIOS {
                     }
                     this.saveUserData();
                     this.loadDeployments();
-                    this.loadDatabases();
+                    this.loadUserFiles();
                     this.loadMemories();
                     this.loadUsage();
                 } else {
                     this.deploymentsCache = [];
-                    this.databasesCache = [];
+                    this.userFilesCache = [];
                     this.memoriesCache = [];
                     this.renderDeployments([]);
-                    this.populateDatabaseProjectFilter([]);
-                    this.renderDatabases([]);
+                    this.resetUserFilesUI();
+                    this.renderUserFiles([]);
                     this.renderMemories([]);
                     this.usageView?.setEmpty();
                     this.usageView?.setError('');
@@ -1163,33 +1172,39 @@ class AIOS {
         return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
     }
 
-    async loadDatabases(showNotification = false) {
+    resetUserFilesUI() {
+        this.selectedFileType = 'all';
+        this.userFileSearch = '';
+        if (this.elements.databaseProjectFilter) this.elements.databaseProjectFilter.value = 'all';
+        if (this.elements.userFilesSearch) this.elements.userFilesSearch.value = '';
+        if (this.elements.userFilesUploadInput) this.elements.userFilesUploadInput.value = '';
+    }
+
+    async loadUserFiles(showNotification = false) {
         try {
             const token = await this._getAccessToken();
             if (!token) {
-                this.databasesCache = [];
-                this.populateDatabaseProjectFilter([]);
-                this.renderDatabases([]);
+                this.userFilesCache = [];
+                this.resetUserFilesUI();
+                this.renderUserFiles([]);
                 return;
             }
 
-            const response = await fetch(`${this.backendBaseUrl}/api/deploy/databases?limit=200`, {
+            const response = await fetch(`${this.backendBaseUrl}/api/user-files?limit=200`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const payload = await response.json();
             if (!response.ok || !payload.ok) {
-                throw new Error(payload.error || 'Failed to load databases');
+                throw new Error(payload.error || 'Failed to load files');
             }
 
-            this.databasesCache = Array.isArray(payload.databases) ? payload.databases : [];
-            this.populateDatabaseProjectFilter(this.databasesCache);
-            this.renderDatabases(this.databasesCache);
-            if (showNotification) this.showNotification('Databases refreshed', 'success');
+            this.userFilesCache = Array.isArray(payload.files) ? payload.files : [];
+            this.renderUserFiles(this.userFilesCache);
+            if (showNotification) this.showNotification('Files refreshed', 'success');
         } catch (error) {
-            console.error('Error loading databases:', error);
-            this.populateDatabaseProjectFilter([]);
-            this.renderDatabases([]);
-            if (showNotification) this.showNotification(error.message || 'Failed to load databases', 'error');
+            console.error('Error loading user files:', error);
+            this.renderUserFiles([]);
+            if (showNotification) this.showNotification(error.message || 'Failed to load files', 'error');
         }
     }
 
@@ -1487,69 +1502,172 @@ class AIOS {
         });
     }
 
-    populateDatabaseProjectFilter(databases) {
-        const select = this.elements.databaseProjectFilter;
-        if (!select) return;
+    async handleUserFilesUpload() {
+        try {
+            const input = this.elements.userFilesUploadInput;
+            const files = Array.from(input?.files || []);
+            if (!files.length) {
+                this.showNotification('Select one or more files first', 'error');
+                return;
+            }
 
-        const previous = this.selectedDatabaseProject || 'all';
-        const projectMap = new Map();
-        (Array.isArray(databases) ? databases : []).forEach((row) => {
-            const key = this._safeText(row.site_id);
-            const label = `${this._safeText(row.project_name, 'Untitled')} (${this._safeText(row.slug, key)})`;
-            if (!projectMap.has(key)) projectMap.set(key, label);
-        });
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.showNotification('Please log in to upload files', 'error');
+                return;
+            }
 
-        select.innerHTML = '<option value="all">All Projects</option>';
-        [...projectMap.entries()].forEach(([siteId, label]) => {
-            const option = document.createElement('option');
-            option.value = siteId;
-            option.textContent = label;
-            select.appendChild(option);
-        });
+            for (const file of files) {
+                const uploadLinkRes = await fetch(`${this.backendBaseUrl}/api/user-files/upload-link`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        fileName: file.name,
+                        mimeType: file.type || 'application/octet-stream',
+                        sizeBytes: file.size || 0,
+                    }),
+                });
+                const uploadLinkPayload = await uploadLinkRes.json();
+                if (!uploadLinkRes.ok || !uploadLinkPayload.ok) {
+                    throw new Error(uploadLinkPayload.error || `Failed to create upload URL for ${file.name}`);
+                }
 
-        const hasPrevious = previous === 'all' || projectMap.has(previous);
-        this.selectedDatabaseProject = hasPrevious ? previous : 'all';
-        select.value = this.selectedDatabaseProject;
+                const uploadRes = await fetch(uploadLinkPayload.uploadUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': file.type || 'application/octet-stream',
+                        'x-upsert': 'false',
+                    },
+                    body: file,
+                });
+                if (!uploadRes.ok) {
+                    const errText = await uploadRes.text();
+                    throw new Error(`Upload failed for ${file.name}: ${errText || uploadRes.statusText}`);
+                }
+
+                const registerRes = await fetch(`${this.backendBaseUrl}/api/user-files/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        path: uploadLinkPayload.path,
+                        fileName: file.name,
+                        mimeType: file.type || 'application/octet-stream',
+                        sizeBytes: file.size || 0,
+                    }),
+                });
+                const registerPayload = await registerRes.json();
+                if (!registerRes.ok || !registerPayload.ok) {
+                    throw new Error(registerPayload.error || `Failed to register ${file.name}`);
+                }
+            }
+
+            this.showNotification(`Uploaded ${files.length} file(s)`, 'success');
+            if (this.elements.userFilesUploadInput) this.elements.userFilesUploadInput.value = '';
+            await this.loadUserFiles();
+        } catch (error) {
+            console.error('Error uploading user files:', error);
+            this.showNotification(error.message || 'Failed to upload files', 'error');
+        }
     }
 
-    renderDatabases(databases) {
+    async deleteUserFile(fileId) {
+        if (!fileId) return;
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.showNotification('Please log in to delete files', 'error');
+                return;
+            }
+            const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Failed to delete file');
+            }
+            this.showNotification('File deleted', 'success');
+            await this.loadUserFiles();
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            this.showNotification(error.message || 'Failed to delete file', 'error');
+        }
+    }
+
+    renderUserFiles(files) {
         const list = this.elements.databasesList;
         const empty = this.elements.databasesEmpty;
         if (!list || !empty) return;
 
-        const selectedProject = this.selectedDatabaseProject || 'all';
-        const items = (Array.isArray(databases) ? databases : []).filter((row) =>
-            selectedProject === 'all' ? true : String(row.site_id) === String(selectedProject)
-        );
+        const selectedType = this.selectedFileType || 'all';
+        const search = (this.userFileSearch || '').trim().toLowerCase();
+        const items = (Array.isArray(files) ? files : []).filter((row) => {
+            const mimeType = String(row.mime_type || '').toLowerCase();
+            const type = mimeType.split('/')[0] || '';
+            const byType = selectedType === 'all' ? true : type === selectedType;
+            const bySearch = !search ? true : String(row.file_name || '').toLowerCase().includes(search);
+            return byType && bySearch;
+        });
 
         list.innerHTML = '';
         if (!items.length) {
             empty.classList.remove('hidden');
-            empty.innerHTML = '<div class="empty-state-text">No databases found. Provision a database for your deployed sites.</div>';
+            empty.innerHTML = '<div class="empty-state-text">No files found. Upload files to make them available to Aetheria AI.</div>';
             return;
         }
         empty.classList.add('hidden');
 
         items.forEach((row) => {
-            const status = this._safeText(row.deployment_status, 'unknown').toLowerCase();
-            const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
+            const mimeType = this._safeText(row.mime_type, 'application/octet-stream');
+            const primaryType = String(mimeType).split('/')[0] || 'file';
+            const badgeClass = primaryType === 'image'
+                ? 'status-active'
+                : primaryType === 'text'
+                    ? 'status-draft'
+                    : '';
+            const created = this._formatDate(row.created_at);
+            const size = this._formatFileSize(Number(row.size_bytes || 0));
+            const downloadUrl = this._safeText(row.download_url, '');
+            const fileId = this._safeText(row.id);
             
             const card = document.createElement('div');
             card.className = 'settings-card';
             card.innerHTML = `
                 <div class="settings-card-header">
-                    <h4>${this._safeText(row.project_name, 'Untitled')}</h4>
-                    <span class="settings-badge ${badgeClass}">${this._safeText(row.deployment_status, 'unknown')}</span>
+                    <h4>${this._safeText(row.file_name, 'Untitled')}</h4>
+                    <div class="settings-card-actions">
+                        ${downloadUrl ? `
+                        <a class="start-project-coding-btn" href="${downloadUrl}" target="_blank" rel="noopener noreferrer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Open</span>
+                        </a>
+                        ` : ''}
+                        <button class="expand-deployment-btn user-file-delete-btn" title="Delete File" data-file-id="${fileId}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                        </button>
+                        <span class="settings-badge ${badgeClass}">${this._safeText(primaryType, 'file')}</span>
+                    </div>
                 </div>
                 <div class="settings-meta-grid">
-                    <div><strong>Site ID</strong><span>${this._safeText(row.site_id)}</span></div>
-                    <div><strong>Slug</strong><span>${this._safeText(row.slug)}</span></div>
-                    <div><strong>Hostname</strong><span>${this._safeText(row.hostname)}</span></div>
-                    <div><strong>Database Name</strong><span>${this._safeText(row.database_name)}</span></div>
-                    <div><strong>DB Hostname</strong><span>${this._safeText(row.database_hostname)}</span></div>
-                    <div><strong>Created</strong><span>${this._formatDate(row.database_created_at)}</span></div>
+                    <div><strong>File ID</strong><span>${fileId}</span></div>
+                    <div><strong>Type</strong><span>${mimeType}</span></div>
+                    <div><strong>Size</strong><span>${size}</span></div>
+                    <div><strong>Created</strong><span>${created}</span></div>
+                    <div><strong>Path</strong><span>${this._safeText(row.storage_path)}</span></div>
                 </div>
             `;
+            const deleteBtn = card.querySelector('.user-file-delete-btn');
+            deleteBtn?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.deleteUserFile(fileId);
+            });
             list.appendChild(card);
         });
     }
@@ -1841,7 +1959,7 @@ class AIOS {
         } else if (tabName === 'deployments') {
             this.loadDeployments();
         } else if (tabName === 'database') {
-            this.loadDatabases();
+            this.loadUserFiles();
         } else if (tabName === 'memory') {
             this.loadMemories();
         }
@@ -1867,14 +1985,14 @@ class AIOS {
         if (isAuthenticated) {
             this.checkIntegrationStatus();
             this.loadDeployments();
-            this.loadDatabases();
+            this.loadUserFiles();
             this.loadMemories();
             this.loadUsage();
         } else {
             ['github', 'google', 'vercel', 'supabase', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
             this.renderDeployments([]);
-            this.populateDatabaseProjectFilter([]);
-            this.renderDatabases([]);
+            this.resetUserFilesUI();
+            this.renderUserFiles([]);
             this.renderMemories([]);
             this.usageView?.setEmpty();
             this.usageView?.setError('');
