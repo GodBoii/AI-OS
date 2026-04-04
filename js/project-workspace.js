@@ -1,6 +1,6 @@
 class ProjectWorkspace {
     constructor() {
-        this.backendBaseUrl = 'http://localhost:8765';
+        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.activeProject = null;
         this.currentTreeSource = null;
         this.selectedFilePath = null;
