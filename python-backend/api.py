@@ -38,10 +38,12 @@ from deploy_platform import (
 from user_file_vault import (
     create_user_file_upload_link,
     delete_user_file,
+    get_user_file_bytes,
     get_user_file,
     list_user_files,
     read_user_file_text,
     register_user_file,
+    upload_user_file_from_base64,
 )
 from subscription_service import (
     UsageLimitExceeded,
@@ -791,14 +793,25 @@ def user_files_register():
         if not isinstance(tags, list):
             return jsonify({"ok": False, "error": "tags must be an array"}), 400
 
-        row = register_user_file(
-            user_id=str(user.id),
-            path=str(path),
-            file_name=body.get("fileName"),
-            mime_type=body.get("mimeType"),
-            size_bytes=body.get("sizeBytes"),
-            tags=tags,
-        )
+        content_base64 = body.get("contentBase64")
+        if content_base64:
+            row = upload_user_file_from_base64(
+                user_id=str(user.id),
+                file_name=body.get("fileName") or body.get("name") or "file.bin",
+                mime_type=body.get("mimeType"),
+                content_base64=str(content_base64),
+                size_bytes=body.get("sizeBytes"),
+                tags=tags,
+            )
+        else:
+            row = register_user_file(
+                user_id=str(user.id),
+                path=str(path),
+                file_name=body.get("fileName"),
+                mime_type=body.get("mimeType"),
+                size_bytes=body.get("sizeBytes"),
+                tags=tags,
+            )
         return jsonify({"ok": True, "file": row}), 200
     except PermissionError as e:
         return jsonify({"ok": False, "error": str(e)}), 403
@@ -807,6 +820,47 @@ def user_files_register():
     except Exception as e:
         logger.error("user-files/register failed: %s", e, exc_info=True)
         return jsonify({"ok": False, "error": "failed to register uploaded file"}), 500
+
+
+@api_bp.route('/user-files/upload', methods=['POST'])
+def user_files_upload():
+    """
+    Upload a file directly into Turso-backed file vault.
+    body: { fileName, mimeType?, contentBase64, sizeBytes?, tags? }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    file_name = body.get("fileName")
+    content_base64 = body.get("contentBase64")
+    if not file_name:
+        return jsonify({"ok": False, "error": "fileName is required"}), 400
+    if not content_base64:
+        return jsonify({"ok": False, "error": "contentBase64 is required"}), 400
+
+    tags = body.get("tags")
+    if tags is None:
+        tags = []
+    if not isinstance(tags, list):
+        return jsonify({"ok": False, "error": "tags must be an array"}), 400
+
+    try:
+        row = upload_user_file_from_base64(
+            user_id=str(user.id),
+            file_name=str(file_name),
+            mime_type=body.get("mimeType"),
+            content_base64=str(content_base64),
+            size_bytes=body.get("sizeBytes"),
+            tags=tags,
+        )
+        return jsonify({"ok": True, "file": row}), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error("user-files upload failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to upload file"}), 500
 
 
 @api_bp.route('/user-files', methods=['GET'])
@@ -854,6 +908,30 @@ def user_files_content(file_id):
     except Exception as e:
         logger.error("user-files content failed: %s", e, exc_info=True)
         return jsonify({"ok": False, "error": "failed to read file content"}), 500
+
+
+@api_bp.route('/user-files/<file_id>/download', methods=['GET'])
+def user_files_download(file_id):
+    """
+    Download raw bytes for one vault file.
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    try:
+        meta, data = get_user_file_bytes(user_id=str(user.id), file_id=str(file_id))
+        from flask import Response
+
+        response = Response(data, mimetype=meta.get("mime_type") or "application/octet-stream")
+        response.headers["Content-Disposition"] = f"inline; filename=\"{meta.get('file_name') or 'file.bin'}\""
+        response.headers["Content-Length"] = str(len(data))
+        return response
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error("user-files download failed: %s", e, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to download file"}), 500
 
 
 @api_bp.route('/user-files/<file_id>', methods=['GET'])
