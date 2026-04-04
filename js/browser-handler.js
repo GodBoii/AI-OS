@@ -18,6 +18,10 @@ class BrowserHandler {
         this.browser = null;
         this.page = null;
         this.isConnected = false;
+        this.debugPort = 9222;
+        this.connectPromise = null;
+        this.commandQueue = Promise.resolve();
+        this.isProcessingCommand = false;
     }
 
     async _uploadScreenshot(screenshotBase64) {
@@ -101,9 +105,68 @@ class BrowserHandler {
         });
     }
 
+    _sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    _getBrowserUrl() {
+        return `http://127.0.0.1:${this.debugPort}`;
+    }
+
+    async _resolveDebugPort() {
+        if (await this._isPortInUse(this.debugPort)) {
+            for (let candidate = 9222; candidate <= 9240; candidate += 1) {
+                if (!(await this._isPortInUse(candidate))) {
+                    this.debugPort = candidate;
+                    return this.debugPort;
+                }
+            }
+            throw new Error('No available remote-debugging port found in range 9222-9240.');
+        }
+        return this.debugPort;
+    }
+
+    async _waitForBrowserReady(timeoutMs = 15000) {
+        const started = Date.now();
+        while ((Date.now() - started) < timeoutMs) {
+            const connected = await this._connect();
+            if (connected) {
+                return true;
+            }
+            await this._sleep(400);
+        }
+        return false;
+    }
+
+    async _stabilizeAfterInteraction(timeoutMs = 5000) {
+        if (!this.page) return;
+
+        // Try to wait for network to settle, but never fail the action if a page keeps long-lived connections.
+        await this.page.waitForNetworkIdle({ idleTime: 500, timeout: timeoutMs }).catch(() => {});
+    }
+
+    _enqueueCommand(commandPayload) {
+        this.commandQueue = this.commandQueue
+            .then(async () => {
+                this.isProcessingCommand = true;
+                await this.handleCommand(commandPayload);
+            })
+            .catch((error) => {
+                const action = commandPayload?.action || 'unknown';
+                const requestId = commandPayload?.request_id;
+                console.error(`BrowserHandler queue error while processing '${action}':`, error?.message || error);
+                if (requestId) {
+                    this._emitResult(requestId, { status: 'error', error: `Internal queue error: ${error?.message || String(error)}` });
+                }
+            })
+            .finally(() => {
+                this.isProcessingCommand = false;
+            });
+    }
+
     initialize() {
         this.eventEmitter.on('execute-browser-command', (commandPayload) => {
-            this.handleCommand(commandPayload);
+            this._enqueueCommand(commandPayload);
         });
         console.log('BrowserHandler initialized and listening for commands.');
         const paths = this._getBrowserPaths();
@@ -119,8 +182,9 @@ class BrowserHandler {
         if (this.managedBrowserProcess) return;
         const paths = this._getBrowserPaths();
         if (!paths) return;
+        await this._resolveDebugPort();
         const args = [
-            `--remote-debugging-port=9222`, `--user-data-dir=${paths.userDataDir}`,
+            `--remote-debugging-port=${this.debugPort}`, `--user-data-dir=${paths.userDataDir}`,
             `--no-first-run`, `--no-default-browser-check`, `--disable-background-timer-throttling`,
             `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding`
         ];
@@ -143,25 +207,37 @@ class BrowserHandler {
 
     async _connect() {
         if (this.isConnected) return true;
-        try {
-            console.log('Attempting to connect to browser at http://localhost:9222...');
-            this.browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null });
-            this.isConnected = true;
-            console.log('Successfully connected to browser via CDP.');
-            const pages = await this.browser.pages();
-            this.page = pages[0] || await this.browser.newPage();
-            console.log(`Connected to page: ${this.page.url()}`);
-            this.browser.on('disconnected', () => {
-                console.log('Browser disconnected.');
-                this.isConnected = false;
-                this.browser = null;
-                this.page = null;
-            });
-            return true;
-        } catch (error) {
-            console.log('Failed to connect to browser:', error.message);
-            return false;
+        if (this.connectPromise) {
+            return this.connectPromise;
         }
+
+        this.connectPromise = (async () => {
+            try {
+                const browserUrl = this._getBrowserUrl();
+                console.log(`Attempting to connect to browser at ${browserUrl}...`);
+                this.browser = await puppeteer.connect({ browserURL: browserUrl, defaultViewport: null });
+                this.isConnected = true;
+                console.log('Successfully connected to browser via CDP.');
+                const pages = await this.browser.pages();
+                this.page = pages[0] || await this.browser.newPage();
+                console.log(`Connected to page: ${this.page.url()}`);
+                this.browser.removeAllListeners('disconnected');
+                this.browser.on('disconnected', () => {
+                    console.log('Browser disconnected.');
+                    this.isConnected = false;
+                    this.browser = null;
+                    this.page = null;
+                });
+                return true;
+            } catch (error) {
+                console.log('Failed to connect to browser:', error.message);
+                return false;
+            } finally {
+                this.connectPromise = null;
+            }
+        })();
+
+        return this.connectPromise;
     }
 
     async handleCommand(commandPayload) {
@@ -180,13 +256,13 @@ class BrowserHandler {
                         result = { status: 'connected', url: await this.page.url() };
                     } else {
                         await this._launchManagedBrowser();
-                        await new Promise(resolve => setTimeout(resolve, 5000));
-                        const isNowConnected = await this._connect();
+                        const isNowConnected = await this._waitForBrowserReady(15000);
                         result = isNowConnected ? { status: 'connected', url: await this.page.url() } : { status: 'disconnected', error: 'Connection failed after launch.' };
                     }
                     break;
                 case 'navigate':
-                    await this.page.goto(commandPayload.url, { waitUntil: 'networkidle2' });
+                    await this.page.goto(commandPayload.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'get_view':
@@ -194,28 +270,56 @@ class BrowserHandler {
                     break;
                 case 'click':
                     await this.page.click(`[data-aios-id="${commandPayload.element_id}"]`);
-                    await this.page.waitForNetworkIdle({ idleTime: 500, timeout: 5000 }).catch(() => {});
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'type':
-                    await this.page.type(`[data-aios-id="${commandPayload.element_id}"]`, commandPayload.text);
+                    {
+                        const selector = `[data-aios-id="${commandPayload.element_id}"]`;
+                        const clearExisting = commandPayload.clear_existing !== false;
+                        await this.page.focus(selector);
+
+                        if (clearExisting) {
+                            await this.page.$eval(selector, (el) => {
+                                const element = el;
+                                const tag = (element.tagName || '').toLowerCase();
+                                const isFormField = tag === 'input' || tag === 'textarea';
+                                if (isFormField && typeof element.value === 'string') {
+                                    element.value = '';
+                                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                                    element.dispatchEvent(new Event('change', { bubbles: true }));
+                                    return;
+                                }
+                                if (element.isContentEditable) {
+                                    element.textContent = '';
+                                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            }).catch(() => {});
+                        }
+
+                        await this.page.type(selector, commandPayload.text);
+                    }
+                    await this._stabilizeAfterInteraction(3000);
                     result = await this.getView();
                     break;
                 case 'scroll':
                     await this.page.evaluate(direction => window.scrollBy(0, direction === 'down' ? window.innerHeight * 0.8 : -window.innerHeight * 0.8), commandPayload.direction);
+                    await this._stabilizeAfterInteraction(2000);
                     result = await this.getView();
                     break;
                 case 'go_back':
-                    await this.page.goBack({ waitUntil: 'networkidle2' });
+                    await this.page.goBack({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'go_forward':
-                    await this.page.goForward({ waitUntil: 'networkidle2' });
+                    await this.page.goForward({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'list_tabs':
                     if (!this.isConnected) {
-                        result = { status: 'success', tabs: [] };
+                        result = { status: 'disconnected', tabs: [], message: 'Browser is not connected.' };
                         break;
                     }
                     const pages = await this.browser.pages();
@@ -230,13 +334,14 @@ class BrowserHandler {
                     break;
                 case 'open_new_tab':
                     this.page = await this.browser.newPage();
-                    await this.page.goto(commandPayload.url, { waitUntil: 'networkidle2' });
+                    await this.page.goto(commandPayload.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await this._stabilizeAfterInteraction(5000);
                     await this.page.bringToFront();
                     result = await this.getView();
                     break;
                 case 'switch_to_tab':
                     const allPages = await this.browser.pages();
-                    if (commandPayload.tab_index < allPages.length) {
+                    if (commandPayload.tab_index >= 0 && commandPayload.tab_index < allPages.length) {
                         this.page = allPages[commandPayload.tab_index];
                         await this.page.bringToFront();
                         result = await this.getView();
@@ -246,7 +351,7 @@ class BrowserHandler {
                     break;
                 case 'close_tab':
                     const pagesToClose = await this.browser.pages();
-                    if (commandPayload.tab_index < pagesToClose.length) {
+                    if (commandPayload.tab_index >= 0 && commandPayload.tab_index < pagesToClose.length) {
                         if (pagesToClose.length === 1) {
                             result = { status: 'error', error: 'Cannot close the last tab.' };
                             break;
@@ -277,7 +382,7 @@ class BrowserHandler {
                     break;
                 case 'press_key':
                     await this.page.keyboard.press(commandPayload.key);
-                    await this.page.waitForNetworkIdle({ idleTime: 500, timeout: 5000 }).catch(() => {});
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'extract_text':
@@ -310,7 +415,8 @@ class BrowserHandler {
                     result = { status: 'success', table_markdown: markdownTable };
                     break;
                 case 'refresh':
-                    await this.page.reload({ waitUntil: 'networkidle2' });
+                    await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
                 case 'wait_for_element':
@@ -360,18 +466,34 @@ class BrowserHandler {
             const interactive_elements = await this.page.evaluate(() => {
                 const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"]'));
                 const visibleElements = [];
-                elements.forEach((el, index) => {
+                let nextId = Number(window.__aiosNextElementId || 1);
+                elements.forEach((el) => {
                     const rect = el.getBoundingClientRect();
-                    const isVisible = rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth && rect.width > 0 && rect.height > 0;
+                    const style = window.getComputedStyle(el);
+                    const isVisible = (
+                        rect.width > 0 &&
+                        rect.height > 0 &&
+                        style.visibility !== 'hidden' &&
+                        style.display !== 'none' &&
+                        rect.bottom >= 0 &&
+                        rect.right >= 0 &&
+                        rect.top <= window.innerHeight &&
+                        rect.left <= window.innerWidth
+                    );
                     if (isVisible) {
-                        el.setAttribute('data-aios-id', index);
+                        let elementId = el.getAttribute('data-aios-id');
+                        if (!elementId) {
+                            elementId = String(nextId++);
+                            el.setAttribute('data-aios-id', elementId);
+                        }
                         visibleElements.push({
-                            id: index, tag: el.tagName.toLowerCase(),
+                            id: Number(elementId), tag: el.tagName.toLowerCase(),
                             text: el.innerText || el.value || el.getAttribute('aria-label') || '',
                             ariaLabel: el.getAttribute('aria-label') || '',
                         });
                     }
                 });
+                window.__aiosNextElementId = nextId;
                 return visibleElements;
             });
             const screenshot_base64 = await this.page.screenshot({ encoding: 'base64' });

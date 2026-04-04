@@ -3,6 +3,7 @@
 import logging
 import uuid
 import json
+import time
 from typing import Dict, Any, Literal, Union
 
 from redis import Redis
@@ -71,29 +72,59 @@ class BrowserTools(Toolkit):
         """
         request_id = str(uuid.uuid4())
         command_payload['request_id'] = request_id
-        
+        action = command_payload.get('action', 'unknown')
+
         response_channel = f"browser-response:{request_id}"
         pubsub = self.redis_client.pubsub()
-        
+        timeout_seconds = BROWSER_COMMAND_TIMEOUT_SECONDS
+        if action == 'wait_for_element':
+            timeout_seconds = max(timeout_seconds, int(command_payload.get('timeout', 10)) + 20)
+
         try:
             pubsub.subscribe(response_channel)
             
             # 1. Send the command to the client
             self.socketio.emit('browser-command', command_payload, room=self.sid)
+            deadline = time.monotonic() + timeout_seconds
 
             # 2. Wait for a message on the subscribed channel
-            for message in pubsub.listen():
-                if message['type'] == 'message':
+            while time.monotonic() < deadline:
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if not message:
+                    continue
+
+                try:
                     result = json.loads(message['data'])
-                    
-                    if "screenshot_path" in result:
-                        return self._process_view_result(result)
-                    
-                    return ToolResult(content=json.dumps(result))
+                except Exception as decode_error:
+                    logger.error("Browser result decode failed for action '%s': %s", action, decode_error)
+                    return ToolResult(content=json.dumps({
+                        "status": "error",
+                        "error": f"Invalid browser response payload for action '{action}'."
+                    }))
+
+                if "screenshot_path" in result:
+                    return self._process_view_result(result)
+
+                return ToolResult(content=json.dumps(result))
+
+            logger.error(
+                "Browser command timed out after %ss (action=%s, request_id=%s, sid=%s)",
+                timeout_seconds,
+                action,
+                request_id,
+                self.sid
+            )
+            return ToolResult(content=json.dumps({
+                "status": "error",
+                "error": f"Browser command '{action}' timed out after {timeout_seconds} seconds."
+            }))
 
         except Exception as e:
             logger.error(f"Browser command error: {e}")
-            return {"status": "error", "error": f"An internal error occurred while waiting for the browser: {e}"}
+            return ToolResult(content=json.dumps({
+                "status": "error",
+                "error": f"An internal error occurred while waiting for the browser: {e}"
+            }))
         finally:
             # 3. Always clean up the subscription
             pubsub.unsubscribe(response_channel)
@@ -114,11 +145,27 @@ class BrowserTools(Toolkit):
     def get_current_view(self) -> Union[Dict[str, Any], ToolResult]:
         return self._send_command_and_wait({'action': 'get_view'})
 
-    def click(self, element_id: int, description: str) -> Union[Dict[str, Any], ToolResult]:
-        return self._send_command_and_wait({'action': 'click', 'element_id': element_id})
+    def click(self, element_id: int, description: str = "") -> Union[Dict[str, Any], ToolResult]:
+        return self._send_command_and_wait({
+            'action': 'click',
+            'element_id': element_id,
+            'description': description
+        })
 
-    def type_text(self, element_id: int, text: str, description: str) -> Union[Dict[str, Any], ToolResult]:
-        return self._send_command_and_wait({'action': 'type', 'element_id': element_id, 'text': text})
+    def type_text(
+        self,
+        element_id: int,
+        text: str,
+        description: str = "",
+        clear_existing: bool = True
+    ) -> Union[Dict[str, Any], ToolResult]:
+        return self._send_command_and_wait({
+            'action': 'type',
+            'element_id': element_id,
+            'text': text,
+            'description': description,
+            'clear_existing': clear_existing
+        })
 
     def scroll(self, direction: Literal['up', 'down']) -> Union[Dict[str, Any], ToolResult]:
         if direction not in ['up', 'down']:
