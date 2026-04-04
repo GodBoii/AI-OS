@@ -52,5 +52,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aios-cloudflared
+    command: tunnel run --token eyJhIjoiNTk1N2M2ZGJjNWVhNDU1MTBmZjRhNmQ4YTY2NjA3OWIiLCJ0IjoiYTcyZGI3YzMtY2RkMC00YjAyLWE0OTItNzFiZTg4OGNjNDNkIiwicyI6IlpHVXlOR0k0Tm1RdE5qZzNNQzAwWVRnd0xUZzVObVV0T1RVeE9Ea3daREZrTkRjd01XWmpNbVppTmpFdFlUWXdaUzAwT1RkakxUbGxaVFl0WTJZM00yUTVOMll5WVRVMSJ9
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
   redis_data:
