@@ -8,7 +8,7 @@ class AIOS {
         this.userDataPath = null;
         this.userData = null;
         this.authService = null;
-        this.backendBaseUrl = 'http://localhost:8765';
+        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.deploymentsCache = [];
         this.databasesCache = [];
         this.memoriesCache = [];
