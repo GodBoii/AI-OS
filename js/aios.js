@@ -1518,7 +1518,22 @@ class AIOS {
             }
 
             for (const file of files) {
-                const uploadLinkRes = await fetch(`${this.backendBaseUrl}/api/user-files/upload-link`, {
+                const contentBase64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const dataUrl = String(reader.result || '');
+                            const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+                            resolve(b64);
+                        } catch (err) {
+                            reject(err);
+                        }
+                    };
+                    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+                    reader.readAsDataURL(file);
+                });
+
+                const uploadRes = await fetch(`${this.backendBaseUrl}/api/user-files/upload`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1528,42 +1543,12 @@ class AIOS {
                         fileName: file.name,
                         mimeType: file.type || 'application/octet-stream',
                         sizeBytes: file.size || 0,
+                        contentBase64,
                     }),
                 });
-                const uploadLinkPayload = await uploadLinkRes.json();
-                if (!uploadLinkRes.ok || !uploadLinkPayload.ok) {
-                    throw new Error(uploadLinkPayload.error || `Failed to create upload URL for ${file.name}`);
-                }
-
-                const uploadRes = await fetch(uploadLinkPayload.uploadUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': file.type || 'application/octet-stream',
-                        'x-upsert': 'false',
-                    },
-                    body: file,
-                });
-                if (!uploadRes.ok) {
-                    const errText = await uploadRes.text();
-                    throw new Error(`Upload failed for ${file.name}: ${errText || uploadRes.statusText}`);
-                }
-
-                const registerRes = await fetch(`${this.backendBaseUrl}/api/user-files/register`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        path: uploadLinkPayload.path,
-                        fileName: file.name,
-                        mimeType: file.type || 'application/octet-stream',
-                        sizeBytes: file.size || 0,
-                    }),
-                });
-                const registerPayload = await registerRes.json();
-                if (!registerRes.ok || !registerPayload.ok) {
-                    throw new Error(registerPayload.error || `Failed to register ${file.name}`);
+                const uploadPayload = await uploadRes.json();
+                if (!uploadRes.ok || !uploadPayload.ok) {
+                    throw new Error(uploadPayload.error || `Failed to upload ${file.name}`);
                 }
             }
 
@@ -1573,6 +1558,38 @@ class AIOS {
         } catch (error) {
             console.error('Error uploading user files:', error);
             this.showNotification(error.message || 'Failed to upload files', 'error');
+        }
+    }
+
+    async openUserFile(fileId) {
+        if (!fileId) return;
+        try {
+            const token = await this._getAccessToken();
+            if (!token) {
+                this.showNotification('Please log in to open files', 'error');
+                return;
+            }
+            const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}/download`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                let message = 'Failed to open file';
+                try {
+                    const payload = await response.json();
+                    message = payload.error || message;
+                } catch (e) {
+                    // no-op
+                }
+                throw new Error(message);
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60 * 1000);
+        } catch (error) {
+            console.error('Error opening file:', error);
+            this.showNotification(error.message || 'Failed to open file', 'error');
         }
     }
 
@@ -1633,7 +1650,6 @@ class AIOS {
                     : '';
             const created = this._formatDate(row.created_at);
             const size = this._formatFileSize(Number(row.size_bytes || 0));
-            const downloadUrl = this._safeText(row.download_url, '');
             const fileId = this._safeText(row.id);
             
             const card = document.createElement('div');
@@ -1642,12 +1658,10 @@ class AIOS {
                 <div class="settings-card-header">
                     <h4>${this._safeText(row.file_name, 'Untitled')}</h4>
                     <div class="settings-card-actions">
-                        ${downloadUrl ? `
-                        <a class="start-project-coding-btn" href="${downloadUrl}" target="_blank" rel="noopener noreferrer">
+                        <button class="start-project-coding-btn user-file-open-btn" data-file-id="${fileId}">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <span>Open</span>
-                        </a>
-                        ` : ''}
+                        </button>
                         <button class="expand-deployment-btn user-file-delete-btn" title="Delete File" data-file-id="${fileId}">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                         </button>
@@ -1662,6 +1676,12 @@ class AIOS {
                     <div><strong>Path</strong><span>${this._safeText(row.storage_path)}</span></div>
                 </div>
             `;
+            const openBtn = card.querySelector('.user-file-open-btn');
+            openBtn?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openUserFile(fileId);
+            });
             const deleteBtn = card.querySelector('.user-file-delete-btn');
             deleteBtn?.addEventListener('click', (e) => {
                 e.preventDefault();
