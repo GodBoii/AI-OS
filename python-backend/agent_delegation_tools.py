@@ -29,6 +29,7 @@ class AgentDelegationTools(Toolkit):
         sid: Optional[str],
         redis_client=None,
         use_memory: bool = False,
+        use_session_summaries: bool = False,
         debug_mode: bool = True,
         enable_github: bool = True,
         enable_coder: bool = True,
@@ -43,6 +44,7 @@ class AgentDelegationTools(Toolkit):
         self.sid = sid
         self.redis_client = redis_client
         self.use_memory = use_memory
+        self.use_session_summaries = use_session_summaries
         self.debug_mode = debug_mode
         self.enable_github = enable_github
         self.enable_coder = enable_coder
@@ -108,6 +110,7 @@ class AgentDelegationTools(Toolkit):
                 session_id=self.session_id,
                 message_id=self.message_id,
                 use_memory=self.use_memory,
+                use_session_summaries=self.use_session_summaries,
                 debug_mode=self.debug_mode,
                 enable_github=self.enable_github,
                 delegation_id=delegation_id,
@@ -123,6 +126,7 @@ class AgentDelegationTools(Toolkit):
                 session_id=self.session_id,
                 message_id=self.message_id,
                 use_memory=self.use_memory,
+                use_session_summaries=self.use_session_summaries,
                 debug_mode=self.debug_mode,
                 enable_google_email=bool(session_config.get("enable_google_email", True)),
                 enable_google_drive=bool(session_config.get("enable_google_drive", True)),

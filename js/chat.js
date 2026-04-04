@@ -1181,7 +1181,7 @@ async function startNewConversation() {
         const shuffleItems = document.querySelectorAll('.shuffle-item');
         shuffleItems.forEach(item => item.classList.remove('active'));
 
-        // Re-enable memory if it's on by default
+        // Re-enable memory only when it's configured as the default.
         if (chatConfig.memory) {
             shuffleMenuController.updateItemActiveState('memory', true);
         }
