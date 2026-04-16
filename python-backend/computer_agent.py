@@ -82,7 +82,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=OpenRouter(id="minimax/minimax-m2.7"),
+        model=OpenRouter(id="minimax/minimax-m2.5:free"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."

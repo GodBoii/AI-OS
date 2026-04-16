@@ -99,7 +99,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=OpenRouter(id="minimax/minimax-m2.5:free"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
