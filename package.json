@@ -19,6 +19,12 @@
       "output": "dist",
       "buildResources": "assets"
     },
+    "extraResources": [
+      {
+        "from": "assets/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
     "files": [
       "js/**/*",
       "css/**/*",
@@ -65,7 +71,11 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aetheria AI",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "include": "build/installer.nsh"
     }
   },
   "dependencies": {
