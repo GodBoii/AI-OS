@@ -209,7 +209,14 @@ class ProjectWorkspace {
             terminalCloseBtn: document.getElementById('project-local-terminal-close'),
             terminalOutput: document.getElementById('project-local-terminal-output'),
             terminalInput: document.getElementById('project-local-terminal-input'),
-            terminalSendBtn: document.getElementById('project-local-terminal-send')
+            terminalSendBtn: document.getElementById('project-local-terminal-send'),
+            // Super-header buttons
+            superSidebarBtn: document.getElementById('super-sidebar-toggle-btn'),
+            superTerminalBtn: document.getElementById('super-terminal-btn'),
+            superSyncBtn: document.getElementById('super-sync-btn'),
+            superCloudBtn: document.getElementById('super-cloud-btn'),
+            superLocalBtn: document.getElementById('super-local-btn'),
+            superGithubBtn: document.getElementById('super-github-btn'),
         };
     }
 
@@ -220,10 +227,11 @@ class ProjectWorkspace {
         this.el.cloneRepoBtn?.addEventListener('click', () => this.cloneGithubRepo());
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
-        this.el.modeToggleBtn?.addEventListener('click', () => this.toggleModeWindow());
+        // modeToggleBtn removed from DOM — mode is now controlled via super-header
         this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
         this.el.modeCloudBtn?.addEventListener('click', () => this.switchToCloudMode());
         this.el.terminalBtn?.addEventListener('click', () => this.toggleTerminalOverlay());
+        this.bindSuperHeaderEvents();
         this.el.terminalCloseBtn?.addEventListener('pointerdown', (event) => {
             event.stopPropagation();
         });
@@ -319,6 +327,65 @@ class ProjectWorkspace {
             const code = Number.isInteger(data?.code) ? data.code : 0;
             this.appendTerminalOutput(`\n[process exited with code ${code}]\n`, 'stdout');
         });
+    }
+
+    bindSuperHeaderEvents() {
+        // 1. Sidebar toggle — closes the project workspace panel
+        this.el.superSidebarBtn?.addEventListener('click', () => {
+            this.closePanel();
+        });
+
+        // 2. Terminal — toggles the terminal overlay (same as old terminal action btn)
+        this.el.superTerminalBtn?.addEventListener('click', () => {
+            this.toggleTerminalOverlay();
+        });
+
+        // 3. Sync — syncs the workspace file tree (same as old sync action btn)
+        this.el.superSyncBtn?.addEventListener('click', () => {
+            this.syncWorkspaceTree();
+        });
+
+        // 4. Cloud button — directly switches to cloud mode; updates pill active state
+        this.el.superCloudBtn?.addEventListener('click', () => {
+            this.switchToCloudMode();
+            this.updateSuperHeaderModeUI();
+        });
+
+        // 5. Local button — directly switches to local mode; updates pill active state
+        this.el.superLocalBtn?.addEventListener('click', () => {
+            this.switchToLocalMode();
+            this.updateSuperHeaderModeUI();
+        });
+
+        // 6. GitHub button — toggles the Clone GitHub Repo section in the sidebar
+        this.el.superGithubBtn?.addEventListener('click', () => {
+            const githubToggle = document.getElementById('project-github-toggle');
+            const githubContent = document.getElementById('project-github-content');
+            if (!githubContent || !githubToggle) return;
+
+            const isCurrentlyOpen = !githubContent.classList.contains('hidden');
+            if (isCurrentlyOpen) {
+                githubContent.classList.add('hidden');
+                githubToggle.classList.remove('active');
+                this.el.superGithubBtn.classList.remove('active');
+            } else {
+                githubContent.classList.remove('hidden');
+                githubToggle.classList.add('active');
+                this.el.superGithubBtn.classList.add('active');
+                // Scroll the github section into view smoothly
+                githubContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+
+    updateSuperHeaderModeUI() {
+        const mode = this.getExecutionTarget(); // 'cloud' | 'local'
+        if (this.el.superCloudBtn) {
+            this.el.superCloudBtn.classList.toggle('active', mode === 'cloud');
+        }
+        if (this.el.superLocalBtn) {
+            this.el.superLocalBtn.classList.toggle('active', mode === 'local');
+        }
     }
 
     openPanel() {
@@ -489,6 +556,8 @@ class ProjectWorkspace {
         if (this.el.modeCloudBtn) {
             this.el.modeCloudBtn.classList.toggle('active', mode === 'cloud');
         }
+        // Keep super-header pills in sync from every code path
+        this.updateSuperHeaderModeUI();
     }
 
     toggleModeWindow() {
