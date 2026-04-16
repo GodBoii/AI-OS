@@ -83,15 +83,27 @@
    Currently: flat black. Fix: frosted glass strip.
    ===================================================================== */
 .dark-mode .sidebar {
-  background: rgba(8, 8, 8, 0.60) !important;
-  -webkit-backdrop-filter: var(--glass-filter-std);
-  backdrop-filter: var(--glass-filter-std);
-  border-right: 1px solid var(--glass-edge-mid) !important;
-  box-shadow: 
-    2px 0 20px rgba(0, 0, 0, 0.50),
-    var(--glass-inset-top);
-  transition: background var(--glass-dur-std) var(--glass-ease-std),
-              border-color var(--glass-dur-std) var(--glass-ease-std);
+  background: rgba(8, 8, 8, 0.98) !important; /* Match project panel — pure near-black, no blue cast */
+  backdrop-filter: none !important; /* Removing blur eliminates the blue tint */
+  -webkit-backdrop-filter: none !important;
+  /* Subtle border visible when workspace is CLOSED — visual boundary between sidebar + content */
+  border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow: none !important;
+}
+
+/* When project workspace is OPEN — sidebar border disappears so both panels merge seamlessly */
+body.project-panel-open .sidebar {
+  border-right: none !important;
+}
+
+/* Light mode: sidebar right border visible when workspace closed */
+body:not(.dark-mode) .sidebar {
+  border-right: 1.5px solid var(--border-primary) !important;
+}
+
+/* Light mode: hide sidebar border when workspace is open */
+body.project-panel-open:not(.dark-mode) .sidebar {
+  border-right: none !important;
 }
 
 /* =====================================================================
