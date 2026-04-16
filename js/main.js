@@ -1,7 +1,7 @@
 // main.js (Definitive Version with Correct Deep Link Handling and Logging)
 
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog } = electron;
+const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog, nativeImage } = electron;
 const path = require('path');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
@@ -15,6 +15,13 @@ let mainWindow;
 
 // --- App Name Setup ---
 app.setName('Aetheria AI');
+
+// --- CRITICAL: Set Application User Model ID for Windows Taskbar Icon ---
+// This ensures Windows properly associates the running app with its icon
+// IMPORTANT: Only set this in production, not in development
+if (process.platform === 'win32' && app.isPackaged) {
+    app.setAppUserModelId('com.aetheria-ai.desktop');
+}
 
 // --- Protocol Registration ---
 // This tells the OS that our app can handle 'aios://' links.
@@ -112,10 +119,59 @@ if (!gotTheLock) {
 
 function createWindow() {
     const mainProcessEmitter = new EventEmitter();
+    const fs = require('fs');
+    
+    // Resolve icon path correctly for both development and production
+    let iconPath;
+    if (app.isPackaged) {
+        // In production, try multiple possible paths
+        // electron-builder can place icons in different locations
+        const possiblePaths = [
+            // Path 1: Unpacked from ASAR
+            path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.ico'),
+            // Path 2: Build resources directory (most common for icons)
+            path.join(process.resourcesPath, 'icon.ico'),
+            // Path 3: Assets in resources
+            path.join(process.resourcesPath, 'assets', 'icon.ico'),
+            // Path 4: Inside ASAR (shouldn't work but try anyway)
+            path.join(app.getAppPath(), 'assets', 'icon.ico'),
+            // Path 5: Executable directory
+            path.join(path.dirname(process.execPath), 'resources', 'icon.ico')
+        ];
+        
+        // Use the first path that exists
+        iconPath = possiblePaths.find(p => {
+            const exists = fs.existsSync(p);
+            console.log(`[Icon] Checking: ${p} - ${exists ? 'EXISTS' : 'NOT FOUND'}`);
+            return exists;
+        });
+        
+        if (!iconPath) {
+            console.error('[Icon] No valid icon path found! Tried:', possiblePaths);
+            iconPath = possiblePaths[0]; // Fallback to first path
+        }
+        
+        console.log('[Icon] Production icon path selected:', iconPath);
+        console.log('[Icon] Path exists:', fs.existsSync(iconPath));
+    } else {
+        // In development, use the regular path
+        iconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
+        console.log('[Icon] Development icon path:', iconPath);
+        console.log('[Icon] Path exists:', fs.existsSync(iconPath));
+    }
+    
+    // Create native image from icon path
+    const icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+        console.error('[Icon] Failed to load icon from path:', iconPath);
+    } else {
+        console.log('[Icon] Successfully loaded icon, size:', icon.getSize());
+    }
+    
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
-        icon: path.join(app.getAppPath(), 'assets/icon.ico'),
+        icon: icon,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -125,8 +181,14 @@ function createWindow() {
             webviewTag: true  // Enable <webview> tag support
         },
         frame: false,
-        transparent: true
+        transparent: true,
+        skipTaskbar: false  // Explicitly show in taskbar
     });
+
+    // Additional Windows-specific icon handling
+    if (process.platform === 'win32') {
+        mainWindow.setIcon(icon);
+    }
 
     mainWindow.maximize();
     mainWindow.loadFile('index.html');

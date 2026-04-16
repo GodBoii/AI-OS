@@ -1911,6 +1911,73 @@ function setupIpcListeners() {
             console.log('[AttachmentDB] Clearing pending metadata due to error');
             window.pendingAttachmentMetadata = null;
 
+            // Handle UI for broken stream
+            Object.keys(ongoingStreams).forEach(messageId => {
+                const stream = ongoingStreams[messageId];
+                if (stream && stream.element) {
+                    const messageDiv = stream.element;
+                    messageDiv.classList.remove('streaming');
+                    const mainContent = messageDiv.querySelector('.message-content');
+                    if (mainContent) {
+                        const errorContentBlock = document.createElement('div');
+                        errorContentBlock.className = 'content-block error-block';
+                        
+                        const innerContent = document.createElement('div');
+                        innerContent.className = 'inner-content';
+                        innerContent.innerHTML = `
+                            <div style="color: #ff4a4a; margin-bottom: 10px; font-weight: 500;">
+                                ⚠️ Something went wrong with the connection.
+                            </div>
+                            <button class="try-again-btn" style="background: var(--surface-2, #2a2a2a); color: var(--text-primary, #fff); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border-color, #444); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.9em; transition: all 0.2s ease;">
+                                <i class="fas fa-redo"></i> Try again
+                            </button>
+                        `;
+                        
+                        const tryAgainBtn = innerContent.querySelector('.try-again-btn');
+                        tryAgainBtn.addEventListener('mouseover', () => {
+                            tryAgainBtn.style.background = 'var(--surface-3, #3a3a3a)';
+                        });
+                        tryAgainBtn.addEventListener('mouseout', () => {
+                            tryAgainBtn.style.background = 'var(--surface-2, #2a2a2a)';
+                        });
+                        
+                        tryAgainBtn.addEventListener('click', () => {
+                            const prevUserMessage = messageDiv.previousElementSibling;
+                            if (prevUserMessage && prevUserMessage.classList.contains('message-user')) {
+                                const textDiv = prevUserMessage.querySelector('.user-message-text');
+                                if (textDiv && textDiv.textContent) {
+                                    if (inputElement) {
+                                        inputElement.value = textDiv.textContent;
+                                        inputElement.style.height = 'auto';
+                                        if (inputElement.scrollHeight) {
+                                            inputElement.style.height = inputElement.scrollHeight + 'px';
+                                        }
+                                        inputElement.focus();
+                                    }
+                                }
+                                prevUserMessage.remove(); // Remove old user message
+                            }
+                            messageDiv.remove(); // Remove this error message
+                        });
+                        
+                        errorContentBlock.appendChild(innerContent);
+                        mainContent.appendChild(errorContentBlock);
+                    }
+                    
+                    const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
+                    if (thinkingIndicator) {
+                        thinkingIndicator.classList.add('steps-done');
+                        const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
+                        if (liveStepsContainer) liveStepsContainer.classList.add('hidden');
+                    }
+                }
+                
+                if (typeof messageFormatter !== 'undefined' && typeof messageFormatter.finishStreamingForAllOwners === 'function') {
+                    messageFormatter.finishStreamingForAllOwners(messageId);
+                }
+                delete ongoingStreams[messageId];
+            });
+
             // DON'T clear the conversation anymore
             // if (error.reset) { startNewConversation(); }
         } catch (e) {
