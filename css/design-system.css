@@ -903,10 +903,10 @@ textarea.input {
   visibility: visible;
 }
 
-/* Scrollbar Styles */
+/* Scrollbar Styles - Ultra Thin & Subtle */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 3px;
+  height: 3px;
 }
 
 ::-webkit-scrollbar-track {
@@ -914,20 +914,32 @@ textarea.input {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--neutral-300);
-  border-radius: 4px;
+  background: rgba(45, 55, 72, 0.15);
+  border-radius: 2px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neutral-400);
+  background: rgba(45, 55, 72, 0.25);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 55, 72, 0.15) transparent;
 }
 
 .dark-mode ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dark-mode ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Firefox scrollbar - dark mode */
+.dark-mode * {
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 /* =================================================================

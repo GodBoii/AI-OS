@@ -309,7 +309,7 @@ body.project-panel-open .design-mode-overlay {
 /* ── Body — preview + inspector side-by-side ───────────────────── */
 .design-mode-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-columns: minmax(0, 1fr) 245px;
     gap: 10px;
     padding: 10px;
     min-height: 0;
@@ -376,7 +376,7 @@ body.project-panel-open .design-mode-overlay {
 
 /* Inspector header */
 .design-mode-inspector-header {
-    padding: 14px 16px 12px;
+    padding: 12px 14px 10px;
     border-bottom: 1px solid var(--dm-border);
     background: var(--dm-surface-1);
     flex-shrink: 0;
@@ -415,17 +415,17 @@ body.project-panel-open .design-mode-overlay {
     flex-direction: column;
     gap: 0;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
-#design-mode-edit-controls::-webkit-scrollbar { width: 5px; }
+#design-mode-edit-controls::-webkit-scrollbar { width: 3px; }
 #design-mode-edit-controls::-webkit-scrollbar-track { background: transparent; }
 #design-mode-edit-controls::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.10);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
 }
 #design-mode-edit-controls::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 
@@ -446,7 +446,7 @@ body.project-panel-open .design-mode-overlay {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 10px 16px;
+    padding: 9px 14px;
     border: none;
     background: transparent;
     cursor: pointer;
@@ -488,7 +488,7 @@ body.project-panel-open .design-mode-overlay {
     display: flex;
     flex-direction: column;
     gap: var(--dm-space-sm);
-    padding: 0 16px 12px;
+    padding: 0 14px 10px;
 }
 
 
@@ -569,15 +569,30 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Select dropdown — FIXED CONTRAST ──────────────────────────── */
+/* ── Select dropdown — CLEAN UI WITH SINGLE ARROW ──────────────────────────── */
 .design-mode-select {
+    /* Remove ALL browser default styling */
     appearance: none;
     -webkit-appearance: none;
+    -moz-appearance: none;
+    
+    /* Clean background with single arrow icon */
+    background-color: var(--dm-surface-2);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.45)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
+    background-size: 12px 12px;
+    
     padding-right: 28px;
     cursor: pointer;
+    
+    /* Prevent text selection on the arrow area */
+    user-select: none;
+}
+
+/* Remove Firefox default arrow */
+.design-mode-select::-ms-expand {
+    display: none;
 }
 
 /* Critical fix: dropdown option contrast */
@@ -881,17 +896,36 @@ body:not(.dark-mode) .design-mode-select:focus {
 }
 
 body:not(.dark-mode) .design-mode-select {
+    /* Clean single arrow for light mode - explicit background properties */
+    background-color: rgba(15,23,42,0.04);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(15,23,42,0.4)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 12px;
 }
 
+/* Light mode dropdown options - FIXED CONTRAST */
 body:not(.dark-mode) .design-mode-select option {
     background-color: #ffffff;
     color: #0f172a;
+    padding: 8px 12px;
+    font-weight: 500;
 }
 
-body:not(.dark-mode) .design-mode-select option:hover,
-body:not(.dark-mode) .design-mode-select option:checked {
+body:not(.dark-mode) .design-mode-select option:hover {
     background-color: #f1f5f9;
+    color: #0f172a;
+}
+
+body:not(.dark-mode) .design-mode-select option:checked {
+    background-color: rgba(190, 24, 93, 0.10);
+    color: #be185d;
+    font-weight: 600;
+}
+
+body:not(.dark-mode) .design-mode-select option:disabled {
+    color: rgba(15, 23, 42, 0.35);
+    background-color: #f8fafc;
 }
 
 body:not(.dark-mode) .design-mode-action-btn {
@@ -977,17 +1011,31 @@ body:not(.dark-mode) .design-mode-color-input {
     border-color: rgba(15,23,42,0.12);
 }
 
+/* Light mode scrollbar for inspector */
+body:not(.dark-mode) #design-mode-edit-controls,
+body:not(.dark-mode) #design-mode-comment-panel {
+    scrollbar-color: rgba(15, 23, 42, 0.12) transparent;
+}
+
+body:not(.dark-mode) #design-mode-edit-controls::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.12);
+}
+
+body:not(.dark-mode) #design-mode-edit-controls::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 23, 42, 0.20);
+}
+
 
 /* ── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 1200px) {
     .design-mode-body {
-        grid-template-columns: minmax(0, 1fr) 280px;
+        grid-template-columns: minmax(0, 1fr) 230px;
     }
 }
 
 @media (max-width: 1024px) {
     .design-mode-body {
-        grid-template-columns: minmax(0, 1fr) 260px;
+        grid-template-columns: minmax(0, 1fr) 220px;
     }
 
     .design-mode-subtitle {
