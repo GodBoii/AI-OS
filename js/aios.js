@@ -10,6 +10,9 @@ class AIOS {
         this.authService = null;
         this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.deploymentsCache = [];
+        this.deploymentsLastLoadedAt = 0;
+        this.deploymentsLoadPromise = null;
+        this.deploymentsFreshnessMs = 15000;
         this.userFilesCache = [];
         this.memoriesCache = [];
         this.editingMemoryId = null;
@@ -1264,31 +1267,58 @@ class AIOS {
         }
     }
 
-    async loadDeployments(showNotification = false) {
-        try {
-            const token = await this._getAccessToken();
-            if (!token) {
-                this.deploymentsCache = [];
-                this.renderDeployments([]);
-                return;
-            }
+    async loadDeployments(showNotification = false, options = {}) {
+        const force = options?.force === true || showNotification === true;
+        const now = Date.now();
 
-            const response = await fetch(`${this.backendBaseUrl}/api/deploy/projects?limit=100`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-                throw new Error(payload.error || 'Failed to load deployments');
-            }
-
-            this.deploymentsCache = Array.isArray(payload.projects) ? payload.projects : [];
-            this.renderDeployments(this.deploymentsCache);
-            if (showNotification) this.showNotification('Deployments refreshed', 'success');
-        } catch (error) {
-            console.error('Error loading deployments:', error);
-            this.renderDeployments([]);
-            if (showNotification) this.showNotification(error.message || 'Failed to load deployments', 'error');
+        if (!force && this.deploymentsLoadPromise) {
+            return this.deploymentsLoadPromise;
         }
+
+        if (
+            !force
+            && Array.isArray(this.deploymentsCache)
+            && this.deploymentsCache.length > 0
+            && now - this.deploymentsLastLoadedAt < this.deploymentsFreshnessMs
+        ) {
+            this.renderDeployments(this.deploymentsCache);
+            return this.deploymentsCache;
+        }
+
+        this.deploymentsLoadPromise = (async () => {
+            try {
+                const token = await this._getAccessToken();
+                if (!token) {
+                    this.deploymentsCache = [];
+                    this.deploymentsLastLoadedAt = 0;
+                    this.renderDeployments([]);
+                    return [];
+                }
+
+                const response = await fetch(`${this.backendBaseUrl}/api/deploy/projects?limit=100`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.error || 'Failed to load deployments');
+                }
+
+                this.deploymentsCache = Array.isArray(payload.projects) ? payload.projects : [];
+                this.deploymentsLastLoadedAt = Date.now();
+                this.renderDeployments(this.deploymentsCache);
+                if (showNotification) this.showNotification('Deployments refreshed', 'success');
+                return this.deploymentsCache;
+            } catch (error) {
+                console.error('Error loading deployments:', error);
+                this.renderDeployments([]);
+                if (showNotification) this.showNotification(error.message || 'Failed to load deployments', 'error');
+                throw error;
+            } finally {
+                this.deploymentsLoadPromise = null;
+            }
+        })();
+
+        return this.deploymentsLoadPromise;
     }
 
     async showDeploymentDetail(project) {

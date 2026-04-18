@@ -9,6 +9,7 @@ class ArtifactHandler {
         this.currentViewMode = 'preview';
         this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.deployInProgress = false;
+        this.deployTargetsByConversation = new Map();
         this.init();
     }
 
@@ -948,10 +949,13 @@ class ArtifactHandler {
     }
 
     getExistingDeployTarget() {
+        const conversationId = this.getCurrentConversationId();
+        const rememberedTarget = conversationId ? this.deployTargetsByConversation.get(conversationId) : null;
         const projectContext =
             (window.projectWorkspace && window.projectWorkspace.activeProject)
             || window.projectContext
             || window.activeProjectContext
+            || rememberedTarget
             || null;
 
         if (!projectContext || typeof projectContext !== 'object') {
@@ -972,6 +976,22 @@ class ArtifactHandler {
         };
     }
 
+    rememberDeployTarget(target = {}) {
+        const conversationId = this.getCurrentConversationId();
+        if (!conversationId) return;
+
+        const siteId = String(target.site_id || '').trim();
+        if (!siteId) return;
+
+        this.deployTargetsByConversation.set(conversationId, {
+            site_id: siteId,
+            project_name: String(target.project_name || '').trim() || null,
+            slug: String(target.slug || '').trim() || null,
+            hostname: String(target.hostname || '').trim() || null,
+            deployment_id: String(target.deployment_id || '').trim() || null,
+        });
+    }
+
     isHtmlContent(content) {
         const text = String(content || '').trim().toLowerCase();
         if (!text) return false;
@@ -990,8 +1010,7 @@ class ArtifactHandler {
             .replace(/-{2,}/g, '-')
             .replace(/^-+|-+$/g, '');
         const root = (base || 'site').slice(0, 56);
-        const suffix = Math.random().toString(36).slice(2, 8);
-        return `${root}-${suffix}`.slice(0, 63);
+        return root || 'site';
     }
 
     normalizeSlugInput(input) {
@@ -1034,6 +1053,12 @@ class ArtifactHandler {
             return { ok: false, error: 'This slug is reserved. Choose another one.' };
         }
         return { ok: true, slug: candidate };
+    }
+
+    getFallbackSlug(baseSlug, siteId) {
+        const normalizedBase = this.normalizeSlugInput(baseSlug || 'site') || 'site';
+        const suffix = String(siteId || '').replace(/[^a-z0-9]/gi, '').slice(0, 6).toLowerCase() || 'site';
+        return `${normalizedBase}-${suffix}`.slice(0, 63);
     }
 
     async deployApi(path, token, body = null, method = 'POST') {
@@ -1174,12 +1199,8 @@ class ArtifactHandler {
         }
 
         const deployFiles = [];
-        const MAX_FILES = 100;
-        let processed = 0;
 
         for (const [path, item] of latestByPath) {
-            if (processed >= MAX_FILES) break;
-
             const metadata = item?.metadata || {};
             const contentType = metadata.mime_type || this.inferContentTypeFromPath(path);
 
@@ -1188,8 +1209,6 @@ class ArtifactHandler {
                 content_type: contentType,
                 download_url: item.download_url
             });
-
-            processed += 1;
         }
 
         return deployFiles;
@@ -1201,7 +1220,11 @@ class ArtifactHandler {
         const patterns = [
             /<link[^>]+href=["']([^"']+)["']/gi,
             /<script[^>]+src=["']([^"']+)["']/gi,
-            /<img[^>]+src=["']([^"']+)["']/gi
+            /<img[^>]+src=["']([^"']+)["']/gi,
+            /url\(\s*["']?([^)"'\s]+)["']?\s*\)/gi,
+            /@import\s+(?:url\()?\s*["']([^"']+)["']/gi,
+            /\bimport\s+[^"'`]*["']([^"']+)["']/gi,
+            /\bimport\(\s*["']([^"']+)["']\s*\)/gi
         ];
 
         for (const pattern of patterns) {
@@ -1570,11 +1593,32 @@ class ArtifactHandler {
                 this.showNotification(`Deploying ${uploadPayload.length} files...`, 'info');
             }
 
-            await this.deployApi('/api/deploy/site/init', session.access_token, {
-                site_id: siteId,
-                project_name: projectName,
-                slug
-            });
+            let finalSlug = slug;
+            try {
+                await this.deployApi('/api/deploy/site/init', session.access_token, {
+                    site_id: siteId,
+                    project_name: projectName,
+                    slug: finalSlug
+                });
+            } catch (initError) {
+                const message = String(initError?.message || '');
+                const isSlugConflict =
+                    message.toLowerCase().includes('already assigned')
+                    || message.toLowerCase().includes('already exists')
+                    || message.toLowerCase().includes('duplicate');
+
+                if (!existingTarget?.site_id && isSlugConflict) {
+                    finalSlug = this.getFallbackSlug(slug, siteId);
+                    await this.deployApi('/api/deploy/site/init', session.access_token, {
+                        site_id: siteId,
+                        project_name: projectName,
+                        slug: finalSlug
+                    });
+                    this.showNotification(`Slug '${slug}' was unavailable, using '${finalSlug}' instead.`, 'info');
+                } else {
+                    throw initError;
+                }
+            }
 
             await this.deployApi('/api/deploy/assign-subdomain', session.access_token, { site_id: siteId });
 
@@ -1588,19 +1632,35 @@ class ArtifactHandler {
                 deployment_id: upload.deployment_id
             });
 
-            const liveUrl = activated?.url || `https://${slug}.pawsitivestrides.store`;
+            const liveUrl = activated?.url || `https://${finalSlug}.pawsitivestrides.store`;
+            const resolvedHostname = activated?.url
+                ? new URL(activated.url).hostname
+                : (existingTarget?.hostname || `${finalSlug}.pawsitivestrides.store`);
+
+            this.rememberDeployTarget({
+                site_id: siteId,
+                project_name: projectName,
+                slug: finalSlug,
+                hostname: resolvedHostname,
+                deployment_id: upload.deployment_id,
+            });
+
             if (existingTarget?.site_id && window.projectWorkspace?.ensureContext) {
                 window.projectWorkspace.ensureContext({
                     site_id: siteId,
                     deployment_id: upload.deployment_id,
                     project_name: projectName,
-                    slug,
-                    hostname: (activated?.url ? new URL(activated.url).hostname : (existingTarget.hostname || null)),
+                    slug: finalSlug,
+                    hostname: resolvedHostname,
                     version: upload.version,
                     r2_prefix: upload.r2_prefix,
                 }, { syncUi: true });
             }
             this.showNotification(`Deployed: ${liveUrl}`, 'success');
+
+            if (window.AIOS?.loadDeployments) {
+                window.AIOS.loadDeployments(false, { force: true });
+            }
 
             if (window.electron?.shell?.openExternal) {
                 window.electron.shell.openExternal(liveUrl);
