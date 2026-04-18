@@ -274,6 +274,19 @@ class PythonBridge {
             });
             this._sendToRenderer('computer-tool-result-preview', data);
         });
+
+        // Handler for agent run completion — triggers native OS notification
+        this.socket.on('run_completed', (data) => {
+            console.log('PythonBridge: Received run_completed:', {
+                conversationId: data?.conversationId || null,
+                messageId: data?.messageId || null,
+                title: data?.title || null,
+            });
+            // Emit to main process for native notification (focus-check happens there)
+            this.eventEmitter.emit('run-completed', data);
+            // Also forward to renderer for optional in-app handling
+            this._sendToRenderer('run-completed', data);
+        });
     }
 
     /**

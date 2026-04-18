@@ -2,6 +2,7 @@
 
 import logging
 import json
+import re
 import traceback
 import inspect
 import base64
@@ -1089,10 +1090,15 @@ def run_agent_and_stream(
             )
             # Broadcast completion notification to the conversation room
             # so the client can show a local notification if in background
+            _preview_raw = (final_content or "").strip()
+            _preview_clean = re.sub(r"^[#*_`>~\-\s]+", "", _preview_raw, flags=re.MULTILINE)
+            _preview_clean = re.sub(r"\n+", " ", _preview_clean).strip()
+            _preview = _preview_clean[:400] if _preview_clean else ""
             socketio.emit("run_completed", {
                 "conversationId": conversation_id,
                 "messageId": message_id,
                 "title": conversation_title,
+                "preview": _preview,
             }, room=room_name)
 
         try:
