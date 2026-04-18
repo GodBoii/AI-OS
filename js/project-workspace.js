@@ -56,6 +56,10 @@ class ProjectWorkspace {
                 branch: 'main',
                 repo_name: null,
                 is_ready: false,
+                source_type: null,
+                source_site_id: null,
+                source_deployment_id: null,
+                source_project_name: null,
             },
             cloud_context: {
                 is_ready: false,
@@ -159,6 +163,50 @@ class ProjectWorkspace {
         return this.workspaceStates.get(key) || null;
     }
 
+    getSnapshotState() {
+        const currentConversationId = this.getConversationId();
+        if (currentConversationId && this.workspaceStates.has(currentConversationId)) {
+            return this.workspaceStates.get(currentConversationId);
+        }
+
+        const fallback = this.workspaceStates.get('__default__');
+        if (fallback) {
+            return fallback;
+        }
+
+        const values = Array.from(this.workspaceStates.values());
+        if (values.length === 1) {
+            return values[0];
+        }
+
+        const activeSiteId = String(this.activeProject?.site_id || '').trim();
+        const activeDeploymentId = String(this.activeProject?.deployment_id || '').trim();
+        if (activeSiteId) {
+            const matched = values.find((state) => {
+                const local = state?.local_context || {};
+                const cloud = state?.cloud_context || {};
+                if (String(local?.source_site_id || '') !== activeSiteId && String(cloud?.site_id || '') !== activeSiteId) {
+                    return false;
+                }
+                if (!activeDeploymentId) {
+                    return true;
+                }
+                if (String(local?.source_deployment_id || '') === activeDeploymentId) {
+                    return true;
+                }
+                if (String(cloud?.deployment_id || '') === activeDeploymentId) {
+                    return true;
+                }
+                return false;
+            });
+            if (matched) {
+                return matched;
+            }
+        }
+
+        return null;
+    }
+
     getExecutionTarget() {
         return this.getState()?.workspace_mode === 'local' ? 'local' : 'cloud';
     }
@@ -183,6 +231,25 @@ class ProjectWorkspace {
             r2_prefix: this.activeProject?.r2_prefix || null,
             url: this.activeProject?.hostname ? `https://${this.activeProject.hostname}` : null,
         };
+    }
+
+    getWorkspaceSnapshot() {
+        const state = this.getSnapshotState();
+        const globalState = window.stateManager?.getState ? window.stateManager.getState() : {};
+        return {
+            isProjectWorkspaceOpen: Boolean(globalState?.isProjectWorkspaceOpen),
+            activeProject: this.activeProject ? { ...this.activeProject } : null,
+            workspace_mode: state?.workspace_mode || 'cloud',
+            local_context: state?.local_context ? { ...state.local_context } : null,
+            cloud_context: state?.cloud_context ? { ...state.cloud_context } : null,
+            currentTreeSource: this.currentTreeSource || null,
+        };
+    }
+
+    emitWorkspaceStateChange() {
+        document.dispatchEvent(new CustomEvent('project-workspace:state-change', {
+            detail: this.getWorkspaceSnapshot()
+        }));
     }
 
     cacheElements() {
@@ -324,6 +391,16 @@ class ProjectWorkspace {
         window.electron?.ipcRenderer?.on?.('local-workspace-changed', (data) => {
             if (data?.conversationId !== this.getConversationId()) return;
             if (this.getExecutionTarget() !== 'local') return;
+            const state = this.getState();
+            if (this.isDeploymentProjectActive() && String(state?.local_context?.source_type || '') === 'deployment') {
+                state.deployment_dirty = true;
+                this.updateRedeployUI({
+                    visible: true,
+                    dirty: true,
+                    title: 'Local workspace has unpublished changes',
+                    subtitle: 'Re-deploy to publish your latest local edits.',
+                });
+            }
             if (this.syncDebounceTimer) {
                 clearTimeout(this.syncDebounceTimer);
             }
@@ -408,6 +485,7 @@ class ProjectWorkspace {
             this.el.panel?.classList.remove('hidden');
             document.body.classList.add('project-panel-open');
         }
+        this.emitWorkspaceStateChange();
     }
 
     closePanel() {
@@ -420,6 +498,7 @@ class ProjectWorkspace {
             this.el.panel?.classList.add('hidden');
             document.body.classList.remove('project-panel-open');
         }
+        this.emitWorkspaceStateChange();
     }
 
     normalizeProjectContext(project = {}) {
@@ -502,6 +581,7 @@ class ProjectWorkspace {
         }
 
         this.updateModeUI();
+        this.emitWorkspaceStateChange();
 
         return this.activeProject;
     }
@@ -652,6 +732,7 @@ class ProjectWorkspace {
         }
         // Keep super-header pills in sync from every code path
         this.updateSuperHeaderModeUI();
+        this.emitWorkspaceStateChange();
     }
 
     toggleModeWindow() {
@@ -1112,12 +1193,74 @@ class ProjectWorkspace {
         return parts.length ? parts.join(', ') : 'Workspace differs from selected deployment.';
     }
 
+    bytesToBase64(bytesLike) {
+        const bytes = bytesLike instanceof Uint8Array ? bytesLike : new Uint8Array(bytesLike || []);
+        const chunkSize = 0x8000;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode(...chunk);
+        }
+        return btoa(binary);
+    }
+
+    async collectLocalWorkspaceDeployFiles(rootPath) {
+        const normalizedRoot = String(rootPath || '').trim();
+        if (!normalizedRoot) {
+            throw new Error('Local workspace root is unavailable.');
+        }
+
+        const walk = async (currentPath, prefix = '') => {
+            const entries = await window.electron.fs.promises.readdir(currentPath);
+            const files = [];
+
+            for (const entry of entries) {
+                const name = String(entry || '').trim();
+                if (!name) continue;
+                if (name === '.git' || name === 'node_modules') continue;
+
+                const fullPath = window.electron.path.join(currentPath, name);
+                const relPath = prefix ? `${prefix}/${name}` : name;
+                const stats = await window.electron.fs.promises.stat(fullPath);
+
+                if (stats?.isDirectory?.()) {
+                    const nested = await walk(fullPath, relPath);
+                    files.push(...nested);
+                    continue;
+                }
+
+                const bytes = await window.electron.fs.promises.readFile(fullPath);
+                files.push({
+                    path: relPath.replace(/\\/g, '/'),
+                    content_base64: this.bytesToBase64(bytes),
+                });
+            }
+
+            return files;
+        };
+
+        return walk(normalizedRoot, '');
+    }
+
     async refreshDeploymentModificationStatus() {
         const state = this.getState();
         const mode = this.getExecutionTarget();
         const conversationId = this.getConversationId();
         const siteId = String(this.activeProject?.site_id || '').trim();
         const deploymentId = String(this.activeProject?.deployment_id || '').trim();
+
+        if (this.activeProject && mode === 'local' && siteId && deploymentId && String(state?.local_context?.source_type || '') === 'deployment') {
+            const dirty = Boolean(state?.deployment_dirty);
+            this.updateRedeployUI({
+                visible: true,
+                dirty,
+                title: dirty ? 'Local workspace has unpublished changes' : 'Local workspace matches selected deployment',
+                subtitle: dirty
+                    ? 'Re-deploy to publish your latest local edits.'
+                    : 'Edit local files or use Design mode to enable re-deploy.',
+            });
+            return;
+        }
 
         if (!this.activeProject || mode !== 'cloud' || !conversationId || !siteId || !deploymentId) {
             if (state) {
@@ -1180,13 +1323,13 @@ class ProjectWorkspace {
     }
 
     async redeployCurrentWorkspace() {
-        const conversationId = this.getConversationId();
         const siteId = String(this.activeProject?.site_id || '').trim();
-        if (!conversationId || !siteId) {
+        if (!siteId) {
             this.setStatus('Cannot redeploy: project context is incomplete.');
             return;
         }
 
+        const mode = this.getExecutionTarget();
         this.updateRedeployUI({
             visible: true,
             dirty: true,
@@ -1196,10 +1339,41 @@ class ProjectWorkspace {
         });
 
         try {
-            const payload = await this.callApi('/api/project/workspace/redeploy', 'POST', {
-                conversation_id: conversationId,
-                site_id: siteId,
-            });
+            let payload = null;
+
+            if (mode === 'local') {
+                const localRoot = String(this.getState()?.local_context?.root_path || '').trim();
+                const files = await this.collectLocalWorkspaceDeployFiles(localRoot);
+                if (!files.length) {
+                    throw new Error('No deployable local files were found.');
+                }
+                if (!files.some((item) => String(item.path || '').toLowerCase() === 'index.html')) {
+                    throw new Error('Deployment must include index.html.');
+                }
+
+                const upload = await this.callApi('/api/deploy/upload-site', 'POST', {
+                    site_id: siteId,
+                    files,
+                });
+                const activation = await this.callApi('/api/deploy/activate', 'POST', {
+                    site_id: siteId,
+                    deployment_id: upload?.deployment_id,
+                });
+                payload = {
+                    ...upload,
+                    ...activation,
+                    deployment_status: 'active',
+                };
+            } else {
+                const conversationId = this.getConversationId();
+                if (!conversationId) {
+                    throw new Error('Conversation is required for cloud redeploy.');
+                }
+                payload = await this.callApi('/api/project/workspace/redeploy', 'POST', {
+                    conversation_id: conversationId,
+                    site_id: siteId,
+                });
+            }
 
             this.ensureContext({
                 deployment_id: payload?.deployment_id || this.activeProject?.deployment_id,
@@ -1212,9 +1386,12 @@ class ProjectWorkspace {
             if (state?.cloud_context) {
                 state.cloud_context.site_id = siteId;
                 state.cloud_context.deployment_id = payload?.deployment_id || state.cloud_context.deployment_id;
-                state.deployment_dirty = false;
-                state.deployment_diff_summary = null;
             }
+            if (state?.local_context && mode === 'local' && String(state.local_context.source_type || '') === 'deployment') {
+                state.local_context.source_deployment_id = payload?.deployment_id || state.local_context.source_deployment_id;
+            }
+            state.deployment_dirty = false;
+            state.deployment_diff_summary = null;
 
             this.setStatus(`Re-deployed ${payload?.files_uploaded || 0} file${payload?.files_uploaded === 1 ? '' : 's'} as v${payload?.version || '?'}.`);
             await this.syncWorkspaceTree();
@@ -1227,7 +1404,7 @@ class ProjectWorkspace {
             });
 
             if (window.AIOS?.loadDeployments) {
-                window.AIOS.loadDeployments();
+                window.AIOS.loadDeployments(false, { force: true });
             }
         } catch (error) {
             this.updateRedeployUI({
@@ -1406,6 +1583,127 @@ class ProjectWorkspace {
         return normalized.split('/').pop() || 'workspace';
     }
 
+    isDeploymentProjectActive(project = this.activeProject) {
+        return Boolean(String(project?.site_id || '').trim());
+    }
+
+    getLocalDeploymentMetadata(project = this.activeProject) {
+        return {
+            source_type: this.isDeploymentProjectActive(project) ? 'deployment' : null,
+            source_site_id: String(project?.site_id || '').trim() || null,
+            source_deployment_id: String(project?.deployment_id || '').trim() || null,
+            source_project_name: String(project?.project_name || project?.slug || '').trim() || null,
+        };
+    }
+
+    doesLocalContextMatchActiveProject(state = this.getState()) {
+        if (!this.isDeploymentProjectActive()) {
+            return Boolean(state?.local_context?.is_ready && state?.local_context?.root_path);
+        }
+        const local = state?.local_context || {};
+        return Boolean(
+            local?.is_ready
+            && local?.root_path
+            && String(local?.source_type || '') === 'deployment'
+            && String(local?.source_site_id || '') === String(this.activeProject?.site_id || '')
+            && String(local?.source_deployment_id || '') === String(this.activeProject?.deployment_id || '')
+        );
+    }
+
+    async fetchDeploymentFilesForLocalImport() {
+        const siteId = String(this.activeProject?.site_id || '').trim();
+        if (!siteId) {
+            throw new Error('No deployed project is active.');
+        }
+
+        const query = new URLSearchParams({
+            site_id: siteId,
+            ...(this.activeProject?.deployment_id
+                ? { deployment_id: String(this.activeProject.deployment_id) }
+                : {})
+        });
+        const listing = await this.callApi(`/api/deploy/files?${query.toString()}`, 'GET');
+        const files = Array.isArray(listing?.files) ? listing.files : [];
+        if (!files.length) {
+            throw new Error('No files were found in the selected deployment.');
+        }
+
+        const importedFiles = [];
+        const batchSize = 4;
+
+        for (let index = 0; index < files.length; index += batchSize) {
+            const batch = files.slice(index, index + batchSize);
+            const resolvedBatch = await Promise.all(batch.map(async (file) => {
+                const fileQuery = new URLSearchParams({
+                    site_id: siteId,
+                    path: String(file?.path || ''),
+                    include_base64: '1',
+                    ...(this.activeProject?.deployment_id
+                        ? { deployment_id: String(this.activeProject.deployment_id) }
+                        : {})
+                });
+                const payload = await this.callApi(`/api/deploy/file-content?${fileQuery.toString()}`, 'GET');
+                return {
+                    path: String(file?.path || ''),
+                    content_base64: payload?.content_base64 || null,
+                    content: typeof payload?.content === 'string' ? payload.content : null,
+                };
+            }));
+
+            importedFiles.push(...resolvedBatch);
+            this.setStatus(`Downloading deployment files for local mode... ${Math.min(index + batch.length, files.length)}/${files.length}`);
+        }
+
+        return importedFiles;
+    }
+
+    async bootstrapActiveDeploymentToLocal(conversationId) {
+        const importedFiles = await this.fetchDeploymentFilesForLocalImport();
+        const result = await this.callLocalInvoke('project-local-import-files', {
+            conversationId,
+            projectName: this.activeProject?.project_name || this.activeProject?.slug || 'workspace',
+            files: importedFiles,
+            branch: this.getState(conversationId)?.branch || 'main',
+            metadata: {
+                ...this.getLocalDeploymentMetadata(),
+                slug: this.activeProject?.slug || null,
+                hostname: this.activeProject?.hostname || null,
+                project_name: this.activeProject?.project_name || null,
+            },
+        });
+
+        if (result?.canceled) {
+            return { success: false, canceled: true };
+        }
+        if (!result?.success) {
+            return {
+                success: false,
+                error: result?.error || 'Failed to create local workspace from deployment.',
+            };
+        }
+
+        const state = this.getState(conversationId);
+        state.workspace_mode = 'local';
+        state.local_context = {
+            root_path: result.root_path,
+            repo_url: state.repo_url || null,
+            branch: state.branch || 'main',
+            repo_name: result.repo_name || this.deriveRepoNameFromPath(result.root_path),
+            is_ready: true,
+            ...this.getLocalDeploymentMetadata(),
+        };
+
+        this.ensureContext({ local_root_path: result.root_path }, { syncUi: true });
+        await this.persistLocalContext(conversationId, state.local_context);
+        await this.startLocalWatcher(conversationId, result.root_path);
+        this.updateModeUI();
+        this.updateRedeployUI({ visible: false, dirty: false });
+        this.setStatus(`Local workspace created from deployment: ${result.repo_name || this.activeProject?.project_name || 'project'}`);
+        await this.syncWorkspaceTree();
+
+        return { success: true, root_path: result.root_path };
+    }
+
     async persistLocalContext(conversationId, context) {
         if (!conversationId) return;
         await this.callLocalInvoke('project-local-set-context', {
@@ -1439,20 +1737,31 @@ class ProjectWorkspace {
         }
 
         const state = this.getState(conversationId);
-        if (state.workspace_mode === 'local' && state.local_context?.is_ready) {
+        if (state.workspace_mode === 'local' && this.doesLocalContextMatchActiveProject(state)) {
             this.updateRedeployUI({ visible: false, dirty: false });
             this.setStatus('Already in local mode.');
             await this.syncWorkspaceTree();
             return;
         }
 
-        if (state.local_context?.is_ready && state.local_context?.root_path) {
+        if (!this.isDeploymentProjectActive() && state.local_context?.is_ready && state.local_context?.root_path) {
             state.workspace_mode = 'local';
             this.updateModeUI();
             this.updateRedeployUI({ visible: false, dirty: false });
             await this.startLocalWatcher(conversationId, state.local_context.root_path);
             this.setStatus(`Local mode active (${state.local_context.root_path}).`);
             await this.syncWorkspaceTree();
+            return;
+        }
+
+        if (this.isDeploymentProjectActive()) {
+            this.setStatus('Preparing a local editable copy of this deployed project...');
+            const imported = await this.bootstrapActiveDeploymentToLocal(conversationId);
+            if (!imported?.success && !imported?.canceled) {
+                this.setStatus(imported?.error || 'Failed to switch deployed project to local mode.');
+            } else if (imported?.canceled) {
+                this.setStatus('Stayed in cloud mode. Local deployment import cancelled.');
+            }
             return;
         }
 
@@ -1539,6 +1848,10 @@ class ProjectWorkspace {
             branch: state.branch || 'main',
             repo_name: repoName,
             is_ready: true,
+            source_type: null,
+            source_site_id: null,
+            source_deployment_id: null,
+            source_project_name: null,
         };
         state.workspace_mode = 'local';
 
@@ -1606,6 +1919,10 @@ class ProjectWorkspace {
             branch,
             repo_name: result.repo_name || this.deriveRepoNameFromPath(result.root_path),
             is_ready: true,
+            source_type: null,
+            source_site_id: null,
+            source_deployment_id: null,
+            source_project_name: null,
         };
 
         this.ensureContext(

@@ -91,6 +91,7 @@ const validInvokeChannels = [
     'computer-select-scope',
     'project-select-local-workspace',
     'project-local-clone-repo',
+    'project-local-import-files',
     'project-local-set-context',
     'project-local-tree',
     'project-local-file-content',
