@@ -437,8 +437,8 @@
 .history-preview-body::-webkit-scrollbar,
 .preview-code-wrapper::-webkit-scrollbar,
 .terminal-output::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 3px;
+    height: 3px;
 }
 
 .history-preview-body::-webkit-scrollbar-track,
@@ -450,14 +450,14 @@
 .history-preview-body::-webkit-scrollbar-thumb,
 .preview-code-wrapper::-webkit-scrollbar-thumb,
 .terminal-output::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb, #444);
-    border-radius: 4px;
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.08));
+    border-radius: 2px;
 }
 
 .history-preview-body::-webkit-scrollbar-thumb:hover,
 .preview-code-wrapper::-webkit-scrollbar-thumb:hover,
 .terminal-output::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover, #555);
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.15));
 }
 
 /* Animation keyframes */
