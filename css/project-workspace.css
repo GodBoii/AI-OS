@@ -186,6 +186,82 @@ body:not(.dark-mode) .project-workspace-header {
     border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
+.project-redeploy-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
+.project-redeploy-bar.hidden {
+    display: none;
+}
+
+.project-redeploy-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.project-redeploy-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.project-redeploy-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
+.project-redeploy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(52, 211, 153, 0.24);
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: all 0.18s ease;
+}
+
+.project-redeploy-btn.hidden {
+    display: none;
+}
+
+.project-redeploy-btn:hover {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(52, 211, 153, 0.38);
+    transform: translateY(-1px);
+}
+
+.project-redeploy-btn:disabled {
+    cursor: wait;
+    opacity: 0.7;
+    transform: none;
+}
+
+body:not(.dark-mode) .project-redeploy-bar {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.04), rgba(255, 255, 255, 0));
+}
+
+body:not(.dark-mode) .project-redeploy-btn {
+    color: #047857;
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(4, 120, 87, 0.16);
+}
+
 /* Exit + Close button group in header */
 .project-header-actions {
     display: flex;
