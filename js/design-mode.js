@@ -78,6 +78,15 @@ class DesignModeController {
             flexDirInput: document.getElementById('design-mode-flex-dir-input'),
             marginInput: document.getElementById('design-mode-margin-input'),
             opacityInput: document.getElementById('design-mode-opacity-input'),
+            opacityValue: document.getElementById('design-mode-opacity-value'),
+            letterSpacingInput: document.getElementById('design-mode-letter-spacing-input'),
+            widthInput: document.getElementById('design-mode-width-input'),
+            heightInput: document.getElementById('design-mode-height-input'),
+            gapInput: document.getElementById('design-mode-gap-input'),
+            borderWidthInput: document.getElementById('design-mode-border-width-input'),
+            borderStyleInput: document.getElementById('design-mode-border-style-input'),
+            borderColorInput: document.getElementById('design-mode-border-color-input'),
+            overflowInput: document.getElementById('design-mode-overflow-input'),
             refreshBtn: document.getElementById('design-mode-refresh-btn'),
             doneBtn: document.getElementById('design-mode-done-btn'),
             closeBtn: document.getElementById('design-mode-close-btn'),
@@ -175,11 +184,76 @@ class DesignModeController {
         this.el.opacityInput?.addEventListener('input', () => {
             if (!this.selectedElement) return;
             this.selectedElement.style.opacity = this.el.opacityInput.value;
+            if (this.el.opacityValue) this.el.opacityValue.textContent = this.el.opacityInput.value;
             this.markDirty('Updated opacity.');
+        });
+
+        this.el.letterSpacingInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            const value = this.applyUnitOrString(this.el.letterSpacingInput.value, 'px');
+            this.selectedElement.style.letterSpacing = value;
+            this.markDirty('Updated letter spacing.');
+        });
+
+        this.el.widthInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            const value = this.applyUnitOrString(this.el.widthInput.value, 'px');
+            this.selectedElement.style.width = value;
+            this.markDirty('Updated width.');
+        });
+
+        this.el.heightInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            const value = this.applyUnitOrString(this.el.heightInput.value, 'px');
+            this.selectedElement.style.height = value;
+            this.markDirty('Updated height.');
+        });
+
+        this.el.gapInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            const value = this.applyUnitOrString(this.el.gapInput.value, 'px');
+            this.selectedElement.style.gap = value;
+            this.markDirty('Updated gap.');
+        });
+
+        this.el.borderWidthInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            const value = this.applyUnitOrString(this.el.borderWidthInput.value, 'px');
+            this.selectedElement.style.borderWidth = value;
+            this.markDirty('Updated border width.');
+        });
+
+        this.el.borderStyleInput?.addEventListener('change', () => {
+            if (!this.selectedElement) return;
+            this.selectedElement.style.borderStyle = this.el.borderStyleInput.value;
+            this.markDirty('Updated border style.');
+        });
+
+        this.el.borderColorInput?.addEventListener('input', () => {
+            if (!this.selectedElement) return;
+            this.selectedElement.style.borderColor = this.el.borderColorInput.value;
+            this.markDirty('Updated border color.');
+        });
+
+        this.el.overflowInput?.addEventListener('change', () => {
+            if (!this.selectedElement) return;
+            this.selectedElement.style.overflow = this.el.overflowInput.value;
+            this.markDirty('Updated overflow.');
         });
 
         document.addEventListener('project-workspace:state-change', this.handleWorkspaceStateChange);
         document.addEventListener('keydown', this.handleGlobalKeydown);
+
+        // Collapsible inspector sections
+        document.querySelectorAll('.design-mode-section-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const section = btn.closest('.design-mode-section');
+                if (!section) return;
+                const isExpanded = btn.getAttribute('aria-expanded') !== 'false';
+                btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+                section.classList.toggle('collapsed', isExpanded);
+            });
+        });
     }
 
     setMode(nextMode = 'edit') {
@@ -626,7 +700,19 @@ class DesignModeController {
         this.el.textAlignInput.value = computed.textAlign !== 'start' ? (computed.textAlign || '') : 'left';
         this.el.displayInput.value = computed.display || '';
         this.el.flexDirInput.value = computed.flexDirection || '';
-        this.el.opacityInput.value = computed.opacity || '';
+
+        const opacityVal = computed.opacity || '1';
+        this.el.opacityInput.value = opacityVal;
+        if (this.el.opacityValue) this.el.opacityValue.textContent = opacityVal;
+
+        if (this.el.letterSpacingInput) this.el.letterSpacingInput.value = this.parsePixelValue(computed.letterSpacing) || '';
+        if (this.el.widthInput) this.el.widthInput.value = this.simplifyValue(computed.width) || '';
+        if (this.el.heightInput) this.el.heightInput.value = this.simplifyValue(computed.height) || '';
+        if (this.el.gapInput) this.el.gapInput.value = this.simplifyValue(computed.gap) || '';
+        if (this.el.borderWidthInput) this.el.borderWidthInput.value = this.simplifyValue(computed.borderTopWidth) || '';
+        if (this.el.borderStyleInput) this.el.borderStyleInput.value = computed.borderTopStyle !== 'none' ? (computed.borderTopStyle || '') : '';
+        if (this.el.borderColorInput) this.el.borderColorInput.value = this.toHexColor(computed.borderTopColor, '#333333');
+        if (this.el.overflowInput) this.el.overflowInput.value = computed.overflow || '';
     }
 
     resetInspector() {
@@ -644,7 +730,16 @@ class DesignModeController {
         this.el.displayInput.value = '';
         this.el.flexDirInput.value = '';
         this.el.marginInput.value = '';
-        this.el.opacityInput.value = '';
+        this.el.opacityInput.value = '1';
+        if (this.el.opacityValue) this.el.opacityValue.textContent = '1';
+        if (this.el.letterSpacingInput) this.el.letterSpacingInput.value = '';
+        if (this.el.widthInput) this.el.widthInput.value = '';
+        if (this.el.heightInput) this.el.heightInput.value = '';
+        if (this.el.gapInput) this.el.gapInput.value = '';
+        if (this.el.borderWidthInput) this.el.borderWidthInput.value = '';
+        if (this.el.borderStyleInput) this.el.borderStyleInput.value = '';
+        if (this.el.borderColorInput) this.el.borderColorInput.value = '#333333';
+        if (this.el.overflowInput) this.el.overflowInput.value = '';
     }
 
     describeElement(element) {
