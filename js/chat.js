@@ -476,6 +476,20 @@ function resolveWorkspaceContextPayload() {
     return fallback && typeof fallback === 'object' ? fallback : null;
 }
 
+function resolveOutgoingUserMessage(rawMessage) {
+    const baseMessage = String(rawMessage || '');
+    if (!isProjectWorkspaceMode()) {
+        return { message: baseMessage, usedProjectBootstrap: false };
+    }
+    if (window.projectWorkspace?.buildBootstrapContextForTurn) {
+        const contextualized = window.projectWorkspace.buildBootstrapContextForTurn(baseMessage);
+        if (typeof contextualized === 'string' && contextualized.trim()) {
+            return { message: contextualized, usedProjectBootstrap: true };
+        }
+    }
+    return { message: baseMessage, usedProjectBootstrap: false };
+}
+
 function isProjectWorkspaceMode() {
     const ctx = window.projectContext || window.activeProjectContext || null;
     if (!ctx || typeof ctx !== 'object') {
@@ -2559,9 +2573,11 @@ async function handleSendMessage() {
 
         const contextSessionIds = selectedSessions.map(session => session.session_id);
 
+        const outgoingMessage = resolveOutgoingUserMessage(messageWithHistory);
+
         const messageData = {
             conversationId: currentConversationId,
-            message: messageWithHistory, // Send with history
+            message: outgoingMessage.message, // Send with hidden project context when needed
             id: messageId,
             files: attachedFiles,
             context_session_ids: contextSessionIds,
@@ -2575,6 +2591,9 @@ async function handleSendMessage() {
 
         try {
             ipcRenderer.send('send-message', messageData);
+            if (outgoingMessage.usedProjectBootstrap) {
+                window.projectWorkspace?.markBootstrapContextSent?.();
+            }
         } catch (error) {
             console.error('Error sending message:', error);
             populateBotMessage({ content: 'Error sending message', id: messageId });
@@ -2616,9 +2635,11 @@ async function handleSendMessage() {
 
     const contextSessionIds = selectedSessions.map(session => session.session_id);
 
+    const outgoingMessage = resolveOutgoingUserMessage(message);
+
     const messageData = {
         conversationId: currentConversationId,
-        message: message,
+        message: outgoingMessage.message,
         id: messageId,
         files: attachedFiles,
         context_session_ids: contextSessionIds,
@@ -2632,6 +2653,9 @@ async function handleSendMessage() {
 
     try {
         ipcRenderer.send('send-message', messageData);
+        if (outgoingMessage.usedProjectBootstrap) {
+            window.projectWorkspace?.markBootstrapContextSent?.();
+        }
 
         // Check if session has content after sending (files will be registered by backend)
         if (attachedFiles.length > 0) {

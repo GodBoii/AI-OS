@@ -947,6 +947,31 @@ class ArtifactHandler {
         return this.artifacts.get(activeId) || null;
     }
 
+    getExistingDeployTarget() {
+        const projectContext =
+            (window.projectWorkspace && window.projectWorkspace.activeProject)
+            || window.projectContext
+            || window.activeProjectContext
+            || null;
+
+        if (!projectContext || typeof projectContext !== 'object') {
+            return null;
+        }
+
+        const siteId = String(projectContext.site_id || '').trim();
+        if (!siteId) {
+            return null;
+        }
+
+        return {
+            site_id: siteId,
+            project_name: String(projectContext.project_name || '').trim() || null,
+            slug: String(projectContext.slug || '').trim() || null,
+            hostname: String(projectContext.hostname || '').trim() || null,
+            deployment_id: String(projectContext.deployment_id || '').trim() || null,
+        };
+    }
+
     isHtmlContent(content) {
         const text = String(content || '').trim().toLowerCase();
         if (!text) return false;
@@ -1499,12 +1524,18 @@ class ArtifactHandler {
             return;
         }
 
-        const siteId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `site-${Date.now()}`;
-        const slugSource = artifact.title || 'generated-site';
-        const generatedSlug = this.slugify(slugSource);
+        const existingTarget = this.getExistingDeployTarget();
+        const siteId = existingTarget?.site_id
+            || ((window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `site-${Date.now()}`);
+        const projectName = artifact.title || existingTarget?.project_name || 'Generated Site';
+        const slugSource = existingTarget?.slug || artifact.title || 'generated-site';
+        const generatedSlug = existingTarget?.slug || this.slugify(slugSource);
 
         this.deployInProgress = true;
-        this.showNotification('Deploy started...', 'info');
+        this.showNotification(
+            existingTarget?.site_id ? 'Creating a new deployment version...' : 'Deploy started...',
+            'info'
+        );
 
         try {
             const sessionFiles = await this.collectSessionDeployFiles(session.access_token);
@@ -1541,7 +1572,7 @@ class ArtifactHandler {
 
             await this.deployApi('/api/deploy/site/init', session.access_token, {
                 site_id: siteId,
-                project_name: artifact.title || 'Generated Site',
+                project_name: projectName,
                 slug
             });
 
@@ -1558,6 +1589,17 @@ class ArtifactHandler {
             });
 
             const liveUrl = activated?.url || `https://${slug}.pawsitivestrides.store`;
+            if (existingTarget?.site_id && window.projectWorkspace?.ensureContext) {
+                window.projectWorkspace.ensureContext({
+                    site_id: siteId,
+                    deployment_id: upload.deployment_id,
+                    project_name: projectName,
+                    slug,
+                    hostname: (activated?.url ? new URL(activated.url).hostname : (existingTarget.hostname || null)),
+                    version: upload.version,
+                    r2_prefix: upload.r2_prefix,
+                }, { syncUi: true });
+            }
             this.showNotification(`Deployed: ${liveUrl}`, 'success');
 
             if (window.electron?.shell?.openExternal) {
