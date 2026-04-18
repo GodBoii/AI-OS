@@ -224,25 +224,25 @@ body.project-panel-open .design-mode-overlay {
 }
 
 .design-mode-tab {
-    height: 30px;
+    height: 32px; /* Matches action buttons */
     border: none;
-    background: transparent;
-    color: var(--dm-text-secondary);
+    background: #FFF8F0; /* Cream white for dark mode */
+    color: #1a1a1a;
     border-radius: 4px;
-    padding: 0 11px;
+    padding: 0 13px;
     cursor: pointer;
     font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.74rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.005em;
-    transition: all 0.18s var(--dm-ease);
+    letter-spacing: 0.01em;
+    transition: background 0.18s ease, color 0.18s ease;
     -webkit-app-region: no-drag;
     white-space: nowrap;
 }
 
 .design-mode-tab:hover {
-    color: var(--dm-text);
-    background: rgba(255, 255, 255, 0.06);
+    background: #FFE8D6;
+    color: #1a1a1a;
 }
 
 /* Dark mode: Cream white background with black text for ACTIVE tab */
@@ -250,7 +250,7 @@ body.project-panel-open .design-mode-overlay {
     background: #FFF8F0 !important;
     border: none !important;
     color: #1a1a1a !important;
-    box-shadow: none !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important; /* Gentle indent for active state */
 }
 
 /* Dark mode: Action buttons */
@@ -1045,12 +1045,23 @@ body:not(.dark-mode) .design-mode-section {
     border-bottom-color: transparent; /* No borders in flat UI */
 }
 
+/* Light mode: Base tab styles match action buttons */
+body:not(.dark-mode) .design-mode-tab {
+    background: #2d3748;
+    color: #ffffff;
+}
+
+body:not(.dark-mode) .design-mode-tab:hover {
+    background: #1a202c;
+    color: #ffffff;
+}
+
 /* Light mode: Dark background with white text for ACTIVE tab */
 body:not(.dark-mode) .design-mode-tab.active {
     background: #2d3748 !important; /* Dark gray/light black - !important to override */
     border: none;
     color: #ffffff !important; /* White text */
-    box-shadow: none;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
 }
 
 body:not(.dark-mode) .design-mode-notes {
