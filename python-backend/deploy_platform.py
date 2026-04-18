@@ -233,13 +233,50 @@ def create_or_get_site(site_id: str, user_id: str, project_name: str, slug: str)
     safe_slug = _validate_slug(slug)
     with _engine.begin() as conn:
         existing = conn.execute(
-            text("select id, user_id, slug, status from platform_sites where id = :site_id"),
+            text("select id, user_id, project_name, slug, status from platform_sites where id = :site_id"),
             {"site_id": site_id},
         ).mappings().first()
         if existing:
             if str(existing["user_id"]) != str(user_id):
                 raise PermissionError("Unauthorized site access")
-            return dict(existing)
+
+            slug_owner = conn.execute(
+                text("select id from platform_sites where slug = :slug and id <> :site_id"),
+                {"slug": safe_slug, "site_id": site_id},
+            ).mappings().first()
+            if slug_owner:
+                raise ValueError(f"Slug '{safe_slug}' is already in use")
+
+            conn.execute(
+                text(
+                    """
+                    update platform_sites
+                    set project_name = :project_name,
+                        slug = :slug,
+                        updated_at = now()
+                    where id = :site_id
+                    """
+                ),
+                {
+                    "site_id": site_id,
+                    "project_name": project_name,
+                    "slug": safe_slug,
+                },
+            )
+            return {
+                "id": site_id,
+                "user_id": user_id,
+                "project_name": project_name,
+                "slug": safe_slug,
+                "status": existing["status"],
+            }
+
+        slug_owner = conn.execute(
+            text("select id from platform_sites where slug = :slug"),
+            {"slug": safe_slug},
+        ).mappings().first()
+        if slug_owner:
+            raise ValueError(f"Slug '{safe_slug}' is already in use")
 
         conn.execute(
             text(
@@ -255,7 +292,13 @@ def create_or_get_site(site_id: str, user_id: str, project_name: str, slug: str)
                 "slug": safe_slug,
             },
         )
-    return {"id": site_id, "user_id": user_id, "slug": safe_slug, "status": "draft"}
+    return {
+        "id": site_id,
+        "user_id": user_id,
+        "project_name": project_name,
+        "slug": safe_slug,
+        "status": "draft",
+    }
 
 
 def assign_subdomain(site_id: str, user_id: str) -> dict[str, Any]:
@@ -264,12 +307,28 @@ def assign_subdomain(site_id: str, user_id: str) -> dict[str, Any]:
     hostname = f"{site['slug']}.{deploy_domain}"
 
     with _engine.begin() as conn:
+        conflicting = conn.execute(
+            text(
+                """
+                select site_id
+                from platform_domains
+                where hostname = :hostname and site_id <> :site_id
+                """
+            ),
+            {"hostname": hostname, "site_id": site_id},
+        ).mappings().first()
+        if conflicting:
+            raise ValueError(f"Hostname '{hostname}' is already assigned to another site")
+
+        conn.execute(
+            text("delete from platform_domains where site_id = :site_id"),
+            {"site_id": site_id},
+        )
         conn.execute(
             text(
                 """
                 insert into platform_domains (id, site_id, hostname, is_primary, ssl_status)
                 values (:id, :site_id, :hostname, true, 'active')
-                on conflict (hostname) do update set site_id = excluded.site_id
                 """
             ),
             {"id": str(uuid.uuid4()), "site_id": site_id, "hostname": hostname},
@@ -601,6 +660,16 @@ def activate_deployment(site_id: str, user_id: str, deployment_id: str) -> dict[
             text(
                 """
                 update platform_deployments
+                set status = 'inactive'
+                where site_id = :site_id and id <> :deployment_id and status = 'active'
+                """
+            ),
+            {"site_id": site_id, "deployment_id": deployment_id},
+        )
+        conn.execute(
+            text(
+                """
+                update platform_deployments
                 set status = 'active', activated_at = now()
                 where id = :deployment_id
                 """
@@ -830,61 +899,96 @@ def list_user_sites(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
 
 def list_deployed_projects(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
     """
-    List deployed projects for a user with one representative deployment per site
-    (prefers active deployment, otherwise latest version).
+    List deployed projects for a user grouped by site, while preserving the
+    full deployment/version history for each site.
     """
     lim = max(1, min(int(limit or 20), 100))
     with _engine.connect() as conn:
         rows = conn.execute(
             text(
                 """
-                with ranked as (
-                  select
-                    s.id as site_id,
-                    s.project_name,
-                    s.slug,
-                    s.status as site_status,
-                    s.updated_at,
-                    d.hostname,
-                    dep.id as deployment_id,
-                    dep.version,
-                    dep.r2_prefix,
-                    dep.status as deployment_status,
-                    dep.created_at as deployment_created_at,
-                    dep.activated_at,
-                    row_number() over (
-                      partition by s.id
-                      order by (dep.status = 'active') desc, dep.version desc
-                    ) as rn
-                  from platform_sites s
-                  join platform_deployments dep
-                    on dep.site_id = s.id
-                  left join platform_domains d
-                    on d.site_id = s.id and d.is_primary = true
-                  where s.user_id = :user_id
-                )
                 select
-                  site_id,
-                  project_name,
-                  slug,
-                  site_status,
-                  hostname,
-                  deployment_id,
-                  version,
-                  r2_prefix,
-                  deployment_status,
-                  deployment_created_at,
-                  activated_at,
-                  updated_at
-                from ranked
-                where rn = 1
-                order by updated_at desc
-                limit :lim
+                  s.id as site_id,
+                  s.project_name,
+                  s.slug,
+                  s.status as site_status,
+                  s.updated_at,
+                  d.hostname,
+                  dep.id as deployment_id,
+                  dep.version,
+                  dep.r2_prefix,
+                  dep.status as deployment_status,
+                  dep.created_at as deployment_created_at,
+                  dep.activated_at
+                from platform_sites s
+                join platform_deployments dep
+                  on dep.site_id = s.id
+                left join platform_domains d
+                  on d.site_id = s.id and d.is_primary = true
+                where s.user_id = :user_id
+                order by s.updated_at desc, dep.version desc
                 """
             ),
-            {"user_id": str(user_id), "lim": lim},
+            {"user_id": str(user_id)},
         ).mappings().all()
-    return [dict(r) for r in rows]
+
+    grouped: list[dict[str, Any]] = []
+    by_site: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        item = dict(row)
+        site_id = str(item["site_id"])
+        deployment = {
+            "site_id": site_id,
+            "project_name": item["project_name"],
+            "slug": item["slug"],
+            "site_status": item["site_status"],
+            "hostname": item["hostname"],
+            "deployment_id": item["deployment_id"],
+            "version": item["version"],
+            "r2_prefix": item["r2_prefix"],
+            "deployment_status": item["deployment_status"],
+            "deployment_created_at": item["deployment_created_at"],
+            "activated_at": item["activated_at"],
+            "updated_at": item["updated_at"],
+        }
+
+        project = by_site.get(site_id)
+        if not project:
+            project = {
+                "site_id": site_id,
+                "project_name": item["project_name"],
+                "slug": item["slug"],
+                "site_status": item["site_status"],
+                "hostname": item["hostname"],
+                "updated_at": item["updated_at"],
+                "deployments": [],
+            }
+            by_site[site_id] = project
+            grouped.append(project)
+
+        project["deployments"].append(deployment)
+
+    normalized: list[dict[str, Any]] = []
+    for project in grouped[:lim]:
+        deployments = list(project.get("deployments") or [])
+        deployments.sort(
+            key=lambda dep: (
+                0 if str(dep.get("deployment_status") or "").lower() == "active" else 1,
+                -(int(dep.get("version") or 0)),
+            )
+        )
+        representative = deployments[0] if deployments else {}
+        normalized.append(
+            {
+                **project,
+                **representative,
+                "deployments": deployments,
+                "deployment_count": len(deployments),
+            }
+        )
+
+    return normalized
 
 
 def list_user_databases(user_id: str, limit: int = 50) -> list[dict[str, Any]]:

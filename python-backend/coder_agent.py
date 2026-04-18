@@ -10,6 +10,7 @@ from agno.tools import Toolkit
 from user_file_vault_tools import UserFileVaultTools
 from deployed_project_tools import DeployedProjectTools
 from github_tools import GitHubTools
+from agno.models.google import Gemini
 from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
@@ -99,7 +100,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=OpenRouter(id="minimax/minimax-m2.5:free"),
+        model=Gemini(id="gemini-2.5-flash"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
