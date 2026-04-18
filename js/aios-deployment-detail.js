@@ -283,14 +283,9 @@ if (window.AIOS) {
 
             files = Array.isArray(payload?.files) ? payload.files : [];
         } catch (error) {
-            console.warn('[AIOS] Failed to load deployment files from API, using fallback sample:', error.message);
-            files = [
-                { path: 'index.html', size: 2048 },
-                { path: 'styles.css', size: 1024 },
-                { path: 'script.js', size: 3072 },
-                { path: 'assets/logo.png', size: 15360 },
-                { path: 'assets/favicon.ico', size: 4096 }
-            ];
+            console.warn('[AIOS] Failed to load deployment files from API:', error.message);
+            fileTreeList.innerHTML = '<li class="deployment-file-tree-item"><i class="fas fa-exclamation-circle"></i> Could not load file structure</li>';
+            return;
         }
 
         if (files.length === 0) {

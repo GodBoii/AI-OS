@@ -1706,8 +1706,19 @@ class AIOS {
         empty.classList.add('hidden');
 
         items.forEach((project) => {
-            const status = this._safeText(project.deployment_status, 'unknown').toLowerCase();
-            const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
+            const deployments = Array.isArray(project.deployments) && project.deployments.length
+                ? [...project.deployments]
+                : [project];
+            deployments.sort((a, b) => {
+                const aStatus = String(a?.deployment_status || '').toLowerCase() === 'active' ? 0 : 1;
+                const bStatus = String(b?.deployment_status || '').toLowerCase() === 'active' ? 0 : 1;
+                if (aStatus !== bStatus) return aStatus - bStatus;
+                return Number(b?.version || 0) - Number(a?.version || 0);
+            });
+
+            let selectedDeployment = deployments.find((item) => String(item?.deployment_status || '').toLowerCase() === 'active')
+                || deployments[0]
+                || project;
             
             const card = document.createElement('div');
             card.className = 'settings-card';
@@ -1717,31 +1728,85 @@ class AIOS {
                         <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
                     </div>
                     <div class="settings-card-actions">
+                        <div class="deployment-version-picker ${deployments.length > 1 ? '' : 'single'}">
+                            <label class="deployment-version-label" for="deployment-version-${this._safeText(project.site_id)}">Version</label>
+                            <select class="deployment-version-select" id="deployment-version-${this._safeText(project.site_id)}">
+                                ${deployments.map((item) => `
+                                    <option value="${this._safeText(item.deployment_id)}">
+                                        v${this._safeText(item.version)}
+                                        ${String(item?.deployment_status || '').toLowerCase() === 'active' ? ' • Active' : ''}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
                         <button class="start-project-coding-btn" title="Start Coding Workspace">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                             <span>Start Coding</span>
                         </button>
-                        <button class="expand-deployment-btn" title="View Details" data-project='${JSON.stringify(project).replace(/'/g, "&apos;")}'>
+                        <button class="expand-deployment-btn" title="View Details">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
                         </button>
-                        <span class="settings-badge ${badgeClass}">${this._safeText(project.deployment_status, 'unknown')}</span>
+                        <span class="settings-badge deployment-status-badge"></span>
                     </div>
                 </div>
                 <div class="settings-meta-grid">
-                    <div><strong>Site ID</strong><span>${this._safeText(project.site_id)}</span></div>
-                    <div><strong>Slug</strong><span>${this._safeText(project.slug)}</span></div>
-                    <div><strong>Hostname</strong><span>${this._safeText(project.hostname)}</span></div>
-                    <div><strong>Version</strong><span>v${this._safeText(project.version)}</span></div>
-                    <div><strong>Deployment ID</strong><span>${this._safeText(project.deployment_id)}</span></div>
-                    <div><strong>R2 Prefix</strong><span>${this._safeText(project.r2_prefix)}</span></div>
+                    <div><strong>Site ID</strong><span data-field="site_id"></span></div>
+                    <div><strong>Slug</strong><span data-field="slug"></span></div>
+                    <div><strong>Hostname</strong><span data-field="hostname"></span></div>
+                    <div><strong>Version</strong><span data-field="version"></span></div>
+                    <div><strong>Deployment ID</strong><span data-field="deployment_id"></span></div>
+                    <div><strong>R2 Prefix</strong><span data-field="r2_prefix"></span></div>
                 </div>
             `;
-            
-            // Add click handler for expand button
+
+            const versionSelect = card.querySelector('.deployment-version-select');
+            const statusBadge = card.querySelector('.deployment-status-badge');
+            const fieldNodes = {
+                site_id: card.querySelector('[data-field="site_id"]'),
+                slug: card.querySelector('[data-field="slug"]'),
+                hostname: card.querySelector('[data-field="hostname"]'),
+                version: card.querySelector('[data-field="version"]'),
+                deployment_id: card.querySelector('[data-field="deployment_id"]'),
+                r2_prefix: card.querySelector('[data-field="r2_prefix"]'),
+            };
+
+            const applyDeploymentSelection = (deploymentId) => {
+                const match = deployments.find((item) => String(item?.deployment_id) === String(deploymentId))
+                    || selectedDeployment;
+                selectedDeployment = match || selectedDeployment;
+
+                const status = this._safeText(selectedDeployment?.deployment_status, 'unknown').toLowerCase();
+                const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
+                if (statusBadge) {
+                    statusBadge.className = `settings-badge deployment-status-badge ${badgeClass}`.trim();
+                    statusBadge.textContent = this._safeText(selectedDeployment?.deployment_status, 'unknown');
+                }
+                if (fieldNodes.site_id) fieldNodes.site_id.textContent = this._safeText(project.site_id);
+                if (fieldNodes.slug) fieldNodes.slug.textContent = this._safeText(project.slug);
+                if (fieldNodes.hostname) fieldNodes.hostname.textContent = this._safeText(selectedDeployment?.hostname || project.hostname);
+                if (fieldNodes.version) fieldNodes.version.textContent = `v${this._safeText(selectedDeployment?.version)}`;
+                if (fieldNodes.deployment_id) fieldNodes.deployment_id.textContent = this._safeText(selectedDeployment?.deployment_id);
+                if (fieldNodes.r2_prefix) fieldNodes.r2_prefix.textContent = this._safeText(selectedDeployment?.r2_prefix);
+                if (versionSelect) {
+                    versionSelect.value = String(selectedDeployment?.deployment_id || '');
+                    versionSelect.disabled = deployments.length <= 1;
+                }
+            };
+
+            applyDeploymentSelection(selectedDeployment?.deployment_id);
+
+            versionSelect?.addEventListener('change', (event) => {
+                applyDeploymentSelection(event.target?.value);
+            });
+
             const expandBtn = card.querySelector('.expand-deployment-btn');
             expandBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showDeploymentDetail(project);
+                this.showDeploymentDetail({
+                    ...project,
+                    ...selectedDeployment,
+                    deployments,
+                });
             });
 
             const startCodingBtn = card.querySelector('.start-project-coding-btn');
@@ -1751,11 +1816,12 @@ class AIOS {
                 document.dispatchEvent(new CustomEvent('project-workspace:open', {
                     detail: {
                         site_id: project.site_id,
-                        deployment_id: project.deployment_id,
+                        deployment_id: selectedDeployment?.deployment_id,
                         project_name: project.project_name,
                         slug: project.slug,
-                        hostname: project.hostname,
-                        r2_prefix: project.r2_prefix
+                        hostname: selectedDeployment?.hostname || project.hostname,
+                        r2_prefix: selectedDeployment?.r2_prefix,
+                        version: selectedDeployment?.version,
                     }
                 }));
 
@@ -1764,7 +1830,10 @@ class AIOS {
                 }
 
                 this.hideWindow();
-                this.showNotification(`Opened coding workspace for ${this._safeText(project.project_name, 'project')}`, 'success');
+                this.showNotification(
+                    `Opened coding workspace for ${this._safeText(project.project_name, 'project')} (v${this._safeText(selectedDeployment?.version)})`,
+                    'success'
+                );
             });
             
             list.appendChild(card);
