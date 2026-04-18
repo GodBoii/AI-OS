@@ -180,7 +180,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: false,
+        frame: true,
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });
@@ -364,6 +364,36 @@ function createWindow() {
             repoUrl: body.repoUrl,
             branch: body.branch || 'main',
             parentFolder: selectedFolder,
+        });
+    });
+
+    ipcMain.handle('project-local-import-files', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+
+        const body = payload && typeof payload === 'object' ? payload : {};
+        let selectedFolder = String(body.parentFolder || '').trim();
+        if (!selectedFolder) {
+            const selection = await dialog.showOpenDialog(mainWindow, {
+                title: 'Choose Location For Deployed Project',
+                properties: ['openDirectory', 'createDirectory'],
+                buttonLabel: 'Save Project Here',
+            });
+            if (selection.canceled || !selection.filePaths || selection.filePaths.length === 0) {
+                return { success: false, canceled: true };
+            }
+            selectedFolder = selection.filePaths[0];
+        }
+
+        return localCoderHandler.importProjectFiles({
+            conversationId: body.conversationId,
+            parentFolder: selectedFolder,
+            projectName: body.projectName,
+            files: Array.isArray(body.files) ? body.files : [],
+            repoUrl: body.repoUrl || null,
+            branch: body.branch || 'main',
+            metadata: body.metadata || {},
         });
     });
 

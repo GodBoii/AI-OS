@@ -182,6 +182,92 @@ class LocalCoderHandler {
         }
     }
 
+    async importProjectFiles({
+        conversationId,
+        parentFolder,
+        projectName,
+        files = [],
+        repoUrl = null,
+        branch = 'main',
+        metadata = {},
+    }) {
+        if (!parentFolder) {
+            return { success: false, error: 'Target folder is required' };
+        }
+        if (!Array.isArray(files) || files.length === 0) {
+            return { success: false, error: 'No files provided for local import' };
+        }
+
+        const workspaceName = this._deriveWorkspaceName(projectName, metadata);
+        const branchName = String(branch || 'main').trim() || 'main';
+        const destinationPath = path.join(parentFolder, workspaceName);
+
+        try {
+            await fsp.mkdir(parentFolder, { recursive: true });
+
+            const exists = await this._pathExists(destinationPath);
+            if (exists) {
+                const entries = await fsp.readdir(destinationPath);
+                if (entries.length > 0) {
+                    return {
+                        success: false,
+                        error: `Destination already exists and is not empty: ${destinationPath}`,
+                    };
+                }
+            } else {
+                await fsp.mkdir(destinationPath, { recursive: true });
+            }
+
+            let writtenCount = 0;
+            for (const file of files) {
+                const relPath = String(file?.path || '').replace(/\\/g, '/').trim();
+                if (!relPath || relPath.endsWith('/') || relPath.split('/').includes('..')) {
+                    continue;
+                }
+
+                const target = this._resolveScopedPath(destinationPath, relPath);
+                if (!target.ok) {
+                    return { success: false, error: target.error };
+                }
+
+                let bytes = null;
+                if (typeof file.content_base64 === 'string' && file.content_base64.length > 0) {
+                    bytes = Buffer.from(file.content_base64, 'base64');
+                } else if (typeof file.content === 'string') {
+                    bytes = Buffer.from(file.content, 'utf8');
+                } else {
+                    return { success: false, error: `File '${relPath}' is missing content` };
+                }
+
+                await fsp.mkdir(path.dirname(target.path), { recursive: true });
+                await fsp.writeFile(target.path, bytes);
+                writtenCount += 1;
+            }
+
+            const mergedMetadata = metadata && typeof metadata === 'object' ? metadata : {};
+            const context = this.setWorkspaceContext(conversationId, {
+                root_path: destinationPath,
+                repo_url: repoUrl,
+                branch: branchName,
+                repo_name: workspaceName,
+                is_ready: true,
+                source_type: 'deployment',
+                ...mergedMetadata,
+            });
+
+            return {
+                success: true,
+                root_path: destinationPath,
+                repo_name: workspaceName,
+                branch: branchName,
+                file_count: writtenCount,
+                context,
+            };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
     async listWorkspaceTree({ conversationId, rootPath }) {
         const root = await this._resolveRootPath(conversationId, rootPath);
         if (!root.ok) return { success: false, error: root.error };
@@ -859,6 +945,23 @@ class LocalCoderHandler {
         const tail = clean.split('/').pop() || 'repository';
         const noGit = tail.endsWith('.git') ? tail.slice(0, -4) : tail;
         return noGit || 'repository';
+    }
+
+    _deriveWorkspaceName(projectName, metadata = {}) {
+        const raw = String(
+            projectName
+            || metadata?.slug
+            || metadata?.project_name
+            || metadata?.site_id
+            || 'workspace'
+        ).trim();
+        const sanitized = raw
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 80);
+        return sanitized || 'workspace';
     }
 
     _isIgnoredPath(relPath) {
