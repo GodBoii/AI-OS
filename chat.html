@@ -79,41 +79,56 @@
                     <div id="design-mode-selection-label" class="design-mode-selection-label">No element selected</div>
                 </div>
                 <div id="design-mode-edit-controls">
-                    <div class="design-mode-section">
-                        <div class="design-mode-section-title">Content</div>
-                        <div class="design-mode-control-group">
-                            <label class="design-mode-label" for="design-mode-text-input" style="display:none;">Text</label>
-                            <textarea id="design-mode-text-input" class="design-mode-textarea" rows="2" placeholder="Select an element to edit text..."></textarea>
+                    <!-- ═══ CONTENT ═══ -->
+                    <div class="design-mode-section" data-dm-section="content">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Content</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-control-group">
+                                <textarea id="design-mode-text-input" class="design-mode-textarea" rows="2" placeholder="Select an element to edit text..."></textarea>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="design-mode-section">
-                        <div class="design-mode-section-title">Typography</div>
-                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-font-size-input">Size</label>
-                                <input id="design-mode-font-size-input" class="design-mode-number-input" type="number" min="0" step="1" placeholder="px" />
+                    <!-- ═══ TYPOGRAPHY ═══ -->
+                    <div class="design-mode-section" data-dm-section="typography">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Typography</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-font-size-input">Size</label>
+                                    <input id="design-mode-font-size-input" class="design-mode-number-input" type="number" min="0" step="1" placeholder="px" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-font-weight-input">Weight</label>
+                                    <select id="design-mode-font-weight-input" class="design-mode-select">
+                                        <option value="">Auto</option>
+                                        <option value="300">Light (300)</option>
+                                        <option value="400">Regular (400)</option>
+                                        <option value="500">Medium (500)</option>
+                                        <option value="600">Semi (600)</option>
+                                        <option value="700">Bold (700)</option>
+                                        <option value="800">Extra (800)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-line-height-input">Line Height</label>
+                                    <input id="design-mode-line-height-input" class="design-mode-number-input" type="number" step="0.1" placeholder="em/px" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-letter-spacing-input">Spacing</label>
+                                    <input id="design-mode-letter-spacing-input" class="design-mode-number-input" type="number" step="0.1" placeholder="px" />
+                                </div>
                             </div>
                             <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-font-weight-input">Weight</label>
-                                <select id="design-mode-font-weight-input" class="design-mode-select">
-                                    <option value="">Auto</option>
-                                    <option value="300">Light (300)</option>
-                                    <option value="400">Regular (400)</option>
-                                    <option value="500">Medium (500)</option>
-                                    <option value="600">SemiBold (600)</option>
-                                    <option value="700">Bold (700)</option>
-                                    <option value="800">ExtraBold (800)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="design-mode-inline-grid mt-2" style="grid-template-columns: 1fr 1fr; margin-top: 8px;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-line-height-input">Line Ht</label>
-                                <input id="design-mode-line-height-input" class="design-mode-number-input" type="number" step="0.1" placeholder="em/px" />
-                            </div>
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-text-align-input">Align</label>
+                                <label class="design-mode-label" for="design-mode-text-align-input">Alignment</label>
                                 <select id="design-mode-text-align-input" class="design-mode-select">
                                     <option value="">Auto</option>
                                     <option value="left">Left</option>
@@ -125,69 +140,151 @@
                         </div>
                     </div>
 
-                    <div class="design-mode-section">
-                        <div class="design-mode-section-title">Appearance</div>
-                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-bg-color">Fill</label>
-                                <div class="design-mode-color-picker-wrap">
-                                    <input id="design-mode-bg-color" class="design-mode-color-input" type="color" value="#ffffff" />
+                    <!-- ═══ APPEARANCE ═══ -->
+                    <div class="design-mode-section" data-dm-section="appearance">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Appearance</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-bg-color">Fill</label>
+                                    <div class="design-mode-color-wrap">
+                                        <input id="design-mode-bg-color" class="design-mode-color-input" type="color" value="#ffffff" />
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-text-color">Text</label>
-                                <div class="design-mode-color-picker-wrap">
-                                    <input id="design-mode-text-color" class="design-mode-color-input" type="color" value="#111111" />
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-text-color">Text</label>
+                                    <div class="design-mode-color-wrap">
+                                        <input id="design-mode-text-color" class="design-mode-color-input" type="color" value="#111111" />
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="design-mode-section">
-                        <div class="design-mode-section-title">Layout & Spacing</div>
-                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-display-input">Display</label>
-                                <select id="design-mode-display-input" class="design-mode-select">
-                                    <option value="">Auto</option>
-                                    <option value="block">block</option>
-                                    <option value="inline-block">inline-block</option>
-                                    <option value="flex">flex</option>
-                                    <option value="grid">grid</option>
-                                    <option value="none">none</option>
-                                </select>
-                            </div>
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-flex-dir-input">Flex Dir</label>
-                                <select id="design-mode-flex-dir-input" class="design-mode-select">
-                                    <option value="">Auto</option>
-                                    <option value="row">row</option>
-                                    <option value="column">column</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="design-mode-inline-grid mt-2" style="grid-template-columns: 1fr 1fr; margin-top: 8px;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-padding-input">Padding</label>
-                                <input id="design-mode-padding-input" class="design-mode-number-input" type="text" placeholder="e.g. 10px 20px" />
-                            </div>
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-margin-input">Margin</label>
-                                <input id="design-mode-margin-input" class="design-mode-number-input" type="text" placeholder="e.g. 10px auto" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="design-mode-section">
-                        <div class="design-mode-section-title">Borders & Effects</div>
-                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
-                            <div class="design-mode-control-group">
-                                <label class="design-mode-label" for="design-mode-radius-input">Radius</label>
-                                <input id="design-mode-radius-input" class="design-mode-number-input" type="text" placeholder="e.g. 8px" />
                             </div>
                             <div class="design-mode-control-group">
                                 <label class="design-mode-label" for="design-mode-opacity-input">Opacity</label>
-                                <input id="design-mode-opacity-input" class="design-mode-number-input" type="number" min="0" max="1" step="0.1" placeholder="0 - 1" />
+                                <div class="design-mode-range-row">
+                                    <input id="design-mode-opacity-input" class="design-mode-range-input" type="range" min="0" max="1" step="0.05" value="1" />
+                                    <span id="design-mode-opacity-value" class="design-mode-range-value">1</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ DIMENSIONS ═══ -->
+                    <div class="design-mode-section" data-dm-section="dimensions">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Dimensions</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-width-input">Width</label>
+                                    <input id="design-mode-width-input" class="design-mode-number-input" type="text" placeholder="auto" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-height-input">Height</label>
+                                    <input id="design-mode-height-input" class="design-mode-number-input" type="text" placeholder="auto" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ LAYOUT & SPACING ═══ -->
+                    <div class="design-mode-section" data-dm-section="layout">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Layout & Spacing</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-display-input">Display</label>
+                                    <select id="design-mode-display-input" class="design-mode-select">
+                                        <option value="">Auto</option>
+                                        <option value="block">Block</option>
+                                        <option value="inline-block">Inline Block</option>
+                                        <option value="flex">Flex</option>
+                                        <option value="inline-flex">Inline Flex</option>
+                                        <option value="grid">Grid</option>
+                                        <option value="none">None</option>
+                                    </select>
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-flex-dir-input">Direction</label>
+                                    <select id="design-mode-flex-dir-input" class="design-mode-select">
+                                        <option value="">Auto</option>
+                                        <option value="row">Row</option>
+                                        <option value="row-reverse">Row Reverse</option>
+                                        <option value="column">Column</option>
+                                        <option value="column-reverse">Col Reverse</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-gap-input">Gap</label>
+                                    <input id="design-mode-gap-input" class="design-mode-number-input" type="text" placeholder="0" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-overflow-input">Overflow</label>
+                                    <select id="design-mode-overflow-input" class="design-mode-select">
+                                        <option value="">Default</option>
+                                        <option value="visible">Visible</option>
+                                        <option value="hidden">Hidden</option>
+                                        <option value="scroll">Scroll</option>
+                                        <option value="auto">Auto</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-padding-input">Padding</label>
+                                    <input id="design-mode-padding-input" class="design-mode-number-input" type="text" placeholder="0" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-margin-input">Margin</label>
+                                    <input id="design-mode-margin-input" class="design-mode-number-input" type="text" placeholder="0" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ BORDERS & EFFECTS ═══ -->
+                    <div class="design-mode-section" data-dm-section="borders">
+                        <button class="design-mode-section-toggle" type="button" aria-expanded="true">
+                            <span class="design-mode-section-title">Borders & Effects</span>
+                            <svg class="design-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="design-mode-section-body">
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-radius-input">Radius</label>
+                                    <input id="design-mode-radius-input" class="design-mode-number-input" type="text" placeholder="0" />
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-border-width-input">Border</label>
+                                    <input id="design-mode-border-width-input" class="design-mode-number-input" type="text" placeholder="0" />
+                                </div>
+                            </div>
+                            <div class="design-mode-inline-grid">
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-border-style-input">Style</label>
+                                    <select id="design-mode-border-style-input" class="design-mode-select">
+                                        <option value="">None</option>
+                                        <option value="solid">Solid</option>
+                                        <option value="dashed">Dashed</option>
+                                        <option value="dotted">Dotted</option>
+                                        <option value="double">Double</option>
+                                    </select>
+                                </div>
+                                <div class="design-mode-control-group">
+                                    <label class="design-mode-label" for="design-mode-border-color-input">Color</label>
+                                    <div class="design-mode-color-wrap">
+                                        <input id="design-mode-border-color-input" class="design-mode-color-input" type="color" value="#333333" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
