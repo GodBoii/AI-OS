@@ -7,6 +7,8 @@ import time
 import requests
 import redis
 import base64
+import hashlib
+import mimetypes
 from typing import Any, Optional
 from urllib.parse import urlparse, unquote
 from flask import Blueprint, request, jsonify
@@ -22,6 +24,7 @@ from deploy_platform import (
     assign_subdomain,
     create_or_get_site,
     ensure_deploy_tables,
+    get_deployment_summary,
     get_site_runtime_db_credentials,
     get_site_db_credentials,
     get_deployment_file_bytes,
@@ -69,12 +72,80 @@ api_bp = Blueprint('api_bp', __name__, url_prefix='/api')
 # RunStateManager is a module-level singleton injected from the factory via
 # set_run_state_manager() below.
 _run_state_manager = None
+_PROJECT_WORKSPACE_ROOT = "/home/sandboxuser/workspace"
 
 
 def set_run_state_manager(manager):
     """Called by the factory to inject the shared RunStateManager instance."""
     global _run_state_manager
     _run_state_manager = manager
+
+
+def _load_project_workspace_session(conversation_id: str, user_id: str) -> dict[str, Any]:
+    redis_client = redis.from_url(config.REDIS_URL, decode_responses=True)
+    session_json = redis_client.get(f"session:{conversation_id}")
+    if not session_json:
+        raise LookupError("session not found")
+
+    session_data = json.loads(session_json) if isinstance(session_json, str) else (session_json or {})
+    if str(session_data.get("user_id")) != str(user_id):
+        raise PermissionError("Unauthorized session access")
+    return session_data
+
+
+def _resolve_project_workspace_sandbox_id(session_data: dict[str, Any]) -> Optional[str]:
+    sandbox_id = session_data.get("active_sandbox_id")
+    if sandbox_id:
+        return str(sandbox_id)
+    sandbox_ids = session_data.get("sandbox_ids", []) or []
+    return str(sandbox_ids[-1]) if sandbox_ids else None
+
+
+def _list_sandbox_workspace_rows(sandbox_id: str, path: str = _PROJECT_WORKSPACE_ROOT) -> list[dict[str, Any]]:
+    resp = requests.get(
+        f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files",
+        params={"path": path},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"failed to list sandbox files (HTTP {resp.status_code})")
+    return (resp.json() or {}).get("files", []) or []
+
+
+def _read_sandbox_workspace_bytes(sandbox_id: str, abs_path: str) -> bytes:
+    resp = requests.get(
+        f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files/content",
+        params={"filepath": abs_path},
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"failed to load sandbox file (HTTP {resp.status_code})")
+    payload = resp.json() or {}
+    encoded = payload.get("content", "") or ""
+    return base64.b64decode(encoded) if encoded else b""
+
+
+def _collect_workspace_upload_files(sandbox_id: str, project_directory: str = _PROJECT_WORKSPACE_ROOT) -> list[dict[str, Any]]:
+    rows = _list_sandbox_workspace_rows(sandbox_id=sandbox_id, path=project_directory)
+    upload_files: list[dict[str, Any]] = []
+
+    for item in rows:
+        abs_path = str(item.get("path", ""))
+        if not abs_path.startswith(project_directory.rstrip("/") + "/"):
+            continue
+        rel_path = abs_path[len(project_directory.rstrip("/")) + 1:].replace("\\", "/")
+        if not rel_path or ".." in rel_path.split("/"):
+            continue
+        content_bytes = _read_sandbox_workspace_bytes(sandbox_id=sandbox_id, abs_path=abs_path)
+        upload_files.append(
+            {
+                "path": rel_path,
+                "content_base64": base64.b64encode(content_bytes).decode("utf-8"),
+                "content_type": mimetypes.guess_type(rel_path)[0] or "application/octet-stream",
+            }
+        )
+
+    return upload_files
 
 
 # --- Run Status Endpoints (used for reconnect / catch-up) ---
@@ -1931,6 +2002,194 @@ def project_workspace_file_content():
     except Exception as e:
         logger.error(f"project/workspace/file-content failed: {e}", exc_info=True)
         return jsonify({"error": "failed to load workspace file content"}), 500
+
+
+@api_bp.route('/project/workspace/deployment-status', methods=['POST'])
+def project_workspace_deployment_status():
+    """
+    Compare current sandbox workspace against the selected deployment.
+    body: { conversation_id, site_id, deployment_id }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    conversation_id = str(body.get("conversation_id") or "").strip()
+    site_ref = str(body.get("site_id") or body.get("site_ref") or "").strip()
+    deployment_id = str(body.get("deployment_id") or "").strip()
+
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+    if not site_ref:
+        return jsonify({"error": "site_id is required"}), 400
+    if not deployment_id:
+        return jsonify({"error": "deployment_id is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        session_data = _load_project_workspace_session(conversation_id=conversation_id, user_id=str(user.id))
+        sandbox_id = _resolve_project_workspace_sandbox_id(session_data)
+        if not sandbox_id:
+            return jsonify({
+                "ok": True,
+                "modified": False,
+                "reason": "sandbox_unavailable",
+                "summary": {"new_files": [], "changed_files": [], "deleted_files": []},
+            }), 200
+
+        site = resolve_site_ref(user_id=str(user.id), site_ref=site_ref)
+        deployment = get_deployment_summary(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=deployment_id,
+        )
+
+        workspace_rows = _list_sandbox_workspace_rows(sandbox_id=sandbox_id, path=_PROJECT_WORKSPACE_ROOT)
+        workspace_map: dict[str, dict[str, Any]] = {}
+        workspace_hashes: dict[str, str] = {}
+
+        for row in workspace_rows:
+            abs_path = str(row.get("path", ""))
+            prefix = _PROJECT_WORKSPACE_ROOT.rstrip("/") + "/"
+            rel_path = abs_path[len(prefix):] if abs_path.startswith(prefix) else abs_path
+            rel_path = rel_path.replace("\\", "/").lstrip("/")
+            if not rel_path or ".." in rel_path.split("/"):
+                continue
+            workspace_map[rel_path] = row
+
+        deployment_files = list_deployment_files(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=str(deployment["id"]),
+        )
+        deployment_paths = {str(item.get("path", "")).replace("\\", "/").lstrip("/") for item in deployment_files}
+        workspace_paths = set(workspace_map.keys())
+
+        new_files = sorted(workspace_paths - deployment_paths)
+        deleted_files = sorted(deployment_paths - workspace_paths)
+        changed_files: list[str] = []
+
+        for item in deployment_files:
+            rel_path = str(item.get("path", "")).replace("\\", "/").lstrip("/")
+            if not rel_path or rel_path not in workspace_map:
+                continue
+
+            abs_path = str(workspace_map[rel_path].get("path", ""))
+            workspace_bytes = _read_sandbox_workspace_bytes(sandbox_id=sandbox_id, abs_path=abs_path)
+            workspace_hash = workspace_hashes.get(rel_path)
+            if not workspace_hash:
+                workspace_hash = hashlib.sha256(workspace_bytes).hexdigest()
+                workspace_hashes[rel_path] = workspace_hash
+
+            deployment_bytes = get_deployment_file_bytes(
+                site_id=str(site["id"]),
+                user_id=str(user.id),
+                path=rel_path,
+                deployment_id=str(deployment["id"]),
+            )
+            deployment_hash = hashlib.sha256(deployment_bytes).hexdigest()
+
+            if workspace_hash != deployment_hash:
+                changed_files.append(rel_path)
+
+        summary = {
+            "new_files": new_files,
+            "changed_files": sorted(changed_files),
+            "deleted_files": deleted_files,
+        }
+        return jsonify({
+            "ok": True,
+            "modified": bool(new_files or changed_files or deleted_files),
+            "reason": "ok",
+            "site_id": str(site["id"]),
+            "deployment_id": str(deployment["id"]),
+            "summary": summary,
+        }), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"project/workspace/deployment-status failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to compare workspace against deployment"}), 500
+
+
+@api_bp.route('/project/workspace/redeploy', methods=['POST'])
+def project_workspace_redeploy():
+    """
+    Redeploy the current cloud sandbox workspace for the selected site.
+    body: { conversation_id, site_id }
+    """
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    conversation_id = str(body.get("conversation_id") or "").strip()
+    site_ref = str(body.get("site_id") or body.get("site_ref") or "").strip()
+
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+    if not site_ref:
+        return jsonify({"error": "site_id is required"}), 400
+
+    try:
+        ensure_deploy_tables()
+        session_data = _load_project_workspace_session(conversation_id=conversation_id, user_id=str(user.id))
+        sandbox_id = _resolve_project_workspace_sandbox_id(session_data)
+        if not sandbox_id:
+            return jsonify({"error": "sandbox not found"}), 404
+        if not config.SANDBOX_API_URL:
+            return jsonify({"error": "SANDBOX_API_URL not configured"}), 500
+
+        site = resolve_site_ref(user_id=str(user.id), site_ref=site_ref)
+        upload_files = _collect_workspace_upload_files(sandbox_id=sandbox_id, project_directory=_PROJECT_WORKSPACE_ROOT)
+        if not upload_files:
+            return jsonify({"error": "No deployable files found in workspace"}), 400
+
+        has_index = any(str(item.get("path", "")).lower() == "index.html" for item in upload_files)
+        if not has_index:
+            return jsonify({"error": "Deployment must include index.html"}), 400
+
+        upload = upload_site_files(site_id=str(site["id"]), user_id=str(user.id), files=upload_files)
+        manifest = upsert_site_manifest(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=str(upload.deployment_id),
+        )
+        activation = activate_deployment(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=str(upload.deployment_id),
+        )
+        deployment = get_deployment_summary(
+            site_id=str(site["id"]),
+            user_id=str(user.id),
+            deployment_id=str(upload.deployment_id),
+        )
+        return jsonify({
+            "ok": True,
+            "site_id": str(site["id"]),
+            "deployment_id": str(upload.deployment_id),
+            "files_uploaded": upload.files_uploaded,
+            "version": deployment.get("version"),
+            "r2_prefix": deployment.get("r2_prefix"),
+            "deployment_status": deployment.get("status"),
+            "manifest": manifest,
+            **activation,
+        }), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"project/workspace/redeploy failed: {e}", exc_info=True)
+        return jsonify({"error": "failed to redeploy workspace"}), 500
 
 
 @api_bp.route('/deploy/activate', methods=['POST'])
