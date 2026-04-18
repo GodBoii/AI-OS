@@ -1557,7 +1557,7 @@ def deploy_files():
 def deploy_file_content():
     """
     Get one deployed file's content.
-    Query params: site_id|site_ref, path, deployment_id (optional)
+    Query params: site_id|site_ref, path, deployment_id (optional), include_base64(optional bool)
     """
     user, error = get_user_from_token(request)
     if error:
@@ -1566,6 +1566,7 @@ def deploy_file_content():
     site_ref = request.args.get("site_id") or request.args.get("site_ref") or "default"
     rel_path = (request.args.get("path") or "").strip()
     deployment_id = request.args.get("deployment_id")
+    include_base64 = str(request.args.get("include_base64") or "").strip().lower() in {"1", "true", "yes"}
     if not rel_path:
         return jsonify({"error": "path is required"}), 400
 
@@ -1581,17 +1582,20 @@ def deploy_file_content():
 
         is_binary = b"\x00" in (data or b"")
         if is_binary:
+            encoded = base64.b64encode(data or b"").decode("utf-8") if include_base64 else None
             return jsonify({
                 "ok": True,
                 "path": rel_path,
                 "is_binary": True,
                 "size_bytes": len(data or b""),
                 "content": None,
+                "content_base64": encoded,
             }), 200
 
         text_content = (data or b"").decode("utf-8", errors="replace")
         lim = 300_000
         truncated = text_content[:lim]
+        encoded = base64.b64encode(data or b"").decode("utf-8") if include_base64 else None
         return jsonify({
             "ok": True,
             "path": rel_path,
@@ -1599,6 +1603,7 @@ def deploy_file_content():
             "size_bytes": len(data or b""),
             "truncated": len(text_content) > len(truncated),
             "content": truncated,
+            "content_base64": encoded,
         }), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403

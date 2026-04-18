@@ -421,6 +421,75 @@ def upload_site_files(site_id: str, user_id: str, files: list[dict[str, Any]]) -
     )
 
 
+def _delete_r2_prefix(prefix: str) -> int:
+    safe_prefix = str(prefix or "").strip().rstrip("/")
+    if not safe_prefix:
+        return 0
+
+    bucket = _require_env("R2_SITES_BUCKET")
+    r2 = get_r2_client()
+    paginator = r2.client.get_paginator("list_objects_v2")
+    deleted = 0
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=f"{safe_prefix}/"):
+        keys = [
+            {"Key": str(item.get("Key"))}
+            for item in (page.get("Contents", []) or [])
+            if item.get("Key")
+        ]
+        if not keys:
+            continue
+
+        for start in range(0, len(keys), 1000):
+            batch = keys[start:start + 1000]
+            response = r2.client.delete_objects(
+                Bucket=bucket,
+                Delete={"Objects": batch, "Quiet": True},
+            )
+            deleted += len(response.get("Deleted", []) or [])
+
+    return deleted
+
+
+def prune_site_deployments(site_id: str, user_id: str, keep_count: int = 2) -> dict[str, Any]:
+    _ensure_site_owned(site_id=site_id, user_id=user_id)
+    keep = max(1, int(keep_count or 1))
+
+    with _engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                select id, version, r2_prefix, status
+                from platform_deployments
+                where site_id = :site_id
+                order by (status = 'active') desc, version desc, created_at desc
+                """
+            ),
+            {"site_id": site_id},
+        ).mappings().all()
+
+    if len(rows) <= keep:
+        return {"deleted_deployments": 0, "deleted_objects": 0}
+
+    victims = [dict(row) for row in rows[keep:]]
+    deleted_objects = 0
+
+    for victim in victims:
+        deleted_objects += _delete_r2_prefix(str(victim.get("r2_prefix") or ""))
+
+    with _engine.begin() as conn:
+        for victim in victims:
+            conn.execute(
+                text("delete from platform_deployments where site_id = :site_id and id = :deployment_id"),
+                {"site_id": site_id, "deployment_id": str(victim["id"])},
+            )
+
+    return {
+        "deleted_deployments": len(victims),
+        "deleted_objects": deleted_objects,
+    }
+
+
 def _safe_db_name(site_id: str) -> str:
     raw = f"site-{site_id}".lower().replace("_", "-")
     cleaned = re.sub(r"[^a-z0-9-]", "-", raw)
@@ -691,7 +760,14 @@ def activate_deployment(site_id: str, user_id: str, deployment_id: str) -> dict[
     else:
         host = host_row["hostname"]
 
-    return {"site_id": site_id, "deployment_id": deployment_id, "url": f"https://{host}", "active": True}
+    retention = prune_site_deployments(site_id=site_id, user_id=user_id, keep_count=2)
+    return {
+        "site_id": site_id,
+        "deployment_id": deployment_id,
+        "url": f"https://{host}",
+        "active": True,
+        **retention,
+    }
 
 
 def upsert_site_manifest(site_id: str, user_id: str, deployment_id: str) -> dict[str, Any]:
