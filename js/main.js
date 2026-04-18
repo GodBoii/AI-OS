@@ -243,6 +243,48 @@ function createWindow() {
         );
     });
 
+    // --- Agent Run Completion → Native OS Notification ---
+    mainProcessEmitter.on('run-completed', (data) => {
+        // Only show native notification when user is NOT actively using the app
+        const isBackgrounded = !mainWindow.isFocused() || mainWindow.isMinimized();
+        console.log('[main.js] Agent run completed:', {
+            conversationId: data?.conversationId || null,
+            title: data?.title || null,
+            isBackgrounded,
+        });
+
+        if (isBackgrounded && nativeNotificationService) {
+            const taskTitle = (data?.title || '').trim() || 'AI task';
+            const preview = (data?.preview || '').trim();
+            // Build notification body: title + first few lines of preview
+            let body = `Your "${taskTitle}" task is completed.`;
+            if (preview) {
+                // Take first ~200 chars of preview for the notification body
+                const previewSnippet = preview.length > 200
+                    ? preview.substring(0, 200) + '…'
+                    : preview;
+                body += `\n${previewSnippet}`;
+            }
+            nativeNotificationService.showNotification(
+                'Aetheria AI',
+                body,
+                {
+                    tag: `run-completed-${data?.conversationId || 'unknown'}`,
+                    urgency: 'normal',
+                    silent: false,
+                }
+            );
+        }
+    });
+
+    // --- Fix: Handle the toggle-native-notifications IPC from renderer settings ---
+    ipcMain.on('toggle-native-notifications', (event, enabled) => {
+        console.log('[main.js] Native notifications toggled:', enabled);
+        if (nativeNotificationService) {
+            nativeNotificationService.setEnabled(enabled);
+        }
+    });
+
     pythonBridge.start().catch(error => {
         console.error('Python bridge error:', error.message);
         mainWindow.webContents.on('did-finish-load', () => {

@@ -32,7 +32,9 @@ const validSendChannels = [
     'save-file-dialog',
     // User context channels
     'save-user-context',
-    'get-user-context'
+    'get-user-context',
+    // Notification settings
+    'toggle-native-notifications'
 ];
 
 const validReceiveChannels = [
@@ -76,7 +78,9 @@ const validReceiveChannels = [
     'save-file-result',
     // User context events
     'user-context-saved',
-    'user-context-retrieved'
+    'user-context-retrieved',
+    // Agent run lifecycle
+    'run-completed'
 ];
 
 const validInvokeChannels = [
