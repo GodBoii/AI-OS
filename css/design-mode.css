@@ -113,7 +113,7 @@ body.design-mode-active .design-mode-toggle-btn { display: none; }
 body.design-mode-active .chat-window { pointer-events: auto; }
 
 
-/* ── Overlay — full-screen canvas ─────────────────────────────── */
+/* ── Overlay — FLAT WITH ROUNDED CORNERS ─────────────────────────────── */
 .design-mode-overlay {
     position: fixed;
     /* Account for Electron OS title bar (~32px) and left nav rail (44px) */
@@ -123,17 +123,14 @@ body.design-mode-active .chat-window { pointer-events: auto; }
     bottom: 0;
     z-index: 1080;
 
-    /* Liquid glass surface */
+    /* FLAT: Solid background, no blur, no shadows */
     background: var(--dm-bg);
-    -webkit-backdrop-filter: blur(var(--dm-blur)) saturate(1.4);
-    backdrop-filter: blur(var(--dm-blur)) saturate(1.4);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 
-    border-radius: 0;
+    border-radius: 12px 0 0 0; /* Rounded top-left corner */
     border: none;
-    border-left: 1px solid var(--dm-border);
-    box-shadow:
-        inset 1px 0 0 rgba(255, 255, 255, 0.04),
-        -8px 0 32px rgba(0, 0, 0, 0.40);
+    box-shadow: none;
 
     pointer-events: auto;
     -webkit-app-region: no-drag;
@@ -166,17 +163,18 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Header — compact, single row ─────────────────────────────── */
+/* ── Header — FLAT, NO SPACING BELOW ─────────────────────────────── */
 .design-mode-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--dm-border);
-    background: rgba(255, 255, 255, 0.025);
+    padding: 10px 16px 10px; /* Consistent padding */
+    border-bottom: none;
+    background: transparent;
     flex-shrink: 0;
     min-height: 0;
     pointer-events: auto;
+    margin-bottom: 0; /* Zero margin */
 }
 
 /* Title block — tight */
@@ -196,7 +194,7 @@ body.project-panel-open .design-mode-overlay {
     white-space: nowrap;
 }
 
-/* Subtitle doubles as live status — small, muted */
+/* Subtitle doubles as live status — NO TOP MARGIN */
 .design-mode-subtitle {
     font-size: 0.7rem;
     font-weight: 400;
@@ -206,27 +204,31 @@ body.project-panel-open .design-mode-overlay {
     text-overflow: ellipsis;
     max-width: 420px;
     transition: color 0.2s ease;
+    margin-top: 0; /* No spacing between headers */
+    margin-bottom: 0; /* Remove bottom margin */
+    padding-top: 2px; /* Minimal spacing */
+    padding-bottom: 0; /* Remove bottom padding for zero spacing */
 }
 
-/* Mode toolstrip (Edit / Comment tabs) */
+/* Mode toolstrip (Edit / Comment tabs) — IMPROVED COLORS */
 .design-mode-toolstrip {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     padding: 3px;
-    border-radius: var(--dm-radius-lg);
-    border: 1px solid var(--dm-border);
-    background: var(--dm-surface-1);
+    border-radius: 6px;
+    border: none;
+    background: rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
     pointer-events: auto;
 }
 
 .design-mode-tab {
     height: 30px;
-    border: 1px solid transparent;
+    border: none;
     background: transparent;
     color: var(--dm-text-secondary);
-    border-radius: 7px;
+    border-radius: 4px;
     padding: 0 11px;
     cursor: pointer;
     font-family: var(--font-sans, 'Outfit', sans-serif);
@@ -240,17 +242,34 @@ body.project-panel-open .design-mode-overlay {
 
 .design-mode-tab:hover {
     color: var(--dm-text);
-    background: var(--dm-surface-hover);
+    background: rgba(255, 255, 255, 0.06);
 }
 
+/* Dark mode: Cream white background with black text for ACTIVE tab */
 .design-mode-tab.active {
-    background: var(--dm-accent-active-bg);
-    border-color: var(--dm-accent-border);
-    color: var(--dm-accent);
-    box-shadow: 0 0 12px var(--dm-accent-glow);
+    background: #FFF8F0 !important; /* Cream white - !important to override other rules */
+    border: none;
+    color: #1a1a1a !important; /* Black text */
+    box-shadow: none;
 }
 
-/* Actions row (Refresh, Done, Close) */
+/* Dark mode: Cream white background for action buttons */
+.design-mode-action-btn {
+    background: #FFF8F0; /* Cream white */
+    border: none;
+    color: #1a1a1a; /* Black text */
+    box-shadow: none;
+}
+
+/* Hover state for action buttons */
+.design-mode-action-btn:hover {
+    background: #FFE8D6; /* Slightly darker cream on hover */
+    color: #1a1a1a;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Actions row (Refresh, Done, Close) — FLAT */
 .design-mode-actions {
     display: inline-flex;
     align-items: center;
@@ -262,45 +281,46 @@ body.project-panel-open .design-mode-overlay {
 
 .design-mode-action-btn {
     height: 32px;
-    border: 1px solid var(--dm-border-strong);
-    background: var(--dm-surface-2);
-    color: var(--dm-text);
-    border-radius: var(--dm-radius-md);
+    border: none;
+    background: #FFF8F0; /* Cream white - matching Edit button */
+    color: #1a1a1a; /* Black text */
+    border-radius: 4px;
     padding: 0 13px;
     cursor: pointer;
     font-family: var(--font-sans, 'Outfit', sans-serif);
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.01em;
-    transition: all 0.18s var(--dm-ease);
+    transition: background 0.18s ease, color 0.18s ease;
     -webkit-app-region: no-drag;
     white-space: nowrap;
 }
 
 .design-mode-action-btn:hover {
-    background: var(--dm-surface-hover);
-    border-color: rgba(255, 255, 255, 0.22);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30);
-}
-
-.design-mode-action-btn:active {
-    transform: translateY(0);
+    background: #FFE8D6; /* Slightly darker cream on hover */
+    color: #1a1a1a;
+    transform: none;
     box-shadow: none;
 }
 
-/* Done button — vivid gradient */
+.design-mode-action-btn:active {
+    transform: scale(0.98);
+    box-shadow: none;
+}
+
+/* Done button — MATCHES OTHER BUTTONS */
 .design-mode-action-btn.primary {
-    background: var(--dm-accent-done);
-    border-color: rgba(249, 168, 212, 0.22);
-    color: #fff;
-    box-shadow: 0 0 18px rgba(236, 72, 153, 0.32);
+    background: #FFF8F0; /* Cream white - matching other buttons */
+    border: none;
+    color: #1a1a1a; /* Black text */
+    box-shadow: none;
 }
 
 .design-mode-action-btn.primary:hover {
-    box-shadow:
-        0 0 28px rgba(236, 72, 153, 0.45),
-        0 4px 16px rgba(0, 0, 0, 0.30);
+    background: #FFE8D6; /* Slightly darker cream on hover */
+    color: #1a1a1a;
+    filter: none;
+    box-shadow: none;
 }
 
 /* Icon-only close button — handled via inline style on the element */
@@ -311,40 +331,39 @@ body.project-panel-open .design-mode-overlay {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 245px;
     gap: 10px;
-    padding: 10px;
+    padding: 0 10px 10px 10px; /* Remove top padding for zero spacing */
     min-height: 0;
     overflow: hidden;
 }
 
 
-/* ── Preview panel ─────────────────────────────────────────────── */
+/* ── Preview panel — FLAT, NO SHADOWS ─────────────────────────────────────────── */
 .design-mode-preview-wrap {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    border-radius: var(--dm-radius-lg);
-    border: 1px solid var(--dm-border);
-    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0; /* Removed rounded corners */
+    border: none; /* Removed border */
+    background: #fff; /* Solid white background */
     overflow: hidden;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 4px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: none; /* Removed all shadows */
 }
 
-/* Slim status bar above the iframe */
+/* Slim status bar above the iframe — DARK BACKGROUND FOR CONTRAST */
 .design-mode-status {
     flex-shrink: 0;
     padding: 7px 14px;
-    border-bottom: 1px solid var(--dm-border);
-    background: var(--dm-surface-1);
-    color: var(--dm-text-muted);
-    font-size: 0.69rem;
+    margin-top: 0; /* Zero spacing from header */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08); /* Subtle separator */
+    background: rgba(0, 0, 0, 0.40); /* Dark semi-transparent background for contrast */
+    color: var(--dm-text); /* Light text color */
+    font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: color 0.25s ease;
+    transition: color 0.25s ease, background 0.25s ease;
 }
 
 /* The iframe — fills ALL remaining vertical space */
@@ -359,42 +378,41 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Inspector panel ───────────────────────────────────────────── */
+/* ── Inspector panel — FLAT, NO SHADOWS ───────────────────────────────────────── */
 .design-mode-inspector {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    border-radius: var(--dm-radius-lg);
-    border: 1px solid var(--dm-border);
-    background: rgba(255, 255, 255, 0.025);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 4px 24px rgba(0, 0, 0, 0.30);
+    border-radius: 0; /* Removed rounded corners */
+    border: none; /* Removed border */
+    background: rgba(255, 255, 255, 0.02); /* Subtle background for separation */
+    box-shadow: none; /* Removed all shadows */
     overflow: hidden;
     pointer-events: auto;
 }
 
-/* Inspector header */
+/* Inspector header - MINIMALISTIC */
 .design-mode-inspector-header {
     padding: 12px 14px 10px;
-    border-bottom: 1px solid var(--dm-border);
-    background: var(--dm-surface-1);
+    border-bottom: none; /* Removed border for flat UI */
+    background: transparent; /* Removed background for flat UI */
     flex-shrink: 0;
 }
 
 .design-mode-inspector-title {
     font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--dm-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 500; /* Reduced from 700 */
+    letter-spacing: 0.02em; /* Reduced from 0.06em */
+    text-transform: none; /* Removed uppercase */
+    color: var(--dm-text-muted);
+    opacity: 0.6; /* Make it subtle */
 }
 
 .design-mode-selection-label {
     margin-top: 5px;
     font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
-    font-size: 0.72rem;
+    font-size: 0.78rem; /* Increased from 0.72rem */
     color: var(--dm-accent);
     font-weight: 500;
     letter-spacing: 0.01em;
@@ -404,16 +422,16 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Scrollable controls area ──────────────────────────────────── */
+/* ── Scrollable controls area - FLAT UI ──────────────────────────────────── */
 #design-mode-edit-controls,
 #design-mode-comment-panel {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: var(--dm-space-sm) 0;
+    padding: var(--dm-space-md) var(--dm-space-lg); /* Added horizontal padding */
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 16px; /* Increased gap for breathing room */
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
@@ -429,109 +447,88 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Collapsible Sections ──────────────────────────────────────── */
+/* ── Collapsible Sections - HIDDEN FOR FLAT UI ──────────────────────────────────── */
 .design-mode-section {
     display: flex;
     flex-direction: column;
-    border-bottom: 1px solid var(--dm-border);
+    border-bottom: none; /* Removed all borders */
 }
 
 .design-mode-section:last-child {
     border-bottom: none;
 }
 
-/* Section toggle button — clickable header */
+/* Section toggle button — HIDDEN */
 .design-mode-section-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 9px 14px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    -webkit-app-region: no-drag;
-}
-
-.design-mode-section-toggle:hover {
-    background: var(--dm-surface-1);
+    display: none; /* Hide section headers completely */
 }
 
 .design-mode-section-title {
-    font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--dm-text);
+    display: none; /* Hide section titles */
 }
 
-/* Chevron icon */
+/* Chevron icon - HIDDEN */
 .design-mode-chevron {
-    color: var(--dm-text-muted);
-    transition: transform 0.2s var(--dm-ease);
-    flex-shrink: 0;
+    display: none; /* Hide chevrons */
 }
 
-/* Collapsed state */
+/* Collapsed state - DISABLED */
 .design-mode-section.collapsed .design-mode-chevron {
-    transform: rotate(-90deg);
-}
-
-.design-mode-section.collapsed .design-mode-section-body {
     display: none;
 }
 
-/* Section body — padded content area */
+.design-mode-section.collapsed .design-mode-section-body {
+    display: flex; /* Always show content, never collapse */
+}
+
+/* Section body — FLAT, NO PADDING */
 .design-mode-section-body {
     display: flex;
     flex-direction: column;
-    gap: var(--dm-space-sm);
-    padding: 0 14px 10px;
+    gap: 12px; /* Increased gap */
+    padding: 0; /* Removed padding - handled by parent */
 }
 
 
-/* ── Control groups ────────────────────────────────────────────── */
+/* ── Control groups - INCREASED SPACING ────────────────────────────────────────── */
 .design-mode-control-group {
     display: flex;
     flex-direction: column;
-    gap: var(--dm-space-xs);
+    gap: 6px; /* Increased from 4px */
 }
 
 .design-mode-inline-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--dm-space-sm);
+    gap: 10px; /* Increased from 8px */
 }
 
 .design-mode-label {
     font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.66rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--dm-text-muted);
-    line-height: 1;
+    font-size: 0.75rem; /* Increased from 0.66rem */
+    font-weight: 500; /* Reduced from 600 */
+    letter-spacing: 0.01em; /* Reduced from 0.04em */
+    text-transform: none; /* Removed uppercase */
+    color: var(--dm-text-secondary); /* Changed from muted to secondary */
+    line-height: 1.3;
+    margin-bottom: 2px;
 }
 
 
-/* ── Input fields — shared base ────────────────────────────────── */
+/* ── Input fields — ULTRA FLAT ────────────────────────────────────────── */
 .design-mode-textarea,
 .design-mode-number-input,
 .design-mode-select {
     width: 100%;
-    border-radius: var(--dm-radius-sm);
-    border: 1px solid var(--dm-border-strong);
-    background: var(--dm-surface-2);
+    border-radius: 4px; /* Minimal radius */
+    border: none; /* Removed border */
+    background: rgba(255, 255, 255, 0.04); /* Very subtle background */
     color: var(--dm-text);
-    padding: 7px 10px;
+    padding: 8px 11px;
     font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.76rem;
+    font-size: 0.8rem;
     line-height: 1.4;
-    transition: border-color 0.18s ease,
-                box-shadow 0.18s ease,
-                background 0.18s ease;
+    transition: background 0.18s ease;
     outline: none;
     box-sizing: border-box;
 }
@@ -539,16 +536,14 @@ body.project-panel-open .design-mode-overlay {
 .design-mode-textarea:hover,
 .design-mode-number-input:hover,
 .design-mode-select:hover {
-    border-color: rgba(255, 255, 255, 0.20);
-    background: var(--dm-surface-3);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .design-mode-textarea:focus,
 .design-mode-number-input:focus,
 .design-mode-select:focus {
-    border-color: var(--dm-accent-border);
-    box-shadow: 0 0 0 2px var(--dm-accent-glow);
-    background: rgba(244, 114, 182, 0.04);
+    background: rgba(244, 114, 182, 0.08);
+    box-shadow: none; /* Removed focus ring */
 }
 
 .design-mode-textarea {
@@ -569,25 +564,58 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Select dropdown — CLEAN UI WITH SINGLE ARROW ──────────────────────────── */
+/* ── Select dropdown — ENHANCED UI/UX WITH BETTER AESTHETICS ──────────────────────────── */
 .design-mode-select {
     /* Remove ALL browser default styling */
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
     
-    /* Clean background with single arrow icon */
-    background-color: var(--dm-surface-2);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.45)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    /* Enhanced background with gradient and arrow */
+    background-color: rgba(30, 31, 48, 0.95); /* Darker, more solid background */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.7)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
+    background-position: right 10px center;
     background-size: 12px 12px;
     
-    padding-right: 28px;
+    /* Enhanced styling */
+    border: 1px solid rgba(244, 114, 182, 0.20); /* Pink border for visibility */
+    border-radius: 6px;
+    padding-right: 32px;
     cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05); /* Inner highlight */
+    
+    /* Smooth transitions */
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     
     /* Prevent text selection on the arrow area */
     user-select: none;
+    
+    /* Better text styling */
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+/* Hover state with smooth animation */
+.design-mode-select:hover {
+    background-color: rgba(40, 42, 60, 0.98);
+    border-color: rgba(244, 114, 182, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Focus state with smooth animation */
+.design-mode-select:focus {
+    background-color: rgba(40, 42, 60, 1);
+    border-color: rgba(244, 114, 182, 0.50);
+    transform: translateY(0);
+    box-shadow: 0 0 0 3px rgba(244, 114, 182, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    outline: none;
+}
+
+/* Active/clicking state */
+.design-mode-select:active {
+    transform: scale(0.98);
 }
 
 /* Remove Firefox default arrow */
@@ -595,27 +623,24 @@ body.project-panel-open .design-mode-overlay {
     display: none;
 }
 
-/* Critical fix: dropdown option contrast */
+/* NOTE: Option styling has limited browser support - most browsers use native OS rendering */
+/* These styles may not apply in all browsers, but we include them for browsers that support it */
 .design-mode-select option {
-    background-color: var(--dm-dropdown-bg);
-    color: var(--dm-dropdown-text);
-    padding: 8px 12px;
+    background-color: #1a1b26;
+    color: #e2e8f0;
+    padding: 12px 16px;
     font-size: 0.8rem;
     font-weight: 500;
 }
 
-.design-mode-select option:hover,
 .design-mode-select option:checked {
-    background-color: var(--dm-dropdown-hover);
-    color: #fff;
-}
-
-.design-mode-select option:disabled {
-    color: rgba(148, 163, 184, 0.5);
+    background-color: rgba(244, 114, 182, 0.25);
+    color: var(--dm-accent);
+    font-weight: 600;
 }
 
 
-/* ── Color input ───────────────────────────────────────────────── */
+/* ── Color input — FLAT ───────────────────────────────────────────── */
 .design-mode-color-wrap {
     position: relative;
     display: flex;
@@ -625,13 +650,12 @@ body.project-panel-open .design-mode-overlay {
 .design-mode-color-input {
     width: 100%;
     height: 32px;
-    border: 1px solid var(--dm-border-strong);
-    border-radius: var(--dm-radius-sm);
-    background: var(--dm-surface-2);
+    border: none; /* Removed border */
+    border-radius: 4px; /* Minimal radius */
+    background: rgba(255, 255, 255, 0.04);
     padding: 3px;
     cursor: pointer;
-    transition: border-color 0.18s ease,
-                box-shadow 0.18s ease;
+    transition: background 0.18s ease;
     box-sizing: border-box;
 }
 
@@ -641,16 +665,16 @@ body.project-panel-open .design-mode-overlay {
 
 .design-mode-color-input::-webkit-color-swatch {
     border: none;
-    border-radius: calc(var(--dm-radius-sm) - 2px);
+    border-radius: 2px;
 }
 
 .design-mode-color-input:hover {
-    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .design-mode-color-input:focus {
-    border-color: var(--dm-accent-border);
-    box-shadow: 0 0 0 2px var(--dm-accent-glow);
+    background: rgba(244, 114, 182, 0.08);
+    box-shadow: none; /* Removed focus ring */
     outline: none;
 }
 
@@ -799,31 +823,31 @@ body.project-panel-open .design-mode-overlay {
 }
 
 
-/* ── Notes / footer card ───────────────────────────────────────── */
+/* ── Notes / footer card - FLAT ───────────────────────────────── */
 .design-mode-notes {
     flex-shrink: 0;
-    margin: var(--dm-space-sm) var(--dm-space-lg) var(--dm-space-md);
-    padding: 10px 12px;
-    border-radius: var(--dm-radius-md);
-    background: var(--dm-accent-surface);
-    border: 1px solid rgba(244, 114, 182, 0.15);
-    box-shadow: 0 0 12px rgba(244, 114, 182, 0.08);
+    margin: var(--dm-space-md) var(--dm-space-lg) var(--dm-space-lg);
+    padding: 14px 16px;
+    border-radius: 6px; /* Minimal radius */
+    background: rgba(244, 114, 182, 0.08);
+    border: none; /* Removed border */
+    box-shadow: none; /* Removed shadow */
 }
 
 .design-mode-note-title {
     font-family: var(--font-sans, 'Outfit', sans-serif);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.76rem; /* Increased from 0.68rem */
+    font-weight: 600; /* Reduced from 700 */
+    letter-spacing: 0.01em; /* Reduced from 0.04em */
+    text-transform: none; /* Removed uppercase */
     color: var(--dm-accent);
-    margin-bottom: 4px;
+    margin-bottom: 6px; /* Increased spacing */
 }
 
 .design-mode-note-copy {
-    font-size: 0.66rem;
-    line-height: 1.5;
-    color: rgba(249, 168, 212, 0.70);
+    font-size: 0.76rem; /* Increased from 0.66rem - MUCH LARGER */
+    line-height: 1.6; /* Increased from 1.5 */
+    color: rgba(249, 168, 212, 0.85); /* Increased opacity from 0.70 */
 }
 
 
@@ -842,7 +866,7 @@ body.design-mode-active .floating-input-container.welcome-mode {
 }
 
 
-/* ── Light mode overrides ──────────────────────────────────────── */
+/* ── Light mode overrides — FLAT UI ──────────────────────────────────────── */
 body:not(.dark-mode) .design-mode-toggle-btn {
     background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,241,248,0.98));
     color: #be185d;
@@ -851,13 +875,17 @@ body:not(.dark-mode) .design-mode-toggle-btn {
 }
 
 body:not(.dark-mode) .design-mode-overlay {
-    background: rgba(248, 250, 252, 0.90);
-    border-color: rgba(15, 23, 42, 0.08);
+    background: #f8fafc; /* Solid light background */
+    border-color: transparent;
+    box-shadow: none; /* Removed shadow */
+    backdrop-filter: none; /* Removed blur */
+    -webkit-backdrop-filter: none;
+    border-radius: 12px 0 0 0; /* Rounded top-left corner */
 }
 
 body:not(.dark-mode) .design-mode-header {
-    background: rgba(255,255,255,0.70);
-    border-bottom-color: rgba(15,23,42,0.07);
+    background: transparent;
+    border-bottom-color: transparent;
 }
 
 body:not(.dark-mode) .design-mode-title,
@@ -866,9 +894,15 @@ body:not(.dark-mode) .design-mode-section-title {
 }
 
 body:not(.dark-mode) .design-mode-subtitle,
-body:not(.dark-mode) .design-mode-status,
 body:not(.dark-mode) .design-mode-label {
     color: rgba(15, 23, 42, 0.55);
+}
+
+/* Light mode status bar - LIGHT BACKGROUND FOR CONTRAST */
+body:not(.dark-mode) .design-mode-status {
+    color: #0f172a; /* Dark text for better contrast */
+    background: rgba(241, 245, 249, 0.95); /* Light semi-transparent background */
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08); /* Subtle separator */
 }
 
 body:not(.dark-mode) .design-mode-textarea,
@@ -876,7 +910,7 @@ body:not(.dark-mode) .design-mode-number-input,
 body:not(.dark-mode) .design-mode-select,
 body:not(.dark-mode) .design-mode-color-input {
     background: rgba(15,23,42,0.04);
-    border-color: rgba(15,23,42,0.12);
+    border: none; /* Removed border */
     color: #0f172a;
 }
 
@@ -884,73 +918,93 @@ body:not(.dark-mode) .design-mode-textarea:hover,
 body:not(.dark-mode) .design-mode-number-input:hover,
 body:not(.dark-mode) .design-mode-select:hover {
     background: rgba(15,23,42,0.06);
-    border-color: rgba(15,23,42,0.18);
 }
 
 body:not(.dark-mode) .design-mode-textarea:focus,
 body:not(.dark-mode) .design-mode-number-input:focus,
 body:not(.dark-mode) .design-mode-select:focus {
-    background: rgba(244, 114, 182, 0.04);
-    border-color: rgba(190, 24, 93, 0.30);
-    box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.12);
+    background: rgba(244, 114, 182, 0.08);
+    border-color: transparent;
+    box-shadow: none; /* Removed focus ring */
 }
 
 body:not(.dark-mode) .design-mode-select {
-    /* Clean single arrow for light mode - explicit background properties */
-    background-color: rgba(15,23,42,0.04);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(15,23,42,0.4)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    /* Enhanced light mode dropdown */
+    background-color: rgba(255, 255, 255, 0.95); /* More solid white background */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(15,23,42,0.6)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
+    background-position: right 10px center;
     background-size: 12px 12px;
-}
-
-/* Light mode dropdown options - FIXED CONTRAST */
-body:not(.dark-mode) .design-mode-select option {
-    background-color: #ffffff;
+    border: 1px solid rgba(190, 24, 93, 0.20); /* Pink border for visibility */
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     color: #0f172a;
-    padding: 8px 12px;
     font-weight: 500;
 }
 
-body:not(.dark-mode) .design-mode-select option:hover {
-    background-color: #f1f5f9;
+/* Light mode hover with animation */
+body:not(.dark-mode) .design-mode-select:hover {
+    background-color: rgba(248, 250, 252, 1);
+    border-color: rgba(190, 24, 93, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+/* Light mode focus */
+body:not(.dark-mode) .design-mode-select:focus {
+    background-color: rgba(255, 255, 255, 1);
+    border-color: rgba(190, 24, 93, 0.50);
+    transform: translateY(0);
+    box-shadow: 0 0 0 3px rgba(190, 24, 93, 0.15), inset 0 1px 0 rgba(255, 255, 255, 1);
+    outline: none;
+}
+
+/* Light mode active */
+body:not(.dark-mode) .design-mode-select:active {
+    transform: scale(0.98);
+}
+
+/* Light mode dropdown options - LIMITED BROWSER SUPPORT */
+body:not(.dark-mode) .design-mode-select option {
+    background-color: #ffffff;
     color: #0f172a;
+    padding: 12px 16px;
+    font-weight: 500;
 }
 
 body:not(.dark-mode) .design-mode-select option:checked {
-    background-color: rgba(190, 24, 93, 0.10);
+    background-color: rgba(190, 24, 93, 0.15);
     color: #be185d;
     font-weight: 600;
 }
 
-body:not(.dark-mode) .design-mode-select option:disabled {
-    color: rgba(15, 23, 42, 0.35);
-    background-color: #f8fafc;
-}
-
 body:not(.dark-mode) .design-mode-action-btn {
-    background: rgba(15,23,42,0.04);
-    border-color: rgba(15,23,42,0.12);
-    color: #0f172a;
+    background: #2d3748; /* Dark gray - matching light mode active tab */
+    border: none;
+    color: #ffffff; /* White text */
 }
 
 body:not(.dark-mode) .design-mode-action-btn:hover {
-    background: rgba(15,23,42,0.07);
-    border-color: rgba(15,23,42,0.18);
+    background: #1a202c; /* Darker on hover */
+    color: #ffffff;
+    box-shadow: none;
+    transform: none;
 }
 
 body:not(.dark-mode) .design-mode-preview-wrap,
 body:not(.dark-mode) .design-mode-inspector {
-    background: rgba(255,255,255,0.70);
-    border-color: rgba(15,23,42,0.08);
+    background: #ffffff; /* Solid white */
+    border: none; /* Removed border */
+    box-shadow: none; /* Removed shadow */
 }
 
 body:not(.dark-mode) .design-mode-inspector-header {
-    background: rgba(15,23,42,0.03);
+    background: transparent; /* Flat UI */
 }
 
 body:not(.dark-mode) .design-mode-inspector-title {
-    color: rgba(15,23,42,0.55);
+    color: rgba(15,23,42,0.45); /* More subtle */
 }
 
 body:not(.dark-mode) .design-mode-selection-label {
@@ -959,29 +1013,33 @@ body:not(.dark-mode) .design-mode-selection-label {
 
 body:not(.dark-mode) .design-mode-section-toggle {
     color: #0f172a;
+    display: none; /* Hidden in flat UI */
 }
 
 body:not(.dark-mode) .design-mode-section-toggle:hover {
-    background: rgba(15,23,42,0.03);
+    background: transparent;
 }
 
 body:not(.dark-mode) .design-mode-chevron {
-    color: rgba(15,23,42,0.35);
+    display: none; /* Hidden in flat UI */
 }
 
 body:not(.dark-mode) .design-mode-section {
-    border-bottom-color: rgba(15,23,42,0.06);
+    border-bottom-color: transparent; /* No borders in flat UI */
 }
 
+/* Light mode: Dark background with white text for ACTIVE tab */
 body:not(.dark-mode) .design-mode-tab.active {
-    background: rgba(190,24,93,0.10);
-    border-color: rgba(190,24,93,0.28);
-    color: #be185d;
+    background: #2d3748 !important; /* Dark gray/light black - !important to override */
+    border: none;
+    color: #ffffff !important; /* White text */
+    box-shadow: none;
 }
 
 body:not(.dark-mode) .design-mode-notes {
-    background: rgba(244,114,182,0.06);
-    border-color: rgba(190,24,93,0.14);
+    background: rgba(244,114,182,0.08);
+    border: none; /* Removed border */
+    box-shadow: none;
 }
 
 body:not(.dark-mode) .design-mode-note-title {
@@ -989,7 +1047,7 @@ body:not(.dark-mode) .design-mode-note-title {
 }
 
 body:not(.dark-mode) .design-mode-note-copy {
-    color: rgba(157,23,77,0.65);
+    color: rgba(157,23,77,0.80);
 }
 
 body:not(.dark-mode) .design-mode-range-input {
@@ -1008,7 +1066,7 @@ body:not(.dark-mode) .design-mode-range-value {
 
 body:not(.dark-mode) .design-mode-color-input {
     background: rgba(15,23,42,0.04);
-    border-color: rgba(15,23,42,0.12);
+    border: none; /* Removed border */
 }
 
 /* Light mode scrollbar for inspector */
