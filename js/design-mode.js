@@ -254,6 +254,95 @@ class DesignModeController {
                 section.classList.toggle('collapsed', isExpanded);
             });
         });
+
+        this.setupCustomSelects();
+    }
+
+    setupCustomSelects() {
+        const selects = document.querySelectorAll('.design-mode-select');
+        selects.forEach(select => {
+            if (select.closest('.dm-custom-select-wrapper')) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'dm-custom-select-wrapper';
+            select.parentNode.insertBefore(wrapper, select);
+            wrapper.appendChild(select);
+
+            const trigger = document.createElement('div');
+            trigger.className = 'dm-custom-select-trigger';
+            const selectedText = document.createElement('span');
+            selectedText.textContent = select.options[select.selectedIndex]?.text || '';
+            trigger.appendChild(selectedText);
+            
+            const icon = document.createElement('div');
+            icon.className = 'dm-custom-select-icon';
+            icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+            trigger.appendChild(icon);
+            
+            wrapper.appendChild(trigger);
+
+            const optionsList = document.createElement('div');
+            optionsList.className = 'dm-custom-select-options';
+            
+            Array.from(select.options).forEach((option, index) => {
+                const item = document.createElement('div');
+                item.className = 'dm-custom-select-item';
+                if (index === select.selectedIndex) item.classList.add('selected');
+                item.textContent = option.text;
+                item.dataset.value = option.value;
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select.selectedIndex = index;
+                    selectedText.textContent = option.text;
+                    wrapper.querySelectorAll('.dm-custom-select-item').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    wrapper.classList.remove('open');
+                    const event = new Event('change', { bubbles: true });
+                    select.dispatchEvent(event);
+                });
+                optionsList.appendChild(item);
+            });
+            wrapper.appendChild(optionsList);
+
+            trigger.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                document.querySelectorAll('.dm-custom-select-wrapper.open').forEach(w => {
+                    if (w !== wrapper) w.classList.remove('open');
+                });
+                wrapper.classList.toggle('open');
+                
+                if (wrapper.classList.contains('open')) {
+                    const rect = optionsList.getBoundingClientRect();
+                    if (rect.bottom > window.innerHeight) {
+                        optionsList.style.top = 'auto';
+                        optionsList.style.bottom = '100%';
+                        optionsList.style.marginTop = '0';
+                        optionsList.style.marginBottom = '4px';
+                    } else {
+                        optionsList.style.top = 'calc(100% + 4px)';
+                        optionsList.style.bottom = 'auto';
+                        optionsList.style.marginTop = '0';
+                        optionsList.style.marginBottom = '0';
+                    }
+                }
+            });
+            
+            select.addEventListener('change', () => {
+                selectedText.textContent = select.options[select.selectedIndex]?.text || '';
+                wrapper.querySelectorAll('.dm-custom-select-item').forEach((el, idx) => {
+                    if (idx === select.selectedIndex) {
+                        el.classList.add('selected');
+                    } else {
+                        el.classList.remove('selected');
+                    }
+                });
+            });
+        });
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.dm-custom-select-wrapper.open').forEach(w => w.classList.remove('open'));
+        });
     }
 
     setMode(nextMode = 'edit') {
