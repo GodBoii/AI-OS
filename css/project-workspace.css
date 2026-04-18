@@ -939,16 +939,16 @@ body.project-file-preview-active .floating-input-container.welcome-mode {
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar {
-    width: 6px;
+    width: 3px;
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: 2px;
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .project-local-terminal-shell .xterm-viewport::-webkit-scrollbar-track {
@@ -1151,18 +1151,18 @@ body:not(.dark-mode).project-panel-open .app-container {
 
 /* Custom scrollbar for premium feel */
 .know-me-modal-content::-webkit-scrollbar {
-    width: 8px;
+    width: 3px;
 }
 .know-me-modal-content::-webkit-scrollbar-track {
     background: transparent;
     margin: 20px 0;
 }
 .know-me-modal-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
 }
 .know-me-modal-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.20);
 }
 
 body:not(.dark-mode) .know-me-modal-content {

@@ -406,7 +406,7 @@
 
 /* Scrollbar styling */
 .history-tab-panel::-webkit-scrollbar {
-    width: 8px;
+    width: 3px;
 }
 
 .history-tab-panel::-webkit-scrollbar-track {
@@ -414,12 +414,12 @@
 }
 
 .history-tab-panel::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb, #444);
-    border-radius: 4px;
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.08));
+    border-radius: 2px;
 }
 
 .history-tab-panel::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover, #555);
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.15));
 }
 
 /* Responsive design */
