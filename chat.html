@@ -30,12 +30,179 @@
                 </button>
             </div>
         </div>
+
         <div class="context-active-indicator">
             <i class="fas fa-layer-group"></i>
             <span class="context-label">Context</span>
             <span class="context-badge"></span>
         </div>
         <!-- The .chat-tools div has been removed from here -->
+    </div>
+</div>
+
+<!-- Design Mode overlay — OUTSIDE chat-container so position:fixed uses the full viewport -->
+<div id="design-mode-overlay" class="design-mode-overlay hidden" aria-hidden="true">
+    <div class="design-mode-shell">
+        <div class="design-mode-header">
+            <div class="design-mode-header-copy">
+                <div class="design-mode-title">Design Mode</div>
+                <div id="design-mode-subtitle" class="design-mode-subtitle">Select an element in the preview to edit simple UI properties.</div>
+            </div>
+            <div class="design-mode-toolstrip" role="tablist" aria-label="Design tools">
+                <button id="design-mode-edit-tab" class="design-mode-tab active" type="button" role="tab" aria-selected="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:4px"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>Edit
+                </button>
+                <button id="design-mode-comment-tab" class="design-mode-tab" type="button" role="tab" aria-selected="false">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Comment
+                </button>
+            </div>
+            <div class="design-mode-actions">
+                <button id="design-mode-refresh-btn" class="design-mode-action-btn" type="button" title="Reload from disk">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Refresh
+                </button>
+                <button id="design-mode-done-btn" class="design-mode-action-btn primary" type="button" title="Save changes and close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Done
+                </button>
+                <button id="design-mode-close-btn" class="design-mode-action-btn" type="button" aria-label="Close design mode" title="Close without saving" style="width:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="design-mode-body">
+            <div class="design-mode-preview-wrap">
+                <div id="design-mode-status" class="design-mode-status">Open a local deployed project to start designing.</div>
+                <iframe id="design-mode-preview-frame" class="design-mode-preview-frame" title="Design preview"></iframe>
+            </div>
+            <aside class="design-mode-inspector">
+                <div class="design-mode-inspector-header">
+                    <div class="design-mode-inspector-title">Inspector</div>
+                    <div id="design-mode-selection-label" class="design-mode-selection-label">No element selected</div>
+                </div>
+                <div id="design-mode-edit-controls">
+                    <div class="design-mode-section">
+                        <div class="design-mode-section-title">Content</div>
+                        <div class="design-mode-control-group">
+                            <label class="design-mode-label" for="design-mode-text-input" style="display:none;">Text</label>
+                            <textarea id="design-mode-text-input" class="design-mode-textarea" rows="2" placeholder="Select an element to edit text..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="design-mode-section">
+                        <div class="design-mode-section-title">Typography</div>
+                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-font-size-input">Size</label>
+                                <input id="design-mode-font-size-input" class="design-mode-number-input" type="number" min="0" step="1" placeholder="px" />
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-font-weight-input">Weight</label>
+                                <select id="design-mode-font-weight-input" class="design-mode-select">
+                                    <option value="">Auto</option>
+                                    <option value="300">Light (300)</option>
+                                    <option value="400">Regular (400)</option>
+                                    <option value="500">Medium (500)</option>
+                                    <option value="600">SemiBold (600)</option>
+                                    <option value="700">Bold (700)</option>
+                                    <option value="800">ExtraBold (800)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="design-mode-inline-grid mt-2" style="grid-template-columns: 1fr 1fr; margin-top: 8px;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-line-height-input">Line Ht</label>
+                                <input id="design-mode-line-height-input" class="design-mode-number-input" type="number" step="0.1" placeholder="em/px" />
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-text-align-input">Align</label>
+                                <select id="design-mode-text-align-input" class="design-mode-select">
+                                    <option value="">Auto</option>
+                                    <option value="left">Left</option>
+                                    <option value="center">Center</option>
+                                    <option value="right">Right</option>
+                                    <option value="justify">Justify</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="design-mode-section">
+                        <div class="design-mode-section-title">Appearance</div>
+                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-bg-color">Fill</label>
+                                <div class="design-mode-color-picker-wrap">
+                                    <input id="design-mode-bg-color" class="design-mode-color-input" type="color" value="#ffffff" />
+                                </div>
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-text-color">Text</label>
+                                <div class="design-mode-color-picker-wrap">
+                                    <input id="design-mode-text-color" class="design-mode-color-input" type="color" value="#111111" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="design-mode-section">
+                        <div class="design-mode-section-title">Layout & Spacing</div>
+                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-display-input">Display</label>
+                                <select id="design-mode-display-input" class="design-mode-select">
+                                    <option value="">Auto</option>
+                                    <option value="block">block</option>
+                                    <option value="inline-block">inline-block</option>
+                                    <option value="flex">flex</option>
+                                    <option value="grid">grid</option>
+                                    <option value="none">none</option>
+                                </select>
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-flex-dir-input">Flex Dir</label>
+                                <select id="design-mode-flex-dir-input" class="design-mode-select">
+                                    <option value="">Auto</option>
+                                    <option value="row">row</option>
+                                    <option value="column">column</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="design-mode-inline-grid mt-2" style="grid-template-columns: 1fr 1fr; margin-top: 8px;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-padding-input">Padding</label>
+                                <input id="design-mode-padding-input" class="design-mode-number-input" type="text" placeholder="e.g. 10px 20px" />
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-margin-input">Margin</label>
+                                <input id="design-mode-margin-input" class="design-mode-number-input" type="text" placeholder="e.g. 10px auto" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="design-mode-section">
+                        <div class="design-mode-section-title">Borders & Effects</div>
+                        <div class="design-mode-inline-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-radius-input">Radius</label>
+                                <input id="design-mode-radius-input" class="design-mode-number-input" type="text" placeholder="e.g. 8px" />
+                            </div>
+                            <div class="design-mode-control-group">
+                                <label class="design-mode-label" for="design-mode-opacity-input">Opacity</label>
+                                <input id="design-mode-opacity-input" class="design-mode-number-input" type="number" min="0" max="1" step="0.1" placeholder="0 - 1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="design-mode-comment-panel" class="design-mode-comment-panel hidden">
+                    <div class="design-mode-comment-hint">Click any element in the preview to add a comment for AI follow-up.</div>
+                    <div id="design-mode-comments-empty" class="design-mode-comments-empty">No comments yet.</div>
+                    <div id="design-mode-comments-list" class="design-mode-comments-list"></div>
+                </div>
+                <div class="design-mode-notes">
+                    <div class="design-mode-note-title">Visual Inspector</div>
+                    <div class="design-mode-note-copy">Fine-tune styling, layouts and typography precisely. Make structural changes or code logic updates with the AI agent.</div>
+                </div>
+            </aside>
+        </div>
     </div>
 </div>
 
@@ -191,6 +358,15 @@
 
 <!-- Know Me FAB — global fixed position, bottom-right of the app -->
 <!-- Only visible when project workspace is open (body.project-panel-open) -->
+<button id="design-mode-toggle-btn" class="design-mode-toggle-btn hidden" type="button" aria-label="Open design mode">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.37 2.63a2.12 2.12 0 1 1 3 3L12 15l-4 1 1-4Z" />
+    </svg>
+    <span>Design</span>
+</button>
+
 <button id="project-know-me-btn" class="project-know-me-fab" title="About Project Workspace" aria-label="Know Me">
     <i class="fas fa-info-circle"></i>
     <span class="project-know-me-label">Know Me</span>
