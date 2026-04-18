@@ -398,6 +398,44 @@
     flex-wrap: wrap;
 }
 
+.deployment-version-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1.5px solid var(--border-primary);
+    border-radius: 8px;
+    background: var(--elevated-bg);
+}
+
+.deployment-version-picker.single {
+    opacity: 0.9;
+}
+
+.deployment-version-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.deployment-version-select {
+    min-width: 92px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+}
+
+.deployment-version-select:disabled {
+    cursor: default;
+    opacity: 0.9;
+}
+
 .expand-deployment-btn {
     width: 38px;
     height: 38px;
