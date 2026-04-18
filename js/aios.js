@@ -46,6 +46,7 @@ class AIOS {
 
         this.userData = await this.loadUserData();
 
+        this.injectSettingsTab();
         this.cacheElements();
         this.initializeUsageUI();
         this.setupEventListeners();
@@ -2494,6 +2495,220 @@ class AIOS {
         reader.readAsDataURL(file);
     }
 
+    // ── Dynamic Settings Tab Injection ──────────────────────────────────
+    injectSettingsTab() {
+        const sidebar = document.querySelector('.tabs-sidebar');
+        const contentArea = document.querySelector('.tab-content-area');
+        if (!sidebar || !contentArea) return;
+
+        // Insert Settings tab button before the About button
+        const aboutBtn = sidebar.querySelector('[data-tab="about"]');
+        if (aboutBtn && !sidebar.querySelector('[data-tab="settings"]')) {
+            const settingsBtn = document.createElement('button');
+            settingsBtn.className = 'tab-btn';
+            settingsBtn.dataset.tab = 'settings';
+            settingsBtn.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Settings</span>';
+            sidebar.insertBefore(settingsBtn, aboutBtn);
+        }
+
+        // Create the Settings tab content panel
+        if (!document.getElementById('settings-tab')) {
+            const settingsPanel = document.createElement('div');
+            settingsPanel.className = 'tab-content';
+            settingsPanel.id = 'settings-tab';
+            settingsPanel.innerHTML = `
+                <h3 class="tab-heading">Settings</h3>
+
+                <!-- Notifications Section -->
+                <section class="settings-card" aria-labelledby="settings-notif-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon"><i class="fa-solid fa-bell"></i></div>
+                        <div>
+                            <h4 id="settings-notif-title" class="settings-card-title">Notifications</h4>
+                            <p class="settings-card-desc">Control how Aetheria AI notifies you about agent activity.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Agent Run Completion</span>
+                                <span class="settings-toggle-hint">Get notified when your AI agent finishes a task while the app is in the background.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-notif-run-complete" checked>
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Native System Notifications</span>
+                                <span class="settings-toggle-hint">Show notifications in your OS notification center (Windows Action Center, macOS, Linux).</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-notif-native" checked>
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">In-App Notifications</span>
+                                <span class="settings-toggle-hint">Show toast notifications within the application window.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-notif-inapp" checked>
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Computer Tool Notifications</span>
+                                <span class="settings-toggle-hint">Get notified when the Computer Agent performs actions on your system.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-notif-computer-tool" checked>
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Notification Sounds</span>
+                                <span class="settings-toggle-hint">Play a sound when notifications appear.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-notif-sounds">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Keyboard Shortcuts Section -->
+                <section class="settings-card" aria-labelledby="settings-kb-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon"><i class="fa-solid fa-keyboard"></i></div>
+                        <div>
+                            <h4 id="settings-kb-title" class="settings-card-title">Keyboard Shortcuts</h4>
+                            <p class="settings-card-desc">Quick actions accessible via keyboard.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-shortcut-row">
+                            <span class="settings-shortcut-label">New Conversation</span>
+                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>N</kbd></div>
+                        </div>
+                        <div class="settings-shortcut-row">
+                            <span class="settings-shortcut-label">Toggle Settings</span>
+                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>,</kbd></div>
+                        </div>
+                        <div class="settings-shortcut-row">
+                            <span class="settings-shortcut-label">Toggle Theme</span>
+                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>T</kbd></div>
+                        </div>
+                        <div class="settings-shortcut-row">
+                            <span class="settings-shortcut-label">Focus Chat Input</span>
+                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>L</kbd></div>
+                        </div>
+                        <div class="settings-shortcut-row">
+                            <span class="settings-shortcut-label">Close Window / Panel</span>
+                            <div class="settings-shortcut-keys"><kbd>Esc</kbd></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- General Section -->
+                <section class="settings-card" aria-labelledby="settings-general-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon"><i class="fa-solid fa-gear"></i></div>
+                        <div>
+                            <h4 id="settings-general-title" class="settings-card-title">General</h4>
+                            <p class="settings-card-desc">App behavior and preferences.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Minimize to System Tray</span>
+                                <span class="settings-toggle-hint">Keep Aetheria AI running in the background when you close the window.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-general-tray">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Auto-check for Updates</span>
+                                <span class="settings-toggle-hint">Automatically check for new versions when the app starts.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-general-auto-update" checked>
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+            `;
+
+            // Insert before the about-tab content panel
+            const aboutTab = document.getElementById('about-tab');
+            if (aboutTab) {
+                contentArea.insertBefore(settingsPanel, aboutTab);
+            } else {
+                contentArea.appendChild(settingsPanel);
+            }
+        }
+
+        // Re-query tabs/tabContents so the new elements are picked up by cacheElements
+        this.initSettingsListeners();
+    }
+
+    initSettingsListeners() {
+        const STORAGE_KEY = 'aetheria-notification-settings';
+
+        // Load saved settings
+        let saved = {};
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) saved = JSON.parse(raw);
+        } catch (_e) { /* ignore */ }
+
+        const defaults = {
+            nativeNotifications: true,
+            inAppNotifications: true,
+            soundEnabled: false,
+            computerToolNotifications: true,
+            runCompleteNotifications: true,
+        };
+        const settings = { ...defaults, ...saved };
+
+        // Map setting keys to checkbox IDs
+        const mapping = {
+            'settings-notif-run-complete': 'runCompleteNotifications',
+            'settings-notif-native': 'nativeNotifications',
+            'settings-notif-inapp': 'inAppNotifications',
+            'settings-notif-computer-tool': 'computerToolNotifications',
+            'settings-notif-sounds': 'soundEnabled',
+        };
+
+        // Apply saved state to checkboxes and bind change listeners
+        for (const [elId, key] of Object.entries(mapping)) {
+            const checkbox = document.getElementById(elId);
+            if (!checkbox) continue;
+            checkbox.checked = !!settings[key];
+            checkbox.addEventListener('change', () => {
+                settings[key] = checkbox.checked;
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+                } catch (_e) { /* ignore */ }
+
+                // Push native notification toggle to main process
+                if (key === 'nativeNotifications' && window.electron?.ipcRenderer) {
+                    window.electron.ipcRenderer.send('toggle-native-notifications', checkbox.checked);
+                }
+            });
+        }
+    }
+
     switchTab(tabName) {
         this.elements.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
         this.elements.tabContents.forEach(content => content.classList.toggle('active', content.id === `${tabName}-tab`));
@@ -2510,6 +2725,8 @@ class AIOS {
             this.loadUserFiles();
         } else if (tabName === 'memory') {
             this.loadMemories();
+        } else if (tabName === 'settings') {
+            this.initSettingsListeners();
         }
     }
 
