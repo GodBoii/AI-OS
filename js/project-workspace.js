@@ -3,6 +3,7 @@ class ProjectWorkspace {
         this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.activeProject = null;
         this.currentTreeSource = null;
+        this.latestSyncedPaths = [];
         this.selectedFilePath = null;
         this.workspaceStates = new Map();
         this.syncDebounceTimer = null;
@@ -61,6 +62,10 @@ class ProjectWorkspace {
                 site_id: null,
                 deployment_id: null,
             },
+            bootstrap_context_sent: false,
+            bootstrap_context_key: null,
+            deployment_dirty: false,
+            deployment_diff_summary: null,
         };
     }
 
@@ -174,6 +179,9 @@ class ProjectWorkspace {
             project_name: this.activeProject?.project_name || null,
             slug: this.activeProject?.slug || null,
             hostname: this.activeProject?.hostname || null,
+            version: this.activeProject?.version || null,
+            r2_prefix: this.activeProject?.r2_prefix || null,
+            url: this.activeProject?.hostname ? `https://${this.activeProject.hostname}` : null,
         };
     }
 
@@ -217,6 +225,10 @@ class ProjectWorkspace {
             superCloudBtn: document.getElementById('super-cloud-btn'),
             superLocalBtn: document.getElementById('super-local-btn'),
             superGithubBtn: document.getElementById('super-github-btn'),
+            redeployBar: document.getElementById('project-redeploy-bar'),
+            redeployTitle: document.getElementById('project-redeploy-title'),
+            redeploySubtitle: document.getElementById('project-redeploy-subtitle'),
+            redeployBtn: document.getElementById('project-redeploy-btn'),
         };
     }
 
@@ -227,6 +239,7 @@ class ProjectWorkspace {
         this.el.cloneRepoBtn?.addEventListener('click', () => this.cloneGithubRepo());
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
+        this.el.redeployBtn?.addEventListener('click', () => this.redeployCurrentWorkspace());
         // modeToggleBtn removed from DOM — mode is now controlled via super-header
         this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
         this.el.modeCloudBtn?.addEventListener('click', () => this.switchToCloudMode());
@@ -493,15 +506,96 @@ class ProjectWorkspace {
         return this.activeProject;
     }
 
+    getProjectContextKey(project = this.activeProject) {
+        if (!project || typeof project !== 'object') {
+            return null;
+        }
+        const siteId = String(project.site_id || '').trim();
+        const deploymentId = String(project.deployment_id || '').trim();
+        if (!siteId && !deploymentId) {
+            return null;
+        }
+        return `${siteId}::${deploymentId}`;
+    }
+
+    formatProjectBootstrapContext(paths = []) {
+        if (!this.activeProject) {
+            return '';
+        }
+
+        const project = this.activeProject;
+        const hostname = String(project.hostname || '').trim();
+        const lines = [
+            'PROJECT WORKSPACE CONTEXT',
+            'The user is working inside a dedicated project workspace.',
+            `Project Name: ${project.project_name || 'Untitled Project'}`,
+            `Hostname: ${hostname || 'Unavailable'}`,
+            `Slug: ${project.slug || 'Unavailable'}`,
+            `Version: ${project.version || 'Unavailable'}`,
+            `Site ID: ${project.site_id || 'Unavailable'}`,
+            `Deployment ID: ${project.deployment_id || 'Unavailable'}`,
+            `R2 Prefix: ${project.r2_prefix || 'Unavailable'}`,
+            `URL: ${hostname ? `https://${hostname}` : 'Unavailable'}`,
+            `Workspace Source: ${this.currentTreeSource || 'unknown'}`,
+            `File Count: ${Array.isArray(paths) ? paths.length : 0}`,
+            'File Structure:',
+        ];
+
+        const normalizedPaths = Array.isArray(paths)
+            ? paths.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+        const shown = normalizedPaths.slice(0, 120);
+        if (shown.length === 0) {
+            lines.push('- File structure unavailable');
+        } else {
+            shown.forEach((item) => lines.push(`- ${item}`));
+            if (normalizedPaths.length > shown.length) {
+                lines.push(`... ${normalizedPaths.length - shown.length} more files omitted`);
+            }
+        }
+
+        return `${lines.join('\n')}\n`;
+    }
+
+    buildBootstrapContextForTurn(userMessage = '') {
+        const state = this.getState();
+        if (!state || !this.activeProject) {
+            return null;
+        }
+
+        const projectKey = this.getProjectContextKey();
+        if (!projectKey) {
+            return null;
+        }
+
+        if (state.bootstrap_context_sent && state.bootstrap_context_key === projectKey) {
+            return null;
+        }
+
+        const contextBlock = this.formatProjectBootstrapContext(this.latestSyncedPaths);
+        const userText = String(userMessage || '').trim() || '(No additional user input provided.)';
+        return `${contextBlock}\nUSER MESSAGE:\n${userText}`;
+    }
+
+    markBootstrapContextSent() {
+        const state = this.getState();
+        if (!state) return;
+        state.bootstrap_context_sent = true;
+        state.bootstrap_context_key = this.getProjectContextKey();
+    }
+
     async openProject(project) {
         this.ensureContext(project, { syncUi: true });
         const state = this.getState();
         state.workspace_mode = 'cloud';
+        state.bootstrap_context_sent = false;
+        state.bootstrap_context_key = this.getProjectContextKey();
         this.updateModeUI();
 
         this.setStatus('Project mode active. Cloud mode enabled by default.');
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.hideMainFilePreview();
+        this.updateRedeployUI({ visible: false, dirty: false });
 
         this.openPanel();
         this.closeModeWindow();
@@ -871,6 +965,7 @@ class ProjectWorkspace {
                 const rootPath = state?.local_context?.root_path;
 
                 if (!state?.local_context?.is_ready || !rootPath) {
+                    this.updateRedeployUI({ visible: false, dirty: false });
                     this.el.tree.innerHTML = '<div class="project-workspace-status">No local workspace selected.</div>';
                     this.currentTreeSource = null;
                     this.setPreviewPlaceholder('Select Local mode and choose a folder.');
@@ -911,14 +1006,26 @@ class ProjectWorkspace {
                         conversation_id: conversationId
                     });
                     const workspaceFiles = Array.isArray(workspacePayload?.files) ? workspacePayload.files : [];
-                    if (workspaceFiles.length > 0) {
-                        paths = workspaceFiles.map((f) => f.path).filter(Boolean);
+                    const workspacePaths = workspaceFiles.map((f) => f.path).filter(Boolean);
+                    const deploymentPathCount = Array.isArray(paths) ? paths.length : 0;
+                    const hasWorkspaceIndex = workspacePaths.some((item) => String(item).toLowerCase() === 'index.html');
+                    const shouldPreferWorkspace =
+                        deploymentPathCount === 0
+                        || workspacePaths.length >= deploymentPathCount
+                        || hasWorkspaceIndex;
+
+                    if (workspacePaths.length > 0 && shouldPreferWorkspace) {
+                        paths = workspacePaths;
                         source = 'workspace';
                     }
                 }
             }
 
             if (!paths.length) {
+                if (mode === 'local') {
+                    this.updateRedeployUI({ visible: false, dirty: false });
+                }
+                this.latestSyncedPaths = [];
                 this.el.tree.innerHTML = '<div class="project-workspace-status">No files found yet.</div>';
                 this.setStatus(mode === 'local'
                     ? 'No local files found in selected folder.'
@@ -930,12 +1037,21 @@ class ProjectWorkspace {
             }
 
             this.currentTreeSource = source || (mode === 'local' ? 'local' : 'workspace');
+            this.latestSyncedPaths = [...paths];
             this.selectedFilePath = null;
             this.renderTreeFromPaths(paths);
             this.setPreviewPlaceholder(`Loaded ${paths.length} files. Click a file to preview.`);
             this.setStatus(`Loaded ${paths.length} file${paths.length === 1 ? '' : 's'} from ${this.currentTreeSource}.`);
+            await this.refreshDeploymentModificationStatus();
         } catch (error) {
+            this.latestSyncedPaths = [];
             this.setStatus(`Sync failed: ${error.message}`);
+            this.updateRedeployUI({
+                visible: this.getExecutionTarget() === 'cloud' && Boolean(this.activeProject?.site_id),
+                dirty: false,
+                title: 'Workspace sync failed',
+                subtitle: error.message || 'Unable to inspect workspace changes.',
+            });
         }
     }
 
@@ -958,6 +1074,171 @@ class ProjectWorkspace {
         this.el.tree.querySelectorAll('.project-file-row.selected').forEach((row) => {
             row.classList.remove('selected');
         });
+    }
+
+    updateRedeployUI(options = {}) {
+        const {
+            visible = false,
+            dirty = false,
+            title = null,
+            subtitle = null,
+            busy = false,
+        } = options;
+
+        if (this.el.redeployBar) {
+            this.el.redeployBar.classList.toggle('hidden', !visible);
+        }
+        if (this.el.redeployTitle && title !== null) {
+            this.el.redeployTitle.textContent = title;
+        }
+        if (this.el.redeploySubtitle && subtitle !== null) {
+            this.el.redeploySubtitle.textContent = subtitle;
+        }
+        if (this.el.redeployBtn) {
+            this.el.redeployBtn.classList.toggle('hidden', !visible || !dirty);
+            this.el.redeployBtn.disabled = Boolean(busy);
+        }
+    }
+
+    getDirtySummaryLine(summary = null) {
+        const diff = summary && typeof summary === 'object' ? summary : {};
+        const newCount = Array.isArray(diff.new_files) ? diff.new_files.length : 0;
+        const changedCount = Array.isArray(diff.changed_files) ? diff.changed_files.length : 0;
+        const deletedCount = Array.isArray(diff.deleted_files) ? diff.deleted_files.length : 0;
+        const parts = [];
+        if (changedCount) parts.push(`${changedCount} changed`);
+        if (newCount) parts.push(`${newCount} new`);
+        if (deletedCount) parts.push(`${deletedCount} removed`);
+        return parts.length ? parts.join(', ') : 'Workspace differs from selected deployment.';
+    }
+
+    async refreshDeploymentModificationStatus() {
+        const state = this.getState();
+        const mode = this.getExecutionTarget();
+        const conversationId = this.getConversationId();
+        const siteId = String(this.activeProject?.site_id || '').trim();
+        const deploymentId = String(this.activeProject?.deployment_id || '').trim();
+
+        if (!this.activeProject || mode !== 'cloud' || !conversationId || !siteId || !deploymentId) {
+            if (state) {
+                state.deployment_dirty = false;
+                state.deployment_diff_summary = null;
+            }
+            this.updateRedeployUI({ visible: false, dirty: false });
+            return;
+        }
+
+        this.updateRedeployUI({
+            visible: true,
+            dirty: false,
+            title: 'Checking workspace changes...',
+            subtitle: 'Comparing sandbox files with the selected deployment version.',
+        });
+
+        try {
+            const payload = await this.callApi('/api/project/workspace/deployment-status', 'POST', {
+                conversation_id: conversationId,
+                site_id: siteId,
+                deployment_id: deploymentId,
+            });
+
+            const dirty = Boolean(payload?.modified);
+            const summary = payload?.summary || null;
+            if (state) {
+                state.deployment_dirty = dirty;
+                state.deployment_diff_summary = summary;
+            }
+
+            if (dirty) {
+                this.updateRedeployUI({
+                    visible: true,
+                    dirty: true,
+                    title: 'Workspace has unpublished changes',
+                    subtitle: this.getDirtySummaryLine(summary),
+                });
+                return;
+            }
+
+            this.updateRedeployUI({
+                visible: true,
+                dirty: false,
+                title: 'Workspace matches selected deployment',
+                subtitle: 'The re-deploy button will appear after sandbox changes are detected.',
+            });
+        } catch (error) {
+            if (state) {
+                state.deployment_dirty = false;
+                state.deployment_diff_summary = null;
+            }
+            this.updateRedeployUI({
+                visible: true,
+                dirty: false,
+                title: 'Could not verify deploy status',
+                subtitle: error.message || 'Workspace comparison failed.',
+            });
+        }
+    }
+
+    async redeployCurrentWorkspace() {
+        const conversationId = this.getConversationId();
+        const siteId = String(this.activeProject?.site_id || '').trim();
+        if (!conversationId || !siteId) {
+            this.setStatus('Cannot redeploy: project context is incomplete.');
+            return;
+        }
+
+        this.updateRedeployUI({
+            visible: true,
+            dirty: true,
+            busy: true,
+            title: 'Re-deploying workspace...',
+            subtitle: 'Uploading sandbox files and activating a new deployment version.',
+        });
+
+        try {
+            const payload = await this.callApi('/api/project/workspace/redeploy', 'POST', {
+                conversation_id: conversationId,
+                site_id: siteId,
+            });
+
+            this.ensureContext({
+                deployment_id: payload?.deployment_id || this.activeProject?.deployment_id,
+                version: payload?.version || this.activeProject?.version,
+                r2_prefix: payload?.r2_prefix || this.activeProject?.r2_prefix,
+                hostname: payload?.hostname || this.activeProject?.hostname,
+            }, { syncUi: true });
+
+            const state = this.getState();
+            if (state?.cloud_context) {
+                state.cloud_context.site_id = siteId;
+                state.cloud_context.deployment_id = payload?.deployment_id || state.cloud_context.deployment_id;
+                state.deployment_dirty = false;
+                state.deployment_diff_summary = null;
+            }
+
+            this.setStatus(`Re-deployed ${payload?.files_uploaded || 0} file${payload?.files_uploaded === 1 ? '' : 's'} as v${payload?.version || '?'}.`);
+            await this.syncWorkspaceTree();
+            this.updateRedeployUI({
+                visible: true,
+                dirty: false,
+                busy: false,
+                title: 'Workspace matches selected deployment',
+                subtitle: `Published as v${payload?.version || '?'}.`,
+            });
+
+            if (window.AIOS?.loadDeployments) {
+                window.AIOS.loadDeployments();
+            }
+        } catch (error) {
+            this.updateRedeployUI({
+                visible: true,
+                dirty: true,
+                busy: false,
+                title: 'Re-deploy failed',
+                subtitle: error.message || 'Unable to publish workspace changes.',
+            });
+            this.setStatus(`Re-deploy failed: ${error.message}`);
+        }
     }
 
     async openFilePreview(path, rowEl) {
@@ -1159,6 +1440,7 @@ class ProjectWorkspace {
 
         const state = this.getState(conversationId);
         if (state.workspace_mode === 'local' && state.local_context?.is_ready) {
+            this.updateRedeployUI({ visible: false, dirty: false });
             this.setStatus('Already in local mode.');
             await this.syncWorkspaceTree();
             return;
@@ -1167,6 +1449,7 @@ class ProjectWorkspace {
         if (state.local_context?.is_ready && state.local_context?.root_path) {
             state.workspace_mode = 'local';
             this.updateModeUI();
+            this.updateRedeployUI({ visible: false, dirty: false });
             await this.startLocalWatcher(conversationId, state.local_context.root_path);
             this.setStatus(`Local mode active (${state.local_context.root_path}).`);
             await this.syncWorkspaceTree();
@@ -1187,6 +1470,7 @@ class ProjectWorkspace {
 
         if (state.workspace_mode === 'cloud') {
             this.setStatus('Already in cloud mode.');
+            await this.refreshDeploymentModificationStatus();
             return;
         }
 
@@ -1488,8 +1772,10 @@ class ProjectWorkspace {
             this.el.terminalOutput.textContent = '';
         }
         this.currentTreeSource = null;
+        this.latestSyncedPaths = [];
         this.selectedFilePath = null;
         this.hideMainFilePreview();
+        this.updateRedeployUI({ visible: false, dirty: false });
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.setStatus('Project mode off. Starting a new normal chat session.');
         this.closePanel();

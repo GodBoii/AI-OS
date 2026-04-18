@@ -4,6 +4,7 @@ import logging
 import json
 import traceback
 import inspect
+import base64
 from typing import Dict, Any, List, Tuple
 from redis import Redis
 import requests
@@ -19,6 +20,12 @@ from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
 from tool_event_payload import serialize_tool_event
+from deploy_platform import (
+    get_deployment_file_bytes,
+    get_deployment_summary,
+    list_deployment_files,
+    resolve_site_ref,
+)
 import config
 
 # --- Agno Framework Imports ---
@@ -27,6 +34,8 @@ from agno.run.agent import RunEvent
 from agno.run.team import TeamRunEvent, TeamRunOutput
 
 logger = logging.getLogger(__name__)
+
+_WORKSPACE_ROOT = "/home/sandboxuser/workspace"
 
 _ALLOWED_AGNO_FILE_MIME_TYPES = {
     "application/pdf",
@@ -199,6 +208,217 @@ def build_sandbox_workspace_context(session_data: Dict[str, Any]) -> str:
     except Exception as exc:
         logger.debug("Unable to build sandbox workspace context: %s", exc)
         return ""
+
+
+def _list_sandbox_workspace_files(sandbox_id: str) -> List[dict]:
+    if not config.SANDBOX_API_URL or not sandbox_id:
+        return []
+    response = requests.get(
+        f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files",
+        params={"path": _WORKSPACE_ROOT},
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json() or {}
+    files = payload.get("files", []) or []
+    return files if isinstance(files, list) else []
+
+
+def _write_sandbox_workspace_file(sandbox_id: str, absolute_path: str, content_bytes: bytes) -> None:
+    if not config.SANDBOX_API_URL:
+        raise RuntimeError("SANDBOX_API_URL is not configured")
+
+    payload = {
+        "filepath": absolute_path,
+        "content_base64": base64.b64encode(content_bytes).decode("utf-8"),
+        "make_dirs": True,
+    }
+    try:
+        response = requests.put(
+            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/files/content",
+            json=payload,
+            timeout=60,
+        )
+        if response.status_code == 405:
+            raise requests.HTTPError("405 Method Not Allowed", response=response)
+        response.raise_for_status()
+        return
+    except requests.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code not in (405, 501):
+            raise
+    except Exception:
+        logger.info("[Bootstrap] Falling back to exec-based sandbox write for %s", absolute_path)
+
+    b64 = base64.b64encode(content_bytes).decode("utf-8")
+    if len(b64) > 1_500_000:
+        raise RuntimeError(
+            "Sandbox file-write fallback hit payload limit. Restart sandbox-manager with updated PUT /files/content endpoint."
+        )
+
+    command = (
+        "python3 - <<'PY'\n"
+        "import base64, pathlib\n"
+        f"p = pathlib.Path(r'''{absolute_path}''')\n"
+        "p.parent.mkdir(parents=True, exist_ok=True)\n"
+        f"p.write_bytes(base64.b64decode('''{b64}'''))\n"
+        "print('ok')\n"
+        "PY"
+    )
+    response = requests.post(
+        f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}/exec",
+        json={"command": command},
+        timeout=90,
+    )
+    response.raise_for_status()
+
+
+def _ensure_project_workspace_bootstrap(
+    *,
+    session_data: Dict[str, Any],
+    conversation_id: str,
+    connection_manager: ConnectionManager,
+    requested_mode: str,
+    requested_coder_target: str,
+) -> Dict[str, Any]:
+    """
+    Ensure a deployed project is copied into the cloud sandbox workspace before
+    coder edits begin. This prevents the agent from editing an empty sandbox
+    while the frontend is still showing deployment files.
+    """
+    if requested_mode != "coder" or requested_coder_target != "cloud":
+        return session_data
+
+    session_config = dict(session_data.get("config", {}) or {})
+    workspace_context = session_config.get("workspace_context", {}) or {}
+    if not isinstance(workspace_context, dict):
+        return session_data
+
+    cloud_context = workspace_context.get("cloud_context", {}) or {}
+    if not isinstance(cloud_context, dict):
+        cloud_context = {}
+
+    site_ref = (
+        workspace_context.get("site_id")
+        or cloud_context.get("site_id")
+        or workspace_context.get("slug")
+        or workspace_context.get("hostname")
+    )
+    deployment_id = (
+        workspace_context.get("deployment_id")
+        or cloud_context.get("deployment_id")
+    )
+    if not site_ref:
+        return session_data
+
+    bootstrap_key = f"{site_ref}::{deployment_id or 'latest'}"
+    if cloud_context.get("bootstrapped_key") == bootstrap_key and cloud_context.get("bootstrapped") is True:
+        return session_data
+
+    try:
+        resolved_site = resolve_site_ref(user_id=str(session_data["user_id"]), site_ref=str(site_ref))
+        resolved_site_id = str(resolved_site["id"])
+        deployment = get_deployment_summary(
+            site_id=resolved_site_id,
+            user_id=str(session_data["user_id"]),
+            deployment_id=str(deployment_id) if deployment_id else None,
+        )
+        files = list_deployment_files(
+            site_id=resolved_site_id,
+            user_id=str(session_data["user_id"]),
+            deployment_id=str(deployment["id"]),
+        )
+        if not files:
+            logger.info(
+                "[Bootstrap] Deployment %s for site %s has no files; skipping sandbox bootstrap",
+                deployment["id"],
+                resolved_site_id,
+            )
+            return session_data
+
+        sandbox_ids = list(session_data.get("sandbox_ids", []) or [])
+        active_sandbox_id = str(session_data.get("active_sandbox_id") or "").strip()
+        sandbox_id = active_sandbox_id or (str(sandbox_ids[-1]).strip() if sandbox_ids else "")
+
+        if not sandbox_id:
+            response = requests.post(f"{config.SANDBOX_API_URL}/sessions", timeout=30)
+            response.raise_for_status()
+            created = response.json() or {}
+            sandbox_id = str(created.get("sandbox_id") or "").strip()
+            if not sandbox_id:
+                raise RuntimeError("Sandbox creation returned no sandbox_id")
+            connection_manager.add_sandbox_to_session(conversation_id, sandbox_id)
+            session_data = connection_manager.get_session(conversation_id) or session_data
+            session_data["active_sandbox_id"] = sandbox_id
+        else:
+            session_data["active_sandbox_id"] = sandbox_id
+
+        current_files = _list_sandbox_workspace_files(sandbox_id)
+        current_rel_paths = {
+            str(item.get("path", "")).replace("\\", "/")
+            for item in current_files
+        }
+        current_rel_paths = {
+            p[len(_WORKSPACE_ROOT) + 1:] if p.startswith(_WORKSPACE_ROOT + "/") else p
+            for p in current_rel_paths if p
+        }
+
+        copied = 0
+        for item in files:
+            rel_path = str(item.get("path", "")).replace("\\", "/").lstrip("/")
+            if not rel_path or ".." in rel_path.split("/"):
+                continue
+            if rel_path in current_rel_paths:
+                continue
+            content_bytes = get_deployment_file_bytes(
+                site_id=resolved_site_id,
+                user_id=str(session_data["user_id"]),
+                path=rel_path,
+                deployment_id=str(deployment["id"]),
+            )
+            dest_path = f"{_WORKSPACE_ROOT}/{rel_path}"
+            _write_sandbox_workspace_file(sandbox_id, dest_path, content_bytes)
+            copied += 1
+
+        latest_session = connection_manager.get_session(conversation_id) or session_data
+        latest_config = dict(latest_session.get("config", {}) or {})
+        latest_workspace_context = latest_config.get("workspace_context", {}) or {}
+        if not isinstance(latest_workspace_context, dict):
+            latest_workspace_context = {}
+        latest_cloud_context = latest_workspace_context.get("cloud_context", {}) or {}
+        if not isinstance(latest_cloud_context, dict):
+            latest_cloud_context = {}
+        latest_cloud_context["bootstrapped"] = True
+        latest_cloud_context["bootstrapped_key"] = bootstrap_key
+        latest_cloud_context["bootstrapped_site_id"] = resolved_site_id
+        latest_cloud_context["bootstrapped_deployment_id"] = str(deployment["id"])
+        latest_workspace_context["cloud_context"] = latest_cloud_context
+        latest_config["workspace_context"] = latest_workspace_context
+        latest_session["config"] = latest_config
+        latest_session["active_sandbox_id"] = sandbox_id
+        connection_manager.redis_client.set(
+            f"session:{conversation_id}",
+            json.dumps(latest_session),
+            ex=connection_manager.SESSION_TTL,
+        )
+        logger.info(
+            "[Bootstrap] Ensured deployment files in sandbox for conv=%s site=%s deployment=%s copied=%s existing=%s sandbox=%s",
+            conversation_id,
+            resolved_site_id,
+            deployment["id"],
+            copied,
+            len(current_rel_paths),
+            sandbox_id,
+        )
+        return latest_session
+    except Exception as exc:
+        logger.error(
+            "[Bootstrap] Failed to prepare deployed project workspace for conv=%s: %s",
+            conversation_id,
+            exc,
+            exc_info=True,
+        )
+        return session_data
 
 
 def _to_int(value: Any) -> int:
@@ -567,6 +787,14 @@ def run_agent_and_stream(
         ).strip().lower()
         if requested_coder_target not in ("local", "cloud"):
             requested_coder_target = "cloud"
+
+        session_data = _ensure_project_workspace_bootstrap(
+            session_data=session_data,
+            conversation_id=conversation_id,
+            connection_manager=connection_manager,
+            requested_mode=requested_mode,
+            requested_coder_target=requested_coder_target,
+        )
 
         if requested_mode == "coder":
             agent = get_coder_agent(
