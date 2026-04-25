@@ -13,6 +13,7 @@ import requests
 # --- Local Module Imports ---
 from extensions import socketio
 from assistant import get_llm_os
+from system_assistant import get_system_assistant
 from coder_agent import get_coder_agent
 from computer_agent import get_computer_agent
 from convex_usage_service import get_convex_usage_service
@@ -775,9 +776,9 @@ def run_agent_and_stream(
             session_coder_target = "cloud"
 
         requested_mode = str(agent_mode or "").strip().lower()
-        if requested_mode not in ("coder", "computer", "default"):
+        if requested_mode not in ("coder", "computer", "default", "system-assistant"):
             requested_mode = session_agent_mode
-        if requested_mode not in ("coder", "computer", "default"):
+        if requested_mode not in ("coder", "computer", "default", "system-assistant"):
             requested_mode = "default"
 
         requested_coder_target = str(
@@ -826,6 +827,15 @@ def run_agent_and_stream(
                 enable_google_drive=bool(session_config.get("enable_google_drive", True)),
                 enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
             )
+        elif requested_mode == "system-assistant":
+            mobile_tools_config = {
+                "sid": sid,
+                "socketio": socketio,
+                "redis_client": redis_client,
+                "conversation_id": conversation_id,
+                "message_id": message_id,
+            }
+            agent = get_system_assistant(mobile_tools_config=mobile_tools_config)
         else:
             llm_os_config = _filter_kwargs_for_callable(
                 get_llm_os,
@@ -963,7 +973,7 @@ def run_agent_and_stream(
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = (
-                    owner_name in ("Aetheria_AI", "Aetheria_Coder", "Aetheria_Computer")
+                    owner_name in ("Aetheria_AI", "Aetheria_Coder", "Aetheria_Computer", "Aetheria_System_Assistant")
                     and not getattr(chunk, 'member_responses', [])
                 )
                 # Include reasoning_content if present

@@ -1295,6 +1295,11 @@ def assistant_chat():
         image_urls = data.get('images', []) or []
         conversation_id = str(data.get("session_id") or data.get("conversationId") or uuid.uuid4())
         message_id = str(data.get("id") or uuid.uuid4())
+        assistant_target = str(
+            data.get("assistant_target")
+            or data.get("assistantTarget")
+            or ""
+        ).strip().lower()
         assistant_sid = str(
             data.get("assistant_sid")
             or data.get("assistantSocketSid")
@@ -1307,9 +1312,10 @@ def assistant_chat():
 
         msg_preview = (user_message[:75] + '...') if len(user_message) > 75 else user_message
         logger.info(
-            "Assistant query user=%s conversation=%s images=%s preview=%s",
+            "Assistant query user=%s conversation=%s target=%s images=%s preview=%s",
             user.id,
             conversation_id,
+            assistant_target or "system-assistant",
             len(image_urls),
             msg_preview,
         )
@@ -1348,6 +1354,14 @@ def assistant_chat():
         else:
             logger.info(
                 "Assistant chat request without assistant_sid user=%s conversation=%s",
+                user.id,
+                conversation_id,
+            )
+
+        if assistant_target and assistant_target != "system-assistant":
+            logger.warning(
+                "assistant_chat received unsupported assistant_target=%s for user=%s conversation=%s; defaulting to system assistant",
+                assistant_target,
                 user.id,
                 conversation_id,
             )
@@ -1415,30 +1429,7 @@ def assistant_chat():
 
 def generate_fallback_response(query: str) -> str:
     """Generate smart fallback responses when AI is unavailable."""
-    import datetime
-    lower = query.lower()
-    
-    if any(word in lower for word in ['time', 'what time']):
-        now = datetime.datetime.now()
-        return f"It's {now.strftime('%I:%M %p')}"
-    
-    if any(word in lower for word in ['date', 'today', 'what day']):
-        now = datetime.datetime.now()
-        return f"Today is {now.strftime('%A, %B %d, %Y')}"
-    
-    if any(word in lower for word in ['hello', 'hi', 'hey']):
-        return "Hello! I'm Aetheria, your AI assistant. How can I help you today?"
-    
-    if any(word in lower for word in ['who are you', 'what are you']):
-        return "I'm Aetheria, an AI assistant designed to help you with various tasks and questions."
-    
-    if any(word in lower for word in ['thank']):
-        return "You're welcome! Is there anything else I can help with?"
-    
-    if any(word in lower for word in ['bye', 'goodbye']):
-        return "Goodbye! Have a great day!"
-    
-    return f"I heard: \"{query}\". The AI service is currently connecting. Please try again in a moment."
+    return "This is taking longer than expected. I'm still working on your request, so please wait a moment and try again if the answer doesn't appear."
 
 
 @api_bp.route('/healthz')
