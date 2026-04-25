@@ -100,7 +100,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=Gemini(id="gemini-2.5-flash"),
+        model=OpenRouter(id="tencent/hy3-preview:free"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
