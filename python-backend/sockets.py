@@ -49,6 +49,8 @@ def _normalize_agent_mode(raw_value: Any) -> str:
         return "coder"
     if value == "computer":
         return "computer"
+    if value == "system-assistant":
+        return "system-assistant"
     return "default"
 
 
@@ -546,6 +548,11 @@ def on_assistant_message(data: str):
 
         user_message = data.get("message", "")
         conversation_id = data.get("conversationId")
+        assistant_target = str(
+            data.get("assistant_target")
+            or data.get("assistantTarget")
+            or ""
+        ).strip().lower()
 
         if not conversation_id and data.get("session_id"):
             conversation_id = data.get("session_id")
@@ -578,17 +585,33 @@ def on_assistant_message(data: str):
             )
 
         user_id = str(user.id)
+        requested_agent_mode = "system-assistant" if assistant_target == "system-assistant" else "default"
 
         if not connection_manager_service.get_session(conversation_id):
+            session_config = dict(data.get("config", {
+                "internet_search": True,
+                "coding_assistant": True,
+                "Planner_Agent": True
+            }))
+            session_config["agent_mode"] = requested_agent_mode
+            session_config["assistant_target"] = assistant_target or "system-assistant"
             connection_manager_service.create_session(
                 conversation_id,
                 user_id,
-                data.get("config", {
-                    "internet_search": True,
-                    "coding_assistant": True,
-                    "Planner_Agent": True
-                }),
+                session_config,
                 device_type='mobile'
+            )
+        else:
+            session_data = connection_manager_service.get_session(conversation_id) or {}
+            session_config = dict(session_data.get("config", {}))
+            session_config.update(dict(data.get("config", {}) or {}))
+            session_config["agent_mode"] = requested_agent_mode
+            session_config["assistant_target"] = assistant_target or "system-assistant"
+            session_data["config"] = session_config
+            connection_manager_service.redis_client.set(
+                f"session:{conversation_id}",
+                json.dumps(session_data),
+                ex=connection_manager_service.SESSION_TTL,
             )
 
         turn_data = {"user_message": user_message, "files": []}
@@ -604,7 +627,7 @@ def on_assistant_message(data: str):
             turn_data,
             browser_tools_config,
             [],
-            "default",
+            requested_agent_mode,
             connection_manager_service,
             redis_client_instance,
             run_state_manager_instance,  # NEW: pass run state manager

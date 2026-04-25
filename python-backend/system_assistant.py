@@ -77,7 +77,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="qwen/qwen3.6-plus:free"),
+        model=OpenRouter(id="tencent/hy3-preview:free"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
