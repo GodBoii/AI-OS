@@ -200,6 +200,10 @@ class PythonBridge {
             this._sendToRenderer('image_generated', data);
         });
 
+        this.socket.on('media_generated', (data) => {
+            this._sendToRenderer('media_generated', data);
+        });
+
         this.socket.on('task_execution_status', (data) => {
             console.log('PythonBridge: Received task_execution_status:', data);
             this._sendToRenderer('task_execution_status', data);
