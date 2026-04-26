@@ -734,7 +734,8 @@ def run_agent_and_stream(
             'sid': sid,
             'message_id': message_id,
             'conversation_id': conversation_id,
-            'redis_client': redis_client
+            'redis_client': redis_client,
+            'user_id': user_id,
         }
         # --- DEBUG LOG ---
         print(f"[AGENT_RUNNER] Created realtime_tool_config: { {k: type(v).__name__ for k, v in realtime_tool_config.items()} }")

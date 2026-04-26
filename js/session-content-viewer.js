@@ -433,7 +433,9 @@ class SessionContentViewer {
         const metadata = file.metadata || {};
         const filename = metadata.filename || 'Unknown file';
         const size = this.formatFileSize(metadata.size || 0);
-        const type = file.content_type === 'artifact' ? 'Generated' : 'Uploaded';
+        const type = metadata.is_generated
+            ? 'Generated'
+            : (file.content_type === 'artifact' ? 'Generated' : 'Uploaded');
 
         // Get file extension and type
         const ext = filename.split('.').pop().toLowerCase();
@@ -571,6 +573,14 @@ class SessionContentViewer {
                                 artifactHandler.showArtifact('image', dataUrl, null, {
                                     title: filename
                                 });
+                            } else if (mimeType.startsWith('video/')) {
+                                const blob = new Blob([fileData], { type: mimeType });
+                                const objectUrl = URL.createObjectURL(blob);
+                                this.hide();
+                                artifactHandler.showArtifact('video', objectUrl, null, {
+                                    title: filename,
+                                    mimeType
+                                });
                             } else if (mimeType.startsWith('text/') || metadata.is_text) {
                                 // Show text content
                                 const content = new TextDecoder().decode(fileData);
@@ -592,10 +602,25 @@ class SessionContentViewer {
                     }
                 }
 
-                // Fallback: try to get from Supabase
-                if (metadata.path) {
-                    const supabaseUrl = `https://your-supabase-url/storage/v1/object/public/${metadata.path}`;
-                    window.open(supabaseUrl, '_blank');
+                if (file.signed_url) {
+                    const mimeType = metadata.mime_type || '';
+                    if (mimeType.startsWith('image/')) {
+                        this.hide();
+                        artifactHandler.showArtifact('image', file.signed_url, null, {
+                            title: filename,
+                            mimeType
+                        });
+                    } else if (mimeType.startsWith('video/')) {
+                        this.hide();
+                        artifactHandler.showArtifact('video', file.signed_url, null, {
+                            title: filename,
+                            mimeType
+                        });
+                    } else {
+                        window.open(file.signed_url, '_blank');
+                    }
+                } else if (metadata.path) {
+                    alert('File is stored in cloud storage, but no signed URL is available right now.');
                 } else {
                     alert('File is not available locally or in cloud storage.');
                 }
