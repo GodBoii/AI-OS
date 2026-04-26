@@ -42,7 +42,7 @@ from composio_tools import (
 )
 from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
-from image_tools import ImageTools
+from media_tools import MediaTools
 from agent_delegation_tools import AgentDelegationTools
 
 # Other Imports
@@ -134,7 +134,7 @@ def get_llm_os(
         else:
             logger.info("Composio WhatsApp not active for user %s. Toolkit not injected.", user_id)
     if custom_tool_config:
-        direct_tools.append(ImageTools(custom_tool_config=custom_tool_config))
+        direct_tools.append(MediaTools(custom_tool_config=custom_tool_config))
     if user_id:
         direct_tools.append(UserFileVaultTools(user_id=user_id))
 
@@ -204,7 +204,8 @@ def get_llm_os(
                 "- `GoogleEmailTools` — read, send, search, reply, label emails",
                 "- `GoogleDriveTools` — search, read, create, share files",
                 "- `GoogleSheetsTools` — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
-                "- `ImageTools.generate_image(prompt)` — AI image generation",
+                "- `MediaTools.generate_image(prompt)` — AI image generation",
+                "- `MediaTools.generate_video(prompt)` — AI video generation",
                 "- `composio_whatsapp_tools` — **always call `list_whatsapp_actions()` first**, then execute with exact tool_slug",
                 "- `DuckDuckGoTools` — web search/ internet search",
                 "- `delegate_to_coder(task_description)` — when available, run dedicated coder agent for coding/build/debug/deployment tasks in main mode",
@@ -348,7 +349,7 @@ def get_llm_os(
         "• GoogleEmailTools — read, send, search, reply, label emails",
         "• GoogleDriveTools — search, read, create, share files",
         "• GoogleSheetsTools — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
-        "• ImageTools — AI image generation via generate_image(prompt)",
+        "• MediaTools — AI media generation via generate_image(prompt) and generate_video(prompt)",
         "• composio_whatsapp_tools — list_whatsapp_actions() first, then execute with exact tool_slug",
         "• DuckDuckGoTools — web search",
         "• delegate_to_coder — dedicated coding-agent execution (available in realtime main-mode sessions)",
@@ -370,6 +371,8 @@ def get_llm_os(
         enable_session_summaries=use_session_summaries,
         stream_intermediate_steps=True,
         search_knowledge=use_memory,
+        send_media_to_model=False,
+        store_media=False,
         events_to_skip=[
             TeamRunEvent.run_started,
             TeamRunEvent.run_completed,

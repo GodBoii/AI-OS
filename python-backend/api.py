@@ -2449,6 +2449,22 @@ def get_session_content(session_id):
                 if urls:
                     item['stdout_url'] = urls.get('stdout_url')
                     item['stderr_url'] = urls.get('stderr_url')
+            elif content_type == 'upload':
+                metadata = _normalize_metadata(item.get('metadata'))
+                storage_path = str(metadata.get('path') or '').strip()
+                if storage_path:
+                    try:
+                        signed_response = supabase_client.storage.from_('media-uploads').create_signed_url(
+                            storage_path,
+                            3600,
+                        )
+                        if isinstance(signed_response, dict):
+                            item['signed_url'] = (
+                                signed_response.get('signedURL')
+                                or signed_response.get('signed_url')
+                            )
+                    except Exception as signed_error:
+                        logger.warning("Failed to generate signed upload URL for %s: %s", storage_path, signed_error)
             
             enriched_content.append(item)
         
