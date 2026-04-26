@@ -43,6 +43,15 @@ class MessageFormatter {
                     </button>`;
                 }
 
+                if (language === 'video') {
+                    const artifactId = code.trim();
+                    artifactHandler.createArtifact(artifactId, 'video');
+                    return `<button class="artifact-reference" data-artifact-id="${artifactId}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+                        View Generated Video
+                    </button>`;
+                }
+
                 if (language === 'mermaid') {
                     const artifactId = artifactHandler.createArtifact(code, 'mermaid');
                     artifactHandler.showArtifact('mermaid', code, artifactId);
@@ -89,6 +98,10 @@ class MessageFormatter {
         renderer.code = (code, language = 'plaintext') => {
             if (language === 'image') {
                 return '<div class="inline-artifact-placeholder">Image preview unavailable for saved sessions.</div>';
+            }
+
+            if (language === 'video') {
+                return '<div class="inline-artifact-placeholder">Video preview unavailable for saved sessions.</div>';
             }
 
             if (language === 'mermaid') {

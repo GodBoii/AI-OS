@@ -698,7 +698,21 @@ app.on('open-url', (event, url) => {
 
 const fs = require('fs').promises;
 ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
-ipcMain.handle('save-file', async (event, { filePath, content }) => { try { await fs.writeFile(filePath, content, 'utf8'); return true; } catch (error) { console.error('Error saving file:', error); return false; } });
+    ipcMain.handle('save-file', async (event, { filePath, content, encoding = 'utf8' }) => {
+        try {
+            if (encoding === 'base64') {
+                await fs.writeFile(filePath, Buffer.from(content, 'base64'));
+            } else if (encoding === 'binary') {
+                await fs.writeFile(filePath, Buffer.from(content, 'binary'));
+            } else {
+                await fs.writeFile(filePath, content, 'utf8');
+            }
+            return true;
+        } catch (error) {
+            console.error('Error saving file:', error);
+            return false;
+        }
+    });
 ipcMain.handle('export-conversation-pdf', async (event, payload) => {
     const html = String(payload?.html || '').trim();
     const defaultPath = String(payload?.defaultPath || 'aetheria-conversation.pdf').trim() || 'aetheria-conversation.pdf';
