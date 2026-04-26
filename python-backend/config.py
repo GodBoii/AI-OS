@@ -17,6 +17,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") # For Google Search, also auto-detected
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # --- OAuth Provider Credentials (Optional) ---
 # These can be None if not set in the .env file. The factory will handle this.
