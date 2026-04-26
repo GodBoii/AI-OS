@@ -7,12 +7,19 @@
     bottom: 0;
     width: 320px;
     /* Pure near-black matching the left sidebar glass — same visual family */
-    background: rgba(8, 8, 8, 0.97);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 32%),
+        rgba(8, 8, 8, 0.97);
     border: none;
     border-right: none; /* No divider — both sidebars look like one continuous panel */
     /* Codex-style right-edge curve: only the right corners are rounded */
     border-radius: 0 10px 10px 0;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.6); /* Soft depth shadow on right */
+    box-shadow:
+        4px 0 24px rgba(0, 0, 0, 0.6),
+        inset -1px 0 0 rgba(255, 255, 255, 0.035),
+        inset 0 1px 0 rgba(255, 255, 255, 0.035); /* Soft depth shadow on right */
+    -webkit-backdrop-filter: blur(22px) saturate(145%);
+    backdrop-filter: blur(22px) saturate(145%);
     display: flex;
     flex-direction: column;
     z-index: 1002;
@@ -77,7 +84,12 @@ body:not(.dark-mode) .project-workspace-super-header {
     font-size: 0.68rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition:
+        transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+        color 0.15s ease,
+        background 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
     white-space: nowrap;
     letter-spacing: 0.01em;
 }
@@ -86,12 +98,14 @@ body:not(.dark-mode) .project-workspace-super-header {
     background: rgba(255, 255, 255, 0.07);
     color: rgba(255, 255, 255, 0.8);
     border-color: rgba(255, 255, 255, 0.10);
+    transform: translateY(-1px);
 }
 
 .super-mode-btn.active {
     background: rgba(255, 255, 255, 0.10);
     color: #e6edf3;
     border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(0, 0, 0, 0.12);
 }
 
 /* Cloud active = slight blue tint */
@@ -127,10 +141,14 @@ body:not(.dark-mode) .super-mode-btn.active {
 }
 
 body:not(.dark-mode) .project-workspace-panel {
-    background: rgba(250, 250, 250, 0.98);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0) 34%),
+        rgba(250, 250, 250, 0.98);
     border: none;
     border-radius: 0 10px 10px 0;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+    box-shadow:
+        4px 0 24px rgba(0, 0, 0, 0.12),
+        inset -1px 0 0 rgba(0, 0, 0, 0.035);
 }
 
 .start-project-coding-btn {
@@ -682,20 +700,24 @@ body:not(.dark-mode) .project-know-me-fab:hover {
     cursor: pointer;
     transition: all var(--anim-fast) var(--easing-smooth);
     border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
 }
 
 .project-file-row:hover {
-    background: var(--accent-muted);
-    border-color: var(--accent-color);
-    transform: translateX(2px);
+    background: rgba(139, 92, 246, 0.10);
+    border-color: rgba(167, 139, 250, 0.22);
+    transform: translateX(3px);
+    box-shadow: inset 3px 0 0 rgba(167, 139, 250, 0.40);
 }
 
 .project-file-row.selected {
-    background: var(--accent-muted);
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.18), rgba(99, 102, 241, 0.08));
     color: var(--accent-color);
-    border-color: var(--accent-color);
+    border-color: rgba(167, 139, 250, 0.34);
     box-shadow: 
         0 2px 6px rgba(45, 55, 72, 0.10),
+        inset 3px 0 0 rgba(167, 139, 250, 0.70),
         inset 0 1px 2px rgba(45, 55, 72, 0.05);
 }
 
@@ -1137,15 +1159,15 @@ body:not(.dark-mode).project-panel-open .app-container {
     max-height: 90vh; /* Limits height so it stays within viewport */
     overflow-y: auto; /* Enables scrolling for overflowing content */
     padding: 40px;
-    border-radius: 28px;
+    border-radius: 22px;
     background: linear-gradient(135deg, rgba(20, 20, 22, 0.75) 0%, rgba(10, 10, 12, 0.95) 100%);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 
         0 40px 80px rgba(0, 0, 0, 0.6), 
         inset 0 0 20px rgba(255, 255, 255, 0.08),
         inset 0 1px 1px rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(40px) saturate(200%);
     -webkit-backdrop-filter: blur(40px) saturate(200%);
+    backdrop-filter: blur(40px) saturate(200%);
     color: #e2e8f0;
 }
 
@@ -1712,7 +1734,7 @@ body:not(.dark-mode) .path-vertical .path-line.vertical {
     position: relative;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px;
+    border-radius: 14px;
     padding: 24px;
     display: flex;
     flex-direction: column;

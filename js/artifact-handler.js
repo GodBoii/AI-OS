@@ -3,7 +3,7 @@
 class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
-        this.pendingImages = new Map();
+        this.pendingMedia = new Map();
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
@@ -111,53 +111,73 @@ class ArtifactHandler {
         document.body.appendChild(modal);
     }
 
-    cachePendingImage(artifactId, base64Data) {
-        if (!base64Data || base64Data.length === 0) {
-            console.error(`[HANDLER] Received empty base64 data for artifact ${artifactId}`);
+    cachePendingMedia(artifactId, media) {
+        if (!artifactId || !media || !media.url) {
+            console.error(`[HANDLER] Received incomplete media payload for artifact ${artifactId}`);
             return;
         }
 
-        // Check if a placeholder artifact already exists (text-first scenario)
         if (this.artifacts.has(artifactId)) {
             const artifact = this.artifacts.get(artifactId);
             
             if (artifact && artifact.isPending) {
-                // Finalize the artifact by adding the content and updating its state
-                artifact.content = base64Data;
+                artifact.content = media.url;
+                artifact.mimeType = media.mimeType || artifact.mimeType || null;
                 artifact.isPending = false;
-                this.showArtifact('image', base64Data, artifactId);
+                this.showArtifact(media.type || artifact.type, media.url, artifactId, {
+                    title: artifact.title,
+                    mimeType: media.mimeType || artifact.mimeType || null
+                });
                 return;
             } else if (artifact && !artifact.isPending) {
                 return;
             }
         }
         
-        // If no placeholder exists, cache it for later (data-first scenario)
-        this.pendingImages.set(artifactId, base64Data);
+        this.pendingMedia.set(artifactId, media);
+    }
+
+    cachePendingImage(artifactId, base64Data) {
+        if (!base64Data || base64Data.length === 0) {
+            console.error(`[HANDLER] Received empty base64 data for artifact ${artifactId}`);
+            return;
+        }
+        this.cachePendingMedia(artifactId, {
+            type: 'image',
+            url: typeof base64Data === 'string' && base64Data.startsWith('data:')
+                ? base64Data
+                : `data:image/png;base64,${base64Data}`,
+            mimeType: 'image/png'
+        });
     }
 
     createArtifact(content, type, artifactId = null, options = {}) {
-        if (type === 'image') {
-            const imageId = content.trim();
+        if (type === 'image' || type === 'video') {
+            const mediaId = content.trim();
             
-            // If ANY artifact already exists (pending or complete), return immediately
-            // This prevents duplicate placeholder creation during streaming
-            if (this.artifacts.has(imageId)) {
-                return imageId;
+            if (this.artifacts.has(mediaId)) {
+                return mediaId;
             }
 
-            // Data-First Scenario: The image data arrived before the text reference.
-            if (this.pendingImages.has(imageId)) {
-                const imageContent = this.pendingImages.get(imageId);
-                this.artifacts.set(imageId, { content: imageContent, type: 'image', isPending: false });
-                this.pendingImages.delete(imageId);
-                return imageId;
-            } 
-            // Text-First Scenario: The text reference arrived first. Create a placeholder.
-            else {
-                this.artifacts.set(imageId, { content: null, type: 'image', isPending: true });
-                return imageId;
+            if (this.pendingMedia.has(mediaId)) {
+                const mediaPayload = this.pendingMedia.get(mediaId);
+                this.artifacts.set(mediaId, {
+                    content: mediaPayload.url,
+                    type: mediaPayload.type || type,
+                    mimeType: mediaPayload.mimeType || null,
+                    isPending: false
+                });
+                this.pendingMedia.delete(mediaId);
+                return mediaId;
             }
+
+            this.artifacts.set(mediaId, {
+                content: null,
+                type,
+                mimeType: options.mimeType || null,
+                isPending: true
+            });
+            return mediaId;
         }
 
         // For all other artifact types (code, mermaid), the logic is simple.
@@ -209,6 +229,18 @@ class ArtifactHandler {
                     contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading image...</span></div>';
                 } else {
                     this.renderImage(data, contentDiv);
+                }
+                break;
+
+            case 'video':
+                titleEl.textContent = options.title || 'Video Viewer';
+                copyBtn.style.display = 'none';
+                downloadBtn.style.display = 'inline-flex';
+                deployBtn.style.display = 'none';
+                if (data === null) {
+                    contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading video...</span></div>';
+                } else {
+                    this.renderVideo(data, contentDiv, options.mimeType || null);
                 }
                 break;
 
@@ -380,6 +412,23 @@ class ArtifactHandler {
             : `data:image/png;base64,${base64Data}`;
         img.alt = 'Generated Image';
         container.appendChild(img);
+    }
+
+    renderVideo(videoUrl, container, mimeType = null) {
+        container.innerHTML = '';
+        const video = document.createElement('video');
+        video.className = 'generated-video-artifact';
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+
+        const source = document.createElement('source');
+        source.src = videoUrl;
+        if (mimeType) {
+            source.type = mimeType;
+        }
+        video.appendChild(source);
+        container.appendChild(video);
     }
 
     renderMermaidView(content, container, mode = 'preview') {
@@ -775,15 +824,17 @@ class ArtifactHandler {
         const artifact = this.artifacts.get(artifactId);
         if (artifact && typeof artifact === 'object') {
             // If the artifact is pending, check if data arrived in pendingImages cache
-            if (artifact.isPending && this.pendingImages.has(artifactId)) {
-                const imageData = this.pendingImages.get(artifactId);
-                artifact.content = imageData;
+            if (artifact.isPending && this.pendingMedia.has(artifactId)) {
+                const mediaData = this.pendingMedia.get(artifactId);
+                artifact.content = mediaData.url;
+                artifact.mimeType = mediaData.mimeType || artifact.mimeType || null;
                 artifact.isPending = false;
-                this.pendingImages.delete(artifactId);
-                this.showArtifact(artifact.type, imageData, artifactId, {
+                this.pendingMedia.delete(artifactId);
+                this.showArtifact(artifact.type, mediaData.url, artifactId, {
                     title: artifact.title,
                     language: artifact.language,
-                    defaultView: artifact.viewMode
+                    defaultView: artifact.viewMode,
+                    mimeType: artifact.mimeType
                 });
                 return;
             }
@@ -793,7 +844,8 @@ class ArtifactHandler {
             this.showArtifact(artifact.type, artifact.isPending ? null : artifact.content, artifactId, {
                 title: artifact.title,
                 language: artifact.language,
-                defaultView: artifact.viewMode
+                defaultView: artifact.viewMode,
+                mimeType: artifact.mimeType
             });
         } else {
             console.error(`ArtifactHandler: Failed to find artifact with ID: ${artifactId}`);
@@ -854,6 +906,23 @@ class ArtifactHandler {
                 suggestedName = safeTitle
                     ? safeTitle.replace(/[\\/:*?"<>|]+/g, '_')
                     : (artifact.type === 'mermaid' ? 'diagram' : 'code');
+            } else if (artifact.type === 'image' || artifact.type === 'video') {
+                const url = artifact.content;
+                if (!url) return;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const bytes = new Uint8Array(await response.arrayBuffer());
+                content = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+                encoding = 'binary';
+                const safeTitle = (artifact.title || '').trim();
+                suggestedName = safeTitle
+                    ? safeTitle.replace(/[\\/:*?"<>|]+/g, '_')
+                    : `generated-${artifact.type}`;
+                extension = artifact.type === 'video'
+                    ? '.mp4'
+                    : this.extensionFromMimeType(artifact.mimeType || 'image/png');
             }
         }
 
@@ -867,13 +936,26 @@ class ArtifactHandler {
         }
 
         const imageEl = contentDiv.querySelector('.generated-image-artifact');
+        const videoEl = contentDiv.querySelector('.generated-video-artifact');
 
         if (imageEl) {
             const dataUri = imageEl.src;
-            content = dataUri.split(',')[1];
-            suggestedName = 'generated-image';
-            extension = '.png';
-            encoding = 'base64';
+            if (dataUri.startsWith('data:')) {
+                content = dataUri.split(',')[1];
+                suggestedName = 'generated-image';
+                extension = '.png';
+                encoding = 'base64';
+            }
+        } else if (videoEl && videoEl.currentSrc) {
+            const response = await fetch(videoEl.currentSrc);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            content = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+            suggestedName = 'generated-video';
+            extension = '.mp4';
+            encoding = 'binary';
         } else if (!content && contentDiv.querySelector('.mermaid')) {
             content = contentDiv.querySelector('.mermaid').textContent;
             extension = '.mmd';
@@ -892,7 +974,7 @@ class ArtifactHandler {
             const result = await window.electron.ipcRenderer.invoke('show-save-dialog', {
                 title: 'Save File',
                 defaultPath: suggestedName + extension,
-                filters: [{ name: 'Image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]
+                filters: [{ name: 'Media', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4'] }, { name: 'All Files', extensions: ['*'] }]
             });
             
             if (result.canceled || !result.filePath) return;
@@ -946,6 +1028,16 @@ class ArtifactHandler {
         const activeId = container?.dataset?.activeArtifactId;
         if (!activeId) return null;
         return this.artifacts.get(activeId) || null;
+    }
+
+    extensionFromMimeType(mimeType) {
+        const map = {
+            'image/png': '.png',
+            'image/jpeg': '.jpg',
+            'image/webp': '.webp',
+            'video/mp4': '.mp4'
+        };
+        return map[mimeType] || '.bin';
     }
 
     getExistingDeployTarget() {
