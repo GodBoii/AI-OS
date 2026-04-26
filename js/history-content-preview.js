@@ -157,6 +157,8 @@ class HistoryContentPreview {
         // Handle different types
         if (mimeType.startsWith('image/')) {
             await this.renderImage(response, container);
+        } else if (mimeType.startsWith('video/')) {
+            await this.renderVideo(response, mimeType, container);
         } else if (mimeType.startsWith('text/') || this.isTextFile(filename)) {
             await this.renderText(response, filename, container);
         } else if (mimeType === 'application/json') {
@@ -183,6 +185,8 @@ class HistoryContentPreview {
                     
                     if (mimeType.startsWith('image/')) {
                         this.renderImageFromBuffer(fileData, mimeType, container);
+                    } else if (mimeType.startsWith('video/')) {
+                        this.renderVideoFromBuffer(fileData, mimeType, container);
                     } else if (mimeType.startsWith('text/') || metadata.is_text) {
                         const text = new TextDecoder().decode(fileData);
                         this.renderTextContent(text, filename, container);
@@ -196,8 +200,23 @@ class HistoryContentPreview {
             }
         }
 
-        // Fallback: show download option
-        this.renderDownloadOnly(filename, metadata.path, container);
+        if (content.signed_url) {
+            if (mimeType.startsWith('image/')) {
+                const response = await fetch(content.signed_url);
+                if (response.ok) {
+                    await this.renderImage(response, container);
+                    return;
+                }
+            } else if (mimeType.startsWith('video/')) {
+                const response = await fetch(content.signed_url);
+                if (response.ok) {
+                    await this.renderVideo(response, mimeType, container);
+                    return;
+                }
+            }
+        }
+
+        this.renderDownloadOnly(filename, content.signed_url || metadata.path, container);
     }
 
     async renderExecution(content, container) {
@@ -264,6 +283,36 @@ class HistoryContentPreview {
         img.className = 'preview-image';
         
         wrapper.appendChild(img);
+        container.appendChild(wrapper);
+    }
+
+    async renderVideo(response, mimeType, container) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        this.renderVideoUrl(url, mimeType, container);
+    }
+
+    renderVideoFromBuffer(buffer, mimeType, container) {
+        const blob = new Blob([buffer], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        this.renderVideoUrl(url, mimeType, container);
+    }
+
+    renderVideoUrl(url, mimeType, container) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'preview-image-wrapper';
+
+        const video = document.createElement('video');
+        video.className = 'preview-image';
+        video.controls = true;
+        video.playsInline = true;
+
+        const source = document.createElement('source');
+        source.src = url;
+        source.type = mimeType;
+        video.appendChild(source);
+
+        wrapper.appendChild(video);
         container.appendChild(wrapper);
     }
 

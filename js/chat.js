@@ -1423,20 +1423,33 @@ function setupIpcListeners() {
         }
     });
 
-    ipcRenderer.on('image_generated', (data) => {
-        const { id: messageId, image_base64, artifactId } = data;
+    const handleGeneratedMediaEvent = (data, fallbackType = 'image') => {
+        const {
+            id: messageId,
+            image_base64,
+            artifactId,
+            mediaType = fallbackType,
+            mediaUrl = null,
+            mimeType = null
+        } = data || {};
         const messageDiv = getStreamMessageDiv(messageId);
 
-        // Filter events by message ID to ensure this client should process it
         if (!messageDiv) {
             return;
         }
 
-        if (artifactHandler && image_base64 && artifactId) {
-            artifactHandler.cachePendingImage(artifactId, image_base64);
+        if (artifactHandler && artifactId) {
+            if (mediaUrl) {
+                artifactHandler.cachePendingMedia(artifactId, {
+                    type: mediaType,
+                    url: mediaUrl,
+                    mimeType
+                });
+            } else if (image_base64) {
+                artifactHandler.cachePendingImage(artifactId, image_base64);
+            }
         }
 
-        // Add log entry to reasoning dropdown
         if (messageId && messageDiv) {
             const logsContainer = messageDiv.querySelector('.detailed-logs');
             if (logsContainer) {
@@ -1446,7 +1459,7 @@ function setupIpcListeners() {
                     <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
                         <i class="fi fi-tr-wisdom tool-log-icon"></i>
                         <div class="tool-log-details" style="flex-grow: 1;">
-                            <span class="tool-log-action"><strong>Generated an image</strong></span>
+                            <span class="tool-log-action"><strong>Generated a ${mediaType}</strong></span>
                         </div>
                         <span class="tool-log-status completed"></span>
                         <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); color: var(--text-secondary);"></i>
@@ -1465,10 +1478,17 @@ function setupIpcListeners() {
                     }
                 });
 
-                // OPTION B: Update the summary live when an image is generated
                 updateReasoningSummary(messageId);
             }
         }
+    };
+
+    ipcRenderer.on('image_generated', (data) => {
+        handleGeneratedMediaEvent(data, 'image');
+    });
+
+    ipcRenderer.on('media_generated', (data) => {
+        handleGeneratedMediaEvent(data, data?.mediaType || 'image');
     });
 
     ipcRenderer.on('agent-step', async (data) => {
