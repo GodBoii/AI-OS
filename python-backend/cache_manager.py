@@ -5,8 +5,42 @@
 import json
 import logging
 import redis
+from datetime import datetime, date
+from decimal import Decimal
 from typing import Any, Optional
+from uuid import UUID
 import config
+
+
+class _SupabaseEncoder(json.JSONEncoder):
+    """
+    JSON encoder that handles all types Supabase/PostgREST returns that the
+    standard library cannot serialise out of the box.
+
+    Without this encoder, CacheManager.set() silently fails for any payload
+    containing these types, turning every request into a perpetual cache miss.
+
+    Conversion rules:
+      - datetime  → ISO-8601 string   e.g. "2026-04-30T04:23:30"
+      - date      → ISO-8601 string   e.g. "2026-04-30"
+      - UUID      → string            e.g. "c069d103-4568-4479-ab87-a3e264c0ebe9"
+      - Decimal   → float             e.g. 3.14
+      - set       → list              e.g. [1, 2, 3]
+      - All other types fall back to the default encoder (raises TypeError
+        for truly un-serialisable objects, preserving correct error behaviour).
+    """
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, date):
+            return obj.isoformat()
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, set):
+            return list(obj)
+        return super().default(obj)
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +70,15 @@ class CacheManager:
     def set(key: str, data: Any, ttl_seconds: int = 3600) -> bool:
         """
         Serialize and store data in Redis with a TTL (default 1 hour = 3600 seconds).
+
+        Uses _SupabaseEncoder so that non-standard types returned by Supabase
+        (datetime, date, UUID, Decimal, set) are automatically converted to
+        JSON-safe primitives instead of raising TypeError.
         """
         try:
-            serialized = json.dumps(data)
+            # Use _SupabaseEncoder so that datetime, UUID, Decimal, etc.
+            # objects returned by Supabase are serialised correctly.
+            serialized = json.dumps(data, cls=_SupabaseEncoder)
             # ex=ttl_seconds sets the expiration time automatically in Redis
             return cache_redis.set(key, serialized, ex=ttl_seconds)
         except Exception as e:

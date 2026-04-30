@@ -29,6 +29,7 @@ from agent_runner import run_agent_and_stream
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
+from cache_manager import CacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -490,6 +491,15 @@ def on_send_message(data: str):
                             }
                         )
                 logger.info(f"Registered {len(files)} user uploads for session {conversation_id}")
+
+                # Invalidate the session_content cache now that new uploads are
+                # registered. Without this the next GET /sessions/<id>/content
+                # would return stale data missing these new files.
+                CacheManager.delete(f"cache:session_content:{conversation_id}:{user.id}")
+                logger.info(
+                    "[Session Content Cache] INVALIDATED after file upload session=%s user=%s",
+                    conversation_id, user.id,
+                )
             except Exception as e:
                 logger.warning(f"Failed to register user uploads: {e}")
 
