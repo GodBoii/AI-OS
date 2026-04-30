@@ -43,6 +43,13 @@ def create_app():
     # management explicitly.
     socketio.init_app(app, message_queue=config.REDIS_URL, manage_session=False)
     oauth.init_app(app)
+
+    from extensions import limiter
+    limiter.init_app(app)
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return {"ok": False, "error": f"Rate limit exceeded: {e.description}"}, 429
     
     # --- 2. Instantiate Services ---
     redis_client = RedisClient.from_url(config.REDIS_URL)
