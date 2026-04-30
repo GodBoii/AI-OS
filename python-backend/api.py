@@ -938,6 +938,7 @@ def user_files_register():
                 size_bytes=body.get("sizeBytes"),
                 tags=tags,
             )
+        CacheManager.invalidate_pattern(f"cache:user_files:{user.id}:*")
         return jsonify({"ok": True, "file": row}), 200
     except PermissionError as e:
         return jsonify({"ok": False, "error": str(e)}), 403
@@ -981,6 +982,7 @@ def user_files_upload():
             size_bytes=body.get("sizeBytes"),
             tags=tags,
         )
+        CacheManager.invalidate_pattern(f"cache:user_files:{user.id}:*")
         return jsonify({"ok": True, "file": row}), 200
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
@@ -1003,6 +1005,12 @@ def user_files_list():
         limit = request.args.get("limit", default=100, type=int) or 100
         search = (request.args.get("search") or "").strip()
         file_type = (request.args.get("file_type") or "all").strip().lower()
+        
+        cache_key = f"cache:user_files:{user.id}:{limit}:{search}:{file_type}"
+        cached_data = CacheManager.get(cache_key)
+        if cached_data:
+            return jsonify(cached_data), 200
+            
         rows = list_user_files(
             user_id=str(user.id),
             limit=limit,
@@ -1010,7 +1018,9 @@ def user_files_list():
             file_type=file_type,
             signed_url_expiry=3600,
         )
-        return jsonify({"ok": True, "files": rows, "count": len(rows)}), 200
+        response_data = {"ok": True, "files": rows, "count": len(rows)}
+        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        return jsonify(response_data), 200
     except Exception as e:
         logger.error("user-files list failed: %s", e, exc_info=True)
         return jsonify({"ok": False, "error": "failed to list user files"}), 500
@@ -1028,6 +1038,7 @@ def user_files_content(file_id):
     try:
         max_chars = request.args.get("max_chars", default=40000, type=int) or 40000
         row = read_user_file_text(user_id=str(user.id), file_id=str(file_id), max_chars=max_chars)
+        CacheManager.invalidate_pattern(f"cache:user_files:{user.id}:*")
         return jsonify({"ok": True, "file": row}), 200
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 404
@@ -1071,6 +1082,7 @@ def user_files_get(file_id):
 
     try:
         row = get_user_file(user_id=str(user.id), file_id=str(file_id), include_signed_url=True)
+        CacheManager.invalidate_pattern(f"cache:user_files:{user.id}:*")
         return jsonify({"ok": True, "file": row}), 200
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 404
@@ -1090,6 +1102,7 @@ def user_files_delete(file_id):
 
     try:
         result = delete_user_file(user_id=str(user.id), file_id=str(file_id))
+        CacheManager.invalidate_pattern(f"cache:user_files:{user.id}:*")
         return jsonify({"ok": True, **result}), 200
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 404
@@ -1555,8 +1568,16 @@ def deploy_projects():
     try:
         ensure_deploy_tables()
         limit = request.args.get("limit", default=20, type=int)
+        
+        cache_key = f"cache:deploy_projects:{user.id}:{limit}"
+        cached_data = CacheManager.get(cache_key)
+        if cached_data:
+            return jsonify(cached_data), 200
+            
         projects = list_deployed_projects(user_id=str(user.id), limit=limit or 20)
-        return jsonify({"ok": True, "projects": projects}), 200
+        response_data = {"ok": True, "projects": projects}
+        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        return jsonify(response_data), 200
     except Exception as e:
         logger.error(f"deploy/projects failed: {e}", exc_info=True)
         return jsonify({"error": "failed to load deployed projects"}), 500
@@ -2263,6 +2284,7 @@ def deploy_activate():
         ensure_deploy_tables()
         manifest = upsert_site_manifest(site_id=str(site_id), user_id=str(user.id), deployment_id=str(deployment_id))
         result = activate_deployment(site_id=str(site_id), user_id=str(user.id), deployment_id=str(deployment_id))
+        CacheManager.invalidate_pattern(f"cache:deploy_projects:{user.id}:*")
         return jsonify({"ok": True, "manifest": manifest, **result}), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
@@ -2323,6 +2345,11 @@ def get_artifact_details(artifact_id):
         from sandbox_persistence import get_persistence_service
         persistence_service = get_persistence_service()
         
+        cache_key = f"cache:artifact_details:{user.id}:{artifact_id}"
+        cached_data = CacheManager.get(cache_key)
+        if cached_data:
+            return jsonify(cached_data), 200
+        
         # Get artifact metadata
         result = supabase_client.table('sandbox_artifacts').select(
             '*'
@@ -2344,8 +2371,11 @@ def get_artifact_details(artifact_id):
             return jsonify({"error": "Failed to generate download URL"}), 500
         
         artifact['download_url'] = download_url
+        response_data = {"artifact": artifact}
         
-        return jsonify({"artifact": artifact}), 200
+        # Cache for slightly less than the URL expiry (e.g. 50 minutes = 3000s)
+        CacheManager.set(cache_key, response_data, ttl_seconds=3000)
+        return jsonify(response_data), 200
         
     except Exception as e:
         logger.error(f"Error fetching artifact details: {e}")
@@ -2371,6 +2401,7 @@ def delete_artifact(artifact_id):
         )
         
         if success:
+            CacheManager.delete(f"cache:artifact_details:{user.id}:{artifact_id}")
             return jsonify({"message": "Artifact deleted"}), 200
         else:
             return jsonify({"error": "Failed to delete artifact"}), 500
