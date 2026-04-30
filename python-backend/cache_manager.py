@@ -1,3 +1,7 @@
+# python-backend/cache_manager.py
+#
+# Redis-backed cache with JSON serialisation, TTL support, and non-blocking
+# bulk key invalidation via SCAN (never uses the blocking KEYS command).
 import json
 import logging
 import redis
@@ -55,14 +59,44 @@ class CacheManager:
             return False
 
     @staticmethod
-    def invalidate_pattern(pattern: str):
+    def invalidate_pattern(pattern: str) -> None:
         """
-        Invalidate all keys matching a specific pattern (e.g., 'cache:memories:*')
+        Invalidate all Redis keys matching a glob pattern (e.g. 'cache:memories:user123:*').
+
+        Why SCAN instead of KEYS:
+        - KEYS is O(N) and holds Redis's single-threaded command lock for the
+          entire scan. Every other client — Flask-Limiter, SocketIO pub/sub,
+          session reads — stalls until it completes. On large keyspaces this can
+          mean tens of milliseconds of full Redis unavailability.
+        - SCAN iterates in small cursor-based batches (count=100 per call).
+          Redis can serve other commands between batches, so latency stays low
+          even on keyspaces with millions of keys.
+
+        Keys matched across all cursor pages are deleted in one single DEL call
+        (one round-trip regardless of how many keys were found).
         """
         try:
-            keys = cache_redis.keys(pattern)
-            if keys:
-                cache_redis.delete(*keys)
-                logger.info(f"[CACHE PATTERN INVALIDATED] {pattern} ({len(keys)} keys)")
+            matched: list[str] = []
+            cursor = 0
+            while True:
+                # count=100 is a hint to Redis about batch size per iteration.
+                # It does NOT guarantee exactly 100 results per call — Redis may
+                # return more or fewer depending on its internal data structures.
+                # 100 strikes a balance between round-trip count and per-call work.
+                cursor, batch = cache_redis.scan(cursor=cursor, match=pattern, count=100)
+                if batch:
+                    matched.extend(batch)
+                # cursor returns to 0 when the full keyspace has been visited.
+                if cursor == 0:
+                    break
+
+            if matched:
+                # Single DEL with all keys — one network round-trip.
+                cache_redis.delete(*matched)
+                logger.info(
+                    "[CACHE PATTERN INVALIDATED] %s (%d keys deleted)",
+                    pattern,
+                    len(matched),
+                )
         except Exception as e:
             logger.error(f"Cache invalidate pattern error for {pattern}: {e}")
