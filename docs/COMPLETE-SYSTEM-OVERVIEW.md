@@ -379,6 +379,8 @@ media-uploads/
 | Feature | Description | Availability |
 |---------|-------------|--------------|
 | **Chat Interface** | Real-time streaming chat with markdown, code highlighting, LaTeX | All plans |
+| **Terminal UI (TUI)** | Premium CLI aesthetics (`/nerdfont`), stats sidebar, input pulse | All plans |
+| **Animated Cat** | Interactive cursor-tracking terminal companion (`/cat` toggle) | All plans |
 | **Voice Input** | Whisper-powered speech recognition | All plans |
 | **Voice Output** | Natural TTS for agent responses | All plans |
 | **File Attachments** | Support for documents, images, audio, video | All plans |
@@ -388,11 +390,13 @@ media-uploads/
 | **Browser Automation** | Dual-mode (client/server) browser control | All plans |
 | **Computer Control** | Desktop automation (desktop only) | All plans |
 | **Project Workspace** | Dedicated development environment | All plans |
+| **Design Mode** | Liquid Glass visual editor for local deployed projects | All plans |
 | **GitHub Integration** | Repository management, commits, PRs | All plans |
 | **Google Services** | Email, Drive, Sheets integration | All plans |
 | **Vercel Deployment** | Deploy to Vercel with one command | All plans |
 | **File Vault** | Persistent user file storage | All plans |
 | **Task Management** | Built-in to-do list | All plans |
+| **Native Notifications** | Background-aware OS notifications for agent completions | All plans |
 | **Memory System** | Persistent agent memory | Pro+ |
 | **Session Summaries** | Automatic conversation summarization | Pro+ |
 | **Priority Support** | Email and chat support | Pro+ |

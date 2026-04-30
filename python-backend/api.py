@@ -16,7 +16,7 @@ from flask import Blueprint, request, jsonify
 # Import the utility function from the factory (or a future utils module)
 from utils import get_user_from_token
 from supabase_client import supabase_client
-from extensions import socketio
+from extensions import socketio, limiter
 import config
 from composio_client import ComposioApiError, ComposioClient
 from deploy_platform import (
@@ -151,6 +151,7 @@ def _collect_workspace_upload_files(sandbox_id: str, project_directory: str = _P
 # --- Run Status Endpoints (used for reconnect / catch-up) ---
 
 @api_bp.route('/conversations/<conversation_id>/status', methods=['GET'])
+@limiter.limit('120 per minute')
 def conversation_run_status(conversation_id):
     """
     Returns the current run state for a conversation.
@@ -178,6 +179,7 @@ def conversation_run_status(conversation_id):
 
 
 @api_bp.route('/conversations/<conversation_id>/result', methods=['GET'])
+@limiter.limit('120 per minute')
 def conversation_run_result(conversation_id):
     """
     Returns the stored result (completed/failed) for a conversation run.
@@ -296,6 +298,7 @@ def _normalize_single_statement(sql: str) -> str:
 
 
 @api_bp.route('/subscription/status', methods=['GET'])
+@limiter.limit('100 per minute')
 def subscription_status():
     user, error = get_user_from_token(request)
     if error:
@@ -310,6 +313,7 @@ def subscription_status():
 
 
 @api_bp.route('/usage/daily', methods=['GET'])
+@limiter.limit('60 per minute')
 def usage_daily_for_user():
     user, error = get_user_from_token(request)
     if error:
@@ -335,6 +339,7 @@ def usage_daily_for_user():
 
 
 @api_bp.route('/admin/usage/daily', methods=['GET'])
+@limiter.limit('60 per minute')
 def usage_daily_admin():
     expected_key = str(config.USAGE_ADMIN_API_KEY or "").strip()
     provided_key = str(request.headers.get("x-usage-admin-key") or "").strip()
@@ -358,6 +363,7 @@ def usage_daily_admin():
 
 
 @api_bp.route('/subscription/create', methods=['POST'])
+@limiter.limit('10 per minute')
 def subscription_create():
     user, error = get_user_from_token(request)
     if error:
@@ -396,6 +402,7 @@ def subscription_create():
 
 
 @api_bp.route('/subscription/verify', methods=['POST'])
+@limiter.limit('10 per minute')
 def subscription_verify():
     user, error = get_user_from_token(request)
     if error:
@@ -427,6 +434,7 @@ def subscription_verify():
 
 
 @api_bp.route('/webhooks/razorpay', methods=['POST'])
+@limiter.limit('100 per minute')
 def razorpay_webhook():
     raw_body = request.get_data(cache=False, as_text=False)
     signature = request.headers.get("X-Razorpay-Signature", "")
@@ -448,6 +456,7 @@ def razorpay_webhook():
 
 
 @api_bp.route('/integrations', methods=['GET'])
+@limiter.limit('60 per minute')
 def get_integrations_status():
     """
     Fetches the list of connected third-party services for the authenticated user.
@@ -462,6 +471,7 @@ def get_integrations_status():
 
 
 @api_bp.route('/integrations/disconnect', methods=['POST'])
+@limiter.limit('20 per minute')
 def disconnect_integration():
     """
     Removes an integration record for the authenticated user and a given service.
@@ -480,6 +490,7 @@ def disconnect_integration():
 
 
 @api_bp.route('/memories', methods=['GET'])
+@limiter.limit('100 per minute')
 def list_memories():
     """
     List authenticated user's memories from agno_memories table.
@@ -508,6 +519,7 @@ def list_memories():
 
 
 @api_bp.route('/memories', methods=['POST'])
+@limiter.limit('100 per minute')
 def create_memory():
     """
     Create a new user memory in agno_memories.
@@ -557,6 +569,7 @@ def create_memory():
 
 
 @api_bp.route('/memories/<memory_id>', methods=['PUT', 'PATCH', 'DELETE'])
+@limiter.limit('100 per minute')
 def memory_by_id(memory_id):
     """
     Update or delete a memory by memory_id for authenticated user.
@@ -628,6 +641,7 @@ def memory_by_id(memory_id):
 
 
 @api_bp.route('/composio/status', methods=['GET'])
+@limiter.limit('30 per minute')
 def composio_status():
     """
     Returns Composio connection status for the authenticated user and toolkit.
@@ -663,6 +677,7 @@ def composio_status():
 
 
 @api_bp.route('/composio/disconnect', methods=['POST'])
+@limiter.limit('10 per minute')
 def composio_disconnect():
     """
     Disconnects Composio connected account(s) for a toolkit.
@@ -704,6 +719,7 @@ def composio_disconnect():
 
 
 @api_bp.route('/composio/connect-url', methods=['GET', 'POST'])
+@limiter.limit('10 per minute')
 def composio_connect_url():
     """
     Generates a Composio connected-account link for the authenticated user.
@@ -753,6 +769,7 @@ def composio_connect_url():
 
 
 @api_bp.route('/composio/tools', methods=['GET'])
+@limiter.limit('30 per minute')
 def composio_tools():
     """
     Lists available Composio tools for a toolkit.
@@ -777,6 +794,7 @@ def composio_tools():
 
 
 @api_bp.route('/generate-upload-url', methods=['POST'])
+@limiter.limit('20 per minute')
 def generate_upload_url():
     """
     Generates a pre-signed URL for securely uploading a file to Supabase storage.
