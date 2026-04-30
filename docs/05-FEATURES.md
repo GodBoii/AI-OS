@@ -484,6 +484,17 @@ Dedicated environment for software development with specialized UI and agent.
 - Faster execution
 - Desktop-only
 
+### Design Mode
+
+**Overview:**
+A visual editing environment with a "Liquid Glass" Neo-Brutalist hybrid aesthetic. Available exclusively for deployed projects running in **Local Mode**.
+
+**Features:**
+- **Inspector Sidebar**: Figma-like visual editing with collapsible sections.
+- **Live Visual Editing**: Interactively edit text, colors, typography, margins, padding, borders, and flex layouts simply by clicking elements.
+- **Comment Mode**: Add targeted comments to specific UI elements for AI follow-up tasks.
+- **Real-time Preview**: See changes instantly reflecting across the UI.
+
 ---
 
 ## 6. Deployment Management
@@ -888,6 +899,11 @@ Agent creates:
 - Errors and warnings
 - Updates available
 
+**Native OS Notifications:**
+- Background-aware system notifications for agent runs.
+- Queues notifications (up to 3 active) when running in the background.
+- Alerts user to major computer operations (screenshots, file creation/deletion, clicks) without needing to keep the app focused.
+
 **Integration Notifications:**
 - GitHub events
 - Email arrivals
@@ -931,7 +947,22 @@ Agent creates:
 
 ---
 
-## 14. Advanced Features
+## 14. Terminal User Interface (TUI) & Cat Companion
+
+### TUI Features
+- **High-Fidelity Rendering**: Premium aesthetic with solid-block rendering.
+- **`/nerdfont <on|off>`**: Toggle high-fidelity glyphs and icons for enhanced terminal styling with persistent configuration.
+- **Dynamic Input Pulse**: Visual feedback loops during command execution.
+- **Telemetry Sidebar**: Real-time stats and runtime execution context.
+
+### Animated Cat Companion
+- **Interactive Avatar**: An animated, compact cat character that acts as your companion within the terminal.
+- **Cursor Tracking**: The cat's eyes physically follow your input cursor in real-time.
+- **Visibility Toggle**: Use `/cat <hide/show>` to easily manage the companion's presence without interrupting your workflow.
+
+---
+
+## 15. Advanced Features
 
 ### Artifacts
 

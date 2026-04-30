@@ -138,6 +138,21 @@ The frontend is a desktop application built with Electron, providing a native ex
    - Terminal integration
    - Git operations
 
+8. **Notification Service** (`js/native-notification-service.js`, `js/notification-service.js`)
+   - Cross-platform native OS notifications
+   - Background run completion alerts
+   - Settings management & queuing system
+
+9. **Design Mode** (`js/design-mode.js`)
+   - Local "Liquid Glass" visual editing
+   - CSS properties manipulation
+   - AI comment threading
+
+10. **TUI & Cat Companion**
+    - High-fidelity CLI aesthetics (`/nerdfont`)
+    - Interactive cursor-tracking animated cat
+    - Telemetry metrics display
+
 #### UI Architecture
 
 ```
