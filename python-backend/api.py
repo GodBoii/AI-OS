@@ -17,6 +17,7 @@ from flask import Blueprint, request, jsonify
 from utils import get_user_from_token
 from supabase_client import supabase_client
 from extensions import socketio, limiter
+from cache_manager import CacheManager
 import config
 from composio_client import ComposioApiError, ComposioClient
 from deploy_platform import (
@@ -304,9 +305,16 @@ def subscription_status():
     if error:
         return jsonify({"error": error[0]}), error[1]
 
+    cache_key = f"cache:subscription_status:{user.id}"
+    cached_data = CacheManager.get(cache_key)
+    if cached_data:
+        return jsonify(cached_data), 200
+
     try:
         summary = calculate_usage_summary(str(user.id), refresh_window=True)
-        return jsonify({"ok": True, "summary": summary}), 200
+        response_data = {"ok": True, "summary": summary}
+        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        return jsonify(response_data), 200
     except Exception as exc:
         logger.error("subscription/status failed: %s", exc, exc_info=True)
         return jsonify({"ok": False, "error": "failed to load subscription status"}), 500
@@ -425,6 +433,7 @@ def subscription_verify():
             subscription_id=subscription_id,
             signature=signature,
         )
+        CacheManager.delete(f"cache:subscription_status:{user.id}")
         return jsonify({"ok": True, **result}), 200
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -465,9 +474,16 @@ def get_integrations_status():
     if error:
         return jsonify({"error": error[0]}), error[1]
     
+    cache_key = f"cache:integrations:{user.id}"
+    cached_data = CacheManager.get(cache_key)
+    if cached_data:
+        return jsonify(cached_data), 200
+
     response = supabase_client.from_('user_integrations').select('service').eq('user_id', str(user.id)).execute()
     
-    return jsonify({"integrations": [item['service'] for item in response.data]})
+    response_data = {"integrations": [item['service'] for item in response.data]}
+    CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+    return jsonify(response_data), 200
 
 
 @api_bp.route('/integrations/disconnect', methods=['POST'])
@@ -486,6 +502,7 @@ def disconnect_integration():
         
     supabase_client.from_('user_integrations').delete().match({'user_id': str(user.id), 'service': service}).execute()
     
+    CacheManager.delete(f"cache:integrations:{user.id}")
     return jsonify({"message": "Disconnected"}), 200
 
 
@@ -503,6 +520,11 @@ def list_memories():
     try:
         limit = request.args.get("limit", default=100, type=int) or 100
         limit = max(1, min(limit, 500))
+        cache_key = f"cache:memories:{user.id}:{limit}"
+        cached_data = CacheManager.get(cache_key)
+        if cached_data:
+            return jsonify(cached_data), 200
+
         response = (
             supabase_client
             .table("agno_memories")
@@ -512,7 +534,9 @@ def list_memories():
             .limit(limit)
             .execute()
         )
-        return jsonify({"ok": True, "memories": response.data or []}), 200
+        response_data = {"ok": True, "memories": response.data or []}
+        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        return jsonify(response_data), 200
     except Exception as e:
         logger.error(f"list memories failed: {e}", exc_info=True)
         return jsonify({"ok": False, "error": "failed to load memories"}), 500
@@ -562,6 +586,7 @@ def create_memory():
             .execute()
         )
         inserted = (response.data or [None])[0]
+        CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
         return jsonify({"ok": True, "memory": inserted, "memory_id": memory_id}), 201
     except Exception as e:
         logger.error(f"create memory failed: {e}", exc_info=True)
@@ -601,6 +626,7 @@ def memory_by_id(memory_id):
                 .eq("user_id", str(user.id))
                 .execute()
             )
+            CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
             return jsonify({"ok": True, "deleted": True, "memory_id": memory_id}), 200
 
         body = request.json or {}
@@ -634,6 +660,7 @@ def memory_by_id(memory_id):
             .execute()
         )
         updated = (updated_resp.data or [None])[0]
+        CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
         return jsonify({"ok": True, "memory": updated, "memory_id": memory_id}), 200
     except Exception as e:
         logger.error(f"memory by id failed: {e}", exc_info=True)
@@ -651,12 +678,18 @@ def composio_status():
         return jsonify({"error": error[0]}), error[1]
 
     toolkit = request.args.get('toolkit', 'GOOGLESHEETS').upper()
+    
+    cache_key = f"cache:composio_status:{user.id}:{toolkit}"
+    cached_data = CacheManager.get(cache_key)
+    if cached_data:
+        return jsonify(cached_data), 200
+
     try:
         client = ComposioClient()
         accounts = client.list_connected_accounts(user_id=str(user.id), toolkit_slug=toolkit)
         connected = any(str(a.get("status", "")).upper() == "ACTIVE" for a in accounts)
         active_account = next((a for a in accounts if str(a.get("status", "")).upper() == "ACTIVE"), None)
-        return jsonify({
+        response_data = {
             "toolkit": toolkit,
             "connected": connected,
             "active_connected_account_id": active_account.get("id") if active_account else None,
@@ -668,7 +701,9 @@ def composio_status():
                 }
                 for a in accounts
             ],
-        }), 200
+        }
+        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        return jsonify(response_data), 200
     except ComposioApiError as exc:
         return jsonify({"error": str(exc)}), 502
     except Exception as exc:
@@ -706,6 +741,8 @@ def composio_disconnect():
                     client.delete_connected_account(account_id)
                     deleted_ids.append(account_id)
 
+        CacheManager.delete(f"cache:composio_status:{user.id}:{toolkit}")
+        CacheManager.delete(f"cache:composio_status:{user.id}:{toolkit}")
         return jsonify({
             "toolkit": toolkit,
             "disconnected_count": len(deleted_ids),
