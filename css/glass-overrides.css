@@ -805,31 +805,37 @@ body.project-panel-open:not(.dark-mode) .sidebar {
 
 /* =====================================================================
    SECTION 31 — TOOLS MENU & SHUFFLE MENU (dropdown from chat input)
-   NOTE: We enhance these — they are NOT the input area itself.
+   NOTE: We make these FLAT / OPAQUE — no transparency for readability.
    ===================================================================== */
 .dark-mode .tools-menu {
-  background: rgba(7, 7, 7, 0.80) !important;
-  -webkit-backdrop-filter: var(--glass-filter-rich);
-  backdrop-filter: var(--glass-filter-rich);
-  border: 1px solid var(--glass-edge-mid) !important;
-  box-shadow: var(--glass-shadow-modal), var(--glass-inset-rich) !important;
+  background: #141416 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.50),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
   border-radius: 14px !important;
 }
 
 .dark-mode .shuffle-menu {
-  background: rgba(7, 7, 7, 0.80) !important;
-  -webkit-backdrop-filter: var(--glass-filter-rich);
-  backdrop-filter: var(--glass-filter-rich);
-  border: 1px solid var(--glass-edge-mid) !important;
-  box-shadow: var(--glass-shadow-modal), var(--glass-inset-rich) !important;
+  background: #141416 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.50),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
   border-radius: 14px !important;
 }
 
 .dark-mode .shuffle-item:hover,
 .dark-mode .tool-item:hover {
-  background: var(--glass-l2) !important;
-  -webkit-backdrop-filter: var(--glass-filter-subtle);
-  backdrop-filter: var(--glass-filter-subtle);
+  background: rgba(255, 255, 255, 0.08) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   border-radius: 9px;
 }
 
