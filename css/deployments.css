@@ -3,51 +3,431 @@
 /* Styles for the Deployments section in Account Settings           */
 /* ================================================================= */
 
-/* Expand Deployment Button */
+/* ── Deployment Card ─────────────────────────────────────────────── */
+.deployment-card {
+    position: relative;
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin-bottom: 0;
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.25s ease;
+
+    /* Light mode */
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-primary);
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Shimmer sweep on hover */
+.deployment-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(105deg,
+        transparent 20%,
+        rgba(255, 255, 255, 0.06) 50%,
+        transparent 80%);
+    pointer-events: none;
+    transition: left 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+}
+
+/* Left accent bar */
+.deployment-card::after {
+    content: '';
+    position: absolute;
+    top: 20%;
+    left: 0;
+    width: 3px;
+    height: 60%;
+    border-radius: 0 3px 3px 0;
+    background: transparent;
+    transition: background 0.25s ease, height 0.3s ease, top 0.3s ease;
+}
+
+.deployment-card:hover::before { left: 120%; }
+
+.deployment-card:hover::after {
+    background: linear-gradient(180deg, #a78bfa, #7c3aed);
+    top: 10%;
+    height: 80%;
+}
+
+.deployment-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(167, 139, 250, 0.35);
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.10),
+        0 2px 8px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Dark mode card */
+.dark-mode .deployment-card {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.08);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.40),
+        0 1px 6px rgba(0, 0, 0, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dark-mode .deployment-card:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(167, 139, 250, 0.30);
+    box-shadow:
+        0 12px 36px rgba(0, 0, 0, 0.55),
+        0 4px 14px rgba(0, 0, 0, 0.40),
+        inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+/* ── Card Header ─────────────────────────────────────────────────── */
+.deployment-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+    z-index: 1;
+}
+
+.dark-mode .deployment-card-header {
+    border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Title row: icon + name + hostname + badge */
+.deployment-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Card icon pill */
+.deployment-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: rgba(124, 58, 237, 0.10);
+    border: 1px solid rgba(124, 58, 237, 0.20);
+    color: #a78bfa;
+    transition: all 0.25s ease;
+}
+
+.deployment-card:hover .deployment-card-icon {
+    background: rgba(124, 58, 237, 0.18);
+    border-color: rgba(124, 58, 237, 0.35);
+    transform: scale(1.08);
+}
+
+/* Name group */
+.deployment-card-name-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.deployment-card-name {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s ease;
+}
+
+.deployment-card:hover .deployment-card-name {
+    color: #a78bfa;
+}
+
+.deployment-card-hostname {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+}
+
+/* ── Status Pill ─────────────────────────────────────────────────── */
+.deployment-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.deployment-status-pill.pill-active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.deployment-status-pill.pill-draft {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.deployment-status-pill.pill-default {
+    background: rgba(148, 163, 184, 0.12);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+/* ── Actions Bar ─────────────────────────────────────────────────── */
+.deployment-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* ── Version Chip ─────────────────────────────────────────────────
+   A single, self-contained chip — NO outer wrapper that creates
+   a second border layer. The select IS the chip.
+   ──────────────────────────────────────────────────────────────── */
+.deployment-version-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 0 10px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.deployment-version-chip:focus-within {
+    border-color: rgba(167, 139, 250, 0.45);
+    background: rgba(167, 139, 250, 0.06);
+}
+
+.deployment-version-icon {
+    font-size: 10px;
+    color: #a78bfa;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+/* The select itself is invisible — just text + system arrow hidden */
+.deployment-version-select {
+    /* Reset completely */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    /* Typography */
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-color);
+    cursor: pointer;
+    /* Sizing */
+    min-width: 90px;
+    max-width: 130px;
+    /* Custom chevron via background */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 2px center;
+    background-size: 10px;
+    padding-right: 16px;
+}
+
+.deployment-version-select:disabled {
+    cursor: default;
+    opacity: 0.65;
+    /* No custom arrow when only one version */
+    background-image: none;
+    padding-right: 0;
+}
+
+/* Force dark dropdown options — critical for Electron readability */
+.dark-mode .deployment-version-select {
+    color: rgba(240, 240, 240, 0.92);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Options need explicit colours because Electron renders native OS dropdowns */
+.deployment-version-select option {
+    background: #1a1a1e !important;
+    color: #f0f0f0 !important;
+    font-size: 13px;
+    padding: 8px 12px;
+}
+
+.deployment-version-select option:checked,
+.deployment-version-select option:hover {
+    background: #2d1f6e !important;
+    color: #e0d4ff !important;
+}
+
+/* ── Action Buttons ─────────────────────────────────────────────── */
+.deployment-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    letter-spacing: 0.01em;
+}
+
+/* Code button — accent filled */
+.deployment-code-btn {
+    background: rgba(124, 58, 237, 0.12);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    color: #a78bfa;
+}
+
+.deployment-code-btn:hover {
+    background: rgba(124, 58, 237, 0.22);
+    border-color: rgba(167, 139, 250, 0.45);
+    color: #c4b5fd;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.22);
+}
+
+.deployment-code-btn:active {
+    transform: scale(0.96) translateY(0);
+}
+
+/* Expand button — ghost */
+.deployment-expand-btn {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: var(--text-secondary);
+}
+
+.deployment-expand-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.20);
+    color: var(--text-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
+}
+
+.deployment-expand-btn:active {
+    transform: scale(0.94);
+}
+
+/* ── Meta Grid ──────────────────────────────────────────────────── */
+.deployment-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.deployment-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+/* Full width row (e.g. R2 Prefix which is very long) */
+.deployment-meta-full {
+    grid-column: 1 / -1;
+}
+
+.deployment-meta-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.deployment-meta-value {
+    font-size: 12.5px;
+    color: var(--text-color);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    transition: color 0.2s ease;
+}
+
+.deployment-meta-value.mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 11.5px;
+}
+
+.deployment-card:hover .deployment-meta-value {
+    color: rgba(167, 139, 250, 0.9);
+}
+
+/* ── Expand Deployment Btn (legacy compat) ───────────────────────── */
 .expand-deployment-btn {
     width: 32px;
     height: 32px;
-    border: 1.5px solid var(--border-secondary);
-    border-radius: 6px;
-    background: var(--elevated-bg);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
     color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 14px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .expand-deployment-btn:hover {
-    background: var(--accent-muted);
-    color: var(--accent-color);
-    border-color: var(--accent-color);
-    transform: scale(1.08);
-    box-shadow: 
-        0 4px 12px rgba(var(--accent-color-rgb), 0.15),
-        0 2px 6px rgba(var(--accent-color-rgb), 0.10);
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: var(--text-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
 }
 
 .expand-deployment-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.94);
 }
 
-/* Dark mode specific */
-.dark-mode .expand-deployment-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.10);
-}
 
-.dark-mode .expand-deployment-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.25);
-    box-shadow:
-        0 4px 16px rgba(0, 0, 0, 0.55),
-        inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
 
 /* Deployment Detail Modal */
 .deployment-detail-modal {
