@@ -2,6 +2,7 @@
 
 import os
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -12,6 +13,41 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 SANDBOX_API_URL = os.getenv("SANDBOX_API_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+
+def _split_csv(value):
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _origin_from_url(url):
+    parsed = urlparse(url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _default_cors_origins():
+    origins = {
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "https://api.pawsitivestrides.store",
+        "https://api.aetheriaai.online",
+    }
+    frontend_origin = _origin_from_url(FRONTEND_URL)
+    if frontend_origin:
+        origins.add(frontend_origin)
+    return sorted(origins)
+
+
+ALLOWED_CORS_ORIGINS = _split_csv(os.getenv("ALLOWED_CORS_ORIGINS")) or _default_cors_origins()
+ALLOWED_CORS_SUFFIXES = _split_csv(
+    os.getenv(
+        "ALLOWED_CORS_SUFFIXES",
+        ".api.pawsitivestrides.store,.api.aetheriaai.online",
+    )
+)
 
 # --- LLM Provider Keys (Handled automatically by Agno, listed here for clarity) ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
