@@ -2,16 +2,17 @@
 /* MEMORY TAB STYLES - Compact Collapsible Design                   */
 /* ================================================================= */
 
-/* Memory Entry Card - Add/Edit Form */
+/* Memory Entry Card - Collapsible Add/Edit Form */
 .memory-entry-card {
     position: relative;
     border: 1px solid var(--border-color);
     border-radius: 12px;
     background: var(--elevated-bg);
-    padding: 20px;
+    padding: 0;
     margin-bottom: 20px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
 }
 
 .memory-entry-card:hover {
@@ -26,12 +27,71 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
-.memory-entry-title {
-    margin: 0 0 16px;
+/* Toggle Button */
+.memory-entry-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 14px 18px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color);
+    transition: background 0.2s ease;
+}
+
+.memory-entry-toggle:hover {
+    background: var(--hover-bg);
+}
+
+.memory-entry-toggle-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.memory-entry-toggle-left i {
     font-size: 16px;
+    color: var(--accent-color);
+    transition: transform 0.25s ease;
+}
+
+.memory-entry-card.expanded .memory-entry-toggle-left i {
+    transform: rotate(45deg);
+}
+
+.memory-entry-chevron {
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.memory-entry-card.expanded .memory-entry-chevron {
+    transform: rotate(180deg);
+}
+
+.memory-entry-title {
+    margin: 0;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-color);
     letter-spacing: -0.01em;
+}
+
+/* Collapsible body */
+.memory-entry-collapsible {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.memory-entry-card.expanded .memory-entry-collapsible {
+    max-height: 800px;
+}
+
+.memory-entry-collapsible .memory-form {
+    padding: 4px 18px 18px;
 }
 
 /* Form Styling */

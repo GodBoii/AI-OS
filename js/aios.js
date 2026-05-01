@@ -449,6 +449,14 @@ class AIOS {
             this.handleAddMemory();
         });
         addClickHandler(this.elements.memoryCancelEditBtn, () => this.resetMemoryForm());
+        // Memory entry collapsible toggle
+        const memoryToggle = document.getElementById('memory-entry-toggle');
+        if (memoryToggle) {
+            memoryToggle.addEventListener('click', () => {
+                const card = document.getElementById('memory-entry-card');
+                if (card) card.classList.toggle('expanded');
+            });
+        }
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
             this.selectedFileType = e.target.value || 'all';
             this.renderUserFiles(this.userFilesCache);
@@ -1571,6 +1579,9 @@ class AIOS {
         this.editingMemoryId = null;
         this.elements.memoryForm?.reset();
         this._setMemoryFormMode(false);
+        // Collapse the form
+        const memoryCard = document.getElementById('memory-entry-card');
+        if (memoryCard) memoryCard.classList.remove('expanded');
     }
 
     startEditMemory(row) {
@@ -1589,6 +1600,9 @@ class AIOS {
         if (this.elements.memoryTopics) this.elements.memoryTopics.value = topicsText;
 
         this._setMemoryFormMode(true);
+        // Auto-expand the collapsible form
+        const memoryCard = document.getElementById('memory-entry-card');
+        if (memoryCard) memoryCard.classList.add('expanded');
         this.elements.memoryContent?.focus();
         this.elements.memoryContent?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -1752,46 +1766,64 @@ class AIOS {
                 || project;
             
             const card = document.createElement('div');
-            card.className = 'settings-card';
+            card.className = 'deployment-card';
             card.innerHTML = `
-                <div class="settings-card-header">
-                    <div class="settings-card-header-left">
-                        <h4>${this._safeText(project.project_name, 'Untitled')}</h4>
+                <div class="deployment-card-header">
+                    <div class="deployment-card-title-row">
+                        <div class="deployment-card-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                        </div>
+                        <div class="deployment-card-name-group">
+                            <h4 class="deployment-card-name">${this._safeText(project.project_name, 'Untitled')}</h4>
+                            <span class="deployment-card-hostname" data-field="hostname"></span>
+                        </div>
+                        <span class="deployment-status-pill" data-field="status_badge"></span>
                     </div>
-                    <div class="settings-card-actions">
-                        <div class="deployment-version-picker ${deployments.length > 1 ? '' : 'single'}">
-                            <label class="deployment-version-label" for="deployment-version-${this._safeText(project.site_id)}">Version</label>
+                    <div class="deployment-card-actions">
+                        <div class="deployment-version-chip ${deployments.length > 1 ? '' : 'single'}">
+                            <i class="fas fa-code-branch deployment-version-icon"></i>
                             <select class="deployment-version-select" id="deployment-version-${this._safeText(project.site_id)}">
-                                ${deployments.map((item) => `
-                                    <option value="${this._safeText(item.deployment_id)}">
-                                        v${this._safeText(item.version)}
-                                        ${String(item?.deployment_status || '').toLowerCase() === 'active' ? ' • Active' : ''}
-                                    </option>
-                                `).join('')}
+                                ${deployments.map((item) => {
+                                    const isActive = String(item?.deployment_status || '').toLowerCase() === 'active';
+                                    return `<option value="${this._safeText(item.deployment_id)}" style="background:#1a1a1e;color:#f0f0f0;">v${this._safeText(item.version)}${isActive ? '  ✦ Active' : ''}</option>`;
+                                }).join('')}
                             </select>
                         </div>
-                        <button class="start-project-coding-btn" title="Start Coding Workspace">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                            <span>Start Coding</span>
+                        <button class="deployment-action-btn deployment-code-btn" title="Start Coding Workspace">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                            <span>Code</span>
                         </button>
-                        <button class="expand-deployment-btn" title="View Details">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
+                        <button class="deployment-action-btn deployment-expand-btn expand-deployment-btn" title="View Details">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
                         </button>
-                        <span class="settings-badge deployment-status-badge"></span>
                     </div>
                 </div>
-                <div class="settings-meta-grid">
-                    <div><strong>Site ID</strong><span data-field="site_id"></span></div>
-                    <div><strong>Slug</strong><span data-field="slug"></span></div>
-                    <div><strong>Hostname</strong><span data-field="hostname"></span></div>
-                    <div><strong>Version</strong><span data-field="version"></span></div>
-                    <div><strong>Deployment ID</strong><span data-field="deployment_id"></span></div>
-                    <div><strong>R2 Prefix</strong><span data-field="r2_prefix"></span></div>
+                <div class="deployment-meta-grid">
+                    <div class="deployment-meta-item">
+                        <span class="deployment-meta-label">Site ID</span>
+                        <span class="deployment-meta-value mono" data-field="site_id"></span>
+                    </div>
+                    <div class="deployment-meta-item">
+                        <span class="deployment-meta-label">Slug</span>
+                        <span class="deployment-meta-value mono" data-field="slug"></span>
+                    </div>
+                    <div class="deployment-meta-item">
+                        <span class="deployment-meta-label">Version</span>
+                        <span class="deployment-meta-value" data-field="version"></span>
+                    </div>
+                    <div class="deployment-meta-item">
+                        <span class="deployment-meta-label">Deployment ID</span>
+                        <span class="deployment-meta-value mono" data-field="deployment_id"></span>
+                    </div>
+                    <div class="deployment-meta-item deployment-meta-full">
+                        <span class="deployment-meta-label">R2 Prefix</span>
+                        <span class="deployment-meta-value mono" data-field="r2_prefix"></span>
+                    </div>
                 </div>
             `;
 
             const versionSelect = card.querySelector('.deployment-version-select');
-            const statusBadge = card.querySelector('.deployment-status-badge');
+            const statusPill = card.querySelector('[data-field="status_badge"]');
             const fieldNodes = {
                 site_id: card.querySelector('[data-field="site_id"]'),
                 slug: card.querySelector('[data-field="slug"]'),
@@ -1807,10 +1839,10 @@ class AIOS {
                 selectedDeployment = match || selectedDeployment;
 
                 const status = this._safeText(selectedDeployment?.deployment_status, 'unknown').toLowerCase();
-                const badgeClass = status === 'active' ? 'status-active' : status === 'draft' ? 'status-draft' : '';
-                if (statusBadge) {
-                    statusBadge.className = `settings-badge deployment-status-badge ${badgeClass}`.trim();
-                    statusBadge.textContent = this._safeText(selectedDeployment?.deployment_status, 'unknown');
+                const pillClass = status === 'active' ? 'pill-active' : status === 'draft' ? 'pill-draft' : 'pill-default';
+                if (statusPill) {
+                    statusPill.className = `deployment-status-pill ${pillClass}`;
+                    statusPill.textContent = this._safeText(selectedDeployment?.deployment_status, 'unknown');
                 }
                 if (fieldNodes.site_id) fieldNodes.site_id.textContent = this._safeText(project.site_id);
                 if (fieldNodes.slug) fieldNodes.slug.textContent = this._safeText(project.slug);
@@ -1840,7 +1872,7 @@ class AIOS {
                 });
             });
 
-            const startCodingBtn = card.querySelector('.start-project-coding-btn');
+            const startCodingBtn = card.querySelector('.deployment-code-btn');
             startCodingBtn?.addEventListener('click', (e) => {
                 e.stopPropagation();
 
