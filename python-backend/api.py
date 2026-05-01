@@ -1501,12 +1501,14 @@ def generate_fallback_response(query: str) -> str:
 
 
 @api_bp.route('/healthz')
+@limiter.limit('30 per minute')
 def health_check():
     """A simple health check endpoint for monitoring."""
     return "OK", 200
 
 
 @api_bp.route('/health')
+@limiter.limit('10 per minute')
 def health():
     """Detailed health check endpoint with memory stats."""
     try:
