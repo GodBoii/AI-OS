@@ -1,7 +1,9 @@
 # python-backend/factory.py (Updated for Redis Pub/Sub)
 
 import logging
-from flask import Flask
+from urllib.parse import urlparse
+
+from flask import Flask, request
 
 # --- Local Module Imports ---
 import config
@@ -18,6 +20,18 @@ import sockets
 
 logger = logging.getLogger(__name__)
 
+
+def _is_allowed_origin(origin):
+    if not origin:
+        return False
+    if origin in config.ALLOWED_CORS_ORIGINS:
+        return True
+    parsed = urlparse(origin)
+    hostname = parsed.hostname or ""
+    if parsed.scheme in {"http", "https"} and hostname in {"localhost", "127.0.0.1"}:
+        return True
+    return any(hostname.endswith(suffix) for suffix in config.ALLOWED_CORS_SUFFIXES)
+
 # ==============================================================================
 # APPLICATION FACTORY
 # ==============================================================================
@@ -31,9 +45,13 @@ def create_app():
 
     @app.after_request
     def add_cors_headers(response):
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        origin = request.headers.get("Origin")
+        if _is_allowed_origin(origin):
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Vary'] = 'Origin'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         return response
 
     # --- 1. Initialize Extensions ---

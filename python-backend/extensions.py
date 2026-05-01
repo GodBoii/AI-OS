@@ -55,7 +55,7 @@ limiter = Limiter(
 # SocketIO: Uninitialized, will be configured in the factory.
 # Increased max_http_buffer_size to handle large image payloads (up to 10MB)
 socketio = SocketIO(
-    cors_allowed_origins="*", 
+    cors_allowed_origins=config.ALLOWED_CORS_ORIGINS,
     async_mode="eventlet",
     max_http_buffer_size=10 * 1024 * 1024,  # 10MB limit
     logger=False,  # Disable verbose socket.io logging
