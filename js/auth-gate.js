@@ -367,14 +367,9 @@
         const name     = document.getElementById('ag-signup-name')?.value?.trim();
         const email    = document.getElementById('ag-signup-email')?.value?.trim();
         const password = document.getElementById('ag-signup-password')?.value;
-        const confirm  = document.getElementById('ag-signup-confirm')?.value;
 
-        if (!name || !email || !password || !confirm) {
+        if (!name || !email || !password) {
             _setError('ag-signup-error', 'All fields are required.');
-            return;
-        }
-        if (password !== confirm) {
-            _setError('ag-signup-error', 'Passwords do not match.');
             return;
         }
         if (password.length < 6) {
