@@ -12,6 +12,7 @@ REDIS_URL = os.getenv('REDIS_URL')
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 SANDBOX_API_URL = os.getenv("SANDBOX_API_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_POOLER_URL = os.getenv("DATABASE_POOLER_URL") or os.getenv("SUPABASE_DB_POOLER_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
