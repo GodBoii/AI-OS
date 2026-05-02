@@ -49,152 +49,153 @@
                 <div class="ag-checking-text">Checking session…</div>
             </div>
 
-            <!-- ── Centered glass card: shown after check ──────────── -->
-            <div class="ag-card" id="ag-form-panel" style="opacity:0;transition:opacity 400ms ease;display:none;">
-
-                <!-- Header: logo + wordmark -->
-                <div class="ag-header">
-                    <div class="ag-logo-mark">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                            <path d="M2 17l10 5 10-5"/>
-                            <path d="M2 12l10 5 10-5"/>
-                        </svg>
+            <!-- ── Split Layout Wrapper ──────────── -->
+            <div class="ag-split-wrapper" id="ag-form-panel" style="opacity:0;transition:opacity 400ms ease;display:none;">
+                
+                <!-- Left Pane: Space Illustration -->
+                <div class="ag-illustration-pane">
+                    <!-- CSS art elements -->
+                    <div class="ag-planet ag-planet-cyan"></div>
+                    <div class="ag-planet ag-planet-purple"></div>
+                    <div class="ag-stars"></div>
+                    
+                    <div class="ag-illustration-content">
+                        <!-- Top left logo -->
+                        <div class="ag-top-logo">
+                            <img src="assets/icon.png" alt="Aetheria AI" class="ag-small-logo">
+                            <span>Aetheria AI</span>
+                        </div>
+                        
+                        <h1 class="ag-hero-title">
+                            ACTIVATE YOUR<br>
+                            <span class="ag-highlight">AI AGENT</span>
+                        </h1>
                     </div>
-                    <div class="ag-wordmark">Aetheria AI</div>
-                    <div class="ag-tagline">Sign in to continue</div>
                 </div>
 
-                <!-- Tab switcher -->
-                <div class="ag-tabs" role="tablist">
-                    <button class="ag-tab-btn active" role="tab" aria-selected="true"
-                            id="ag-tab-login" aria-controls="ag-panel-login">Login</button>
-                    <button class="ag-tab-btn" role="tab" aria-selected="false"
-                            id="ag-tab-signup" aria-controls="ag-panel-signup">Sign Up</button>
-                </div>
-
-                <!-- ── Login form ──────────────────────────────────── -->
-                <form class="ag-form-panel active" id="ag-panel-login" role="tabpanel"
-                      aria-labelledby="ag-tab-login" novalidate>
-
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-login-email">Email</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="email" id="ag-login-email"
-                                   placeholder="your@email.com" autocomplete="email" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                                <polyline points="22,6 12,13 2,6"/>
-                            </svg>
-                        </div>
+                <!-- Right Pane: Forms -->
+                <div class="ag-form-pane">
+                    
+                    <!-- Dynamic Header -->
+                    <div class="ag-form-header">
+                        <h2 id="ag-dynamic-title">SIGN IN</h2>
+                        <p id="ag-dynamic-subtitle">Sign in with email address</p>
                     </div>
 
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-login-password">Password</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="password" id="ag-login-password"
-                                   placeholder="Enter your password" autocomplete="current-password" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                            </svg>
-                        </div>
+                    <!-- Tab switcher (Hidden but functional, or integrated into text) -->
+                    <!-- In the reference, there are no tabs, just a clean form. We can keep tabs small or use text toggles. Let's keep a subtle tab switcher to keep functionality intact. -->
+                    <div class="ag-tabs" role="tablist">
+                        <button class="ag-tab-btn active" role="tab" aria-selected="true"
+                                id="ag-tab-login" aria-controls="ag-panel-login">Sign in</button>
+                        <button class="ag-tab-btn" role="tab" aria-selected="false"
+                                id="ag-tab-signup" aria-controls="ag-panel-signup">Sign up</button>
                     </div>
 
-                    <div class="ag-error" id="ag-login-error" role="alert"></div>
+                    <!-- ── Login form ──────────────────────────────────── -->
+                    <form class="ag-form-panel active" id="ag-panel-login" role="tabpanel"
+                          aria-labelledby="ag-tab-login" novalidate>
 
-                    <button type="submit" class="ag-submit-btn" id="ag-login-submit">
-                        Login
-                    </button>
-
-                    <div class="ag-divider"><span class="ag-divider-text">OR</span></div>
-
-                    <button type="button" class="ag-google-btn" id="ag-google-signin">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        <span>Continue with Google</span>
-                    </button>
-                </form>
-
-                <!-- ── Sign Up form ────────────────────────────────── -->
-                <form class="ag-form-panel" id="ag-panel-signup" role="tabpanel"
-                      aria-labelledby="ag-tab-signup" novalidate>
-
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-signup-name">Full Name</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="text" id="ag-signup-name"
-                                   placeholder="Your full name" autocomplete="name" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                                <circle cx="12" cy="7" r="4"/>
-                            </svg>
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
+                                <input class="ag-input" type="email" id="ag-login-email"
+                                       placeholder="Yourname@gmail.com" autocomplete="email" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                    <polyline points="22,6 12,13 2,6"/>
+                                </svg>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-signup-email">Email</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="email" id="ag-signup-email"
-                                   placeholder="your@email.com" autocomplete="email" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                                <polyline points="22,6 12,13 2,6"/>
-                            </svg>
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
+                                <input class="ag-input" type="password" id="ag-login-password"
+                                       placeholder="Enter your password" autocomplete="current-password" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-signup-password">Password</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="password" id="ag-signup-password"
-                                   placeholder="Min. 6 characters" autocomplete="new-password" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                            </svg>
+                        <div class="ag-error" id="ag-login-error" role="alert"></div>
+
+                        <button type="submit" class="ag-submit-btn" id="ag-login-submit">
+                            Sign in
+                        </button>
+
+                        <div class="ag-divider"><span class="ag-divider-text">Or continue with</span></div>
+
+                        <div class="ag-social-row">
+                            <button type="button" class="ag-social-btn ag-google" id="ag-google-signin">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                </svg>
+                                <span>Continue with Google</span>
+                            </button>
                         </div>
-                    </div>
+                    </form>
 
-                    <div class="ag-field">
-                        <label class="ag-label" for="ag-signup-confirm">Confirm Password</label>
-                        <div class="ag-input-wrap">
-                            <input class="ag-input" type="password" id="ag-signup-confirm"
-                                   placeholder="Repeat your password" autocomplete="new-password" required>
-                            <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2"
-                                stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                            </svg>
+                    <!-- ── Sign Up form ────────────────────────────────── -->
+                    <form class="ag-form-panel" id="ag-panel-signup" role="tabpanel"
+                          aria-labelledby="ag-tab-signup" novalidate>
+
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
+                                <input class="ag-input" type="text" id="ag-signup-name"
+                                       placeholder="Your full name" autocomplete="name" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="12" cy="7" r="4"/>
+                                </svg>
+                            </div>
                         </div>
+
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
+                                <input class="ag-input" type="email" id="ag-signup-email"
+                                       placeholder="Yourname@gmail.com" autocomplete="email" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                    <polyline points="22,6 12,13 2,6"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
+                                <input class="ag-input" type="password" id="ag-signup-password"
+                                       placeholder="Min. 6 characters" autocomplete="new-password" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="ag-error" id="ag-signup-error" role="alert"></div>
+
+                        <button type="submit" class="ag-submit-btn" id="ag-signup-submit">
+                            Sign up
+                        </button>
+                    </form>
+
+                    <!-- Footer note -->
+                    <div class="ag-footer-note" id="ag-login-footer">
+                        Don't have an account? <span onclick="document.getElementById('ag-tab-signup').click()">Sign Up</span>
                     </div>
-
-                    <div class="ag-error" id="ag-signup-error" role="alert"></div>
-
-                    <button type="submit" class="ag-submit-btn" id="ag-signup-submit">
-                        Create Account
-                    </button>
-                </form>
-
-                <!-- Footer note -->
-                <div class="ag-footer-note">
-                    By continuing you agree to our Terms of Service &amp; Privacy Policy
                 </div>
             </div>
         `;
@@ -223,6 +224,9 @@
         const signupPanel = document.getElementById('ag-panel-signup');
         const loginTab    = document.getElementById('ag-tab-login');
         const signupTab   = document.getElementById('ag-tab-signup');
+        
+        const titleEl     = document.getElementById('ag-dynamic-title');
+        const footerEl    = document.getElementById('ag-login-footer');
 
         const isLogin = (tab === 'login');
 
@@ -232,6 +236,15 @@
         signupTab?.classList.toggle('active', !isLogin);
         loginTab?.setAttribute('aria-selected', String(isLogin));
         signupTab?.setAttribute('aria-selected', String(!isLogin));
+        
+        if (titleEl && footerEl) {
+            titleEl.textContent = isLogin ? 'SIGN IN' : 'SIGN UP';
+            if (isLogin) {
+                footerEl.innerHTML = `Don't have an account? <span onclick="document.getElementById('ag-tab-signup').click()">Sign Up</span>`;
+            } else {
+                footerEl.innerHTML = `Already have an account? <span onclick="document.getElementById('ag-tab-login').click()">Sign In</span>`;
+            }
+        }
 
         // Focus first input of the active form
         setTimeout(() => {
@@ -303,7 +316,6 @@
         if (formPanel) {
             // Step 1: make it block so layout starts
             formPanel.style.display = 'flex';
-            formPanel.style.flexDirection = 'column';
             // Step 2: transition opacity in after one frame
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -542,7 +554,6 @@
         }
         if (formPanel) {
             formPanel.style.display = 'flex';
-            formPanel.style.flexDirection = 'column';
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     formPanel.style.opacity = '1';

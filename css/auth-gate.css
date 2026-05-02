@@ -1,8 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
 /* ================================================================
-   AUTH GATE — Native desktop login/signup modal
-   Design: Single centered glass card over pure-black bg
-   Palette: Exactly matches the app's Liquid Glass token set
+   AUTH GATE — Split-Pane Pure Black Glassmorphism (Aetheria Native)
    ================================================================ */
+
+:root {
+  --font-main: 'Outfit', system-ui, -apple-system, sans-serif;
+  
+  --color-bg-app: #000000;
+  --color-bg-form: rgba(12, 12, 12, 0.95);
+  --color-bg-input: rgba(255, 255, 255, 0.05);
+  
+  --color-text-main: #f0f0f0;
+  --color-text-muted: #a0a0a8;
+  
+  --color-brand-cyan: #e6e6eb; /* Adapted to silver/white accent */
+  --color-brand-purple: #ffffff; /* Adapted to pure white */
+  --color-brand-purple-dark: #b0b0b8;
+  
+  --ease-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.09);
+}
 
 /* ── Full-screen backdrop ──────────────────────────────────────── */
 #auth-gate {
@@ -12,23 +30,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Match the app's body background exactly */
-  background-color: #000;
-  background-image:
-    radial-gradient(circle at 25% 25%, rgba(67, 56, 202, 0.07) 0%, transparent 45%),
-    radial-gradient(circle at 75% 78%, rgba(67, 56, 202, 0.05) 0%, transparent 45%);
-  background-attachment: fixed;
-  /* Entry state: visible by default */
+  background-color: var(--color-bg-app);
   opacity: 1;
-  transition: opacity 480ms cubic-bezier(0.4, 0, 1, 1),
-              transform 480ms cubic-bezier(0.4, 0, 1, 1);
-  will-change: opacity, transform;
+  transition: opacity 400ms ease;
+  padding: 24px;
 }
 
-/* Dismissal animation */
 #auth-gate.is-exiting {
   opacity: 0;
-  transform: scale(1.02);
   pointer-events: none;
 }
 
@@ -36,13 +45,15 @@
   display: none !important;
 }
 
-/* ── Loading state (while checking session) ───────────────────── */
+/* ── Loading state ───────────────────── */
 .ag-checking-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  transition: opacity 350ms ease;
+  gap: 16px;
+  position: absolute;
+  z-index: 100;
+  transition: opacity 300ms ease;
 }
 
 .ag-checking-state.hidden {
@@ -50,342 +61,320 @@
 }
 
 .ag-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-  border-top-color: rgba(102, 126, 234, 0.80);
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-brand-purple);
   border-radius: 50%;
-  animation: ag-spin 650ms linear infinite;
+  animation: ag-spin 800ms linear infinite;
 }
 
 .ag-checking-text {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.30);
-  letter-spacing: 0.01em;
+  font-family: var(--font-main);
+  font-size: 14px;
+  color: var(--color-text-muted);
 }
 
-/* ── Glass card ───────────────────────────────────────────────── */
-/*
-  Tokens drawn directly from glass-overrides.css:
-    --glass-l2  = rgba(255,255,255,0.080)
-    --glass-filter-heavy = blur(40px) saturate(220%)
-    --glass-shadow-modal = 0 16px 64px rgba(0,0,0,0.70), 0 8px 32px rgba(0,0,0,0.55)
-    --glass-inset-rich   = inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(0,0,0,0.25)
-    --glass-edge-mid     = rgba(255,255,255,0.11)
-*/
-.ag-card {
-  width: 420px;
-  max-width: calc(100vw - 48px);
-  padding: 36px 40px 32px;
-  border-radius: 20px;
-  background: rgba(7, 7, 7, 0.72);
-  -webkit-backdrop-filter: blur(40px) saturate(220%);
-  backdrop-filter: blur(40px) saturate(220%);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow:
-    0 16px 64px rgba(0, 0, 0, 0.70),
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
-  /* Slide-in animation matching the app's modalSlideIn */
-  animation: ag-card-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+/* ── Split Layout Wrapper ─────────────────────────────────────── */
+.ag-split-wrapper {
+  width: 100%;
+  max-width: 1100px;
+  min-height: 650px;
+  background: var(--color-bg-form);
+  border-radius: 24px;
+  border: var(--glass-border);
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: ag-fade-up 600ms var(--ease-smooth) both;
 }
 
-.ag-card[style*="opacity: 0"] {
-  /* Hide until session check completes */
-  pointer-events: none;
+@keyframes ag-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ag-card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* ── Card header: logo + wordmark ─────────────────────────────── */
-.ag-header {
+/* ── Left Pane (Illustration) ─────────────────────────────────── */
+.ag-illustration-pane {
+  flex: 1.2;
+  position: relative;
+  background: linear-gradient(135deg, #0a0a0a 0%, #000000 100%);
+  border-right: var(--glass-border);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 28px;
-  text-align: center;
-}
-
-.ag-logo-mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.50),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
+  justify-content: space-between;
+  padding: 40px;
   overflow: hidden;
 }
 
-/* Indigo glow behind the logo icon */
-.ag-logo-mark::before {
+/* CSS Art: Planets and Stars (Monochromatic) */
+.ag-planet {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.ag-planet-cyan {
+  width: 400px;
+  height: 400px;
+  top: -100px;
+  left: -100px;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.02) 50%, transparent 100%);
+  box-shadow: inset -20px -20px 40px rgba(0,0,0,0.8);
+  opacity: 0.9;
+}
+
+/* Rings */
+.ag-planet-cyan::before {
   content: '';
   position: absolute;
+  width: 500px;
+  height: 500px;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  top: -50px;
+  left: -50px;
+  transform: rotateX(75deg) rotateY(10deg);
+}
+
+.ag-planet-cyan::after {
+  content: '';
+  position: absolute;
+  width: 540px;
+  height: 540px;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  border-radius: 50%;
+  top: -70px;
+  left: -70px;
+  transform: rotateX(75deg) rotateY(10deg);
+}
+
+.ag-planet-purple {
+  width: 150px;
+  height: 150px;
+  bottom: 150px;
+  right: 80px;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.01) 70%, transparent 100%);
+  box-shadow: inset -10px -10px 20px rgba(0,0,0,0.9);
+  opacity: 0.8;
+}
+
+.ag-stars {
+  position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 40% 35%, rgba(102, 126, 234, 0.25) 0%, transparent 65%);
-  pointer-events: none;
-}
-
-.ag-logo-mark svg {
-  width: 22px;
-  height: 22px;
-  color: rgba(255, 255, 255, 0.88);
-  position: relative;
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1.5px 1.5px at 90px 40px, rgba(255,255,255,0.6), transparent),
+    radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 200px 50px, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 250px 180px, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1.5px 1.5px at 300px 90px, rgba(255,255,255,0.4), transparent),
+    radial-gradient(2px 2px at 350px 250px, rgba(255,255,255,0.5), transparent);
+  background-size: 400px 400px;
+  opacity: 0.7;
   z-index: 1;
-  filter: drop-shadow(0 2px 6px rgba(102, 126, 234, 0.50));
 }
 
-.ag-wordmark {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 18px;
+.ag-illustration-content {
+  position: relative;
+  z-index: 10;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ag-top-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ag-small-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.ag-top-logo span {
+  font-family: var(--font-main);
+  font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--color-text-main);
+  letter-spacing: 0.05em;
+}
+
+.ag-hero-title {
+  font-family: var(--font-main);
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--color-text-main);
+  line-height: 1.1;
+  margin: 0 0 20px 0;
   letter-spacing: -0.02em;
-  line-height: 1;
 }
 
-.ag-tagline {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.32);
-  letter-spacing: 0.01em;
-  margin-top: 2px;
+.ag-hero-title .ag-highlight {
+  color: var(--color-brand-purple);
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
 }
 
-/* ── Tab switcher (Login / Sign Up) ───────────────────────────── */
-/*
-  Matches the existing .auth-tabs pattern from aios.css but
-  wrapped in a glass pill pill strip
-*/
+/* ── Right Pane (Forms) ───────────────────────────────────────── */
+.ag-form-pane {
+  flex: 1;
+  padding: 60px 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--color-bg-form);
+  position: relative;
+  z-index: 10;
+}
+
+.ag-form-header {
+  margin-bottom: 32px;
+}
+
+.ag-form-header h2 {
+  font-family: var(--font-main);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-text-main);
+  margin: 0 0 8px 0;
+}
+
+.ag-form-header p {
+  font-family: var(--font-main);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* Tabs (Visual Toggle) */
 .ag-tabs {
   display: flex;
-  gap: 4px;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  margin-bottom: 24px;
+  gap: 24px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding-bottom: 12px;
+  display: none; /* We hide the explicit tabs in this design, or rely on JS to change header text */
 }
 
-.ag-tab-btn {
-  flex: 1;
-  padding: 9px 0;
-  border: none;
-  border-radius: 7px;
-  background: none;
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.40);
-  cursor: pointer;
-  transition: all 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative;
-}
-
-.ag-tab-btn.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.90);
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.30),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.ag-tab-btn:hover:not(.active) {
-  color: rgba(255, 255, 255, 0.65);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* ── Form panels ──────────────────────────────────────────────── */
+/* Form Panels */
 .ag-form-panel {
   display: none;
   flex-direction: column;
   gap: 0;
-  animation: ag-form-appear 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: ag-fade-in 400ms ease;
 }
 
 .ag-form-panel.active {
   display: flex;
 }
 
-@keyframes ag-form-appear {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes ag-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* ── Form field groups ────────────────────────────────────────── */
-/* Match existing .form-group pattern */
+/* Fields */
 .ag-field {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-.ag-label {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.60);
-  padding-left: 1px;
-}
-
-/* Input wrapper for icon positioning */
 .ag-input-wrap {
   position: relative;
 }
 
 .ag-input {
   width: 100%;
-  padding: 11px 14px 11px 38px;
-  /* Matches glass-overrides .form-group input tokens exactly */
-  background: rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  border-radius: 8px;
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  padding: 16px 16px 16px 48px;
+  background: var(--color-bg-input);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-family: var(--font-main);
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--color-text-main);
   outline: none;
-  transition:
-    background 220ms ease,
-    border-color 220ms ease,
-    box-shadow 220ms ease;
+  transition: all 200ms ease;
   box-sizing: border-box;
 }
 
 .ag-input::placeholder {
-  color: rgba(255, 255, 255, 0.20);
-  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-/* Focus — match existing glass-overrides input:focus */
 .ag-input:focus {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.32);
-  box-shadow:
-    0 0 0 3px rgba(255, 255, 255, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12);
 }
 
-/* Field icon */
 .ag-input-icon {
   position: absolute;
-  left: 12px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
-  color: rgba(255, 255, 255, 0.25);
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.4);
   pointer-events: none;
   transition: color 200ms ease;
 }
 
 .ag-input-wrap:focus-within .ag-input-icon {
-  color: rgba(102, 126, 234, 0.70);
+  color: var(--color-brand-purple);
 }
 
-/* ── Error message ────────────────────────────────────────────── */
+/* Error */
 .ag-error {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12.5px;
-  color: #ef4444;
-  min-height: 14px;
-  padding: 0 2px;
-  margin-bottom: 10px;
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 500;
+  color: #ff5c5c;
+  min-height: 16px;
+  margin-bottom: 12px;
   opacity: 0;
-  transform: translateY(-3px);
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity 200ms ease;
 }
 
 .ag-error.visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
-/* ── Primary submit button ────────────────────────────────────── */
-/*
-  Matches .auth-btn.primary from aios.css — uses the app's
-  existing button-primary-bg token (indigo). We hard-code
-  the indigo to avoid depending on CSS var resolution order.
-*/
+/* Submit Button (White/Silver Accent) */
 .ag-submit-btn {
   width: 100%;
-  padding: 12px 0;
-  margin-top: 6px;
-  margin-bottom: 16px;
+  padding: 16px 0;
+  margin-bottom: 24px;
   border: none;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
-  color: #fff;
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
+  border-radius: 12px;
+  background: rgba(240, 240, 245, 0.95);
+  color: #080808;
+  font-family: var(--font-main);
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 280ms ease,
-              opacity 200ms ease;
-  box-shadow:
-    0 4px 16px rgba(102, 126, 234, 0.45),
-    0 1px 0 rgba(255, 255, 255, 0.15) inset;
-}
-
-/* Subtle top-left highlight matching the app's glass inset style */
-.ag-submit-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 55%);
-  border-radius: inherit;
-  pointer-events: none;
+  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease;
 }
 
 .ag-submit-btn:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 8px 24px rgba(102, 126, 234, 0.60),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.2);
 }
 
 .ag-submit-btn:active {
-  transform: translateY(0) scale(0.98);
-  transition-duration: 100ms;
+  transform: translateY(0);
 }
 
-.ag-submit-btn.loading {
-  opacity: 0.70;
-  pointer-events: none;
-}
-
-/* ── Divider ──────────────────────────────────────────────────── */
+/* Divider */
 .ag-divider {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .ag-divider::before,
@@ -393,72 +382,96 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .ag-divider-text {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-main);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.22);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
+  color: var(--color-text-muted);
 }
 
-/* ── Google sign-in button ────────────────────────────────────── */
-/* Matches .auth-btn.social from glass-overrides exactly */
-.ag-google-btn {
-  width: 100%;
-  padding: 11px 0;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  color: rgba(255, 255, 255, 0.72);
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  font-weight: 500;
+/* Social Buttons */
+.ag-social-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.ag-social-btn {
+  flex: 1;
+  padding: 14px 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-bg-input);
+  color: var(--color-text-main);
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: all 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: background 200ms ease;
 }
 
-.ag-google-btn:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.20);
-  color: rgba(255, 255, 255, 0.90);
-  transform: translateY(-1px);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.40),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+.ag-social-btn:hover:not([disabled]) {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.ag-google-btn:active {
-  transform: translateY(0);
+.ag-social-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.ag-google-btn svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+.ag-social-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
-/* ── Card footer note ─────────────────────────────────────────── */
+/* Footer Note */
 .ag-footer-note {
-  margin-top: 20px;
-  text-align: center;
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 11.5px;
-  color: rgba(255, 255, 255, 0.20);
-  line-height: 1.6;
+  font-family: var(--font-main);
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
-/* ── Keyframe animations ──────────────────────────────────────── */
+.ag-footer-note span {
+  color: var(--color-brand-purple);
+  cursor: pointer;
+}
+
+/* ── Keyframes ────────────────────────────────────────────── */
 @keyframes ag-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ag-split-wrapper {
+    flex-direction: column;
+    height: auto;
+    min-height: unset;
+    max-width: 500px;
+  }
+  
+  .ag-illustration-pane {
+    padding: 32px;
+    min-height: 240px;
+  }
+  
+  .ag-hero-title {
+    font-size: 32px;
+    margin-top: 40px;
+  }
+  
+  .ag-form-pane {
+    padding: 32px;
+  }
+  
+  .ag-form-header h2 {
+    font-size: 28px;
+  }
+}
+
