@@ -8,9 +8,26 @@ class AuthService {
         this.supabase = null;
         this.user = null;
         this.listeners = [];
+        this.initPromise = null;
     }
 
     async init() {
+        if (this.supabase) {
+            return true;
+        }
+        if (this.initPromise) {
+            return this.initPromise;
+        }
+
+        this.initPromise = this._initClient();
+        const initialized = await this.initPromise;
+        if (!initialized) {
+            this.initPromise = null;
+        }
+        return initialized;
+    }
+
+    async _initClient() {
         try {
             this.supabase = createClient(
                 config.supabase.url,
@@ -39,6 +56,13 @@ class AuthService {
         }
     }
 
+    async ensureInitialized() {
+        if (this.supabase) {
+            return true;
+        }
+        return await this.init();
+    }
+
     onAuthChange(callback) {
         this.listeners.push(callback);
         if (callback && typeof callback === 'function') {
@@ -59,6 +83,7 @@ class AuthService {
 
     async signUp(email, password, name) {
         try {
+            await this.ensureInitialized();
             const processedName = typeof name === 'string' ? name.trim() : '';
             const { data, error } = await this.supabase.auth.signUp({
                 email: email,
@@ -86,6 +111,7 @@ class AuthService {
 
     async signIn(email, password) {
         try {
+            await this.ensureInitialized();
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email: email,
                 password: password
@@ -93,25 +119,28 @@ class AuthService {
 
             if (error) throw error;
 
-            if (data.user) {
-                if (!data.user.user_metadata?.name) {
+            const signedInUser = data.session?.user || data.user || null;
+            if (signedInUser) {
+                this.user = signedInUser;
+
+                if (!this.user.user_metadata?.name) {
                     try {
                         const { data: profileData, error: profileError } = await this.supabase
                             .from('profiles')
                             .select('name')
-                            .eq('id', data.user.id)
+                            .eq('id', this.user.id)
                             .single();
 
                         if (profileData && profileData.name) {
-                            data.user.user_metadata = data.user.user_metadata || {};
-                            data.user.user_metadata.name = profileData.name;
-                            this.user = data.user;
-                            this._notifyListeners();
+                            this.user.user_metadata = this.user.user_metadata || {};
+                            this.user.user_metadata.name = profileData.name;
                         }
                     } catch (profileFetchError) {
                         console.error('Failed to fetch profile during sign-in:', profileFetchError);
                     }
                 }
+
+                this._notifyListeners();
             }
 
             return { success: true, data };
@@ -122,6 +151,7 @@ class AuthService {
 
     async signInWithGoogle() {
         try {
+            await this.ensureInitialized();
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -177,7 +207,7 @@ class AuthService {
      * This is optimized to fetch only metadata without heavy runs data
      */
     async fetchSessionTitles(limit = 15, offset = 0) {
-        if (!this.supabase) {
+        if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
         }
 
@@ -272,7 +302,7 @@ class AuthService {
      * @returns {Promise<Array>} Array of attachment metadata objects
      */
     async fetchSessionAttachments(sessionId) {
-        if (!this.supabase) {
+        if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
         }
 
@@ -302,7 +332,7 @@ class AuthService {
      * This is called when user clicks on a session to view details
      */
     async fetchSessionData(sessionId) {
-        if (!this.supabase) {
+        if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
         }
 
@@ -340,7 +370,7 @@ class AuthService {
     }
 
     async renameSessionTitle(sessionId, newTitle, sessionCreatedAt = null) {
-        if (!this.supabase) {
+        if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
         }
 
@@ -386,7 +416,7 @@ class AuthService {
     }
 
     async deleteSession(sessionId) {
-        if (!this.supabase) {
+        if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
         }
 
@@ -436,6 +466,7 @@ class AuthService {
 
     async setSession(accessToken, refreshToken) {
         try {
+            await this.ensureInitialized();
             const { data, error } = await this.supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
@@ -448,6 +479,10 @@ class AuthService {
 
             // The onAuthStateChange listener will now fire with the correct user data
             // and the state will be a persistent SIGNED_IN.
+            this.user = data.session?.user || data.user || null;
+            if (this.user) {
+                this._notifyListeners();
+            }
             console.log('Session successfully set in auth service.');
             return { success: true, data };
         } catch (error) {
@@ -458,6 +493,7 @@ class AuthService {
 
     async signOut() {
         try {
+            await this.ensureInitialized();
             const { error } = await this.supabase.auth.signOut();
             if (error) throw error;
             return { success: true };
@@ -499,6 +535,11 @@ class AuthService {
 
     async getSession() {
         try {
+            const initialized = await this.ensureInitialized();
+            if (!initialized || !this.supabase) {
+                return null;
+            }
+
             const { data, error } = await this.supabase.auth.getSession();
             if (error) {
                 console.error('Error getting session:', error.message);
