@@ -497,6 +497,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    // ── Auth Gate integration ───────────────────────────────────────────
+    // Wait until the auth gate has been dismissed (i.e. user is authenticated)
+    // before loading the main application modules.
+    // The auth-gate.js emits 'auth-gate:authenticated' once the session is confirmed.
+    async function waitForAuth() {
+        return new Promise((resolve) => {
+            // If the gate was already dismissed (user was already logged in),
+            // the event may have fired before we got here — use a flag check.
+            if (window._authGateAuthenticated) {
+                resolve();
+                return;
+            }
+            window.addEventListener('auth-gate:authenticated', () => resolve(), { once: true });
+        });
+    }
+
+    // auth-gate.js sets this flag when it dismisses itself
+    window.addEventListener('auth-gate:authenticated', () => {
+        window._authGateAuthenticated = true;
+    });
+
+    // Wait for auth before initializing the heavy modules
+    await waitForAuth();
+    // ── End Auth Gate integration ───────────────────────────────────────
+
     await Promise.all([
         loadModule('aios', 'aios-container', () => window.AIOS?.init()),
         loadModule('chat', 'chat-root', () => window.chatModule?.init()),
