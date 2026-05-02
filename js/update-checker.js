@@ -20,13 +20,13 @@ class UpdateChecker {
     init() {
         // Check on startup (after 10 seconds delay)
         setTimeout(() => this.checkForUpdates(), 10000);
-        
+
         // Check periodically
         setInterval(() => this.checkForUpdates(), this.checkInterval);
-        
+
         // Setup UI event listeners
         this.setupUIListeners();
-        
+
         console.log('Update checker initialized');
     }
 
@@ -36,11 +36,11 @@ class UpdateChecker {
     setupUIListeners() {
         const checkBtn = document.getElementById('check-updates-btn');
         const downloadBtn = document.getElementById('download-update-btn');
-        
+
         if (checkBtn) {
             checkBtn.addEventListener('click', () => this.manualCheck());
         }
-        
+
         if (downloadBtn) {
             downloadBtn.addEventListener('click', () => {
                 if (this.latestUpdateData) {
@@ -137,7 +137,7 @@ class UpdateChecker {
         if (downloadLinks && this.latestUpdateData.downloads) {
             downloadLinks.innerHTML = '';
             const platform = this.detectPlatform();
-            
+
             const platformNames = {
                 'windows': { icon: '🪟', name: 'Windows' },
                 'linux-appimage': { icon: '🐧', name: 'Linux AppImage' },
@@ -149,9 +149,9 @@ class UpdateChecker {
             Object.entries(this.latestUpdateData.downloads).forEach(([key, url]) => {
                 const info = platformNames[key] || { icon: '📦', name: key };
                 const isRecommended = (platform === 'windows' && key === 'windows') ||
-                                     (platform === 'linux' && key === 'linux-appimage') ||
-                                     (platform === 'mac' && key === 'mac');
-                
+                    (platform === 'linux' && key === 'linux-appimage') ||
+                    (platform === 'mac' && key === 'mac');
+
                 const link = document.createElement('a');
                 link.href = url;
                 link.className = 'download-link' + (isRecommended ? ' recommended' : '');
@@ -171,7 +171,7 @@ class UpdateChecker {
      */
     getTimeAgo(date) {
         const seconds = Math.floor((new Date() - date) / 1000);
-        
+
         if (seconds < 60) return 'Just now';
         if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
         if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
@@ -186,9 +186,9 @@ class UpdateChecker {
             if (!silent) {
                 this.updateUI('checking');
             }
-            
+
             this.lastCheckTime = new Date();
-            
+
             const response = await fetch(this.updateCheckUrl, {
                 cache: 'no-cache',
                 headers: {
@@ -206,20 +206,20 @@ class UpdateChecker {
             }
 
             const release = await response.json();
-            
+
             // Extract version from tag_name (remove 'v' prefix if present)
             const latestVersion = release.tag_name.replace(/^v/, '');
-            
+
             if (this.isNewerVersion(latestVersion, this.currentVersion)) {
                 // Transform GitHub release data to our format
                 const updateData = this.transformReleaseData(release, latestVersion);
                 this.latestUpdateData = updateData;
                 this.updateAvailable = true;
-                
+
                 if (!silent) {
                     this.updateUI('update-available');
                 }
-                
+
                 // Show notification only on automatic checks (not manual)
                 if (silent) {
                     this.notifyUpdate(updateData);
@@ -228,7 +228,7 @@ class UpdateChecker {
                 this.updateAvailable = false;
                 this.latestUpdateData = null;
                 console.log('App is up to date:', this.currentVersion);
-                
+
                 if (!silent) {
                     this.updateUI('up-to-date');
                 }
@@ -246,12 +246,12 @@ class UpdateChecker {
      */
     transformReleaseData(release, version) {
         const downloads = {};
-        
+
         // Parse assets to find platform-specific downloads
         if (release.assets && release.assets.length > 0) {
             release.assets.forEach(asset => {
                 const name = asset.name.toLowerCase();
-                
+
                 if (name.endsWith('.exe')) {
                     downloads.windows = asset.browser_download_url;
                 } else if (name.endsWith('.appimage')) {
@@ -265,10 +265,10 @@ class UpdateChecker {
                 }
             });
         }
-        
+
         // Convert markdown release notes to HTML (basic conversion)
         const releaseNotes = this.markdownToHtml(release.body || 'Bug fixes and improvements');
-        
+
         return {
             version: version,
             releaseDate: release.published_at.split('T')[0],
@@ -285,7 +285,7 @@ class UpdateChecker {
      */
     markdownToHtml(markdown) {
         if (!markdown) return 'Bug fixes and improvements';
-        
+
         let html = markdown
             // Headers
             .replace(/^### (.*$)/gim, '<h3>$1</h3>')
@@ -305,15 +305,15 @@ class UpdateChecker {
             // Line breaks
             .replace(/\n\n/g, '</p><p>')
             .replace(/\n/g, '<br>');
-        
+
         // Wrap lists
         html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-        
+
         // Wrap in paragraph if not already wrapped
         if (!html.startsWith('<')) {
             html = `<p>${html}</p>`;
         }
-        
+
         return html;
     }
 
@@ -337,16 +337,16 @@ class UpdateChecker {
     detectPlatform() {
         const platform = navigator.platform.toLowerCase();
         const userAgent = navigator.userAgent.toLowerCase();
-        
+
         if (platform.includes('win')) return 'windows';
         if (platform.includes('mac')) return 'mac';
         if (platform.includes('linux')) return 'linux';
-        
+
         // Fallback to user agent
         if (userAgent.includes('windows')) return 'windows';
         if (userAgent.includes('mac')) return 'mac';
         if (userAgent.includes('linux')) return 'linux';
-        
+
         return 'unknown';
     }
 
@@ -355,7 +355,7 @@ class UpdateChecker {
      */
     getDownloadUrl(updateData) {
         const platform = this.detectPlatform();
-        
+
         // If platform-specific downloads exist
         if (updateData.downloads) {
             if (platform === 'windows' && updateData.downloads.windows) {
@@ -363,15 +363,15 @@ class UpdateChecker {
             }
             if (platform === 'linux') {
                 // Prefer AppImage for Linux
-                return updateData.downloads['linux-appimage'] || 
-                       updateData.downloads['linux-deb'] || 
-                       updateData.downloads['linux-rpm'];
+                return updateData.downloads['linux-appimage'] ||
+                    updateData.downloads['linux-deb'] ||
+                    updateData.downloads['linux-rpm'];
             }
             if (platform === 'mac' && updateData.downloads.mac) {
                 return updateData.downloads.mac;
             }
         }
-        
+
         // Fallback to general download URL
         return updateData.downloadUrl;
     }
@@ -382,20 +382,20 @@ class UpdateChecker {
     notifyUpdate(updateData) {
         const { version, critical } = updateData;
         const downloadUrl = this.getDownloadUrl(updateData);
-        
+
         // Check if we already notified about this version
         const lastNotified = localStorage.getItem('lastNotifiedVersion');
         if (lastNotified === version) {
             return; // Don't spam notifications
         }
-        
+
         // Show simple notification
         const message = `Version ${version} is now available! Click to view details.`;
         const type = critical ? 'warning' : 'info';
-        
+
         if (window.notificationService) {
             const notifId = window.notificationService.show(message, type, 8000);
-            
+
             // Add click handler to notification to open Updates tab
             setTimeout(() => {
                 const notifElement = document.querySelector(`[data-notification-id="${notifId}"]`);
@@ -425,12 +425,12 @@ class UpdateChecker {
     showReleaseNotes(notes, version, updateData) {
         const downloadUrl = this.getDownloadUrl(updateData);
         const platform = this.detectPlatform();
-        
+
         // Build download options HTML
         let downloadOptions = '';
         if (updateData.downloads) {
             downloadOptions = '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color, #333);"><p style="margin-bottom: 8px; font-weight: 500;">Download for other platforms:</p><div style="display: flex; flex-direction: column; gap: 8px;">';
-            
+
             if (updateData.downloads.windows) {
                 downloadOptions += `<a href="${updateData.downloads.windows}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🪟 Windows (.exe)</a>`;
             }
@@ -446,10 +446,10 @@ class UpdateChecker {
             if (updateData.downloads.mac) {
                 downloadOptions += `<a href="${updateData.downloads.mac}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🍎 macOS (.dmg)</a>`;
             }
-            
+
             downloadOptions += '</div></div>';
         }
-        
+
         const modal = document.createElement('div');
         modal.className = 'update-modal';
         modal.innerHTML = `
@@ -492,7 +492,7 @@ class UpdateChecker {
                 body: `Version ${version} is ready to download`,
                 icon: 'assets/icon.png'
             });
-            
+
             notification.onclick = () => {
                 window.open(downloadUrl, '_blank');
             };

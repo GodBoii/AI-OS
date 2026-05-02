@@ -19,6 +19,7 @@ from agno.run.agent import RunEvent
 from agno.db.postgres import PostgresDb
 from agno.models.groq import Groq
 from agno.models.google import Gemini
+from database_config import get_sqlalchemy_database_url
 
 # Tool Imports
 from agno.tools import Toolkit
@@ -80,15 +81,10 @@ def get_llm_os(
     """
     direct_tools: List[Union[Toolkit, callable]] = []
 
-    db_url_full = os.getenv("DATABASE_URL")
-    if not db_url_full:
-        raise ValueError("DATABASE_URL environment variable is not set.")
-    db_url_sqlalchemy = db_url_full.replace("postgresql://", "postgresql+psycopg2://")
-
     # This PostgresDb object is now the single source of truth for persistence.
     # The Team will use it automatically to save runs and memories to Supabase.
     db = PostgresDb(
-        db_url=db_url_sqlalchemy,
+        db_url=get_sqlalchemy_database_url(),
         db_schema="public"
 
     )
