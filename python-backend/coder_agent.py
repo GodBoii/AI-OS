@@ -14,13 +14,11 @@ from agno.models.google import Gemini
 from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
+from database_config import get_sqlalchemy_database_url
 
 
 def _db_url_sqlalchemy() -> str:
-    db_url_full = os.getenv("DATABASE_URL")
-    if not db_url_full:
-        raise ValueError("DATABASE_URL environment variable is not set.")
-    return db_url_full.replace("postgresql://", "postgresql+psycopg2://")
+    return get_sqlalchemy_database_url()
 
 
 def get_coder_agent(

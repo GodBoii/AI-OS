@@ -13,13 +13,11 @@ from computer_tools import ComputerTools
 from google_drive_tools import GoogleDriveTools
 from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
+from database_config import get_sqlalchemy_database_url
 
 
 def _db_url_sqlalchemy() -> str:
-    db_url_full = os.getenv("DATABASE_URL")
-    if not db_url_full:
-        raise ValueError("DATABASE_URL environment variable is not set.")
-    return db_url_full.replace("postgresql://", "postgresql+psycopg2://")
+    return get_sqlalchemy_database_url()
 
 
 def get_computer_agent(
