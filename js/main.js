@@ -120,7 +120,7 @@ if (!gotTheLock) {
 function createWindow() {
     const mainProcessEmitter = new EventEmitter();
     const fs = require('fs');
-    
+
     // Resolve icon path correctly for both development and production
     let iconPath;
     if (app.isPackaged) {
@@ -138,19 +138,19 @@ function createWindow() {
             // Path 5: Executable directory
             path.join(path.dirname(process.execPath), 'resources', 'icon.ico')
         ];
-        
+
         // Use the first path that exists
         iconPath = possiblePaths.find(p => {
             const exists = fs.existsSync(p);
             console.log(`[Icon] Checking: ${p} - ${exists ? 'EXISTS' : 'NOT FOUND'}`);
             return exists;
         });
-        
+
         if (!iconPath) {
             console.error('[Icon] No valid icon path found! Tried:', possiblePaths);
             iconPath = possiblePaths[0]; // Fallback to first path
         }
-        
+
         console.log('[Icon] Production icon path selected:', iconPath);
         console.log('[Icon] Path exists:', fs.existsSync(iconPath));
     } else {
@@ -159,7 +159,7 @@ function createWindow() {
         console.log('[Icon] Development icon path:', iconPath);
         console.log('[Icon] Path exists:', fs.existsSync(iconPath));
     }
-    
+
     // Create native image from icon path
     const icon = nativeImage.createFromPath(iconPath);
     if (icon.isEmpty()) {
@@ -167,7 +167,7 @@ function createWindow() {
     } else {
         console.log('[Icon] Successfully loaded icon, size:', icon.getSize());
     }
-    
+
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
@@ -180,7 +180,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: false,
+        frame: true,
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });
@@ -698,21 +698,21 @@ app.on('open-url', (event, url) => {
 
 const fs = require('fs').promises;
 ipcMain.handle('show-save-dialog', async (event, options) => { return await dialog.showSaveDialog(mainWindow, options); });
-    ipcMain.handle('save-file', async (event, { filePath, content, encoding = 'utf8' }) => {
-        try {
-            if (encoding === 'base64') {
-                await fs.writeFile(filePath, Buffer.from(content, 'base64'));
-            } else if (encoding === 'binary') {
-                await fs.writeFile(filePath, Buffer.from(content, 'binary'));
-            } else {
-                await fs.writeFile(filePath, content, 'utf8');
-            }
-            return true;
-        } catch (error) {
-            console.error('Error saving file:', error);
-            return false;
+ipcMain.handle('save-file', async (event, { filePath, content, encoding = 'utf8' }) => {
+    try {
+        if (encoding === 'base64') {
+            await fs.writeFile(filePath, Buffer.from(content, 'base64'));
+        } else if (encoding === 'binary') {
+            await fs.writeFile(filePath, Buffer.from(content, 'binary'));
+        } else {
+            await fs.writeFile(filePath, content, 'utf8');
         }
-    });
+        return true;
+    } catch (error) {
+        console.error('Error saving file:', error);
+        return false;
+    }
+});
 ipcMain.handle('export-conversation-pdf', async (event, payload) => {
     const html = String(payload?.html || '').trim();
     const defaultPath = String(payload?.defaultPath || 'aetheria-conversation.pdf').trim() || 'aetheria-conversation.pdf';
