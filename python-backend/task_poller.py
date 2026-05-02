@@ -7,7 +7,10 @@ Checks for pending tasks every 60 seconds and triggers autonomous execution
 import logging
 import time
 import threading
+import os
 from typing import List, Dict, Any
+import redis
+import config
 from supabase_client import supabase_client
 from task_executor import run_autonomous_task
 
@@ -30,6 +33,10 @@ class TaskPoller:
         self.running = False
         self.thread = None
         self.processing_tasks = set()  # Track tasks currently being processed
+        self.worker_id = f"{os.getpid()}:{threading.get_ident()}"
+        self.leader_lock_key = "locks:task-poller:leader"
+        self.leader_lock_ttl = max(60, min(self.poll_interval, 300))
+        self.redis_client = redis.from_url(config.REDIS_URL, decode_responses=True)
         
     def start(self):
         """Start the background polling thread."""
@@ -55,7 +62,10 @@ class TaskPoller:
         while self.running:
             try:
                 logger.debug(f"🔍 Scanning for pending tasks...")
-                self._check_and_execute_pending_tasks()
+                if self._acquire_leader_lock():
+                    self._check_and_execute_pending_tasks()
+                else:
+                    logger.debug("Task poller leadership held by another worker; skipping this cycle")
             except Exception as e:
                 logger.error(f"❌ Error in task polling loop: {e}")
             
@@ -63,6 +73,23 @@ class TaskPoller:
             logger.debug(f"💤 Sleeping for {self.poll_interval} seconds")
             time.sleep(self.poll_interval)
     
+    def _acquire_leader_lock(self) -> bool:
+        """
+        Ensure only one Gunicorn worker polls pending tasks per cycle.
+
+        Each worker has its own Python globals, so the in-process singleton is
+        not enough once Gunicorn runs multiple workers. Redis SET NX gives us a
+        cross-process leadership lock.
+        """
+        return bool(
+            self.redis_client.set(
+                self.leader_lock_key,
+                self.worker_id,
+                nx=True,
+                ex=self.leader_lock_ttl,
+            )
+        )
+
     def _check_and_execute_pending_tasks(self):
         """
         Query database for pending tasks and execute them.
