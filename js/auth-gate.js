@@ -67,8 +67,8 @@
                         </div>
                         
                         <h1 class="ag-hero-title">
-                            ACTIVATE YOUR<br>
-                            <span class="ag-highlight">AI AGENT</span>
+                            ELEVATE YOURSELF WITH<br>
+                            <span class="ag-highlight">AETHERIA AI</span>
                         </h1>
                     </div>
                 </div>
