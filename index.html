@@ -51,6 +51,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap"
         rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <!-- Auth Gate — fullscreen login/signup intercept -->
+    <link rel="stylesheet" href="css/auth-gate.css" />
     <!-- Glass UI Overrides — MUST be last stylesheet for highest specificity -->
     <link rel="stylesheet" href="css/glass-overrides.css" />
 </head>
@@ -134,6 +136,8 @@
     </div>
 
     <!-- Scripts -->
+    <!-- Auth Gate MUST be first — intercepts the app before UI loads -->
+    <script src="js/auth-gate.js"></script>
     <script src="js/notification-service.js"></script>
     <script src="js/update-checker.js"></script>
     <script src="js/renderer.js"></script>

@@ -2487,6 +2487,13 @@ class AIOS {
                 const result = await this.authService.signOut();
                 if (result.success) {
                     this.showNotification('Logged out successfully', 'success');
+                    // Re-launch the auth gate so the user must log back in
+                    if (window.AuthGate?.reinit) {
+                        window.AuthGate.reinit();
+                    } else {
+                        // Fallback: reload the window
+                        window.location.reload();
+                    }
                 } else {
                     this.showNotification('Logout failed: ' + result.error, 'error');
                 }
