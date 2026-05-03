@@ -853,6 +853,8 @@ class AIOS {
                 button.textContent = 'Upgrade to Pro';
             } else if (planType === 'elite') {
                 button.textContent = 'Upgrade to Elite';
+            } else if (planType === 'upi_test') {
+                button.textContent = 'Test UPI';
             }
         });
     }
@@ -944,6 +946,8 @@ class AIOS {
             button.disabled = false;
             if (canChangeExistingSubscription) {
                 button.textContent = planType === 'elite' ? 'Upgrade to Elite' : 'Move to Pro at renewal';
+            } else if (planType === 'upi_test') {
+                button.textContent = 'Test UPI';
             } else {
                 button.textContent = planType === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Elite';
             }
@@ -988,7 +992,7 @@ class AIOS {
 
     async startSubscriptionCheckout(planType) {
         const normalizedPlan = String(planType || '').toLowerCase();
-        if (!['pro', 'elite'].includes(normalizedPlan)) {
+        if (!['pro', 'elite', 'upi_test'].includes(normalizedPlan)) {
             return;
         }
         if (this.activeCheckoutPlan) {

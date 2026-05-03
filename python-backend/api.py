@@ -379,8 +379,8 @@ def subscription_create():
 
     body = request.json or {}
     plan_type = str(body.get("plan_type") or body.get("plan") or "").strip().lower()
-    if plan_type not in {"pro", "elite"}:
-        return jsonify({"ok": False, "error": "plan_type must be either 'pro' or 'elite'"}), 400
+    if plan_type not in {"pro", "elite", "upi_test"}:
+        return jsonify({"ok": False, "error": "plan_type must be 'pro', 'elite', or 'upi_test'"}), 400
 
     try:
         subscription = create_razorpay_subscription(
