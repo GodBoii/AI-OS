@@ -33,6 +33,9 @@ def _default_cors_origins():
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "https://localhost",
+        "capacitor://localhost",
+        "ionic://localhost",
         "https://api.pawsitivestrides.store",
         "https://api.aetheriaai.online",
     }
@@ -42,7 +45,7 @@ def _default_cors_origins():
     return sorted(origins)
 
 
-ALLOWED_CORS_ORIGINS = _split_csv(os.getenv("ALLOWED_CORS_ORIGINS")) or _default_cors_origins()
+ALLOWED_CORS_ORIGINS = sorted(set(_default_cors_origins()) | set(_split_csv(os.getenv("ALLOWED_CORS_ORIGINS"))))
 ALLOWED_CORS_SUFFIXES = _split_csv(
     os.getenv(
         "ALLOWED_CORS_SUFFIXES",
