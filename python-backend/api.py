@@ -390,6 +390,7 @@ def subscription_create():
         )
         plan = get_plan_config(plan_type)
         summary = calculate_usage_summary(str(user.id), refresh_window=False)
+        checkout_required = str(subscription.get("_aetheria_change_type") or "").strip() == ""
         return jsonify({
             "ok": True,
             "key_id": config.RAZORPAY_KEY_ID,
@@ -397,6 +398,10 @@ def subscription_create():
             "plan_name": plan["name"],
             "subscription_id": subscription.get("id"),
             "status": subscription.get("status"),
+            "checkout_required": checkout_required,
+            "change_type": subscription.get("_aetheria_change_type"),
+            "has_scheduled_changes": subscription.get("has_scheduled_changes"),
+            "change_scheduled_at": subscription.get("change_scheduled_at"),
             "subscription": subscription,
             "summary": summary,
         }), 200

@@ -909,6 +909,11 @@ class AIOS {
             const planType = button.dataset.planType;
             const isCurrent = planType === currentPlanType;
             const isLoading = this.activeCheckoutPlan === planType;
+            const canChangeExistingSubscription = hasExistingSubscription
+                && ['authenticated', 'active'].includes(currentStatus)
+                && ['pro', 'elite'].includes(currentPlanType)
+                && ['pro', 'elite'].includes(planType)
+                && planType !== currentPlanType;
 
             button.classList.toggle('is-current', isCurrent);
 
@@ -930,14 +935,18 @@ class AIOS {
                 return;
             }
 
-            if (hasExistingSubscription) {
+            if (hasExistingSubscription && !canChangeExistingSubscription) {
                 button.disabled = true;
                 button.textContent = 'Existing subscription';
                 return;
             }
 
             button.disabled = false;
-            button.textContent = planType === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Elite';
+            if (canChangeExistingSubscription) {
+                button.textContent = planType === 'elite' ? 'Upgrade to Elite' : 'Move to Pro at renewal';
+            } else {
+                button.textContent = planType === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Elite';
+            }
         });
     }
 
@@ -997,15 +1006,32 @@ class AIOS {
             const payload = await this._callAuthorizedApi('/api/subscription/create', 'POST', {
                 plan_type: normalizedPlan,
             });
+            if (payload.checkout_required === false) {
+                this.renderSubscriptionSummary(payload.summary || null);
+                const changeType = payload.change_type === 'downgrade' ? 'Plan change scheduled for renewal.' : 'Plan updated successfully.';
+                this.showNotification(changeType, 'success');
+                this.activeCheckoutPlan = null;
+                this.updatePricingButtons(payload.summary || this.subscriptionSummary);
+                return;
+            }
             const currentUser = this.authService?.getCurrentUser?.();
             const checkout = new window.Razorpay({
                 key: payload.key_id,
                 subscription_id: payload.subscription_id,
+                recurring: 1,
                 name: 'Aetheria AI',
                 description: `${payload.plan_name} monthly subscription`,
                 prefill: {
                     name: currentUser?.user_metadata?.name || currentUser?.user_metadata?.full_name || this.userData?.account?.name || '',
                     email: currentUser?.email || ''
+                },
+                method: {
+                    upi: true,
+                    card: true,
+                    netbanking: true,
+                    wallet: false,
+                    emi: false,
+                    paylater: false
                 },
                 theme: {
                     color: '#38bdf8'
