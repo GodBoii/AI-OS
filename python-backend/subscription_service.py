@@ -18,6 +18,9 @@ PAID_PLAN_TYPES = {"pro", "elite"}
 ACCESS_ACTIVE_STATUSES = {"active", "authenticated", "resumed"}
 ACCESS_WINDOW_STATUSES = {"cancelled", "paused", "pending"}
 TERMINAL_STATUSES = {"completed", "expired", "halted"}
+SUBSCRIPTION_CHANGEABLE_STATUSES = {"authenticated", "active"}
+SUBSCRIPTION_BLOCKING_STATUSES = {"created", "authenticated", "active", "pending", "paused", "resumed"}
+PLAN_RANK = {"free": 0, "pro": 1, "elite": 2}
 
 
 PLAN_CATALOG: dict[str, dict[str, Any]] = {
@@ -568,6 +571,48 @@ def fetch_razorpay_subscription(subscription_id: str) -> dict[str, Any]:
     return response.json() or {}
 
 
+def update_razorpay_subscription_plan(
+    subscription_id: str,
+    plan_type: str,
+    schedule_change_at: Optional[str] = None,
+) -> dict[str, Any]:
+    normalized_plan = str(plan_type or "").strip().lower()
+    if normalized_plan not in PAID_PLAN_TYPES:
+        raise ValueError("Only paid plans can be applied to a Razorpay subscription.")
+    if not subscription_id:
+        raise ValueError("subscription_id is required.")
+    if not _razorpay_auth_available():
+        raise RuntimeError("Razorpay credentials are not configured.")
+
+    plan_id = get_plan_id_for_type(normalized_plan)
+    if not plan_id:
+        raise RuntimeError(f"Missing Razorpay plan id for '{normalized_plan}'.")
+
+    configured_mode = str(
+        schedule_change_at
+        or config.RAZORPAY_SUBSCRIPTION_CHANGE_MODE
+        or "cycle_end"
+    ).strip().lower()
+    if configured_mode not in {"now", "cycle_end"}:
+        configured_mode = "cycle_end"
+
+    payload = {
+        "plan_id": plan_id,
+        "quantity": 1,
+        "schedule_change_at": configured_mode,
+        "customer_notify": True,
+    }
+    response = requests.patch(
+        f"{RAZORPAY_API_BASE}/subscriptions/{subscription_id}",
+        auth=(config.RAZORPAY_KEY_ID, config.RAZORPAY_KEY_SECRET),
+        json=payload,
+        timeout=30,
+    )
+    if response.status_code not in (200, 201):
+        raise RuntimeError(_extract_error_message(response))
+    return response.json() or {}
+
+
 def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> dict[str, Any]:
     normalized_plan = str(plan_type or "").strip().lower()
     if normalized_plan not in PAID_PLAN_TYPES:
@@ -582,25 +627,66 @@ def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> di
     summary = calculate_usage_summary(user_id, refresh_window=True)
     current_status = str(summary.get("subscription_status") or "none").lower()
     current_subscription_id = summary.get("razorpay_subscription_id")
-    if current_subscription_id and current_status in {
-        "created",
-        "authenticated",
-        "active",
-        "pending",
-        "paused",
-        "resumed",
-    }:
-        raise RuntimeError("An active or pending Razorpay subscription already exists for this account.")
+    current_plan_type = str(summary.get("plan_type") or "free").strip().lower()
+    if current_subscription_id and current_status in SUBSCRIPTION_BLOCKING_STATUSES:
+        if current_plan_type == normalized_plan:
+            raise RuntimeError("This account already has that Razorpay subscription.")
+        if current_status not in SUBSCRIPTION_CHANGEABLE_STATUSES:
+            raise RuntimeError(
+                "This account has a pending Razorpay subscription. Complete or cancel it before changing plans."
+            )
+        change_type = (
+            "upgrade"
+            if PLAN_RANK.get(normalized_plan, 0) > PLAN_RANK.get(current_plan_type, 0)
+            else "downgrade"
+        )
+        schedule_change_at = "now" if change_type == "upgrade" else "cycle_end"
+        updated_subscription = update_razorpay_subscription_plan(
+            subscription_id=str(current_subscription_id),
+            plan_type=normalized_plan,
+            schedule_change_at=schedule_change_at,
+        )
+        profile = get_profile(user_id)
+        if change_type == "downgrade":
+            current_period_end = _unix_to_dt(updated_subscription.get("current_end"))
+            updated_profile = update_profile(
+                user_id,
+                {
+                    "plan_type": current_plan_type,
+                    "subscription_status": str(updated_subscription.get("status") or current_status),
+                    "razorpay_customer_id": updated_subscription.get("customer_id") or profile.get("razorpay_customer_id"),
+                    "razorpay_subscription_id": updated_subscription.get("id") or current_subscription_id,
+                    "current_period_end": _dt_to_iso(current_period_end) if current_period_end else profile.get("current_period_end"),
+                },
+            )
+            _sync_profile_snapshot_to_convex(user_id, updated_profile)
+        else:
+            updated_profile = sync_subscription_state(
+                user_id=user_id,
+                profile=profile,
+                subscription_entity=updated_subscription,
+                source="subscription_change",
+            )
+        updated_subscription["_aetheria_change_type"] = change_type
+        updated_subscription["_aetheria_schedule_change_at"] = schedule_change_at
+        updated_subscription["_aetheria_profile_plan_type"] = updated_profile.get("plan_type")
+        return updated_subscription
+
+    expire_by = int(
+        (_utc_now() + timedelta(minutes=max(config.RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES, 15))).timestamp()
+    )
 
     payload = {
         "plan_id": plan_id,
         "total_count": config.RAZORPAY_SUBSCRIPTION_TOTAL_COUNT,
         "quantity": 1,
-        "customer_notify": 1,
+        "customer_notify": True,
+        "expire_by": expire_by,
         "notes": {
             "user_id": str(user_id),
             "email": str(email or ""),
             "plan_type": normalized_plan,
+            "app": "aetheria_ai",
         },
     }
 
@@ -819,7 +905,14 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
     period_end = _parse_dt(usage_window.get("window_end")) or _parse_dt(profile.get("current_period_end"))
     subscription_status = str(profile.get("subscription_status") or "none").strip().lower()
     is_enforceable = usage_source == "convex_window"
-    access_locked = bool(is_enforceable and total_tokens >= (5_000_000_000 if plan_type == "free" else limit_tokens))
+    # Pre-live testing bypass:
+    # Keep free-plan users effectively unblocked while the app is being tested
+    # heavily before launch. When going live, replace this with `limit_tokens`
+    # so Core users are capped at the configured 50,000 tokens/day allowance.
+    enforcement_limit_tokens = 5_000_000_000 if plan_type == "free" else limit_tokens
+    access_locked = bool(is_enforceable and limit_tokens > 0 and total_tokens >= enforcement_limit_tokens)
+    warning_threshold = 80
+    is_near_limit = bool(is_enforceable and usage_percent >= warning_threshold and not access_locked)
     _sync_profile_snapshot_to_convex(user_id, profile)
 
     summary = {
@@ -836,6 +929,8 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
         "remaining_tokens": remaining_tokens,
         "usage_percent": usage_percent,
         "is_limit_reached": access_locked,
+        "is_near_limit": is_near_limit,
+        "warning_threshold_percent": warning_threshold,
         "is_enforceable": is_enforceable,
         "usage_source": usage_source,
         "usage_window": {
@@ -869,6 +964,11 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
         ),
     }
     summary["message"] = format_limit_message(summary) if access_locked else None
+    summary["warning_message"] = (
+        f"{plan['name']} usage is at {usage_percent}% of your {summary['limit_label']} allowance."
+        if is_near_limit
+        else None
+    )
     return summary
 
 
