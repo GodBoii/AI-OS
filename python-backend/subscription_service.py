@@ -14,12 +14,13 @@ from supabase_client import supabase_client
 logger = logging.getLogger(__name__)
 
 RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
+DEFAULT_SUBSCRIPTION_TOTAL_COUNT = 120
 PAID_PLAN_TYPES = {"pro", "elite", "upi_test"}
 ACCESS_ACTIVE_STATUSES = {"active", "authenticated", "resumed"}
-ACCESS_WINDOW_STATUSES = {"cancelled", "paused", "pending"}
+ACCESS_WINDOW_STATUSES = {"cancelled", "paused"}
 TERMINAL_STATUSES = {"completed", "expired", "halted"}
 SUBSCRIPTION_CHANGEABLE_STATUSES = {"authenticated", "active"}
-SUBSCRIPTION_BLOCKING_STATUSES = {"created", "authenticated", "active", "pending", "paused", "resumed"}
+SUBSCRIPTION_BLOCKING_STATUSES = {"authenticated", "active", "pending", "paused", "resumed"}
 PLAN_RANK = {"free": 0, "upi_test": 1, "pro": 2, "elite": 3}
 
 
@@ -47,7 +48,7 @@ PLAN_CATALOG: dict[str, dict[str, Any]] = {
     "upi_test": {
         "type": "upi_test",
         "name": "UPI Test",
-        "price_inr": 2,
+        "price_inr": 10,
         "limit_tokens": 50_000,
         "interval_label": "month",
         "description": "Temporary live-mode plan for validating UPI Autopay.",
@@ -66,6 +67,8 @@ PLAN_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
+NON_ACCESS_STATUSES = {"created", "pending", "halted", "expired", "completed"}
+
 
 class UsageLimitExceeded(Exception):
     def __init__(self, summary: dict[str, Any]):
@@ -82,6 +85,16 @@ def _to_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _subscription_total_count() -> int:
+    configured = _to_int(getattr(config, "RAZORPAY_SUBSCRIPTION_TOTAL_COUNT", DEFAULT_SUBSCRIPTION_TOTAL_COUNT))
+    configured_max = _to_int(getattr(config, "RAZORPAY_SUBSCRIPTION_MAX_TOTAL_COUNT", DEFAULT_SUBSCRIPTION_TOTAL_COUNT))
+    if configured <= 0:
+        configured = DEFAULT_SUBSCRIPTION_TOTAL_COUNT
+    if configured_max <= 0:
+        configured_max = DEFAULT_SUBSCRIPTION_TOTAL_COUNT
+    return max(1, min(configured, configured_max, DEFAULT_SUBSCRIPTION_TOTAL_COUNT))
 
 
 def _parse_dt(value: Any) -> Optional[datetime]:
@@ -572,6 +585,10 @@ def _status_grants_paid_access(status: str, current_period_end: Optional[datetim
     return False
 
 
+def _should_track_incomplete_subscription(status: str) -> bool:
+    return str(status or "").strip().lower() in {"created", "pending"}
+
+
 def fetch_razorpay_subscription(subscription_id: str) -> dict[str, Any]:
     if not _razorpay_auth_available():
         raise RuntimeError("Razorpay credentials are not configured.")
@@ -583,6 +600,67 @@ def fetch_razorpay_subscription(subscription_id: str) -> dict[str, Any]:
     if response.status_code not in (200, 201):
         raise RuntimeError(_extract_error_message(response))
     return response.json() or {}
+
+
+def cancel_razorpay_subscription(subscription_id: str, cancel_at_cycle_end: bool = False) -> dict[str, Any]:
+    if not subscription_id:
+        raise ValueError("subscription_id is required.")
+    if not _razorpay_auth_available():
+        raise RuntimeError("Razorpay credentials are not configured.")
+
+    response = requests.post(
+        f"{RAZORPAY_API_BASE}/subscriptions/{subscription_id}/cancel",
+        auth=(config.RAZORPAY_KEY_ID, config.RAZORPAY_KEY_SECRET),
+        json={"cancel_at_cycle_end": int(bool(cancel_at_cycle_end))},
+        timeout=30,
+    )
+    if response.status_code not in (200, 201):
+        raise RuntimeError(_extract_error_message(response))
+    return response.json() or {}
+
+
+def cleanup_incomplete_subscription(user_id: str, subscription_id: str) -> dict[str, Any]:
+    subscription_id = str(subscription_id or "").strip()
+    if not subscription_id:
+        raise ValueError("subscription_id is required.")
+
+    profile = get_profile(user_id)
+    entity = fetch_razorpay_subscription(subscription_id)
+    notes = entity.get("notes") if isinstance(entity.get("notes"), dict) else {}
+    note_user_id = str(notes.get("user_id") or "").strip()
+    linked_subscription_id = str(profile.get("razorpay_subscription_id") or "").strip()
+
+    if note_user_id and note_user_id != str(user_id):
+        raise ValueError("The Razorpay subscription does not belong to this user.")
+    if linked_subscription_id and linked_subscription_id != subscription_id:
+        raise ValueError("This Razorpay subscription is not linked to the active profile.")
+
+    status = str(entity.get("status") or "created").strip().lower()
+    if status not in {"created", "pending", "halted", "expired"}:
+        return {"subscription": entity, "cleaned": False, "status": status}
+
+    cancelled = entity
+    if status in {"created", "pending"}:
+        cancelled = cancel_razorpay_subscription(subscription_id, cancel_at_cycle_end=False)
+
+    current_subscription_id = str(profile.get("razorpay_subscription_id") or "").strip()
+    if current_subscription_id == subscription_id:
+        updated_profile = update_profile(
+            user_id,
+            {
+                "plan_type": "free",
+                "subscription_status": "none",
+                "razorpay_subscription_id": None,
+                "current_period_end": _dt_to_iso(_next_utc_day_boundary()),
+            },
+        )
+        _sync_profile_snapshot_to_convex(user_id, updated_profile)
+
+    return {
+        "subscription": cancelled,
+        "cleaned": True,
+        "status": str(cancelled.get("status") or status).lower(),
+    }
 
 
 def update_razorpay_subscription_plan(
@@ -686,16 +764,11 @@ def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> di
         updated_subscription["_aetheria_profile_plan_type"] = updated_profile.get("plan_type")
         return updated_subscription
 
-    expire_by = int(
-        (_utc_now() + timedelta(minutes=max(config.RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES, 15))).timestamp()
-    )
-
     payload = {
         "plan_id": plan_id,
-        "total_count": config.RAZORPAY_SUBSCRIPTION_TOTAL_COUNT,
+        "total_count": _subscription_total_count(),
         "quantity": 1,
         "customer_notify": True,
-        "expire_by": expire_by,
         "notes": {
             "user_id": str(user_id),
             "email": str(email or ""),
@@ -714,14 +787,6 @@ def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> di
         raise RuntimeError(_extract_error_message(response))
 
     data = response.json() or {}
-    update_profile(
-        user_id,
-        {
-            "subscription_status": str(data.get("status") or "created"),
-            "razorpay_customer_id": data.get("customer_id"),
-            "razorpay_subscription_id": data.get("id"),
-        },
-    )
     return data
 
 
@@ -773,6 +838,11 @@ def sync_subscription_state(
         effective_plan = plan_type
     elif status in TERMINAL_STATUSES or (current_period_end and current_period_end <= now):
         effective_plan = "free"
+
+    current_subscription_id = str(profile.get("razorpay_subscription_id") or "").strip()
+    incoming_subscription_id = str(subscription_entity.get("id") or "").strip()
+    if status in NON_ACCESS_STATUSES and current_subscription_id and incoming_subscription_id != current_subscription_id:
+        return profile
 
     update_fields = {
         "plan_type": effective_plan,
@@ -834,6 +904,8 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
             user_id,
             {
                 "plan_type": "free",
+                "subscription_status": "none" if status in NON_ACCESS_STATUSES else status,
+                "razorpay_subscription_id": None if status in NON_ACCESS_STATUSES else profile.get("razorpay_subscription_id"),
                 "current_period_end": _dt_to_iso(_next_utc_day_boundary(now)),
             },
         )
@@ -974,7 +1046,7 @@ def calculate_usage_summary(user_id: str, refresh_window: bool = True) -> dict[s
         "razorpay_subscription_id": profile.get("razorpay_subscription_id"),
         "can_create_subscription": not (
             profile.get("razorpay_subscription_id")
-            and subscription_status in {"created", "authenticated", "active", "pending", "paused", "resumed"}
+            and subscription_status in {"authenticated", "active", "pending", "paused", "resumed"}
         ),
     }
     summary["message"] = format_limit_message(summary) if access_locked else None
