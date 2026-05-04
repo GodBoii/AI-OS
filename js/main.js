@@ -124,40 +124,21 @@ function createWindow() {
     // Resolve icon path correctly for both development and production
     let iconPath;
     if (app.isPackaged) {
-        // In production, try multiple possible paths
-        // electron-builder can place icons in different locations
-        const possiblePaths = [
-            // Path 1: Unpacked from ASAR
-            path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.ico'),
-            // Path 2: Build resources directory (most common for icons)
-            path.join(process.resourcesPath, 'icon.ico'),
-            // Path 3: Assets in resources
-            path.join(process.resourcesPath, 'assets', 'icon.ico'),
-            // Path 4: Inside ASAR (shouldn't work but try anyway)
-            path.join(app.getAppPath(), 'assets', 'icon.ico'),
-            // Path 5: Executable directory
-            path.join(path.dirname(process.execPath), 'resources', 'icon.ico')
-        ];
-
-        // Use the first path that exists
-        iconPath = possiblePaths.find(p => {
-            const exists = fs.existsSync(p);
-            console.log(`[Icon] Checking: ${p} - ${exists ? 'EXISTS' : 'NOT FOUND'}`);
-            return exists;
-        });
-
-        if (!iconPath) {
-            console.error('[Icon] No valid icon path found! Tried:', possiblePaths);
-            iconPath = possiblePaths[0]; // Fallback to first path
-        }
-
-        console.log('[Icon] Production icon path selected:', iconPath);
-        console.log('[Icon] Path exists:', fs.existsSync(iconPath));
+        // In production, icon is copied to resources folder via extraResources in package.json
+        iconPath = path.join(process.resourcesPath, 'icon.ico');
+        console.log('[Icon] Production icon path:', iconPath);
     } else {
         // In development, use the regular path
         iconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
         console.log('[Icon] Development icon path:', iconPath);
-        console.log('[Icon] Path exists:', fs.existsSync(iconPath));
+    }
+
+    // Verify icon exists
+    const iconExists = fs.existsSync(iconPath);
+    console.log('[Icon] Path exists:', iconExists);
+    
+    if (!iconExists) {
+        console.error('[Icon] CRITICAL: Icon file not found at:', iconPath);
     }
 
     // Create native image from icon path
@@ -186,8 +167,11 @@ function createWindow() {
     });
 
     // Additional Windows-specific icon handling
+    // This ensures the icon is properly set for the window and taskbar
     if (process.platform === 'win32') {
         mainWindow.setIcon(icon);
+        // Set overlay icon (shown in taskbar when app is running)
+        mainWindow.setOverlayIcon(icon, 'Aetheria AI');
     }
 
     mainWindow.maximize();
