@@ -388,6 +388,7 @@ def subscription_create():
             email=str(getattr(user, "email", "") or ""),
             plan_type=plan_type,
         )
+        CacheManager.delete(f"cache:subscription_status:{user.id}")
         plan = get_plan_config(plan_type)
         summary = calculate_usage_summary(str(user.id), refresh_window=False)
         checkout_required = str(subscription.get("_aetheria_change_type") or "").strip() == ""

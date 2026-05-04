@@ -20,6 +20,13 @@ def _split_csv(value):
     return [item.strip() for item in (value or "").split(",") if item.strip()]
 
 
+def _int_env(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _origin_from_url(url):
     parsed = urlparse(url or "")
     if not parsed.scheme or not parsed.netloc:
@@ -108,8 +115,9 @@ RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
 PRO_PLAN_ID = os.getenv("PRO_PLAN_ID")
 ELITE_PLAN_ID = os.getenv("ELITE_PLAN_ID")
 UPI_PLAN_ID = os.getenv("UPI_PLAN_ID")
-RAZORPAY_SUBSCRIPTION_TOTAL_COUNT = int(os.getenv("RAZORPAY_SUBSCRIPTION_TOTAL_COUNT", "1200"))
-RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES = int(os.getenv("RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES", "60"))
+RAZORPAY_SUBSCRIPTION_TOTAL_COUNT = _int_env("RAZORPAY_SUBSCRIPTION_TOTAL_COUNT", 120)
+RAZORPAY_SUBSCRIPTION_MAX_TOTAL_COUNT = _int_env("RAZORPAY_SUBSCRIPTION_MAX_TOTAL_COUNT", 120)
+RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES = _int_env("RAZORPAY_SUBSCRIPTION_AUTH_EXPIRE_MINUTES", 60)
 RAZORPAY_SUBSCRIPTION_CHANGE_MODE = os.getenv("RAZORPAY_SUBSCRIPTION_CHANGE_MODE", "cycle_end").strip().lower()
 
 # --- Celery Configuration ---
