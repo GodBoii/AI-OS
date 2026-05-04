@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 RAZORPAY_API_BASE = "https://api.razorpay.com/v1"
 DEFAULT_SUBSCRIPTION_TOTAL_COUNT = 120
-PAID_PLAN_TYPES = {"pro", "elite", "upi_test"}
+PAID_PLAN_TYPES = {"pro", "elite"}
 ACCESS_ACTIVE_STATUSES = {"active", "authenticated", "resumed"}
 ACCESS_WINDOW_STATUSES = {"cancelled", "paused"}
 TERMINAL_STATUSES = {"completed", "expired", "halted"}
 SUBSCRIPTION_CHANGEABLE_STATUSES = {"authenticated", "active"}
 SUBSCRIPTION_BLOCKING_STATUSES = {"authenticated", "active", "pending", "paused", "resumed"}
-PLAN_RANK = {"free": 0, "upi_test": 1, "pro": 2, "elite": 3}
+PLAN_RANK = {"free": 0, "pro": 1, "elite": 2}
 
 
 PLAN_CATALOG: dict[str, dict[str, Any]] = {
@@ -44,16 +44,6 @@ PLAN_CATALOG: dict[str, dict[str, Any]] = {
         "description": "Monthly plan for regular heavy usage.",
         "cta_label": "Upgrade to Pro",
         "accent": "pro",
-    },
-    "upi_test": {
-        "type": "upi_test",
-        "name": "UPI Test",
-        "price_inr": 10,
-        "limit_tokens": 50_000,
-        "interval_label": "month",
-        "description": "Temporary live-mode plan for validating UPI Autopay.",
-        "cta_label": "Test UPI",
-        "accent": "core",
     },
     "elite": {
         "type": "elite",
@@ -234,8 +224,6 @@ def get_plan_id_for_type(plan_type: str) -> Optional[str]:
         return config.PRO_PLAN_ID
     if normalized == "elite":
         return config.ELITE_PLAN_ID
-    if normalized == "upi_test":
-        return config.UPI_PLAN_ID
     return None
 
 
@@ -246,8 +234,6 @@ def resolve_plan_type_from_plan_id(plan_id: Optional[str]) -> Optional[str]:
         return "pro"
     if config.ELITE_PLAN_ID and str(plan_id) == str(config.ELITE_PLAN_ID):
         return "elite"
-    if config.UPI_PLAN_ID and str(plan_id) == str(config.UPI_PLAN_ID):
-        return "upi_test"
     return None
 
 
