@@ -52,6 +52,7 @@ from user_file_vault import (
 from subscription_service import (
     UsageLimitExceeded,
     calculate_usage_summary,
+    cleanup_incomplete_subscription,
     create_razorpay_subscription,
     enforce_usage_limit,
     get_daily_usage_by_date,
@@ -379,8 +380,8 @@ def subscription_create():
 
     body = request.json or {}
     plan_type = str(body.get("plan_type") or body.get("plan") or "").strip().lower()
-    if plan_type not in {"pro", "elite", "upi_test"}:
-        return jsonify({"ok": False, "error": "plan_type must be 'pro', 'elite', or 'upi_test'"}), 400
+    if plan_type not in {"pro", "elite"}:
+        return jsonify({"ok": False, "error": "plan_type must be 'pro' or 'elite'"}), 400
 
     try:
         subscription = create_razorpay_subscription(
@@ -446,6 +447,31 @@ def subscription_verify():
     except Exception as exc:
         logger.error("subscription/verify failed: %s", exc, exc_info=True)
         return jsonify({"ok": False, "error": "failed to verify subscription payment"}), 500
+
+
+@api_bp.route('/subscription/cleanup', methods=['POST'])
+@limiter.limit('20 per minute')
+def subscription_cleanup():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+
+    body = request.json or {}
+    subscription_id = str(body.get("razorpay_subscription_id") or body.get("subscription_id") or "").strip()
+    if not subscription_id:
+        return jsonify({"ok": False, "error": "subscription_id is required"}), 400
+
+    try:
+        result = cleanup_incomplete_subscription(str(user.id), subscription_id)
+        CacheManager.delete(f"cache:subscription_status:{user.id}")
+        return jsonify({"ok": True, **result}), 200
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except Exception as exc:
+        logger.error("subscription/cleanup failed: %s", exc, exc_info=True)
+        return jsonify({"ok": False, "error": "failed to clean up subscription"}), 500
 
 
 @api_bp.route('/webhooks/razorpay', methods=['POST'])
