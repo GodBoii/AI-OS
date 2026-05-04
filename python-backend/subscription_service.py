@@ -68,6 +68,8 @@ PLAN_CATALOG: dict[str, dict[str, Any]] = {
 }
 
 NON_ACCESS_STATUSES = {"created", "pending", "halted", "expired", "completed"}
+INCOMPLETE_SUBSCRIPTION_STATUSES = {"created", "pending", "halted", "expired"}
+ABANDONED_CHECKOUT_STATUSES = {"created", "expired"}
 
 
 class UsageLimitExceeded(Exception):
@@ -585,8 +587,29 @@ def _status_grants_paid_access(status: str, current_period_end: Optional[datetim
     return False
 
 
-def _should_track_incomplete_subscription(status: str) -> bool:
-    return str(status or "").strip().lower() in {"created", "pending"}
+def _incomplete_subscription_grace_seconds() -> int:
+    configured = _to_int(getattr(config, "RAZORPAY_INCOMPLETE_SUBSCRIPTION_GRACE_SECONDS", 300))
+    return max(0, configured)
+
+
+def _subscription_age_seconds(subscription_entity: dict[str, Any]) -> Optional[float]:
+    created_at = _unix_to_dt(subscription_entity.get("created_at"))
+    if not created_at:
+        return None
+    return max(0.0, (_utc_now() - created_at).total_seconds())
+
+
+def _looks_like_unpaid_checkout_attempt(subscription_entity: dict[str, Any], status: str) -> bool:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status in ABANDONED_CHECKOUT_STATUSES:
+        return True
+    if normalized_status in {"pending", "halted"}:
+        return (
+            _to_int(subscription_entity.get("paid_count")) == 0
+            and not subscription_entity.get("current_start")
+            and not subscription_entity.get("current_end")
+        )
+    return False
 
 
 def fetch_razorpay_subscription(subscription_id: str) -> dict[str, Any]:
@@ -636,7 +659,7 @@ def cleanup_incomplete_subscription(user_id: str, subscription_id: str) -> dict[
         raise ValueError("This Razorpay subscription is not linked to the active profile.")
 
     status = str(entity.get("status") or "created").strip().lower()
-    if status not in {"created", "pending", "halted", "expired"}:
+    if not _looks_like_unpaid_checkout_attempt(entity, status):
         return {"subscription": entity, "cleaned": False, "status": status}
 
     cancelled = entity
@@ -661,6 +684,48 @@ def cleanup_incomplete_subscription(user_id: str, subscription_id: str) -> dict[
         "cleaned": True,
         "status": str(cancelled.get("status") or status).lower(),
     }
+
+
+def cleanup_profile_incomplete_subscription_if_due(
+    user_id: str,
+    profile: dict[str, Any],
+    *,
+    force: bool = False,
+) -> dict[str, Any]:
+    subscription_id = str(profile.get("razorpay_subscription_id") or "").strip()
+    status = str(profile.get("subscription_status") or "none").strip().lower()
+    if not subscription_id or status not in INCOMPLETE_SUBSCRIPTION_STATUSES:
+        return profile
+    if not _razorpay_auth_available():
+        return profile
+
+    try:
+        entity = fetch_razorpay_subscription(subscription_id)
+    except Exception as exc:
+        logger.warning("[Subscription] Failed to inspect incomplete subscription %s: %s", subscription_id, exc)
+        return profile
+
+    entity_status = str(entity.get("status") or status).strip().lower()
+    if entity_status not in INCOMPLETE_SUBSCRIPTION_STATUSES:
+        return sync_subscription_state(
+            user_id=user_id,
+            profile=profile,
+            subscription_entity=entity,
+            source="incomplete_cleanup_refresh",
+        )
+    if not _looks_like_unpaid_checkout_attempt(entity, entity_status):
+        return profile
+
+    age_seconds = _subscription_age_seconds(entity)
+    if not force and age_seconds is not None and age_seconds < _incomplete_subscription_grace_seconds():
+        return profile
+
+    try:
+        cleanup_incomplete_subscription(user_id, subscription_id)
+        return get_profile(user_id)
+    except Exception as exc:
+        logger.warning("[Subscription] Failed to clean incomplete subscription %s: %s", subscription_id, exc)
+        return profile
 
 
 def update_razorpay_subscription_plan(
@@ -716,6 +781,8 @@ def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> di
     if not plan_id:
         raise RuntimeError(f"Missing Razorpay plan id for '{normalized_plan}'.")
 
+    profile = get_profile(user_id)
+    profile = cleanup_profile_incomplete_subscription_if_due(user_id, profile, force=True)
     summary = calculate_usage_summary(user_id, refresh_window=True)
     current_status = str(summary.get("subscription_status") or "none").lower()
     current_subscription_id = summary.get("razorpay_subscription_id")
@@ -787,6 +854,19 @@ def create_razorpay_subscription(user_id: str, email: str, plan_type: str) -> di
         raise RuntimeError(_extract_error_message(response))
 
     data = response.json() or {}
+    if data.get("id"):
+        existing_profile = get_profile(user_id)
+        updated_profile = update_profile(
+            user_id,
+            {
+                "plan_type": existing_profile.get("plan_type") or "free",
+                "subscription_status": str(data.get("status") or "created").strip().lower(),
+                "razorpay_customer_id": data.get("customer_id") or existing_profile.get("razorpay_customer_id"),
+                "razorpay_subscription_id": data.get("id"),
+                "current_period_end": existing_profile.get("current_period_end") or _dt_to_iso(_next_utc_day_boundary()),
+            },
+        )
+        _sync_profile_snapshot_to_convex(user_id, updated_profile)
     return data
 
 
@@ -880,6 +960,12 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
     plan_type = str(profile.get("plan_type") or "free").strip().lower()
     status = str(profile.get("subscription_status") or "none").strip().lower()
 
+    if profile.get("razorpay_subscription_id") and status in INCOMPLETE_SUBSCRIPTION_STATUSES:
+        profile = cleanup_profile_incomplete_subscription_if_due(user_id, profile, force=False)
+        current_period_end = _parse_dt(profile.get("current_period_end"))
+        plan_type = str(profile.get("plan_type") or "free").strip().lower()
+        status = str(profile.get("subscription_status") or "none").strip().lower()
+
     if plan_type in PAID_PLAN_TYPES and current_period_end and current_period_end <= now:
         refreshed = _refresh_profile_from_razorpay_if_needed(profile)
         profile = refreshed or profile
@@ -888,6 +974,9 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
         status = str(profile.get("subscription_status") or "none").strip().lower()
 
     if plan_type == "free":
+        if status in NON_ACCESS_STATUSES and not profile.get("razorpay_subscription_id"):
+            profile = update_profile(user_id, {"subscription_status": "none"})
+            status = "none"
         if not current_period_end or current_period_end <= now:
             profile = update_profile(
                 user_id,
@@ -929,7 +1018,7 @@ def ensure_usage_window(user_id: str, profile: dict[str, Any]) -> dict[str, Any]
 
 def _build_status_label(plan_type: str, status: str) -> str:
     normalized_status = str(status or "none").strip().lower()
-    if plan_type == "free" and normalized_status in {"none", ""}:
+    if plan_type == "free" and normalized_status in {"none", "", *NON_ACCESS_STATUSES}:
         return "Free"
     return normalized_status.replace("_", " ").title()
 
