@@ -229,3 +229,144 @@
         padding: 8px 14px;
     }
 }
+
+/* ================================================================= */
+/* GOOGLE SERVICES SUBBAR                                            */
+/* Ultra-compact service icons respecting glassmorphism theme       */
+/* ================================================================= */
+
+.google-services-subbar {
+    display: none; /* Hidden by default, shown when connected */
+    padding: 6px 0 6px 36px;
+    margin: -4px 0 0 0;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.35s var(--easing-smooth);
+}
+
+.google-services-subbar.visible {
+    display: block;
+    opacity: 1;
+    max-height: 40px;
+}
+
+.services-icons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.service-icon-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    transition: all 0.2s var(--easing-smooth);
+    padding: 4px;
+    border-radius: 6px;
+    background: transparent;
+    position: relative;
+}
+
+.service-icon-item::before {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%) scale(0.9);
+    padding: 4px 8px;
+    background: var(--elevated-bg);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s var(--easing-smooth);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+    z-index: 10;
+}
+
+.service-icon-item:hover::before {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+}
+
+.service-icon-item:hover {
+    background-color: var(--hover-bg);
+    transform: translateY(-1px);
+}
+
+.service-icon-item svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s var(--easing-smooth);
+    display: block;
+}
+
+.service-icon-item:hover svg {
+    transform: scale(1.15);
+}
+
+/* Dark mode adjustments - glassmorphism style */
+.dark-mode .google-services-subbar {
+    background: transparent;
+}
+
+.dark-mode .service-icon-item {
+    background: transparent;
+}
+
+.dark-mode .service-icon-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.40),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .service-icon-item::before {
+    background: rgba(18, 18, 18, 0.95);
+    border-color: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.60),
+        0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Light mode subtle styling */
+.service-icon-item {
+    opacity: 0.7;
+}
+
+.service-icon-item:hover {
+    opacity: 1;
+}
+
+/* Responsive adjustments for subbar */
+@media (max-width: 768px) {
+    .google-services-subbar {
+        padding: 6px 0 6px 20px;
+    }
+
+    .google-services-subbar.visible {
+        max-height: 36px;
+    }
+
+    .services-icons {
+        gap: 6px;
+    }
+
+    .service-icon-item {
+        padding: 3px;
+    }
+
+    .service-icon-item svg {
+        width: 14px;
+        height: 14px;
+    }
+}
