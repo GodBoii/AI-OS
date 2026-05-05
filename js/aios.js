@@ -14,7 +14,11 @@ class AIOS {
         this.deploymentsLoadPromise = null;
         this.deploymentsFreshnessMs = 15000;
         this.userFilesCache = [];
+        this.userFilesLoadPromise = null;
         this.memoriesCache = [];
+        this.memoriesLoadPromise = null;
+        this.usageLoadPromise = null;
+        this.pendingUiActions = new Set();
         this.editingMemoryId = null;
         this.selectedFileType = 'all';
         this.userFileSearch = '';
@@ -395,8 +399,11 @@ class AIOS {
             const button = e.currentTarget;
             const action = button.dataset.action;
             const provider = button.dataset.provider;
-            if (action === 'connect') this.startAuthFlow(provider);
-            else if (action === 'disconnect') this.disconnectIntegration(provider);
+            if (action === 'connect') {
+                this._withButtonLoading(button, `connect:${provider}`, () => this.startAuthFlow(provider));
+            } else if (action === 'disconnect') {
+                this._withButtonLoading(button, `disconnect:${provider}`, () => this.disconnectIntegration(provider));
+            }
         };
 
         addClickHandler(this.elements.connectGithubBtn, integrationButtonHandler);
@@ -404,8 +411,12 @@ class AIOS {
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
-        addClickHandler(this.elements.refreshDeploymentsBtn, () => this.loadDeployments(true));
-        addClickHandler(this.elements.refreshDatabasesBtn, () => this.loadUserFiles(true));
+        addClickHandler(this.elements.refreshDeploymentsBtn, (event) => {
+            this._withButtonLoading(event.currentTarget, 'refresh:deployments', () => this.loadDeployments(true));
+        });
+        addClickHandler(this.elements.refreshDatabasesBtn, (event) => {
+            this._withButtonLoading(event.currentTarget, 'refresh:files', () => this.loadUserFiles(true));
+        });
         addClickHandler(this.elements.openFilesCacheFolderBtn, () => this.openFilesCacheFolder());
 
         const triggerBtn = document.getElementById('trigger-file-select-btn');
@@ -439,8 +450,12 @@ class AIOS {
         
         addClickHandler(this.elements.userFilesUploadBtn, () => this.handleUserFilesUpload());
         
-        addClickHandler(this.elements.refreshMemoriesBtn, () => this.loadMemories(true));
-        addClickHandler(this.elements.refreshUsageBtn, () => this.loadUsage(true));
+        addClickHandler(this.elements.refreshMemoriesBtn, (event) => {
+            this._withButtonLoading(event.currentTarget, 'refresh:memories', () => this.loadMemories(true));
+        });
+        addClickHandler(this.elements.refreshUsageBtn, (event) => {
+            this._withButtonLoading(event.currentTarget, 'refresh:usage', () => this.loadUsage(true));
+        });
         addClickHandler(this.elements.manageSubscriptionBtn, () => this.openPricingModal());
         addClickHandler(this.elements.pricingModalClose, () => this.closePricingModal());
         addClickHandler(this.elements.pricingModalBackdrop, () => this.closePricingModal());
@@ -624,6 +639,7 @@ class AIOS {
     }
 
     async startAuthFlow(provider) {
+        if (!this._ensureOnlineForAction('connect an integration')) return;
         try {
             if (!this.authService) {
                 this.showNotification('Authentication service not available.', 'error');
@@ -668,6 +684,7 @@ class AIOS {
     }
 
     async disconnectIntegration(provider) {
+        if (!this._ensureOnlineForAction('disconnect an integration')) return;
         if (!confirm(`Are you sure you want to disconnect your ${provider} account?`)) return;
 
         const session = await this.authService.getSession();
@@ -778,12 +795,28 @@ class AIOS {
             textSpan.textContent = 'Disconnect';
             connectIcon.style.display = 'none';
             connectedIcon.style.display = 'inline-block';
+            
+            // Show Google services subbar when Google is connected
+            if (provider === 'google') {
+                const googleSubbar = document.getElementById('google-services-subbar');
+                if (googleSubbar) {
+                    googleSubbar.classList.add('visible');
+                }
+            }
         } else {
             button.classList.remove('connected');
             button.dataset.action = 'connect';
             textSpan.textContent = 'Connect';
             connectIcon.style.display = 'inline-block';
             connectedIcon.style.display = 'none';
+            
+            // Hide Google services subbar when Google is disconnected
+            if (provider === 'google') {
+                const googleSubbar = document.getElementById('google-services-subbar');
+                if (googleSubbar) {
+                    googleSubbar.classList.remove('visible');
+                }
+            }
         }
     }
 
@@ -793,6 +826,10 @@ class AIOS {
     }
 
     async _callAuthorizedApi(endpoint, method = 'GET', body = null) {
+        if (this._isOffline()) {
+            throw new Error('You are offline. Connect to the internet and try again.');
+        }
+
         const token = await this._getAccessToken();
         if (!token) {
             throw new Error('User not authenticated.');
@@ -1009,6 +1046,7 @@ class AIOS {
     }
 
     async startSubscriptionCheckout(planType) {
+        if (!this._ensureOnlineForAction('start checkout')) return;
         const normalizedPlan = String(planType || '').toLowerCase();
         if (!['pro', 'elite'].includes(normalizedPlan)) {
             return;
@@ -1104,6 +1142,60 @@ class AIOS {
         if (value === null || value === undefined) return fallback;
         const text = String(value).trim();
         return text.length ? text : fallback;
+    }
+
+    async _withButtonLoading(button, actionKey, task) {
+        if (this.pendingUiActions.has(actionKey)) return null;
+        this.pendingUiActions.add(actionKey);
+
+        const originalDisabled = button?.disabled || false;
+        try {
+            if (button) {
+                button.disabled = true;
+                button.classList.add('is-loading');
+                button.setAttribute('aria-busy', 'true');
+            }
+            return await task();
+        } finally {
+            this.pendingUiActions.delete(actionKey);
+            if (button) {
+                button.disabled = originalDisabled;
+                button.classList.remove('is-loading');
+                button.removeAttribute('aria-busy');
+            }
+        }
+    }
+
+    _isOffline() {
+        return typeof navigator !== 'undefined' && navigator.onLine === false;
+    }
+
+    _isNetworkUnavailableError(error) {
+        const message = String(error?.message || '').toLowerCase();
+        return this._isOffline()
+            || error?.name === 'AbortError'
+            || message.includes('failed to fetch')
+            || message.includes('network')
+            || message.includes('load failed');
+    }
+
+    _getNetworkUnavailableMessage() {
+        return this._isOffline()
+            ? 'You appear to be offline. Showing cached data where available.'
+            : 'Could not reach the backend server. Showing cached data where available.';
+    }
+
+    _notifyNetworkUnavailable(showNotification = false) {
+        const message = this._getNetworkUnavailableMessage();
+        console.warn(message);
+        if (showNotification) this.showNotification(message, 'error');
+        return message;
+    }
+
+    _ensureOnlineForAction(actionLabel = 'perform this action') {
+        if (!this._isOffline()) return true;
+        this.showNotification(`You are offline. Connect to the internet to ${actionLabel}.`, 'error');
+        return false;
     }
 
     _escapeHtml(value) {
@@ -1340,6 +1432,14 @@ class AIOS {
             return this.deploymentsCache;
         }
 
+        if (this._isOffline()) {
+            if (Array.isArray(this.deploymentsCache) && this.deploymentsCache.length > 0) {
+                this.renderDeployments(this.deploymentsCache);
+            }
+            this._notifyNetworkUnavailable(showNotification);
+            return this.deploymentsCache || [];
+        }
+
         this.deploymentsLoadPromise = (async () => {
             try {
                 const token = await this._getAccessToken();
@@ -1365,9 +1465,18 @@ class AIOS {
                 return this.deploymentsCache;
             } catch (error) {
                 console.error('Error loading deployments:', error);
+                if (this._isNetworkUnavailableError(error)) {
+                    if (Array.isArray(this.deploymentsCache) && this.deploymentsCache.length > 0) {
+                        this.renderDeployments(this.deploymentsCache);
+                    } else {
+                        this.renderDeployments([]);
+                    }
+                    this._notifyNetworkUnavailable(showNotification);
+                    return this.deploymentsCache || [];
+                }
                 this.renderDeployments([]);
                 if (showNotification) this.showNotification(error.message || 'Failed to load deployments', 'error');
-                throw error;
+                return [];
             } finally {
                 this.deploymentsLoadPromise = null;
             }
@@ -1524,6 +1633,19 @@ class AIOS {
     }
 
     async loadUserFiles(showNotification = false) {
+        if (!showNotification && this.userFilesLoadPromise) {
+            return this.userFilesLoadPromise;
+        }
+
+        if (this._isOffline()) {
+            if (Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
+                this.renderUserFiles(this.userFilesCache);
+            }
+            this._notifyNetworkUnavailable(showNotification);
+            return this.userFilesCache || [];
+        }
+
+        this.userFilesLoadPromise = (async () => {
         try {
             if (!showNotification && Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
                 this.renderUserFiles(this.userFilesCache);
@@ -1555,16 +1677,42 @@ class AIOS {
             }
             this.renderUserFiles(this.userFilesCache);
             if (showNotification) this.showNotification('Files refreshed', 'success');
+            return this.userFilesCache;
         } catch (error) {
             console.error('Error loading user files:', error);
+            if (this._isNetworkUnavailableError(error)) {
+                if (Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
+                    this.renderUserFiles(this.userFilesCache);
+                } else {
+                    this.renderUserFiles([]);
+                }
+                this._notifyNetworkUnavailable(showNotification);
+                return this.userFilesCache || [];
+            }
             this.renderUserFiles([]);
             if (showNotification) this.showNotification(error.message || 'Failed to load files', 'error');
+            return [];
+        } finally {
+            this.userFilesLoadPromise = null;
         }
+        })();
+
+        return this.userFilesLoadPromise;
     }
 
     async loadUsage(showNotification = false) {
         if (!this.usageView) return;
 
+        if (!showNotification && this.usageLoadPromise) {
+            return this.usageLoadPromise;
+        }
+
+        if (this._isOffline()) {
+            this._notifyNetworkUnavailable(showNotification);
+            return null;
+        }
+
+        this.usageLoadPromise = (async () => {
         try {
             const isAuthenticated = this.authService?.isAuthenticated?.() || false;
             if (!isAuthenticated) {
@@ -1593,13 +1741,25 @@ class AIOS {
             }
             this.renderSubscriptionSummary(summary);
             if (showNotification) this.showNotification('Usage refreshed', 'success');
+            return summary;
         } catch (error) {
             console.error('Error loading usage:', error);
+            if (this._isNetworkUnavailableError(error)) {
+                this.usageView.setError(this._getNetworkUnavailableMessage());
+                this._notifyNetworkUnavailable(showNotification);
+                return null;
+            }
             this.usageView.setEmpty();
             this.usageView.setError(error.message || 'Failed to load usage');
             this.resetSubscriptionUI();
             if (showNotification) this.showNotification(error.message || 'Failed to load usage', 'error');
+            return null;
+        } finally {
+            this.usageLoadPromise = null;
         }
+        })();
+
+        return this.usageLoadPromise;
     }
 
     _formatMemoryContent(value) {
@@ -1654,6 +1814,19 @@ class AIOS {
     }
 
     async loadMemories(showNotification = false) {
+        if (!showNotification && this.memoriesLoadPromise) {
+            return this.memoriesLoadPromise;
+        }
+
+        if (this._isOffline()) {
+            if (Array.isArray(this.memoriesCache) && this.memoriesCache.length > 0) {
+                this.renderMemories(this.memoriesCache);
+            }
+            this._notifyNetworkUnavailable(showNotification);
+            return this.memoriesCache || [];
+        }
+
+        this.memoriesLoadPromise = (async () => {
         try {
             const token = await this._getAccessToken();
             if (!token) {
@@ -1673,14 +1846,31 @@ class AIOS {
             this.memoriesCache = Array.isArray(payload.memories) ? payload.memories : [];
             this.renderMemories(this.memoriesCache);
             if (showNotification) this.showNotification('Memories refreshed successfully', 'success');
+            return this.memoriesCache;
         } catch (error) {
             console.error('Error loading memories:', error);
+            if (this._isNetworkUnavailableError(error)) {
+                if (Array.isArray(this.memoriesCache) && this.memoriesCache.length > 0) {
+                    this.renderMemories(this.memoriesCache);
+                } else {
+                    this.renderMemories([]);
+                }
+                this._notifyNetworkUnavailable(showNotification);
+                return this.memoriesCache || [];
+            }
             this.renderMemories([]);
             if (showNotification) this.showNotification(error.message || 'Failed to load memories', 'error');
+            return [];
+        } finally {
+            this.memoriesLoadPromise = null;
         }
+        })();
+
+        return this.memoriesLoadPromise;
     }
 
     async handleAddMemory() {
+        if (!this._ensureOnlineForAction('save memory')) return;
         try {
             const token = await this._getAccessToken();
             if (!token) {
@@ -1950,6 +2140,7 @@ class AIOS {
     }
 
     async handleUserFilesUpload() {
+        if (!this._ensureOnlineForAction('upload files')) return;
         if (this.userFilesUploadInProgress) {
             this.showNotification('Upload already in progress', 'info');
             return;

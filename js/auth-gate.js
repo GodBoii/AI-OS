@@ -215,6 +215,17 @@
         _setError('ag-signup-error', '');
     }
 
+    function _getFocusableGateElements() {
+        if (!_gateEl) return [];
+        return Array.from(
+            _gateEl.querySelectorAll('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')
+        ).filter((el) => {
+            if (el.closest('.ag-checking-state:not(.hidden)')) return false;
+            if (el.closest('.ag-form-panel:not(.active)')) return false;
+            return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+        });
+    }
+
     // ─── Tab switching ─────────────────────────────────────────────────────
     function _switchTab(tab) {
         _activeTab = tab;
@@ -320,6 +331,7 @@
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     formPanel.style.opacity = '1';
+                    _getFocusableGateElements()[0]?.focus();
                 });
             });
         }
@@ -472,10 +484,14 @@
 
         // Keyboard: focus trap within gate
         _gateEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                _getFocusableGateElements()[0]?.focus();
+                return;
+            }
+
             if (e.key !== 'Tab') return;
-            const focusable = Array.from(
-                _gateEl.querySelectorAll('button:not([disabled]), input, [tabindex]:not([tabindex="-1"])')
-            ).filter(el => !el.closest('.ag-checking-state.hidden'));
+            const focusable = _getFocusableGateElements();
 
             if (!focusable.length) return;
             const first = focusable[0];
@@ -552,6 +568,7 @@
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     formPanel.style.opacity = '1';
+                    _getFocusableGateElements()[0]?.focus();
                 });
             });
         }
