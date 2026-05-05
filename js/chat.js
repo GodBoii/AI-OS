@@ -508,12 +508,33 @@ function isProjectWorkspaceMode() {
 }
 
 function escapeToolPreviewHtml(text = '') {
-    return String(text)
+    const escaped = String(text)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    if (window.DOMPurify?.sanitize) {
+        return window.DOMPurify.sanitize(escaped, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+    }
+    return escaped;
+}
+
+function getSafeToolPreviewUrl(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw);
+        if (!['https:', 'http:'].includes(parsed.protocol)) return '';
+        return escapeToolPreviewHtml(parsed.href);
+    } catch (error) {
+        return '';
+    }
+}
+
+function getSafeToolPreviewMimeType(value = '', fallback = 'image/png') {
+    const mimeType = String(value || '').trim().toLowerCase();
+    return /^image\/[a-z0-9.+-]+$/.test(mimeType) ? mimeType : fallback;
 }
 
 function parseMaybeJson(value) {
@@ -599,10 +620,10 @@ function formatToolPreviewValue(value) {
 }
 
 function buildSheetsLinkMarkup(metadata) {
-    const url = metadata?.spreadsheet_url || '';
+    const url = getSafeToolPreviewUrl(metadata?.spreadsheet_url || '');
     if (!url) return '';
     return `
-        <a class="tool-preview-sheets-link" href="${escapeToolPreviewHtml(url)}" target="_blank" rel="noopener noreferrer">
+        <a class="tool-preview-sheets-link" href="${url}" target="_blank" rel="noopener noreferrer">
             Open in Google Sheets
         </a>
     `;
@@ -713,7 +734,7 @@ function buildSheetsArtifactHtml(metadata, toolName = '') {
     const summary = metadata?.summary || '';
     const range = metadata?.range || inline?.range || '';
     const rowCount = inline?.row_count ?? '';
-    const url = metadata?.spreadsheet_url || '';
+    const url = getSafeToolPreviewUrl(metadata?.spreadsheet_url || '');
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -752,7 +773,7 @@ function buildSheetsArtifactHtml(metadata, toolName = '') {
           <thead><tr>${headerCells}</tr></thead>
           <tbody>${bodyRows || '<tr><td colspan="999">No preview rows available.</td></tr>'}</tbody>
         </table>
-        ${url ? `<a class="link" href="${escapeToolPreviewHtml(url)}" target="_blank" rel="noopener noreferrer">Open this spreadsheet in Google Sheets</a>` : ''}
+        ${url ? `<a class="link" href="${url}" target="_blank" rel="noopener noreferrer">Open this spreadsheet in Google Sheets</a>` : ''}
       </div>
     </div>
   </div>
@@ -808,7 +829,7 @@ async function buildToolPreviewMarkup(metadata) {
             if (exists) {
                 const fileData = await window.electron.fileArchive.readFile(metadata.relativePath);
                 const base64 = bufferToBase64(fileData);
-                const mimeType = metadata.mime_type || 'image/png';
+                const mimeType = getSafeToolPreviewMimeType(metadata.mime_type);
                 const summary = inline.width && inline.height
                     ? `${inline.width}x${inline.height}`
                     : (metadata.summary || 'Screenshot');
@@ -1185,6 +1206,7 @@ async function startNewConversation() {
     switchConversation(currentConversationId);
     document.getElementById('floating-input').disabled = false;
     document.getElementById('send-message').disabled = false;
+    window.chatSendInProgress = false;
 
     if (contextHandler) {
         contextHandler.clearSelectedContext();
@@ -1409,6 +1431,7 @@ function setupIpcListeners() {
                     sendBtn.disabled = false;
                     sendBtn.classList.remove('sending');
                 }
+                window.chatSendInProgress = false;
             }
         } catch (error) {
             console.error('Error handling response:', error);
@@ -1420,6 +1443,7 @@ function setupIpcListeners() {
                 sendBtn.disabled = false;
                 sendBtn.classList.remove('sending');
             }
+            window.chatSendInProgress = false;
         }
     });
 
@@ -1911,6 +1935,8 @@ function setupIpcListeners() {
             if (error?.code === 'subscription_limit_exceeded') {
                 window.dispatchEvent(new CustomEvent('subscription-limit-reached', {
                     detail: {
+                        source: 'aetheria-chat-runtime',
+                        eventToken: window.__aiosSubscriptionLimitEventToken,
                         message: error.message || 'Your current plan limit has been reached.',
                         limitInfo: error.limit_info || null
                     }
@@ -1937,6 +1963,7 @@ function setupIpcListeners() {
                 sendBtn.disabled = false;
                 sendBtn.classList.remove('sending');
             }
+            window.chatSendInProgress = false;
 
             // Mark that we need to start a new backend session on next message
             window.needsNewBackendSession = true;
@@ -2519,8 +2546,12 @@ function extractConversationHistory() {
 
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');
-    const message = floatingInput.value.trim();
     const sendMessageBtn = document.getElementById('send-message');
+    if (window.chatSendInProgress || floatingInput?.disabled || sendMessageBtn?.disabled) {
+        return;
+    }
+
+    const message = floatingInput.value.trim();
     const attachedFiles = fileAttachmentHandler.getAttachedFiles();
     const selectedSessions = contextHandler.getSelectedSessions();
 
@@ -2530,6 +2561,7 @@ async function handleSendMessage() {
     floatingInput.disabled = true;
     sendMessageBtn.disabled = true;
     sendMessageBtn.classList.add('sending');
+    window.chatSendInProgress = true;
 
     const session = await window.electron.auth.getSession();
     if (!session || !session.access_token) {
@@ -2537,6 +2569,7 @@ async function handleSendMessage() {
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
+        window.chatSendInProgress = false;
         return;
     }
 
@@ -2546,6 +2579,7 @@ async function handleSendMessage() {
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
+        window.chatSendInProgress = false;
         return;
     }
 
@@ -2620,6 +2654,7 @@ async function handleSendMessage() {
             floatingInput.disabled = false;
             sendMessageBtn.disabled = false;
             sendMessageBtn.classList.remove('sending');
+            window.chatSendInProgress = false;
         }
 
         floatingInput.value = '';
@@ -2688,6 +2723,7 @@ async function handleSendMessage() {
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
+        window.chatSendInProgress = false;
         // Clear pending metadata on error
         window.pendingAttachmentMetadata = null;
     }
