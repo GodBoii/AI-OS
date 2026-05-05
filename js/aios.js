@@ -29,7 +29,10 @@ class AIOS {
         this.usageView = null;
         this.subscriptionSummary = null;
         this.activeCheckoutPlan = null;
+        this.userFilesUploadInProgress = false;
+        this.userFilesUploadFingerprints = new Set();
         this.pricingModalContext = null;
+        window.__aiosSubscriptionLimitEventToken = window.__aiosSubscriptionLimitEventToken || self.crypto?.randomUUID?.() || String(Date.now());
     }
 
     async init() {
@@ -442,7 +445,11 @@ class AIOS {
         addClickHandler(this.elements.pricingModalClose, () => this.closePricingModal());
         addClickHandler(this.elements.pricingModalBackdrop, () => this.closePricingModal());
         this.elements.pricingPlanButtons?.forEach((button) => {
-            button.addEventListener('click', () => this.startSubscriptionCheckout(button.dataset.planType));
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (button.disabled || this.activeCheckoutPlan) return;
+                this.startSubscriptionCheckout(button.dataset.planType);
+            });
         });
         this.elements.memoryForm?.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -467,6 +474,13 @@ class AIOS {
         });
         window.addEventListener('subscription-limit-reached', (event) => {
             const detail = event?.detail || {};
+            if (
+                detail.source !== 'aetheria-chat-runtime' ||
+                detail.eventToken !== window.__aiosSubscriptionLimitEventToken
+            ) {
+                console.warn('Ignored untrusted subscription limit event');
+                return;
+            }
             this.openPricingModal({
                 message: detail.message || 'Your current plan limit has been reached.',
                 footnote: 'Upgrade to continue immediately, or wait for the next reset window.',
@@ -481,7 +495,7 @@ class AIOS {
 
         if (this.authService) {
             this.authService.onAuthChange((user) => {
-                console.log('Auth change detected:', user);
+                console.log('Auth change detected:', user ? 'signed-in' : 'signed-out');
                 this.updateAuthUI();
                 this.updateUserUI(user); // Centralized UI update call
 
@@ -645,7 +659,7 @@ class AIOS {
                 // Add client=electron parameter to identify Electron client
                 authUrl = `${this.backendBaseUrl}/login/${provider}?token=${session.access_token}&client=electron`;
             }
-            console.log(`Opening auth URL for ${provider}: ${authUrl}`);
+            console.log(`Opening auth URL for ${provider}`);
             window.electron.ipcRenderer.send('open-webview', authUrl);
         } catch (error) {
             console.error(`Error starting auth flow for ${provider}:`, error);
@@ -908,6 +922,7 @@ class AIOS {
         this.elements.pricingPlanButtons?.forEach((button) => {
             const planType = button.dataset.planType;
             const isCurrent = planType === currentPlanType;
+            const isAnyCheckoutLoading = !!this.activeCheckoutPlan;
             const isLoading = this.activeCheckoutPlan === planType;
             const canChangeExistingSubscription = hasExistingSubscription
                 && ['authenticated', 'active'].includes(currentStatus)
@@ -916,6 +931,7 @@ class AIOS {
                 && planType !== currentPlanType;
 
             button.classList.toggle('is-current', isCurrent);
+            button.classList.toggle('is-loading', isLoading);
 
             if (planType === 'free') {
                 button.disabled = true;
@@ -932,6 +948,12 @@ class AIOS {
             if (isCurrent) {
                 button.disabled = true;
                 button.textContent = currentStatus === 'created' ? 'Pending confirmation' : 'Current plan';
+                return;
+            }
+
+            if (isAnyCheckoutLoading) {
+                button.disabled = true;
+                button.textContent = 'Checkout in progress';
                 return;
             }
 
@@ -1054,8 +1076,6 @@ class AIOS {
                 this.updatePricingButtons();
             });
 
-            this.activeCheckoutPlan = null;
-            this.updatePricingButtons(payload.summary || this.subscriptionSummary);
             checkout.open();
         } catch (error) {
             console.error('Failed to start subscription checkout:', error);
@@ -1930,11 +1950,22 @@ class AIOS {
     }
 
     async handleUserFilesUpload() {
+        if (this.userFilesUploadInProgress) {
+            this.showNotification('Upload already in progress', 'info');
+            return;
+        }
+
         try {
             const input = this.elements.userFilesUploadInput;
-            const files = Array.from(input?.files || []);
+            const selectedFiles = Array.from(input?.files || []);
+            const files = selectedFiles.filter((file) => {
+                const fingerprint = `${file.name}::${file.size}::${file.lastModified || 0}`;
+                if (this.userFilesUploadFingerprints.has(fingerprint)) return false;
+                this.userFilesUploadFingerprints.add(fingerprint);
+                return true;
+            });
             if (!files.length) {
-                this.showNotification('Select one or more files first', 'error');
+                this.showNotification(selectedFiles.length ? 'Selected file(s) are already uploading' : 'Select one or more files first', 'error');
                 return;
             }
 
@@ -1942,6 +1973,12 @@ class AIOS {
             if (!token) {
                 this.showNotification('Please log in to upload files', 'error');
                 return;
+            }
+
+            this.userFilesUploadInProgress = true;
+            if (this.elements.userFilesUploadBtn) {
+                this.elements.userFilesUploadBtn.disabled = true;
+                this.elements.userFilesUploadBtn.classList.add('is-loading');
             }
 
             for (const file of files) {
@@ -2008,6 +2045,13 @@ class AIOS {
         } catch (error) {
             console.error('Error uploading user files:', error);
             this.showNotification(error.message || 'Failed to upload files', 'error');
+        } finally {
+            this.userFilesUploadInProgress = false;
+            this.userFilesUploadFingerprints.clear();
+            if (this.elements.userFilesUploadBtn) {
+                this.elements.userFilesUploadBtn.disabled = false;
+                this.elements.userFilesUploadBtn.classList.remove('is-loading');
+            }
         }
     }
 

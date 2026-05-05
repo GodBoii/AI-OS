@@ -43,9 +43,6 @@ class AuthService {
             this.supabase.auth.onAuthStateChange((event, session) => {
                 console.log('Auth state changed:', event);
                 this.user = session?.user || null;
-                if (this.user) {
-                    console.log('User metadata:', this.user.user_metadata);
-                }
                 this._notifyListeners();
             });
 
