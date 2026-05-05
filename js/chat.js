@@ -1282,6 +1282,23 @@ async function startNewConversation() {
  * Set up IPC listeners for communication with python-bridge.js
  */
 function setupIpcListeners() {
+    window.addEventListener('offline', () => {
+        connectionStatus = false;
+        const message = 'You are offline. Chat will reconnect when internet is available.';
+        if (window.NotificationService) {
+            window.NotificationService.showConnection(message, false);
+        } else {
+            showConnectionError(message);
+        }
+    });
+
+    window.addEventListener('online', () => {
+        if (!connectionStatus) {
+            showNotification('Internet connection restored. Reconnecting to server...', 'success');
+            ipcRenderer.send('restart-python-bridge');
+        }
+    });
+
     ipcRenderer.on('socket-connection-status', (data) => {
         connectionStatus = data.connected;
         if (data.connected) {
@@ -2574,8 +2591,16 @@ async function handleSendMessage() {
     }
 
     if (!connectionStatus) {
-        showNotification('Not connected to server. Please wait...', 'error');
-        ipcRenderer.send('restart-python-bridge');
+        const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        showNotification(
+            isOffline
+                ? 'You are offline. Connect to the internet before sending a message.'
+                : 'Not connected to server. Please wait...',
+            'error'
+        );
+        if (!isOffline) {
+            ipcRenderer.send('restart-python-bridge');
+        }
         floatingInput.disabled = false;
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');

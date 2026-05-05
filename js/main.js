@@ -43,12 +43,60 @@ let isAppQuitting = false;
 
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
 // This function's only job is to receive the URL from the OS and pass it to the UI.
+function parseTrustedDeepLink(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(String(rawUrl || ''));
+    } catch (error) {
+        return null;
+    }
+
+    if (parsed.protocol !== 'aios:') {
+        return null;
+    }
+
+    const host = parsed.hostname;
+    const pathName = parsed.pathname || '';
+
+    if (host === 'auth' && pathName === '/callback') {
+        const provider = parsed.searchParams.get('provider') || 'unknown';
+        if (!/^[a-z0-9_-]{1,64}$/i.test(provider)) {
+            return null;
+        }
+
+        return {
+            type: 'integration-callback',
+            parsed,
+            provider,
+        };
+    }
+
+    if (host === 'auth-callback' || (host === 'auth' && pathName === '/auth-callback')) {
+        const hash = new URLSearchParams(parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash);
+        if (!hash.get('access_token') || !hash.get('refresh_token')) {
+            return null;
+        }
+
+        return {
+            type: 'auth-callback',
+            parsed,
+        };
+    }
+
+    return null;
+}
+
 function handleDeepLink(url) {
     console.log('[main.js] >>> handleDeepLink function triggered.');
-    console.log(`[main.js] >>> Received URL: ${url}`);
 
     if (!mainWindow) {
         console.error('[main.js] >>> Error: mainWindow is not available. The app might still be launching.');
+        return;
+    }
+
+    const trustedLink = parseTrustedDeepLink(url);
+    if (!trustedLink) {
+        console.warn('[main.js] >>> Ignored untrusted or unsupported deep link.');
         return;
     }
 
@@ -58,26 +106,19 @@ function handleDeepLink(url) {
     }
     mainWindow.focus();
 
-    // Handle integration callback deep links (e.g. Composio).
-    try {
-        const parsed = new URL(url);
-        if (parsed.protocol === 'aios:' && parsed.hostname === 'auth' && parsed.pathname === '/callback') {
-            const params = parsed.searchParams;
-            const provider = params.get('provider') || 'unknown';
-            const error = params.get('error') || params.get('error_description');
-            const successParam = params.get('success');
-            const success = successParam ? successParam === 'true' : !error;
+    if (trustedLink.type === 'integration-callback') {
+        const params = trustedLink.parsed.searchParams;
+        const error = params.get('error') || params.get('error_description');
+        const successParam = params.get('success');
+        const success = successParam ? successParam === 'true' : !error;
 
-            console.log('[main.js] >>> Emitting oauth-integration-callback from deep link.');
-            mainWindow.webContents.send('oauth-integration-callback', {
-                success,
-                provider,
-                error: error || null,
-            });
-            return;
-        }
-    } catch (err) {
-        console.error('[main.js] >>> Failed to parse deep link URL:', err);
+        console.log('[main.js] >>> Emitting oauth-integration-callback from deep link.');
+        mainWindow.webContents.send('oauth-integration-callback', {
+            success,
+            provider: trustedLink.provider,
+            error: error || null,
+        });
+        return;
     }
 
     console.log('[main.js] >>> Forwarding "auth-state-changed" IPC message to the renderer process.');
@@ -566,19 +607,24 @@ function createWindow() {
 
             // Listen for navigation to aios:// deep link (OAuth callback)
             linkWebView.webContents.on('will-navigate', (event, navigationUrl) => {
-                console.log('linkWebView will-navigate:', navigationUrl);
+                console.log('linkWebView will-navigate');
 
                 // Check if navigating to aios:// deep link
-                if (navigationUrl.startsWith('aios://auth/callback')) {
+                if (navigationUrl.startsWith('aios://')) {
                     event.preventDefault();
+                    const trustedLink = parseTrustedDeepLink(navigationUrl);
+                    if (!trustedLink || trustedLink.type !== 'integration-callback') {
+                        console.warn('Ignored untrusted webview deep link navigation.');
+                        return;
+                    }
                     console.log('OAuth callback detected, closing webview and processing deep link');
 
                     // Parse the deep link URL
                     try {
-                        const url = new URL(navigationUrl);
+                        const url = trustedLink.parsed;
                         const params = new URLSearchParams(url.search);
                         const success = params.get('success') === 'true';
-                        const provider = params.get('provider');
+                        const provider = trustedLink.provider;
                         const error = params.get('error');
 
                         // Close the webview
