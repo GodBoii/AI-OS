@@ -495,8 +495,10 @@ class ToDoList {
     }
 
     async saveNewTask() {
+        if (this.isSubmittingTask) return;
+        this.isSubmittingTask = true;
         const taskName = this.elements.taskNameInput.value.trim();
-        if (!taskName) return;
+        if (!taskName) { this.isSubmittingTask = false; return; }
 
         try {
             const newTask = await window.electron.tasks.create({
@@ -516,6 +518,8 @@ class ToDoList {
         } catch (error) {
             console.error('Error creating task:', error);
             this.showToast('Error creating task', 'error');
+        } finally {
+            this.isSubmittingTask = false;
         }
     }
 
@@ -544,6 +548,9 @@ class ToDoList {
     }
 
     async deleteTask(taskId) {
+        this.isDeletingTask = this.isDeletingTask || {};
+        if (this.isDeletingTask[taskId]) return;
+        this.isDeletingTask[taskId] = true;
         try {
             await window.electron.tasks.delete(taskId);
 
@@ -554,6 +561,8 @@ class ToDoList {
         } catch (error) {
             console.error('Error deleting task:', error);
             this.showToast('Error deleting task', 'error');
+        } finally {
+            this.isDeletingTask[taskId] = false;
         }
     }
 
@@ -587,6 +596,8 @@ class ToDoList {
     }
 
     async saveUserContext() {
+        if (this.isSavingContext) return;
+        this.isSavingContext = true;
         try {
             this.userContext = {
                 personal: {
@@ -629,6 +640,8 @@ class ToDoList {
         } catch (error) {
             console.error('Error saving user context:', error);
             this.showToast('Error saving user context: ' + error.message, 'error');
+        } finally {
+            this.isSavingContext = false;
         }
     }
 
