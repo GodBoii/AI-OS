@@ -1094,7 +1094,7 @@ class AIOS {
                     paylater: false
                 },
                 theme: {
-                    color: '#38bdf8'
+                    color: '#BD18C9'
                 },
                 handler: async (response) => {
                     await this.verifySubscriptionCheckout(response);

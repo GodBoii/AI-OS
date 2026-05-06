@@ -42,6 +42,7 @@ run_state_manager_instance: RunStateManager = None
 # socket if the client calls join_conversation more than once per session.
 # Key: (sid, conversation_id)   Value: True
 _catchup_sent: dict = {}
+_socket_auth_tokens: dict = {}
 
 
 def _normalize_agent_mode(raw_value: Any) -> str:
@@ -107,8 +108,14 @@ def listen_for_browser_screenshots():
 # ==============================================================================
 
 @socketio.on("connect")
-def on_connect():
-    logger.info(f"Client connected: {request.sid}")
+def on_connect(auth=None):
+    sid = request.sid
+    token = None
+    if isinstance(auth, dict):
+        token = auth.get("token")
+    if token:
+        _socket_auth_tokens[sid] = token
+    logger.info(f"Client connected: {sid}")
     socketio.emit("status", {"message": "Connected to server"}, room=request.sid)
 
 
@@ -120,6 +127,7 @@ def on_disconnect():
     to_remove = [k for k in _catchup_sent if k[0] == sid]
     for k in to_remove:
         del _catchup_sent[k]
+    _socket_auth_tokens.pop(sid, None)
 
 
 @socketio.on("join_conversation")
@@ -201,7 +209,7 @@ def handle_save_user_context(data: Dict[str, Any]):
     try:
         logger.info(f"Received save-user-context request: {data.keys()}")
 
-        access_token = data.get("accessToken")
+        access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
         if not access_token:
             logger.error("Authentication token missing")
             return socketio.emit("user-context-saved", {"success": False, "error": "Authentication token missing"}, room=sid)
@@ -236,7 +244,7 @@ def handle_get_user_context(data: Dict[str, Any]):
     """Retrieves user context from agno_memories table via UserContextTools"""
     sid = request.sid
     try:
-        access_token = data.get("accessToken")
+        access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
         if not access_token:
             return socketio.emit("user-context-retrieved", {"success": False, "error": "Authentication token missing"}, room=sid)
 
@@ -372,7 +380,7 @@ def on_send_message(data: str):
 
     try:
         data = json.loads(data)
-        access_token = data.get("accessToken")
+        access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
         conversation_id = data.get("conversationId")
 
         if not conversation_id:
@@ -548,7 +556,7 @@ def on_assistant_message(data: str):
 
         logger.info(f"[Assistant Socket] Received message: {data}")
 
-        access_token = data.get("accessToken")
+        access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
         if not access_token:
             return socketio.emit("assistant_error", {"message": "Authentication token is missing."}, room=sid)
 
