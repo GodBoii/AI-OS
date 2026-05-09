@@ -45,6 +45,7 @@ from agno.models.openrouter import OpenRouter
 from agno.tools.trafilatura import TrafilaturaTools
 from media_tools import MediaTools
 from agent_delegation_tools import AgentDelegationTools
+from mimo_model import get_mimo_model
 
 # Other Imports
 from supabase_client import supabase_client
@@ -195,7 +196,7 @@ def get_llm_os(
                 "**Aetheria AI (direct tools)** — handles these itself, never delegates:",
                 "- `GitHubTools` — list/create repos, commit files, branches, PRs, issues",
                 "- `VercelTools` — deploy projects, manage env vars, domains, deployments. **Requires GitHubTools data first (IMMUTABLE git connection)**",
-                "- `BrowserTools` — browser automation. **Always call `get_status()` first. Stops if not connected.**",
+                "- `BrowserTools` — browser automation. **CRITICAL: Always call `get_browser_status()` FIRST before any other browser action. This launches and connects to the browser.**",
                 "- `SupabaseTools` — manage projects, storage buckets, secrets, edge functions",
                 "- `GoogleEmailTools` — read, send, search, reply, label emails",
                 "- `GoogleDriveTools` — search, read, create, share files",
@@ -273,7 +274,7 @@ def get_llm_os(
         
         dev_team = Agent(
             name="dev_team",
-            model=OpenRouter(id="tencent/hy3-preview:free"),
+            model=get_mimo_model("mimo-v2.5-pro"),
             role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a persistent user file vault. Delegate all coding, debugging, building, file operations, and deployment tasks here.",
             tools=dev_tools,
             instructions=[
@@ -331,6 +332,7 @@ def get_llm_os(
         "When delegation tools are available in main mode, use `delegate_to_coder(task_description)` for coding tasks and `delegate_to_computer(task_description)` for desktop/browser control tasks.",
         "Use every available tool and method to fulfil user demands — exhaust all options before giving up.",
         "If a tool or method fails, silently try alternatives. Never surface internal errors or system operations to the user",
+        "IF user asks for diagrams and similer things proivde mermaid code/ diagrams generate images when user explicitly asks for or its the most logical choise.",
         "Never use phrases like 'I will now', 'based on my knowledge', 'I was informed by', 'delegating to', or any language that exposes internal processes.",
         "Deliver every result as if you personally completed it — natural, direct, and focused entirely on user value.",
         "Never explain what tools you used, which agents you called, or what happened internally.",
@@ -341,7 +343,7 @@ def get_llm_os(
         "• GitHubTools — repos, branches, commits, PRs, issues",
         "• VercelTools — deployments, projects, env vars, domains (always get GitHub repo data first)",
         "• SupabaseTools — projects, storage, secrets, edge functions",
-        "• BrowserTools — browser automation (always check get_status() first)",
+        "• BrowserTools — browser automation (always call get_browser_status() first to launch/connect)",
         "• GoogleEmailTools — read, send, search, reply, label emails",
         "• GoogleDriveTools — search, read, create, share files",
         "• GoogleSheetsTools — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
@@ -356,7 +358,7 @@ def get_llm_os(
     # This allows the `db` object to automatically handle session persistence.
     llm_os_team = Team(
         name="Aetheria_AI",
-        model=OpenRouter(id="openrouter/owl-alpha"), # Gemini(id="gemini-2.5-flash"), Groq(id="moonshotai/kimi-k2-instruct-0905"),
+        model=get_mimo_model("mimo-v2.5"),
         members=main_team_members,
         tools=direct_tools,
         instructions=aetheria_instructions,

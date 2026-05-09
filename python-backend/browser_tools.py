@@ -40,7 +40,7 @@ class BrowserTools(Toolkit):
         super().__init__(
             name="browser_tools",
             tools=[
-                self.get_status, self.navigate, self.get_current_view,
+                self.get_browser_status, self.navigate, self.get_current_view,
                 self.click, self.type_text, self.scroll, self.go_back,
                 self.go_forward, self.list_tabs, self.open_new_tab,
                 self.switch_to_tab, self.close_tab, self.hover_over_element,
@@ -134,7 +134,16 @@ class BrowserTools(Toolkit):
     # The function signatures remain the same. Their implementation via
     # _send_command_and_wait is now scalable.
     
-    def get_status(self) -> Dict[str, Any]:
+    def get_browser_status(self) -> Dict[str, Any]:
+        """
+        Check browser connection status and launch browser if needed.
+        
+        This is the FIRST tool you must call before any other browser action.
+        It will automatically launch Chrome and establish a connection if needed.
+        
+        Returns:
+            Dict with status='connected' if browser is ready, or status='disconnected' with error details.
+        """
         return self._send_command_and_wait({'action': 'status'})
 
     def navigate(self, url: str) -> Union[Dict[str, Any], ToolResult]:
