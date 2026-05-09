@@ -55,7 +55,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: aios-cloudflared
-    command: tunnel run --token 
+    command: tunnel run --token
     depends_on:
       - web
     restart: unless-stopped
