@@ -8,6 +8,7 @@ from agno.models.openrouter import OpenRouter
 from agno.models.groq import Groq
 
 from mobile_tools import MobileTools
+from mimo_model import get_mimo_model
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="tencent/hy3-preview:free"),
+        model=get_mimo_model("mimo-v2.5"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
