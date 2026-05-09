@@ -14,6 +14,7 @@ from google_drive_tools import GoogleDriveTools
 from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from database_config import get_sqlalchemy_database_url
+from mimo_model import get_mimo_model
 
 
 def _db_url_sqlalchemy() -> str:
@@ -80,7 +81,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=OpenRouter(id="minimax/minimax-m2.5:free"),
+        model=get_mimo_model("mimo-v2.5"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
@@ -91,16 +92,17 @@ def get_computer_agent(
             "You are Aetheria Computer. Focus only on computer-control and browser-automation tasks.",
             "Always check capability/permission state before first control action.",
             "For file operations: never use placeholder paths like /path/to/folder.",
-            "When user says 'this folder' or selected scope, call get_status() and use scopes[0] as the base directory.",
+            "When user says 'this folder' or selected scope, call ComputerTools.get_status() and use scopes[0] as the base directory.",
             "For desktop actions: observe -> act -> verify loop with screenshots/status checks.",
-            "For browser actions: get browser status first, then execute navigation/interactions.",
+            "For browser actions: ALWAYS call get_browser_status() FIRST to launch/connect browser, then execute navigation/interactions.",
+            "when using the browser tools you will get screenshot of browser after using a tool and if you still want to see what is on the browser use (get_current_view) tool."
             "Use safe, reversible actions first; confirm destructive operations with user intent.",
             "Keep responses concise, action-oriented, and outcome-verified.",
             "</system_instructions>",
             "",
             "<tools>",
             "ComputerTools: request_permission, get_status, screenshot/mouse/keyboard/window/system operations.",
-            "BrowserTools/ServerBrowserTools: browser status, navigation, interaction, extraction.",
+            "BrowserTools/ServerBrowserTools: get_browser_status (call first!), navigation, interaction, extraction.",
             "GoogleEmailTools: read/send/search/reply/label emails.",
             "GoogleDriveTools: search/read/create/share files.",
             "GoogleSheetsTools: search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets.",
