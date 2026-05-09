@@ -71,7 +71,7 @@ class ServerBrowserTools(Toolkit):
         super().__init__(
             name="browser_tools",
             tools=[
-                self.get_status, self.navigate, self.get_current_view,
+                self.get_browser_status, self.navigate, self.get_current_view,
                 self.click, self.type_text, self.scroll, self.go_back,
                 self.go_forward, self.refresh_page, self.extract_text_from_element,
                 self.extract_table_data, self.wait_for_element,
@@ -335,8 +335,16 @@ class ServerBrowserTools(Toolkit):
     
     # ==================== PUBLIC TOOL METHODS ====================
     
-    def get_status(self) -> Dict[str, Any]:
-        """Check if browser is ready."""
+    def get_browser_status(self) -> Dict[str, Any]:
+        """
+        Check if server-side browser is ready and launch if needed.
+        
+        This is the FIRST tool you must call before any other browser action.
+        It will automatically launch a headless Chromium instance if needed.
+        
+        Returns:
+            Dict with status='connected' if browser is ready, or status='disconnected' with error details.
+        """
         try:
             is_ready = self.session_id in self._pages
             installed, install_detail = self._check_browser_installation()
