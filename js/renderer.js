@@ -386,6 +386,20 @@ class UIManager {
     updateAIOSVisibility(isOpen) {
         if (window.AIOS?.initialized) {
             document.getElementById('floating-window')?.classList.toggle('hidden', !isOpen);
+            
+            console.log(`[UIManager] AIOS visibility changed: ${isOpen ? 'OPEN' : 'CLOSED'}`);
+            console.log('[UIManager] window.artifactHandler available:', !!window.artifactHandler);
+            
+            // Auto-hide workspace sidebars when AIOS opens
+            if (isOpen && window.artifactHandler) {
+                console.log('[UIManager] Calling hideWorkspaceSidebarsForOverlay for AIOS');
+                window.artifactHandler.hideWorkspaceSidebarsForOverlay('aios');
+            }
+            // Restore workspace sidebars when AIOS closes
+            else if (!isOpen && window.artifactHandler) {
+                console.log('[UIManager] Calling restoreWorkspaceSidebarsFromOverlay for AIOS');
+                window.artifactHandler.restoreWorkspaceSidebarsFromOverlay('aios');
+            }
         }
     }
 
