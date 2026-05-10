@@ -2437,12 +2437,6 @@ def delete_artifact(artifact_id):
         if success:
             # Invalidate the per-artifact detail cache
             CacheManager.delete(f"cache:artifact_details:{user.id}:{artifact_id}")
-            # Invalidate session_content cache for the session that owned this
-            # artifact. We don't know the session_id here, so we use pattern
-            # invalidation across all sessions for this user.  The number of
-            # session_content cache entries per user is small (one per open
-            # conversation), so this SCAN is cheap.
-            CacheManager.invalidate_pattern(f"cache:session_content:*:{user.id}")
             return jsonify({"message": "Artifact deleted"}), 200
         else:
             return jsonify({"error": "Failed to delete artifact"}), 500
@@ -2485,35 +2479,12 @@ def get_session_content(session_id):
 
     Returns content with fresh presigned URLs for downloads.
 
-    Caching strategy:
-    - Cache key:  cache:session_content:{session_id}:{user_id}
-    - TTL:        3000 seconds (50 minutes)
-
-    Why 3000s and not longer?
-      Every item in the response carries a presigned URL (R2 artifact download
-      URL or Supabase signed storage URL) that is generated with expiry=3600s
-      (1 hour).  We cache for 50 minutes so that by the time any cached URL
-      is served it still has at least 10 minutes of validity left — preventing
-      the client from receiving already-expired URLs.
-
-    Invalidation triggers (active invalidation, not TTL-only):
-      1. File upload during a message send  (sockets.py on_send_message)
-      2. Agent run completion               (agent_runner.py run_agent_and_stream)
-      3. Artifact deletion                  (api.py delete_artifact)
-    Without active invalidation, new uploads or artifacts would be invisible
-    until the 50-minute TTL expired — a terrible UX.
+    Note: Backend caching removed - frontend handles caching via sessionContentViewer.
+    This ensures real-time content updates without race conditions.
     """
     user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
-
-    # ── Cache-Aside: attempt Redis read first ────────────────────────────────
-    # Key includes user_id so a malicious actor who knows another user's
-    # session_id cannot poison or read their cached content.
-    cache_key = f"cache:session_content:{session_id}:{user.id}"
-    cached = CacheManager.get(cache_key)
-    if cached is not None:
-        return jsonify(cached), 200
 
     try:
         from sandbox_persistence import get_persistence_service
@@ -2626,15 +2597,6 @@ def get_session_content(session_id):
             "content": enriched_content,
             "count": len(enriched_content)
         }
-
-        # ── Cache-Aside: write result to Redis ───────────────────────────────
-        # TTL is 3000s (50 min) — presigned URLs expire in 3600s (60 min),
-        # so cached URLs are always served with at least 10 min validity left.
-        CacheManager.set(cache_key, response_payload, ttl_seconds=3000)
-        logger.info(
-            "[Session Content Cache] WRITE session=%s user=%s items=%d TTL=3000s",
-            session_id, user.id, len(enriched_content),
-        )
 
         return jsonify(response_payload), 200
 

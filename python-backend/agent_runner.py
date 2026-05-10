@@ -1100,14 +1100,7 @@ def run_agent_and_stream(
                 events=accumulated_events,
                 conversation_title=conversation_title,
             )
-            # Invalidate the session_content cache so that when the user
-            # reopens this conversation they see any new artifacts or
-            # execution logs created by this agent run.
-            CacheManager.delete(f"cache:session_content:{conversation_id}:{user_id}")
-            logger.info(
-                "[Session Content Cache] INVALIDATED after run complete conv=%s user=%s",
-                conversation_id, user_id,
-            )
+            # Session content cache removed - frontend handles caching
             # Broadcast completion notification to the conversation room
             # so the client can show a local notification if in background
             _preview_raw = (final_content or "").strip()
@@ -1135,7 +1128,5 @@ def run_agent_and_stream(
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
         if run_state_manager:
             run_state_manager.fail_run(conversation_id, message_id, str(e))
-            # Invalidate session_content cache even on failure so any partial
-            # artifacts saved before the error become visible to the client.
-            CacheManager.delete(f"cache:session_content:{conversation_id}:{user_id}")
+            # Session content cache removed - frontend handles caching
         socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=room_name)
