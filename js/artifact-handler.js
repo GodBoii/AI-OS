@@ -10,6 +10,12 @@ class ArtifactHandler {
         this.backendBaseUrl = 'https://api.pawsitivestrides.store';
         this.deployInProgress = false;
         this.deployTargetsByConversation = new Map();
+        // Track workspace state before hiding for overlays
+        this.workspaceStateBeforeOverlay = {
+            projectWorkspaceWasOpen: false,
+            computerWorkspaceWasOpen: false,
+            hiddenBy: null // 'artifact' or 'aios'
+        };
         this.init();
     }
 
@@ -304,6 +310,9 @@ class ArtifactHandler {
         container.classList.remove('hidden');
         chatContainer.classList.add('with-artifact');
         inputContainer.classList.add('with-artifact');
+
+        // Auto-hide workspace sidebars when artifact opens
+        this.hideWorkspaceSidebarsForOverlay('artifact');
 
         if (currentArtifactId) {
             container.dataset.activeArtifactId = currentArtifactId;
@@ -818,6 +827,9 @@ class ArtifactHandler {
         container.classList.add('hidden');
         chatContainer.classList.remove('with-artifact');
         inputContainer.classList.remove('with-artifact');
+
+        // Restore workspace sidebars when artifact closes
+        this.restoreWorkspaceSidebarsFromOverlay('artifact');
     }
 
     reopenArtifact(artifactId) {
@@ -1830,6 +1842,100 @@ class ArtifactHandler {
             codeEl.appendChild(statusSpan);
         }
     }
+
+    /**
+     * Hide workspace sidebars when overlays (artifact/AIOS) open
+     * @param {string} source - 'artifact' or 'aios'
+     */
+    hideWorkspaceSidebarsForOverlay(source) {
+        if (!window.stateManager) {
+            console.warn('[ArtifactHandler] StateManager not available, cannot hide workspaces');
+            return;
+        }
+
+        const state = window.stateManager.getState();
+        
+        // Save current workspace state before hiding
+        this.workspaceStateBeforeOverlay = {
+            projectWorkspaceWasOpen: state.isProjectWorkspaceOpen,
+            computerWorkspaceWasOpen: state.isComputerWorkspaceOpen,
+            hiddenBy: source
+        };
+
+        console.log(`[ArtifactHandler] Hiding workspaces for ${source}:`, {
+            projectWorkspaceWasOpen: state.isProjectWorkspaceOpen,
+            computerWorkspaceWasOpen: state.isComputerWorkspaceOpen
+        });
+
+        // Hide both workspace sidebars if they're open
+        const updates = {};
+        if (state.isProjectWorkspaceOpen) {
+            updates.isProjectWorkspaceOpen = false;
+        }
+        if (state.isComputerWorkspaceOpen) {
+            updates.isComputerWorkspaceOpen = false;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            console.log('[ArtifactHandler] Applying state updates:', updates);
+            window.stateManager.setState(updates);
+        } else {
+            console.log('[ArtifactHandler] No workspaces to hide');
+        }
+    }
+
+    /**
+     * Restore workspace sidebars when overlays close
+     * @param {string} source - 'artifact' or 'aios'
+     */
+    restoreWorkspaceSidebarsFromOverlay(source) {
+        if (!window.stateManager) {
+            console.warn('[ArtifactHandler] StateManager not available, cannot restore workspaces');
+            return;
+        }
+
+        // Only restore if this source was the one that hid them
+        if (this.workspaceStateBeforeOverlay.hiddenBy !== source) {
+            console.log(`[ArtifactHandler] Not restoring workspaces - hidden by '${this.workspaceStateBeforeOverlay.hiddenBy}', not '${source}'`);
+            return;
+        }
+
+        console.log(`[ArtifactHandler] Restoring workspaces for ${source}:`, {
+            projectWorkspaceWasOpen: this.workspaceStateBeforeOverlay.projectWorkspaceWasOpen,
+            computerWorkspaceWasOpen: this.workspaceStateBeforeOverlay.computerWorkspaceWasOpen
+        });
+
+        const updates = {};
+        
+        // Restore project workspace if it was open before
+        if (this.workspaceStateBeforeOverlay.projectWorkspaceWasOpen) {
+            updates.isProjectWorkspaceOpen = true;
+        }
+        
+        // Restore computer workspace if it was open before
+        if (this.workspaceStateBeforeOverlay.computerWorkspaceWasOpen) {
+            updates.isComputerWorkspaceOpen = true;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            console.log('[ArtifactHandler] Applying restore updates:', updates);
+            window.stateManager.setState(updates);
+        } else {
+            console.log('[ArtifactHandler] No workspaces to restore');
+        }
+
+        // Reset the tracking state
+        this.workspaceStateBeforeOverlay = {
+            projectWorkspaceWasOpen: false,
+            computerWorkspaceWasOpen: false,
+            hiddenBy: null
+        };
+    }
 }
 
 export const artifactHandler = new ArtifactHandler();
+
+// Make artifactHandler available globally for cross-module access
+if (typeof window !== 'undefined') {
+    window.artifactHandler = artifactHandler;
+}
