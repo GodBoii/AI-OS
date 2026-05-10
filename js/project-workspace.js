@@ -479,6 +479,11 @@ class ProjectWorkspace {
     }
 
     openPanel() {
+        // Initialize activeProject if it doesn't exist (e.g., when opening from sidebar without deployment)
+        if (!this.activeProject) {
+            this.ensureContext({}, { syncUi: true });
+        }
+        
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isProjectWorkspaceOpen: true });
         } else {
@@ -503,12 +508,21 @@ class ProjectWorkspace {
 
     normalizeProjectContext(project = {}) {
         const source = project && typeof project === 'object' ? project : {};
-        return {
+        
+        // Ensure we always have a minimal valid project object
+        const normalized = {
             ...source,
             agentMode: 'coder',
             isDedicatedProject: true,
             mode: 'project'
         };
+        
+        // If we have local_root_path but no repo_name, derive it
+        if (normalized.local_root_path && !normalized.repo_name) {
+            normalized.repo_name = this.deriveRepoNameFromPath(normalized.local_root_path);
+        }
+        
+        return normalized;
     }
 
     isModeActive() {
@@ -556,11 +570,18 @@ class ProjectWorkspace {
         }
 
         if (syncUi && this.el) {
-            const label = this.activeProject?.project_name || this.activeProject?.slug || 'Project Workspace';
+            // Derive label from various sources
+            const label = this.activeProject?.project_name 
+                || this.activeProject?.slug 
+                || this.activeProject?.repo_name
+                || (this.activeProject?.local_root_path ? this.deriveRepoNameFromPath(this.activeProject.local_root_path) : null)
+                || 'Project Workspace';
+            
             const sub = this.activeProject?.hostname
                 || this.activeProject?.repo_url
                 || this.activeProject?.local_root_path
                 || 'Dedicated coding mode';
+            
             if (this.el.title) this.el.title.textContent = label;
             if (this.el.subtitle) this.el.subtitle.textContent = sub;
         }
@@ -578,6 +599,10 @@ class ProjectWorkspace {
             state.cloud_context.site_id = this.activeProject.site_id;
             state.cloud_context.deployment_id = this.activeProject.deployment_id || null;
             state.cloud_context.is_ready = true;
+        }
+        // Sync local_root_path to local_context if provided
+        if (this.activeProject.local_root_path && !state.local_context.root_path) {
+            state.local_context.root_path = this.activeProject.local_root_path;
         }
 
         this.updateModeUI();
@@ -1027,10 +1052,21 @@ class ProjectWorkspace {
     }
 
     async syncWorkspaceTree() {
+        // Initialize activeProject if it doesn't exist (handles fresh local mode start)
         if (!this.activeProject) {
-            this.setStatus('Open a project first.');
-            this.el.tree.innerHTML = '';
-            return;
+            const state = this.getState();
+            // If we have local context ready, initialize activeProject with it
+            if (state?.local_context?.is_ready && state?.local_context?.root_path) {
+                this.ensureContext({ 
+                    local_root_path: state.local_context.root_path,
+                    repo_name: state.local_context.repo_name 
+                }, { syncUi: true });
+            } else {
+                // No project context at all
+                this.setStatus('Open a project first.');
+                this.el.tree.innerHTML = '';
+                return;
+            }
         }
 
         try {
@@ -1855,7 +1891,12 @@ class ProjectWorkspace {
         };
         state.workspace_mode = 'local';
 
-        this.ensureContext({ local_root_path: selectedPath }, { syncUi: true });
+        // Ensure activeProject is set with local context
+        this.ensureContext({ 
+            local_root_path: selectedPath,
+            repo_name: repoName
+        }, { syncUi: true });
+        
         await this.persistLocalContext(conversationId, state.local_context);
         await this.startLocalWatcher(conversationId, selectedPath);
 
@@ -1930,6 +1971,7 @@ class ProjectWorkspace {
                 repo_url: repoUrl,
                 branch,
                 local_root_path: result.root_path,
+                repo_name: result.repo_name || this.deriveRepoNameFromPath(result.root_path)
             },
             { syncUi: true }
         );
