@@ -202,7 +202,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: false,
+        frame: true,
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });

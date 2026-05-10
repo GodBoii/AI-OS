@@ -178,11 +178,11 @@ contextBridge.exposeInMainWorld(
     // Path operations
     path: {
         join: (...paths) => path.join(...paths),
-        basename: (path, ext) => path.basename(path, ext),
-        dirname: (path) => path.dirname(path),
-        extname: (path) => path.extname(path),
+        basename: (filePath, ext) => path.basename(filePath, ext),
+        dirname: (filePath) => path.dirname(filePath),
+        extname: (filePath) => path.extname(filePath),
         resolve: (...paths) => path.resolve(...paths),
-        isAbsolute: (path) => path.isAbsolute(path)
+        isAbsolute: (filePath) => path.isAbsolute(filePath)
     },
 
     // Shell operations
