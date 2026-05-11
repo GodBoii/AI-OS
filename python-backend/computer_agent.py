@@ -36,13 +36,18 @@ def get_computer_agent(
     enable_google_sheets: bool = False,
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
+    persist_session: bool = True,
 ) -> Agent:
     """
     Dedicated desktop/browser automation agent used for computer workspace mode.
     """
-    db = PostgresDb(
-        db_url=_db_url_sqlalchemy(),
-        db_schema="public",
+    db = (
+        PostgresDb(
+            db_url=_db_url_sqlalchemy(),
+            db_schema="public",
+        )
+        if persist_session
+        else None
     )
 
     tools: List[Union[Toolkit, callable]] = []

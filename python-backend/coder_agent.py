@@ -36,16 +36,21 @@ def get_coder_agent(
     coder_execution_target: str = "cloud",
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
+    persist_session: bool = True,
 ) -> Agent:
     """
     Dedicated coding-only Agent used for project workspace mode.
-    Persists sessions/runs in Postgres using the same DB backend as assistant.py.
+    Persists sessions/runs in Postgres when persist_session is enabled.
     """
     _ = custom_tool_config
 
-    db = PostgresDb(
-        db_url=_db_url_sqlalchemy(),
-        db_schema="public",
+    db = (
+        PostgresDb(
+            db_url=_db_url_sqlalchemy(),
+            db_schema="public",
+        )
+        if persist_session
+        else None
     )
 
     persistence_service = get_persistence_service()
