@@ -115,6 +115,7 @@ class AgentDelegationTools(Toolkit):
                 enable_github=self.enable_github,
                 delegation_id=delegation_id,
                 delegated_agent=delegated_agent,
+                persist_session=False,
             )
         else:
             session_config = self.session_info.get("config", {}) if isinstance(self.session_info, dict) else {}
@@ -133,6 +134,7 @@ class AgentDelegationTools(Toolkit):
                 enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
                 delegation_id=delegation_id,
                 delegated_agent=delegated_agent,
+                persist_session=False,
             )
 
         final_chunks: list[str] = []

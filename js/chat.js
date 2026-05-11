@@ -25,16 +25,14 @@ let chatConfig = {
     tools: {
         internet_search: true,
         coding_assistant: true,
-        World_Agent: true,
         enable_github: true,
         enable_google_email: true,
-        Planner_Agent: true,
         enable_vercel: true,
         enable_google_drive: true,
         enable_google_sheets: true,
         enable_supabase: true,
         enable_composio_whatsapp: true,
-        computer_control: true  // NEW: Computer control enabled by default (desktop only)
+        enable_computer_control: true
     }
 };
 
@@ -488,6 +486,17 @@ function resolveOutgoingUserMessage(rawMessage) {
         }
     }
     return { message: baseMessage, usedProjectBootstrap: false };
+}
+
+function buildOutgoingAgentConfig() {
+    const tools = { ...(chatConfig.tools || {}) };
+    if (Object.prototype.hasOwnProperty.call(tools, 'computer_control')) {
+        tools.enable_computer_control = Boolean(tools.enable_computer_control || tools.computer_control);
+        delete tools.computer_control;
+    }
+    delete tools.Planner_Agent;
+    delete tools.World_Agent;
+    return { use_memory: Boolean(chatConfig.memory), ...tools };
 }
 
 function isProjectWorkspaceMode() {
@@ -1229,9 +1238,7 @@ async function startNewConversation() {
         tasks: false,
         tools: {
             internet_search: true,
-            Planner_Agent: true,
             coding_assistant: true,
-            World_Agent: true,
             enable_vercel: true,
             enable_github: true,
             enable_google_email: true,
@@ -1239,7 +1246,7 @@ async function startNewConversation() {
             enable_google_sheets: true,
             enable_supabase: true,
             enable_composio_whatsapp: true,
-            computer_control: true
+            enable_computer_control: true
         }
     };
 
@@ -2665,7 +2672,7 @@ async function handleSendMessage() {
             is_cloud_mode: resolveIsCloudMode(),
             workspace_context: resolveWorkspaceContextPayload(),
             accessToken: session.access_token,
-            config: { use_memory: chatConfig.memory, ...chatConfig.tools }
+            config: buildOutgoingAgentConfig()
         };
 
         try {
@@ -2728,7 +2735,7 @@ async function handleSendMessage() {
         is_cloud_mode: resolveIsCloudMode(),
         workspace_context: resolveWorkspaceContextPayload(),
         accessToken: session.access_token,
-        config: { use_memory: chatConfig.memory, ...chatConfig.tools }
+        config: buildOutgoingAgentConfig()
     };
 
     try {
