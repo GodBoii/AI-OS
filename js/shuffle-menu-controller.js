@@ -85,7 +85,10 @@ class ShuffleMenuController {
         this.renderToolsSubmenu();
         this.updateToolsActiveState();
 
-        if (this.chatConfig.memory) {
+        // Initialize memory toggle state
+        const memoryToggle = this.shuffleMenu?.querySelector('[data-toggle="memory"]');
+        if (memoryToggle && this.chatConfig.memory) {
+            memoryToggle.setAttribute('aria-checked', 'true');
             this.updateItemActiveState('memory', true);
         }
     }
@@ -193,9 +196,27 @@ class ShuffleMenuController {
             item.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const action = item.dataset.action;
+                
+                // If clicking on toggle switch, let it handle the action
+                if (e.target.closest('.toggle-switch')) {
+                    if (action === 'memory') {
+                        this.handleMemoryAction();
+                    }
+                    return;
+                }
+                
                 this.handleMenuItemClick(action);
             });
         });
+
+        // Add click handler for memory toggle switch
+        const memoryToggle = this.shuffleMenu.querySelector('[data-toggle="memory"]');
+        if (memoryToggle) {
+            memoryToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleMemoryAction();
+            });
+        }
 
         document.addEventListener('click', (e) => {
             if (!this.shuffleBtn.contains(e.target)) {
@@ -268,6 +289,12 @@ class ShuffleMenuController {
     handleMemoryAction() {
         this.chatConfig.memory = !this.chatConfig.memory;
         this.updateItemActiveState('memory', this.chatConfig.memory);
+        
+        // Update toggle switch visual state
+        const memoryToggle = this.shuffleMenu.querySelector('[data-toggle="memory"]');
+        if (memoryToggle) {
+            memoryToggle.setAttribute('aria-checked', this.chatConfig.memory ? 'true' : 'false');
+        }
     }
 
     handleToolsAction() {
@@ -310,10 +337,32 @@ class ShuffleMenuController {
 
                 this.userModifiedProviders.add(provider);
                 this.setProviderEnabled(provider, target.checked);
+                
+                // Update toggle switch visual state
+                const toggleSwitch = toolsSubmenu.querySelector(`.toggle-switch[data-provider="${provider}"]`);
+                if (toggleSwitch) {
+                    toggleSwitch.setAttribute('aria-checked', target.checked ? 'true' : 'false');
+                }
+                
                 this.updateToolsActiveState();
                 e.stopPropagation();
             });
         }
+    }
+
+    attachToggleSwitchHandlers(listEl) {
+        const toggleSwitches = listEl.querySelectorAll('.toggle-switch');
+        toggleSwitches.forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const provider = toggle.dataset.provider;
+                const checkbox = listEl.querySelector(`input[data-provider="${provider}"]`);
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        });
     }
 
     setProviderEnabled(provider, enabled) {
@@ -355,8 +404,13 @@ class ShuffleMenuController {
         listEl.innerHTML = connectedTools.map((tool) => {
             const checkboxId = `integration_tool_${tool.provider}`;
             const checked = this.isProviderEnabled(tool.provider) ? 'checked' : '';
+            const ariaChecked = this.isProviderEnabled(tool.provider) ? 'true' : 'false';
             return `
                 <div class="tool-item" role="menuitem">
+                    <label for="${checkboxId}">
+                        <i class="${tool.iconClass}" aria-hidden="true"></i>
+                        ${tool.label}
+                    </label>
                     <input
                         type="checkbox"
                         id="${checkboxId}"
@@ -364,15 +418,17 @@ class ShuffleMenuController {
                         data-provider="${tool.provider}"
                         ${checked}
                     />
-                    <label for="${checkboxId}">
-                        <i class="${tool.iconClass}" aria-hidden="true"></i>
-                        ${tool.label}
-                    </label>
+                    <div class="toggle-switch" data-provider="${tool.provider}" role="switch" aria-checked="${ariaChecked}">
+                        <div class="toggle-slider"></div>
+                    </div>
                 </div>
             `;
         }).join('');
 
         emptyEl.classList.toggle('hidden', connectedTools.length > 0);
+        
+        // Add click handlers to toggle switches
+        this.attachToggleSwitchHandlers(listEl);
     }
 
     updateToolsActiveState() {

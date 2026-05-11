@@ -805,39 +805,67 @@ body.project-panel-open:not(.dark-mode) .sidebar {
 
 /* =====================================================================
    SECTION 31 — TOOLS MENU & SHUFFLE MENU (dropdown from chat input)
-   NOTE: We make these FLAT / OPAQUE — no transparency for readability.
+   NOTE: Black background in dark mode, white in light mode
    ===================================================================== */
 .dark-mode .tools-menu {
-  background: #141416 !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
+  background: rgba(20, 20, 22, 0.6) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.50),
     0 4px 16px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    inset 0 0 15px rgba(255, 255, 255, 0.05) !important;
   border-radius: 14px !important;
 }
 
 .dark-mode .shuffle-menu {
-  background: #141416 !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
+  background: rgba(20, 20, 22, 0.6) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow:
     0 12px 40px rgba(0, 0, 0, 0.50),
     0 4px 16px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    inset 0 0 15px rgba(255, 255, 255, 0.05) !important;
   border-radius: 14px !important;
+}
+
+/* When menus are open in DARK MODE: Deep black */
+.dark-mode .tools-menu.visible {
+  background: #0a0a0b !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.90),
+    0 4px 16px rgba(0, 0, 0, 0.70),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode .shuffle-menu.visible {
+  background: #0a0a0b !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.90),
+    0 4px 16px rgba(0, 0, 0, 0.70),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 .dark-mode .shuffle-item:hover,
 .dark-mode .tool-item:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px;
 }
+
+/* When menus are open in DARK MODE: Subtle hover */
+.dark-mode .shuffle-menu.visible .shuffle-item:hover,
+.dark-mode .tools-menu.visible .tool-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
 
 /* =====================================================================
    SECTION 32 — SHARE MODAL (message share popup)
