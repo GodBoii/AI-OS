@@ -63,6 +63,56 @@ def _normalize_coder_execution_target(raw_value: Any) -> str:
     return "cloud"
 
 
+def _sanitize_tool_config_for_user(config_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """
+    Keep frontend tool toggles aligned with the user's actual connected services.
+
+    The desktop client may optimistically send enabled integration flags before
+    its async connection-status refresh completes. The backend is the source of
+    truth, so enabled third-party tools must be gated by stored integrations.
+    """
+    sanitized = dict(config_data or {})
+
+    try:
+        response = (
+            supabase_client.from_("user_integrations")
+            .select("service")
+            .eq("user_id", str(user_id))
+            .execute()
+        )
+        connected_services = {
+            str(item.get("service", "")).strip().lower()
+            for item in (response.data or [])
+            if item.get("service")
+        }
+    except Exception as exc:
+        logger.warning("Failed to fetch connected integrations for user %s: %s", user_id, exc)
+        connected_services = set()
+
+    service_gates = {
+        "enable_github": "github",
+        "enable_vercel": "vercel",
+        "enable_supabase": "supabase",
+        "enable_google_email": "google",
+        "enable_google_drive": "google",
+        "enable_google_sheets": "google",
+    }
+    for flag, service in service_gates.items():
+        if flag in sanitized:
+            sanitized[flag] = bool(sanitized.get(flag)) and service in connected_services
+
+    if "enable_composio_whatsapp" in sanitized and sanitized.get("enable_composio_whatsapp"):
+        try:
+            from composio_tools import has_active_whatsapp_connection
+
+            sanitized["enable_composio_whatsapp"] = has_active_whatsapp_connection(str(user_id))
+        except Exception as exc:
+            logger.warning("Failed to verify WhatsApp integration for user %s: %s", user_id, exc)
+            sanitized["enable_composio_whatsapp"] = False
+
+    return sanitized
+
+
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
     global connection_manager_service, redis_client_instance, run_state_manager_instance
@@ -413,7 +463,10 @@ def on_send_message(data: str):
         if not isinstance(workspace_context, dict):
             workspace_context = {}
 
-        incoming_config = dict(data.get("config", {}) or {})
+        incoming_config = _sanitize_tool_config_for_user(
+            dict(data.get("config", {}) or {}),
+            str(user.id),
+        )
 
         if not connection_manager_service.get_session(conversation_id):
             device_type = data.get("deviceType", "web")
@@ -432,6 +485,7 @@ def on_send_message(data: str):
             session_data = connection_manager_service.get_session(conversation_id) or {}
             session_config = dict(session_data.get("config", {}))
             session_config.update(incoming_config)
+            session_config = _sanitize_tool_config_for_user(session_config, str(user.id))
             session_config["agent_mode"] = requested_agent_mode
             session_config["coder_execution_target"] = requested_coder_target
             session_config["workspace_context"] = workspace_context
@@ -599,11 +653,13 @@ def on_assistant_message(data: str):
         requested_agent_mode = "system-assistant" if assistant_target == "system-assistant" else "default"
 
         if not connection_manager_service.get_session(conversation_id):
-            session_config = dict(data.get("config", {
-                "internet_search": True,
-                "coding_assistant": True,
-                "Planner_Agent": True
-            }))
+            session_config = _sanitize_tool_config_for_user(
+                dict(data.get("config", {
+                    "internet_search": True,
+                    "coding_assistant": True,
+                })),
+                user_id,
+            )
             session_config["agent_mode"] = requested_agent_mode
             session_config["assistant_target"] = assistant_target or "system-assistant"
             connection_manager_service.create_session(
@@ -615,7 +671,10 @@ def on_assistant_message(data: str):
         else:
             session_data = connection_manager_service.get_session(conversation_id) or {}
             session_config = dict(session_data.get("config", {}))
-            session_config.update(dict(data.get("config", {}) or {}))
+            session_config.update(
+                _sanitize_tool_config_for_user(dict(data.get("config", {}) or {}), user_id)
+            )
+            session_config = _sanitize_tool_config_for_user(session_config, user_id)
             session_config["agent_mode"] = requested_agent_mode
             session_config["assistant_target"] = assistant_target or "system-assistant"
             session_data["config"] = session_config
