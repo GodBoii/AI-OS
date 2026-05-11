@@ -10,6 +10,7 @@ import config
 from extensions import oauth
 from gotrue.errors import AuthApiError
 from supabase_client import supabase_client
+from cache_manager import CacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,7 @@ def auth_callback(provider):
         integration_data = {k: v for k, v in integration_data.items() if v is not None}
 
         supabase_client.from_('user_integrations').upsert(integration_data).execute()
+        CacheManager.delete(f"cache:integrations:{user_id}")
         logger.info("Supabase: Saved %s integration", provider)
 
         return _oauth_callback_page(

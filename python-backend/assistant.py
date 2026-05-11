@@ -1,54 +1,30 @@
-# python-backend/assistant.py (Final, Corrected Version for Agno v2.0.7 - Path B)
+# python-backend/assistant.py
 
-import os
-import base64
-import traceback
 import logging
-import uuid
-from typing import Optional, List, Dict, Any, Union
+import os
+from typing import Any, Dict, List, Optional, Union
 
-# Agno Core Imports
 from agno.agent import Agent
-from agno.team import Team  # <-- Use the standard Team class
-from agno.media import Image
-from agno.tools import tool
-
-# V2 Imports
-from agno.run.team import TeamRunEvent
-from agno.run.agent import RunEvent
 from agno.db.postgres import PostgresDb
-from agno.models.groq import Groq
-from agno.models.google import Gemini
-from database_config import get_sqlalchemy_database_url
-
-# Tool Imports
+from agno.run.team import TeamRunEvent
+from agno.team import Team
 from agno.tools import Toolkit
 from agno.tools.duckduckgo import DuckDuckGoTools
-from agno.tools.website import WebsiteTools
-from sandbox_tools import SandboxTools
-from sandbox_persistence import get_persistence_service
-from github_tools import GitHubTools
-from google_email_tools import GoogleEmailTools
-from google_drive_tools import GoogleDriveTools
-from google_sheets_tools import GoogleSheetsTools
+
+from agent_delegation_tools import AgentDelegationTools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
-from vercel_tools import VercelTools
+from composio_tools import ComposioWhatsAppTools, has_active_whatsapp_connection
+from database_config import get_sqlalchemy_database_url
+from github_tools import GitHubTools
+from google_drive_tools import GoogleDriveTools
+from google_email_tools import GoogleEmailTools
+from google_sheets_tools import GoogleSheetsTools
+from media_tools import MediaTools
+from mimo_model import get_mimo_model
 from supabase_tools import SupabaseTools
 from user_file_vault_tools import UserFileVaultTools
-from deployed_project_tools import DeployedProjectTools
-from composio_tools import (
-    ComposioWhatsAppTools,
-    has_active_whatsapp_connection,
-)
-from agno.models.openrouter import OpenRouter
-from agno.tools.trafilatura import TrafilaturaTools
-from media_tools import MediaTools
-from agent_delegation_tools import AgentDelegationTools
-from mimo_model import get_mimo_model
-
-# Other Imports
-from supabase_client import supabase_client
+from vercel_tools import VercelTools
 
 logger = logging.getLogger(__name__)
 
@@ -74,24 +50,88 @@ def get_llm_os(
     browser_tools_config: Optional[Dict[str, Any]] = None,
     computer_tools_config: Optional[Dict[str, Any]] = None,
     custom_tool_config: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None, 
-    message_id: Optional[str] = None, 
+    session_id: Optional[str] = None,
+    message_id: Optional[str] = None,
 ) -> Team:
     """
-    hierarchical Aetheria AI multi-agent system with integrated planner.
-    """
-    direct_tools: List[Union[Toolkit, callable]] = []
+    Build the main Aetheria AI team.
 
-    # This PostgresDb object is now the single source of truth for persistence.
-    # The Team will use it automatically to save runs and memories to Supabase.
+    Planner_Agent is kept in the signature for compatibility with existing
+    callers, but planner/dev-team sub-agents have been removed. Coding now
+    flows through the explicit delegate_to_coder tool when realtime context is
+    available.
+    """
+    _ = Planner_Agent
+    _ = computer_tools_config
+
+    direct_tools: List[Union[Toolkit, callable]] = []
+    members: List[Union[Agent, Team]] = []
     db = PostgresDb(
         db_url=get_sqlalchemy_database_url(),
-        db_schema="public"
-
+        db_schema="public",
     )
 
+    connected_platform_tools: List[Union[Toolkit, callable]] = []
+    connected_platform_instructions = [
+        "<system_instructions>",
+        "You are assistant, Aetheria AI's platform operations specialist.",
+        "Own GitHub, Vercel, and Supabase work when those integrations are available.",
+        "Be precise with identifiers, repository names, project names, organization scopes, branch names, deployment IDs, domains, database refs, bucket names, and environment variable keys.",
+        "Before mutating external services, inspect current state and choose the smallest reversible action that satisfies the user request.",
+        "For destructive actions, risky production changes, secret changes, database deletion, project deletion, domain reassignment, or forceful git operations, ask for explicit confirmation.",
+        "Return a concise operational result that Aetheria AI can present naturally to the user.",
+        "</system_instructions>",
+        "",
+        "<available_tools>",
+    ]
+
     if enable_github and user_id:
-        direct_tools.append(GitHubTools(user_id=user_id))
+        connected_platform_tools.append(GitHubTools(user_id=user_id))
+        connected_platform_instructions.extend(
+            [
+                "- GitHubTools are available.",
+                "  Use GitHubTools for repository discovery, file reads, branch operations, commits, pull requests, issues, and GitHub metadata.",
+                "  Prefer reading repository state before writing. For code changes, use a branch and clear commit/PR messages unless the user explicitly requests direct changes.",
+            ]
+        )
+
+    if enable_vercel and user_id:
+        connected_platform_tools.append(VercelTools(user_id=user_id))
+        connected_platform_instructions.extend(
+            [
+                "- VercelTools are available.",
+                "  Use VercelTools for deployments, project lookup, environment variables, domains, aliases, and deployment status.",
+                "  When a Vercel action depends on source code or repository metadata, resolve the GitHub repository/project relationship first if GitHubTools are also available.",
+                "  Never expose secret values. Treat environment variable names as okay to mention, but values as sensitive.",
+            ]
+        )
+
+    if enable_supabase and user_id:
+        connected_platform_tools.append(SupabaseTools(user_id=user_id))
+        connected_platform_instructions.extend(
+            [
+                "- SupabaseTools are available.",
+                "  Use SupabaseTools for project management, storage buckets, secrets, edge functions, and Supabase platform operations.",
+                "  Verify project identity before making changes. Be especially careful with production databases, auth settings, secrets, storage policies, and edge functions.",
+            ]
+        )
+
+    if connected_platform_tools:
+        connected_platform_instructions.append("</available_tools>")
+        members.append(
+            Agent(
+                name="assistant",
+                model=get_mimo_model("mimo-v2.5"),
+                role=(
+                    "Platform operations assistant for GitHub, Vercel, and Supabase. "
+                    "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
+                ),
+                tools=connected_platform_tools,
+                instructions=connected_platform_instructions,
+                debug_mode=debug_mode,
+            )
+        )
+
     if (enable_google_email or enable_google_drive or enable_google_sheets) and user_id:
         if enable_google_email:
             direct_tools.append(GoogleEmailTools(user_id=user_id))
@@ -99,32 +139,28 @@ def get_llm_os(
             direct_tools.append(GoogleDriveTools(user_id=user_id))
         if enable_google_sheets:
             direct_tools.append(GoogleSheetsTools(user_id=user_id))
+
     if internet_search:
         direct_tools.append(DuckDuckGoTools())
+
     if enable_browser and browser_tools_config:
-        # CRITICAL: Select browser tool based on device type from session
-        device_type = session_info.get('device_type', 'web') if session_info else 'web'
-        
-        if device_type == 'desktop':
-            # Desktop (Electron): Use client-side browser automation
-            logger.info(f"[Browser Tool] Using CLIENT-SIDE browser for desktop (session: {session_id})")
+        device_type = session_info.get("device_type", "web") if session_info else "web"
+        if device_type == "desktop":
+            logger.info("[Browser Tool] Using CLIENT-SIDE browser for desktop (session: %s)", session_id)
             direct_tools.append(BrowserTools(**browser_tools_config))
         else:
-            # Mobile/Web: Use server-side browser automation
-            logger.info(f"[Browser Tool] Using SERVER-SIDE browser for {device_type} (session: {session_id})")
-            direct_tools.append(ServerBrowserTools(
-                session_id=session_id,
-                user_id=user_id,
-                socketio=browser_tools_config.get('socketio'),
-                sid=browser_tools_config.get('sid'),
-                redis_client=browser_tools_config.get('redis_client'),
-                message_id=message_id
-            ))
-    
-    if enable_vercel and user_id:
-        direct_tools.append(VercelTools(user_id=user_id))
-    if enable_supabase and user_id:
-        direct_tools.append(SupabaseTools(user_id=user_id))
+            logger.info("[Browser Tool] Using SERVER-SIDE browser for %s (session: %s)", device_type, session_id)
+            direct_tools.append(
+                ServerBrowserTools(
+                    session_id=session_id,
+                    user_id=user_id,
+                    socketio=browser_tools_config.get("socketio"),
+                    sid=browser_tools_config.get("sid"),
+                    redis_client=browser_tools_config.get("redis_client"),
+                    message_id=message_id,
+                )
+            )
+
     if enable_composio_whatsapp and user_id and os.getenv("COMPOSIO_API_KEY"):
         if has_active_whatsapp_connection(user_id=user_id):
             direct_tools.append(ComposioWhatsAppTools(user_id=user_id))
@@ -135,15 +171,13 @@ def get_llm_os(
     if user_id:
         direct_tools.append(UserFileVaultTools(user_id=user_id))
 
-    # Expose explicit delegation tools so Aetheria can spawn dedicated coder/computer runs
-    # while preserving full trace visibility in the reasoning UI.
     socketio_instance = browser_tools_config.get("socketio") if browser_tools_config else None
     sid = browser_tools_config.get("sid") if browser_tools_config else None
     redis_client_instance = browser_tools_config.get("redis_client") if browser_tools_config else None
     has_socket_context = bool(socketio_instance and sid and session_id and message_id)
     can_delegate_coder = bool(has_socket_context and coding_assistant)
-    # Computer delegation requires Redis pub/sub for request/response bridging.
     can_delegate_computer = bool(has_socket_context and enable_computer_control and redis_client_instance)
+
     if can_delegate_coder or can_delegate_computer:
         direct_tools.append(
             AgentDelegationTools(
@@ -163,209 +197,53 @@ def get_llm_os(
             )
         )
 
-    main_team_members: List[Union[Agent, Team]] = []
-
-    if Planner_Agent:
-        planner = Agent(
-            name="REASONING AGENT",
-            role="Planning agent analyzes complex queries and outputs a step-by-step execution plan for Aetheria AI. Call this first for any non-trivial task.",
-            model=Groq(id="groq/compound"),
-            instructions=[
-                "You are the **Reasoning Agent** in Aetheria AI. Your only job is to analyze complex user queries and output a clean execution plan for Aetheria AI to follow. You do NOT execute tasks or answer questions directly.",
-                "",
-                "## Output Format",
-                "",
-                "Always respond in markdown. Provide a plan of **3 to 7 steps**. Each step must be **2 lines max** — one for the action, one for the reason. After the plan, you may optionally add notes.",
-                "",
-                "```",
-                "## Plan: [one-line task summary]",
-                "**Tools:** [Tool1, Tool2, ...]",
-                "",
-                "1. **[Action]** — [brief reason]",
-                "2. **[Action]** — [brief reason]",
-                "...",
-                "",
-                "note :- [optional caveats or prerequisites]",
-                "important :- [critical ordering or constraints]",
-                "diagram :- [mermaid code if helpful]",
-                "```",
-                "",
-                "## Available Tools & Agents",
-                "",
-                "<query>",
-                "**Aetheria AI (direct tools)** — handles these itself, never delegates:",
-                "- `GitHubTools` — list/create repos, commit files, branches, PRs, issues",
-                "- `VercelTools` — deploy projects, manage env vars, domains, deployments. **Requires GitHubTools data first (IMMUTABLE git connection)**",
-                "- `BrowserTools` — browser automation. **CRITICAL: Always call `get_browser_status()` FIRST before any other browser action. This launches and connects to the browser.**",
-                "- `SupabaseTools` — manage projects, storage buckets, secrets, edge functions",
-                "- `GoogleEmailTools` — read, send, search, reply, label emails",
-                "- `GoogleDriveTools` — search, read, create, share files",
-                "- `GoogleSheetsTools` — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
-                "- `MediaTools.generate_image(prompt)` — AI image generation",
-                "- `MediaTools.generate_video(prompt)` — AI video generation",
-                "- `composio_whatsapp_tools` — **always call `list_whatsapp_actions()` first**, then execute with exact tool_slug",
-                "- `DuckDuckGoTools` — web search/ internet search",
-                "- `delegate_to_coder(task_description)` — when available, run dedicated coder agent for coding/build/debug/deployment tasks in main mode",
-                "- `delegate_to_computer(task_description)` — when available, run dedicated computer agent for desktop/browser control tasks in main mode",
-                "</query>",
-                "",
-                "<coding_agent>",
-                "**dev_team (delegate coding/file/deployment tasks)** — has three toolkits:",
-                "",
-                "`SandboxTools` — code execution & file management:",
-                "- `get_workspace_overview()` → `search_code()` / `read_file()` → `edit_file()` / `write_file()` → `execute_in_sandbox(command)`",
-                "- Sandbox auto-creates and persists across the session. Workspace root: `/home/sandboxuser/workspace`",
-                "",
-                "`DeployedProjectTools` — inspect & retrieve live deployed site files:",
-                "- `get_deployed_projects()` — list all deployed sites",
-                "- `select_project(site_id|slug|hostname|url|default)` — set active project context",
-                "- `get_deployment(site_id?, deployment_id?)` — get deployment details",
-                "- `get_file_structure(site_id?, deployment_id?)` — list all deployed files",
-                "- `get_file_content(path, site_id?, deployment_id?)` — read a deployed file's source",
-                "- **Always call `get_deployed_projects()` then `select_project()` first before any deployment action**",
-                "",
-                "`UserFileVaultTools` — persistent user-managed files (Google Drive-style):",
-                "- `list_user_files(search?, file_type?, limit?)` — list uploaded files available to the user",
-                "- `get_file_details(file_id)` — fetch metadata and download link for one file",
-                "- `read_user_file(file_id, max_chars?)` — read text/UTF-8 content preview (binary-safe)",
-                "- `delete_user_file(file_id, confirm?)` — delete a file from user vault",
-                "- **Use these tools for persistent file retrieval. Do not assume only turn attachments are available.**",
-                "</coding_agent>",
-                "",
-                "",
-                "<computer_agent>",
-                "**Computer_Agent (delegate desktop control tasks)** — screenshot, mouse/keyboard control, window management, file system, shell commands. Always starts with `request_permission()` then `take_screenshot()`.",
-                "</computer_agent>",
-                "",
-                "## Key Rules",
-                "- For simple/conversational queries, reply: `No plan needed — this is a simple query.`",
-                "- Always respect tool ordering: GitHub metadata → Vercel; Browser status → Browser actions; list_actions → execute (Composio WhatsApp)",
-                "- In main mode, prefer explicit delegation tools (if available): coding → `delegate_to_coder(...)`, desktop → `delegate_to_computer(...)`",
-                "- You may still use `dev_team` when tool-based delegation is unavailable or not appropriate",
-                "- Never skip prerequisite steps (status checks, ID lookups, list calls)",
-            ],
-            debug_mode=debug_mode,
-        )
-        main_team_members.append(planner)
-
-    if coding_assistant:
-        # Initialize persistence service for sandbox tools
-        persistence_service = get_persistence_service()
-        
-        # Extract socketio and sid from browser_tools_config if available
-        socketio_instance = browser_tools_config.get('socketio') if browser_tools_config else None
-        sid = browser_tools_config.get('sid') if browser_tools_config else None
-        redis_client_instance = browser_tools_config.get('redis_client') if browser_tools_config else None
-        dev_tools: List[Union[Toolkit, callable]] = [
-            SandboxTools(
-                session_info=session_info,
-                persistence_service=persistence_service,
-                user_id=user_id,
-                session_id=session_id,
-                message_id=message_id,
-                socketio=socketio_instance,
-                sid=sid,
-                redis_client=redis_client_instance
-            )
-        ]
-        if user_id:
-            dev_tools.append(DeployedProjectTools(user_id=user_id))
-            dev_tools.append(UserFileVaultTools(user_id=user_id))
-        
-        dev_team = Agent(
-            name="dev_team",
-            model=get_mimo_model("mimo-v2.5-pro"),
-            role="Full-stack software engineer with a persistent sandbox/ terminal, deployed project access, and a persistent user file vault. Delegate all coding, debugging, building, file operations, and deployment tasks here.",
-            tools=dev_tools,
-            instructions=[
-                "<system_instructions>",
-                "You are a Coding Sub-Agent under Aetheria AI — the user talks to Aetheria AI directly, which delegates tasks to you. Stay aware of your position: execute precisely, report results cleanly.",
-                "Access user-uploaded files from session_state['turn_context']['files'].",
-                "Workspace root: /home/sandboxuser/workspace — keep all project files here.",
-                "Deterministic edit contract: get_workspace_overview → search_code → read_file → edit_file/write_file → execute_in_sandbox.",
-                "Prefer edit_file for surgical changes. Avoid full-file rewrites unless truly necessary.",
-                "Before deployment action: call get_deployed_projects() then select_project(site_id|slug|hostname|url|default) to lock project context.",
-                "For persistent user documents/assets, prefer UserFileVaultTools (list/get/read) over ephemeral assumptions.",
-                "For deployed-site edits: copy_deployed_project(site_id, deployment_id?, target_dir) → edit files → redeploy_project(site_id, project_directory).",
-                "For follow-up deployment work: always re-resolve the correct project context before applying changes.",
-                "Keep responses under 300 words unless the implementation genuinely requires more.",
-                "</system_instructions>",
-                "",
-                "<frontend>",
-                "Build production-grade UIs — avoid generic AI slop. Every interface should feel crafted and intentional.",
-                "Typography: Pick fonts that are beautiful, distinctive, and purposeful — not system defaults.",
-                "Color & Theme: Commit to a cohesive visual identity. No random color mixing. Use a defined palette.",
-                "Motion: Add meaningful animations and micro-interactions — hover states, transitions, loading feedback.",
-                "Spatial Composition: Use whitespace, grid, and visual hierarchy to guide the eye naturally.",
-                "Backgrounds & Visual Details: Avoid plain white/grey. Use gradients, textures, or layered elements to add depth.",
-                "Components: Build reusable, accessible components. Prefer semantic HTML. Style with precision.",
-                "Responsive: All UIs must work across screen sizes — mobile-first where applicable.",
-                "</frontend>",
-                "",
-                "<backend>",
-                "Write clean, modular backend code — functions/classes should do one thing well.",
-                "Always validate and sanitize inputs server-side. Never trust client-provided data.",
-                "Use environment variables for secrets and config — never hardcode credentials.",
-                "Handle errors explicitly: use try/except (Python) or try/catch (JS), return meaningful error messages.",
-                "For APIs: follow REST conventions — correct HTTP methods, status codes, and JSON response shapes.",
-                "For data/file operations: always validate inputs and keep user ownership checks strict.",
-                "Log meaningfully — enough to debug, not so much it's noise.",
-                "Test critical paths: run execute_in_sandbox to verify behavior before reporting done.",
-                "</backend>",
-                "",
-                "<tools>",
-                "SandboxTools: get_workspace_overview, search_code, read_file, write_file, edit_file, execute_in_sandbox",
-                "DeployedProjectTools: get_deployed_projects, select_project, get_deployment, get_file_structure, get_file_content",
-                "UserFileVaultTools: list_user_files, get_file_details, read_user_file, delete_user_file",
-                "</tools>",
-            ],
-            debug_mode=debug_mode
-        )
-        main_team_members.append(dev_team)
-
     aetheria_instructions = [
         "<system_instructions>",
-        "You are Aetheria AI — the most advanced AI system in the world, providing deeply personalized responses using all available user context.",
+        "You are Aetheria AI, providing deeply personalized responses using all available user context.",
         "Access context via session_state['turn_context'].",
-        "Users talk directly to you. You have sub-agents and direct tools at your disposal — use them silently and effectively.",
-        "ALWAYS consult the 'planner' agent first for any non-trivial query to get a structured execution plan.", 
+        "Users talk directly to you. Use direct tools and explicit delegation tools silently and effectively.",
         "When delegation tools are available in main mode, use `delegate_to_coder(task_description)` for coding tasks and `delegate_to_computer(task_description)` for desktop/browser control tasks.",
-        "internet_search tool like duckduckgo provides simple data you can use this to overcome your knowledge cutoff issue nad provide user latest information",
-        "Browser_Tool gives you access to a complete chrome browser that you can use to complete your task you can control and see the browser in order to complete users query"
-        "Use every available tool and method to fulfil user demands — exhaust all options before giving up.",
-        "If a tool or method fails, silently try alternatives. Never surface internal errors or system operations to the user",
-        "IF user asks for diagrams and similer things proivde mermaid code/ diagrams generate images when user explicitly asks for or its the most logical choise.",
+        "Use DuckDuckGoTools for current internet data when needed.",
+        "BrowserTools gives you access to a complete browser. Always call get_browser_status() first before browser actions.",
+        "Use every available tool and method to fulfil user demands. If a tool fails, silently try alternatives before giving up.",
+        "If the user asks for diagrams, provide Mermaid diagrams. Generate images only when explicitly asked or when it is the most logical choice.",
         "Never use phrases like 'I will now', 'based on my knowledge', 'I was informed by', 'delegating to', or any language that exposes internal processes.",
-        "Deliver every result as if you personally completed it — natural, direct, and focused entirely on user value.",
+        "Deliver every result as if you personally completed it: natural, direct, and focused entirely on user value.",
         "Never explain what tools you used, which agents you called, or what happened internally.",
         "</system_instructions>",
         "",
         "<tools>",
-        "You directly own and execute these tools — never delegate tasks that require them:",
-        "• GitHubTools — repos, branches, commits, PRs, issues",
-        "• VercelTools — deployments, projects, env vars, domains (always get GitHub repo data first)",
-        "• SupabaseTools — projects, storage, secrets, edge functions",
-        "• BrowserTools — browser automation (always call get_browser_status() first to launch/connect)",
-        "• GoogleEmailTools — read, send, search, reply, label emails",
-        "• GoogleDriveTools — search, read, create, share files",
-        "• GoogleSheetsTools — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
-        "• MediaTools — AI media generation via generate_image(prompt) and generate_video(prompt)",
-        "• composio_whatsapp_tools — list_whatsapp_actions() first, then execute with exact tool_slug",
-        "• DuckDuckGoTools — fast simple web search",
-        "• delegate_to_coder — dedicated coding-agent execution (available in realtime main-mode sessions)",
-        "• delegate_to_computer — dedicated computer-agent execution (available in realtime main-mode sessions with computer control enabled), use only when you have requirement to use and control the user desktop os",
+        "You directly own and execute these tools; do not delegate tasks that require them:",
+        "- BrowserTools: browser automation; always call get_browser_status() first",
+        "- GoogleEmailTools: read, send, search, reply, label emails",
+        "- GoogleDriveTools: search, read, create, share files",
+        "- GoogleSheetsTools: search sheets, inspect tabs, read/write ranges, create spreadsheets",
+        "- MediaTools: generate_image(prompt) and generate_video(prompt)",
+        "- composio_whatsapp_tools: list_whatsapp_actions() first, then execute with exact tool_slug",
+        "- DuckDuckGoTools: fast web search",
+        "- delegate_to_coder: dedicated coding-agent execution in realtime main-mode sessions",
+        "- delegate_to_computer: dedicated computer-agent execution when computer control is enabled",
         "</tools>",
     ]
-    # --- CRITICAL CHANGE: Instantiate the standard Team class ---
-    # This allows the `db` object to automatically handle session persistence.
-    llm_os_team = Team(
+
+    if members:
+        aetheria_instructions.extend(
+            [
+                "",
+                "<members>",
+                "- assistant: platform operations specialist. Route GitHub, Vercel, and Supabase work to this member instead of trying to perform those operations directly.",
+                "</members>",
+            ]
+        )
+
+    return Team(
         name="Aetheria_AI",
         model=get_mimo_model("mimo-v2.5"),
-        members=main_team_members,
+        members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,
         user_id=user_id,
-        db=db,  # This now controls persistence
+        db=db,
         enable_agentic_memory=use_memory,
         enable_user_memories=use_memory,
         enable_session_summaries=use_session_summaries,
@@ -382,10 +260,7 @@ def get_llm_os(
         read_team_history=True,
         add_history_to_context=True,
         num_history_runs=40,
-        store_events=True, 
+        store_events=True,
         add_datetime_to_context=True,
         debug_mode=debug_mode,
     )
-
-    return llm_os_team
-
