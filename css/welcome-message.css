@@ -72,11 +72,11 @@
 /* --- Welcome Secondary Heading --- */
 .welcome-secondary-heading {
     font-size: var(--text-xl, 1.25rem);
-    color: var(--text-secondary);
+    color: #0f172a; /* Default light mode color */
     margin: 0;
     font-weight: 400;
     line-height: var(--leading-relaxed, 1.625);
-    opacity: 0.9;
+    opacity: 0.85;
     font-family: Georgia, 'Times New Roman', serif;
 }
 
@@ -154,7 +154,7 @@
 }
 
 .dark-mode .welcome-secondary-heading {
-    color: var(--text-secondary);
+    color: #a0a0a8; /* Light gray for dark mode */
     opacity: 0.95;
 }
 
