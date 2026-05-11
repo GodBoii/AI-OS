@@ -61,6 +61,21 @@
     color: #ffffff;
 }
 
+/* Shuffle button: When menu is open, icon turns black on white background */
+.shuffle-btn.active[aria-expanded="true"] {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #000000;
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.shuffle-btn.active[aria-expanded="true"]:hover {
+    background: #f8f9fa;
+    color: #000000;
+}
+
 /* --- Mic Button Styles --- */
 
 .mic-btn {

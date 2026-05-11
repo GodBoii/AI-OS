@@ -541,22 +541,36 @@
                 aria-label="Open shuffle menu" aria-expanded="false" aria-haspopup="true" title="Configure memory and tools">
                 <i class="fas fa-random" aria-hidden="true"></i>
                 <div class="shuffle-menu" role="menu" aria-label="Shuffle menu options">
+                    <!-- Memory Item with Toggle -->
                     <div class="shuffle-item" data-action="memory" role="menuitem" tabindex="-1"
                         aria-label="Toggle memory">
-                        <i class="fa-solid fa-brain" aria-hidden="true"></i>
-                        <span>Memory</span>
+                        <div class="shuffle-item-content">
+                            <i class="fa-solid fa-brain" aria-hidden="true"></i>
+                            <span class="shuffle-item-label">Memory</span>
+                        </div>
+                        <div class="toggle-switch" data-toggle="memory" role="switch" aria-checked="false">
+                            <div class="toggle-slider"></div>
+                        </div>
                     </div>
-                    <div class="shuffle-item" data-action="tools" role="menuitem" tabindex="-1"
+                    
+                    <!-- Tools Item (Navigation) -->
+                    <div class="shuffle-item shuffle-item-nav" data-action="tools" role="menuitem" tabindex="-1"
                         aria-label="Open tools submenu" aria-haspopup="true">
-                        <i class="fas fa-wrench" aria-hidden="true"></i>
-                        <span>Tools</span>
+                        <div class="shuffle-item-content">
+                            <i class="fas fa-wrench" aria-hidden="true"></i>
+                            <span class="shuffle-item-label">Tools</span>
+                        </div>
                         <i class="fas fa-chevron-right submenu-indicator" aria-hidden="true"></i>
-                        <!-- Tools submenu will be dynamically positioned -->
+                        
+                        <!-- Tools Submenu -->
                         <div class="tools-menu" role="menu" aria-label="Tools options">
+                            <div class="tools-menu-header">
+                                <span class="tools-menu-title">INTEGRATIONS</span>
+                            </div>
                             <div class="tool-items-list" data-role="integration-tools-list"></div>
                             <div class="tool-item tool-empty-state hidden" data-role="integration-tools-empty" aria-live="polite">
                                 <i class="fa-solid fa-link-slash" aria-hidden="true"></i>
-                                <span>No connected integrations. Connect one in Integrations settings.</span>
+                                <span>No connected integrations</span>
                             </div>
                         </div>
                     </div>
