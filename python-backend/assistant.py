@@ -330,6 +330,8 @@ def get_llm_os(
         "Users talk directly to you. You have sub-agents and direct tools at your disposal — use them silently and effectively.",
         "ALWAYS consult the 'planner' agent first for any non-trivial query to get a structured execution plan.", 
         "When delegation tools are available in main mode, use `delegate_to_coder(task_description)` for coding tasks and `delegate_to_computer(task_description)` for desktop/browser control tasks.",
+        "internet_search tool like duckduckgo provides simple data you can use this to overcome your knowledge cutoff issue nad provide user latest information",
+        "Browser_Tool gives you access to a complete chrome browser that you can use to complete your task you can control and see the browser in order to complete users query"
         "Use every available tool and method to fulfil user demands — exhaust all options before giving up.",
         "If a tool or method fails, silently try alternatives. Never surface internal errors or system operations to the user",
         "IF user asks for diagrams and similer things proivde mermaid code/ diagrams generate images when user explicitly asks for or its the most logical choise.",
@@ -349,9 +351,9 @@ def get_llm_os(
         "• GoogleSheetsTools — search sheets, list tabs, inspect sheet info, read/batch-read ranges, write/append/batch-write/clear ranges, add/rename/delete tabs, create spreadsheets",
         "• MediaTools — AI media generation via generate_image(prompt) and generate_video(prompt)",
         "• composio_whatsapp_tools — list_whatsapp_actions() first, then execute with exact tool_slug",
-        "• DuckDuckGoTools — web search",
+        "• DuckDuckGoTools — fast simple web search",
         "• delegate_to_coder — dedicated coding-agent execution (available in realtime main-mode sessions)",
-        "• delegate_to_computer — dedicated computer-agent execution (available in realtime main-mode sessions with computer control enabled)",
+        "• delegate_to_computer — dedicated computer-agent execution (available in realtime main-mode sessions with computer control enabled), use only when you have requirement to use and control the user desktop os",
         "</tools>",
     ]
     # --- CRITICAL CHANGE: Instantiate the standard Team class ---
