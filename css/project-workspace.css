@@ -836,6 +836,8 @@ body.project-panel-open .floating-input-container {
     padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
     background: var(--elevated-bg);
+    position: relative;
+    z-index: 20;
 }
 
 .project-main-file-preview-title {
