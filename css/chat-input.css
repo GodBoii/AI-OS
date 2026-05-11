@@ -358,214 +358,560 @@
     gap: 8px;
 }
 
-/* --- Tools Dropdown Menu --- */
-.tools-menu {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 0;
-    background: var(--window-bg);
-    border: 1.5px solid var(--border-primary);
-    border-radius: 12px;
-    box-shadow:
-        0 8px 32px rgba(45, 55, 72, 0.18),
-        0 4px 16px rgba(45, 55, 72, 0.12);
-    padding: 8px;
-    min-width: 220px;
-    z-index: var(--z-dropdown-menu);
-    transform: translateY(10px) scale(0.95);
-    transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
-    opacity: 0;
-    visibility: hidden;
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHUFFLE MENU — MINIMALISTIC GLASS REDESIGN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables for Glass Menu System ── */
+:root {
+    --glass-surface: rgba(255, 255, 255, 0.08);
+    --glass-surface-hover: rgba(255, 255, 255, 0.12);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-blur: 20px;
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --accent-yellow: #fbbf24;
+    --accent-yellow-hover: #fcd34d;
+    --accent-yellow-glow: rgba(251, 191, 36, 0.3);
+    --menu-bg-open: #ffffff;
+    --menu-text-open: #0f172a;
+    --menu-icon-open: #64748b;
+    --icon-active: #000000;
+    --menu-width: 240px;
+    --menu-padding: 10px;
+    --item-height: 40px;
+    --toggle-width: 38px;
+    --toggle-height: 20px;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --duration-fast: 150ms;
+    --duration-base: 300ms;
 }
 
-.tools-menu.visible {
+/* Dark Mode Variables */
+.dark-mode {
+    --menu-bg-open-dark: #0a0a0b;
+    --menu-text-open-dark: rgba(255, 255, 255, 0.95);
+    --menu-icon-open-dark: rgba(255, 255, 255, 0.6);
+    --menu-border-dark: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Shuffle Menu Container ── */
+.shuffle-menu {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    width: var(--menu-width);
+    
+    /* Glass Surface (default closed state) */
+    background: var(--glass-surface);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    
+    /* Borders & Shadows */
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 0 15px rgba(255, 255, 255, 0.05);
+    
+    /* Layout */
+    padding: var(--menu-padding);
+    z-index: var(--z-dropdown-menu);
+    
+    /* Animation States */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px) scale(0.96);
+    transition: 
+        opacity var(--duration-base) var(--ease-out-expo),
+        transform var(--duration-base) var(--ease-out-expo),
+        background var(--duration-base) ease,
+        border-color var(--duration-base) ease,
+        visibility 0s var(--duration-base);
+    
+    /* Performance */
+    will-change: opacity, transform;
+}
+
+/* Open State: Pure White Background */
+.shuffle-menu.visible {
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
+    background: var(--menu-bg-open);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.15),
+        0 2px 8px rgba(0, 0, 0, 0.1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transition: 
+        opacity var(--duration-base) var(--ease-out-expo),
+        transform var(--duration-base) var(--ease-out-expo),
+        background var(--duration-base) ease,
+        border-color var(--duration-base) ease,
+        visibility 0s 0s;
 }
 
-.tool-item {
-    padding: 10px 12px;
+/* ── Shuffle Menu Items ── */
+.shuffle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--item-height);
+    padding: 0 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    transition: background-color var(--duration-fast) ease;
+}
+
+.shuffle-item:not(:last-child) {
+    margin-bottom: 3px;
+}
+
+.shuffle-item:hover {
+    background: var(--glass-surface-hover);
+}
+
+/* When menu is open (white background) */
+.shuffle-menu.visible .shuffle-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* Left side: Icon + Label */
+.shuffle-item-content {
     display: flex;
     align-items: center;
     gap: 12px;
-    transition: all 0.2s ease;
-    border-radius: 8px;
+    flex: 1;
 }
 
-.tool-item:hover {
-    background: var(--hover-bg);
+.shuffle-item-content i {
+    width: 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    transition: color var(--duration-fast) ease;
 }
 
+/* When menu is open (white background) */
+.shuffle-menu.visible .shuffle-item-content i {
+    color: var(--menu-icon-open);
+}
+
+.shuffle-item:hover .shuffle-item-content i {
+    color: var(--text-primary);
+}
+
+.shuffle-menu.visible .shuffle-item:hover .shuffle-item-content i {
+    color: var(--menu-text-open);
+}
+
+.shuffle-item-label {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+}
+
+/* When menu is open (white background) */
+.shuffle-menu.visible .shuffle-item-label {
+    color: var(--menu-text-open);
+}
+
+/* ── Toggle Switch Component ── */
+.toggle-switch {
+    position: relative;
+    width: var(--toggle-width);
+    height: var(--toggle-height);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+/* When menu is open (white background) */
+.shuffle-menu.visible .toggle-switch {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: 
+        transform var(--duration-fast) var(--ease-spring),
+        background-color var(--duration-fast) ease;
+}
+
+/* When menu is open (white background) */
+.shuffle-menu.visible .toggle-slider {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Active State - YELLOW */
+.toggle-switch[aria-checked="true"] {
+    background: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+}
+
+.toggle-switch[aria-checked="true"] .toggle-slider {
+    transform: translateX(18px);
+    background: white;
+}
+
+/* Hover Effects */
+.shuffle-item:hover .toggle-switch {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.shuffle-menu.visible .shuffle-item:hover .toggle-switch {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.shuffle-item:hover .toggle-switch[aria-checked="true"] {
+    background: var(--accent-yellow-hover);
+}
+
+.shuffle-menu.visible .shuffle-item:hover .toggle-switch[aria-checked="true"] {
+    background: var(--accent-yellow-hover);
+}
+
+/* ── Navigation Item (Tools) ── */
+.shuffle-item-nav .submenu-indicator {
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: 
+        color var(--duration-fast) ease,
+        transform var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+/* When menu is open (white background) */
+.shuffle-menu.visible .shuffle-item-nav .submenu-indicator {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+.shuffle-item-nav:hover .submenu-indicator {
+    color: var(--text-secondary);
+    transform: translateX(2px);
+}
+
+.shuffle-menu.visible .shuffle-item-nav:hover .submenu-indicator {
+    color: var(--menu-text-open);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOOLS SUBMENU — MINIMALISTIC GLASS REDESIGN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tools-menu {
+    position: absolute;
+    left: calc(100% + 12px);
+    bottom: 0;
+    width: var(--menu-width);
+    
+    /* Glass Surface (default) */
+    background: var(--glass-surface);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    
+    /* Borders & Shadows */
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.35),
+        inset 0 0 15px rgba(255, 255, 255, 0.05);
+    
+    /* Layout */
+    padding: var(--menu-padding);
+    z-index: calc(var(--z-dropdown-menu) + 1);
+    
+    /* Animation States */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-8px) scale(0.96);
+    transition: 
+        opacity var(--duration-base) var(--ease-out-expo),
+        transform var(--duration-base) var(--ease-out-expo),
+        background var(--duration-base) ease,
+        border-color var(--duration-base) ease,
+        visibility 0s var(--duration-base);
+    
+    /* Performance */
+    will-change: opacity, transform;
+}
+
+/* Open State: Pure White Background */
+.tools-menu.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0) scale(1);
+    background: var(--menu-bg-open);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 2px 8px rgba(0, 0, 0, 0.1);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transition: 
+        opacity var(--duration-base) var(--ease-out-expo),
+        transform var(--duration-base) var(--ease-out-expo),
+        background var(--duration-base) ease,
+        border-color var(--duration-base) ease,
+        visibility 0s 0s;
+}
+
+/* ── Tools Menu Header ── */
+.tools-menu-header {
+    padding: 6px 10px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 6px;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tools-menu-header {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.tools-menu-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tools-menu-title {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+/* ── Tool Items List ── */
 .tool-items-list {
     max-height: 280px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
-.tool-empty-state {
+/* Custom Scrollbar */
+.tool-items-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tool-items-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tool-items-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.tool-items-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Individual Tool Item ── */
+.tool-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--item-height);
+    padding: 0 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) ease;
+}
+
+.tool-item:not(:last-child) {
+    margin-bottom: 3px;
+}
+
+.tool-item:hover {
+    background: var(--glass-surface-hover);
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* Tool Item Label (Icon + Text) */
+.tool-item label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-item label {
+    color: var(--menu-text-open);
+}
+
+.tool-item label i {
+    width: 16px;
+    text-align: center;
     color: var(--text-secondary);
+    font-size: 14px;
+    transition: color var(--duration-fast) ease;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-item label i {
+    color: var(--menu-icon-open);
+}
+
+.tool-item:hover label i {
+    color: var(--text-primary);
+}
+
+.tools-menu.visible .tool-item:hover label i {
+    color: var(--menu-text-open);
+}
+
+/* Hide default checkbox */
+.tool-item input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Toggle Switch for Tools - YELLOW */
+.tool-item .toggle-switch {
+    position: relative;
+    width: var(--toggle-width);
+    height: var(--toggle-height);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-item .toggle-switch {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+.tool-item .toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: 
+        transform var(--duration-fast) var(--ease-spring),
+        background-color var(--duration-fast) ease;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-item .toggle-slider {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* Checked State (via checkbox) - YELLOW */
+.tool-item input[type="checkbox"]:checked ~ .toggle-switch {
+    background: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+}
+
+.tool-item input[type="checkbox"]:checked ~ .toggle-switch .toggle-slider {
+    transform: translateX(18px);
+    background: white;
+}
+
+/* Hover Effects */
+.tool-item:hover .toggle-switch {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.tools-menu.visible .tool-item:hover .toggle-switch {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.tool-item:hover input[type="checkbox"]:checked ~ .toggle-switch {
+    background: var(--accent-yellow-hover);
+}
+
+.tools-menu.visible .tool-item:hover input[type="checkbox"]:checked ~ .toggle-switch {
+    background: var(--accent-yellow-hover);
+}
+
+/* ── Empty State ── */
+.tool-empty-state {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: left;
     cursor: default;
+}
+
+/* When menu is open (white background) */
+.tools-menu.visible .tool-empty-state {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.tool-empty-state i {
+    font-size: 20px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.tools-menu.visible .tool-empty-state i {
+    color: rgba(0, 0, 0, 0.4);
 }
 
 .tool-empty-state:hover {
     background: transparent;
 }
 
-.tool-item label {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    color: var(--text-color);
-    font-size: 0.9rem;
+/* ── Active State Indicator - YELLOW ── */
+.shuffle-item.active .shuffle-item-content i {
+    color: var(--accent-yellow);
 }
 
-.tool-item input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
-    border: 2px solid var(--border-color);
-    appearance: none;
-    position: relative;
-    cursor: pointer;
-    flex-shrink: 0;
-    background: var(--window-bg);
-    transition: all 0.2s ease;
+.shuffle-item-nav.active .submenu-indicator {
+    color: var(--accent-yellow);
 }
 
-.tool-item input[type="checkbox"]:checked {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-}
-
-.tool-item input[type="checkbox"]:checked::after {
-    content: '✓';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 12px;
-}
-
-/* --- Shuffle Dropdown Menu --- */
-.shuffle-menu {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 0;
-    background: var(--window-bg);
-    border: 1.5px solid var(--border-primary);
-    border-radius: 12px;
-    box-shadow:
-        0 8px 32px rgba(45, 55, 72, 0.18),
-        0 4px 16px rgba(45, 55, 72, 0.12);
-    padding: 8px;
-    min-width: 200px;
-    z-index: var(--z-dropdown-menu);
-    transform: translateY(10px) scale(0.95);
-    transform: translateY(10px) scale(0.95);
-    transition: opacity var(--anim-slow) var(--easing-standard), transform var(--anim-slow) var(--easing-standard), visibility 0s 0s;
-    opacity: 0;
-    visibility: hidden;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    will-change: opacity, transform;
-    color: #0f172a;
-    /* Explicit Black for Light Mode */
-    text-align: left;
-}
-
-/* Ensure icons and text inside inherit this black color in Light Mode by default */
-.shuffle-menu .shuffle-item {
-    color: #0f172a;
-}
-
-.shuffle-menu .shuffle-item i {
-    color: #475569;
-    /* distinct gray/black icon color */
-}
-
-/* Dark Mode Overrides for Shuffle Menu */
-.dark-mode .shuffle-menu {
-    color: var(--text-color);
-}
-
-.dark-mode .shuffle-menu .shuffle-item {
-    color: var(--text-color);
-}
-
-.dark-mode .shuffle-menu .shuffle-item i {
-    color: var(--icon-color);
-}
-
-.shuffle-menu.visible {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0) scale(1);
-}
-
-.shuffle-item {
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    transition: background-color 0.2s ease, color 0.2s ease;
-    border-radius: 8px;
-    cursor: pointer;
-    position: relative;
-    will-change: background-color;
-}
-
-.shuffle-item:hover {
-    background: var(--hover-bg);
-    color: var(--accent-color);
-}
-
-.shuffle-item i {
-    width: 16px;
-    text-align: center;
-    color: var(--icon-color);
-    transition: color 0.2s ease;
-}
-
-.shuffle-item:hover i {
-    color: var(--accent-color);
-}
-
-.shuffle-item span {
-    flex-grow: 1;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--text-color);
-}
-
-.shuffle-item.active {
-    background: var(--accent-muted);
-    color: var(--accent-color);
-}
-
-.shuffle-item.active i {
-    color: var(--accent-color);
-}
-
-.submenu-indicator {
-    margin-left: auto;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    transition: transform 0.2s ease;
-}
-
-.shuffle-item:hover .submenu-indicator {
-    color: var(--accent-color);
-    transform: translateX(2px);
-}
-
-/* Tools submenu positioning within shuffle menu */
-.shuffle-item .tools-menu {
-    left: calc(100% + 8px);
-    bottom: 0;
-    min-width: 220px;
+/* ── Responsive Adjustments ── */
+@media (max-width: 768px) {
+    :root {
+        --menu-width: 260px;
+        --item-height: 48px;
+    }
+    
+    .tools-menu {
+        left: 0;
+        bottom: calc(100% + 8px);
+    }
 }
 
 /* Screen reader only content */

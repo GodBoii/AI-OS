@@ -1059,17 +1059,119 @@ textarea.input {
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-/* ── Dropdown menus (tools/shuffle): Solid opaque for readability ── */
+/* ── Dropdown menus (tools/shuffle): Pure white when open ── */
 .dark-mode .tools-menu,
 .dark-mode .shuffle-menu {
-  background: #141416;
+  background: rgba(20, 20, 22, 0.6);
   border-color: rgba(255, 255, 255, 0.12);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.70),
     0 8px 24px  rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    inset 0 0 15px rgba(255, 255, 255, 0.05);
+}
+
+/* When menus are open in DARK MODE: Black background */
+.dark-mode .tools-menu.visible,
+.dark-mode .shuffle-menu.visible {
+  background: var(--menu-bg-open-dark);
+  border-color: var(--menu-border-dark);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.90),
+    0 8px 24px rgba(0, 0, 0, 0.70),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .shuffle-item-label,
+.dark-mode .tool-item label {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* When menus are open in DARK MODE: Keep light text */
+.dark-mode .shuffle-menu.visible .shuffle-item-label,
+.dark-mode .tools-menu.visible .tool-item label {
+    color: var(--menu-text-open-dark);
+}
+
+.dark-mode .shuffle-item-content i,
+.dark-mode .tool-item label i {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-mode .shuffle-menu.visible .shuffle-item-content i,
+.dark-mode .tools-menu.visible .tool-item label i {
+    color: var(--menu-icon-open-dark);
+}
+
+.dark-mode .shuffle-item:hover .shuffle-item-content i,
+.dark-mode .tool-item:hover label i {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.dark-mode .shuffle-menu.visible .shuffle-item:hover .shuffle-item-content i,
+.dark-mode .tools-menu.visible .tool-item:hover label i {
+    color: rgba(255, 255, 255, 1);
+}
+
+.dark-mode .tools-menu-title {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.dark-mode .tools-menu.visible .tools-menu-title {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.dark-mode .tool-empty-state {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-mode .tools-menu.visible .tool-empty-state {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-mode .tool-empty-state i {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.dark-mode .tools-menu.visible .tool-empty-state i {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Shuffle button in dark mode: Keep dark with light icon when menu open */
+.dark-mode .shuffle-btn.active[aria-expanded="true"] {
+    background: var(--menu-bg-open-dark);
+    border-color: var(--menu-border-dark);
+    color: rgba(255, 255, 255, 0.95);
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        0 2px 6px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Dark mode hover backgrounds */
+.dark-mode .shuffle-menu.visible .shuffle-item:hover,
+.dark-mode .tools-menu.visible .tool-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Dark mode toggle switches when menu is open */
+.dark-mode .shuffle-menu.visible .toggle-switch,
+.dark-mode .tools-menu.visible .tool-item .toggle-switch {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .shuffle-menu.visible .toggle-slider,
+.dark-mode .tools-menu.visible .tool-item .toggle-slider {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+/* Dark mode tools menu header border */
+.dark-mode .tools-menu.visible .tools-menu-header {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
 }
 
 /* ── Code blocks: Deep glass tint ── */
