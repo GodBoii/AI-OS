@@ -1085,6 +1085,241 @@ body:not(.dark-mode) .file-card > div > div > div[style*="background: var(--bg-t
     border-color: #e2e8f0 !important;
 }
 
+/* File Card Metadata Text */
+body:not(.dark-mode) .file-card strong {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-card code {
+    color: #0f172a !important;
+    background: #f1f5f9 !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+}
+
+/* ===== MEMORY SECTION LIGHT MODE FIXES ===== */
+
+/* Memory Entry Card (Add/Edit Form) */
+body:not(.dark-mode) .memory-entry-card {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+body:not(.dark-mode) .memory-entry-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+body:not(.dark-mode) .memory-entry-toggle {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-entry-toggle:hover {
+    background: #f8fafc !important;
+}
+
+body:not(.dark-mode) .memory-entry-toggle-left i {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-entry-chevron {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-entry-title {
+    color: #0f172a !important;
+}
+
+/* Memory Form Inputs */
+body:not(.dark-mode) .memory-form .form-group label {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-form .form-group textarea,
+body:not(.dark-mode) .memory-form .form-group input {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-form .form-group textarea::placeholder,
+body:not(.dark-mode) .memory-form .form-group input::placeholder {
+    color: #94a3b8 !important;
+}
+
+body:not(.dark-mode) .memory-form .form-group textarea:focus,
+body:not(.dark-mode) .memory-form .form-group input:focus {
+    border-color: #0f172a !important;
+    background: #ffffff !important;
+}
+
+/* Memory Compact Card */
+body:not(.dark-mode) .memory-compact-card {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+body:not(.dark-mode) .memory-compact-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+body:not(.dark-mode) .memory-card-collapsed:hover {
+    background: #f8fafc !important;
+}
+
+body:not(.dark-mode) .memory-expand-icon {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-preview-content {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-timestamp {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-timestamp i {
+    color: #64748b !important;
+}
+
+/* Memory Action Buttons */
+body:not(.dark-mode) .memory-action-btn {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .memory-action-btn:hover {
+    background: #f8fafc !important;
+    border-color: #0f172a !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-delete-btn:hover {
+    border-color: #ef4444 !important;
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.08) !important;
+}
+
+/* Memory Expanded Details */
+body:not(.dark-mode) .memory-expanded-content {
+    border-top-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .memory-detail-label {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-detail-value {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-detail-value.code {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+}
+
+/* Memory Topic Tags */
+body:not(.dark-mode) .topic-tag {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+    border-color: #93c5fd !important;
+}
+
+/* Memory Confirmation Modal */
+body:not(.dark-mode) .memory-confirm-modal {
+    background: rgba(15, 23, 42, 0.5) !important;
+}
+
+body:not(.dark-mode) .memory-confirm-content {
+    background: #ffffff !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+}
+
+body:not(.dark-mode) .memory-confirm-icon {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+}
+
+body:not(.dark-mode) .memory-confirm-title {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-confirm-message {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-confirm-btn-cancel {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-confirm-btn-cancel:hover {
+    background: #e2e8f0 !important;
+}
+
+body:not(.dark-mode) .memory-confirm-btn-delete {
+    background: #ef4444 !important;
+    color: #ffffff !important;
+}
+
+body:not(.dark-mode) .memory-confirm-btn-delete:hover {
+    background: #dc2626 !important;
+}
+
+/* ===== FILE PREVIEW AREAS (GRID VIEW) ===== */
+body:not(.dark-mode) .file-preview-content {
+    background-color: #f8fafc !important;
+    border-bottom-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-preview-content i {
+    color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-preview-text {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-preview-text span {
+    color: #94a3b8 !important;
+}
+
+/* File Card Bottom Section (Grid View) */
+body:not(.dark-mode) .file-card > div[style*="padding: 12px"] {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .file-card > div[style*="padding: 12px"] i {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-card > div[style*="padding: 12px"] h4 {
+    color: #0f172a !important;
+}
+
+/* File Card List View Metadata */
+body:not(.dark-mode) .file-card > div > div > div[style*="background: var(--bg-tertiary)"] {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+body:not(.dark-mode) .file-card > div > div > div[style*="background: var(--bg-tertiary)"] strong {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-card > div > div > div[style*="background: var(--bg-tertiary)"] code {
+    color: #0f172a !important;
+    background: #ffffff !important;
+}
+
 body:not(.dark-mode) .file-card > div > div > div[style*="background: var(--bg-tertiary)"] > div {
     color: #64748b !important;
 }
@@ -1213,4 +1448,395 @@ body:not(.dark-mode) .file-card i.fa-file-pdf,
 body:not(.dark-mode) .file-card i.fa-external-link-alt,
 body:not(.dark-mode) .file-card i.fa-trash {
     color: inherit !important;
+}
+
+
+/* ===== ADDITIONAL INLINE STYLE OVERRIDES FOR LIGHT MODE ===== */
+
+/* Override inline styles that use CSS variables in file cards */
+body:not(.dark-mode) .file-card [style*="var(--elevated-bg)"] {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--bg-tertiary)"] {
+    background: #f8fafc !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--text-secondary)"] {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--text-primary)"] {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--hover-bg)"] {
+    background: #f1f5f9 !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--border-color)"] {
+    border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-card [style*="var(--danger-color)"] {
+    color: #dc2626 !important;
+}
+
+/* File preview gradient overlay fix */
+body:not(.dark-mode) .file-preview-text + div[style*="linear-gradient"] {
+    background: linear-gradient(transparent, #f8fafc) !important;
+}
+
+/* Memory card inline style overrides */
+body:not(.dark-mode) .memory-compact-card [style*="var(--elevated-bg)"] {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--hover-bg)"] {
+    background: #f8fafc !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--border-color)"] {
+    border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--text-color)"] {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--text-secondary)"] {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--accent-color)"] {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-compact-card [style*="var(--code-bg)"] {
+    background: #f8fafc !important;
+}
+
+/* Memory entry card inline style overrides */
+body:not(.dark-mode) .memory-entry-card [style*="var(--elevated-bg)"] {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--hover-bg)"] {
+    background: #f8fafc !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--border-color)"] {
+    border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--input-bg)"] {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--text-color)"] {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--accent-color)"] {
+    color: #0f172a !important;
+    border-color: #0f172a !important;
+}
+
+body:not(.dark-mode) .memory-entry-card [style*="var(--accent-muted)"] {
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Ensure all file card icons are visible */
+body:not(.dark-mode) .file-card i.fa-file,
+body:not(.dark-mode) .file-card i.fa-image,
+body:not(.dark-mode) .file-card i.fa-file-alt,
+body:not(.dark-mode) .file-card i.fa-file-video,
+body:not(.dark-mode) .file-card i.fa-file-audio,
+body:not(.dark-mode) .file-card i.fa-file-pdf,
+body:not(.dark-mode) .file-card i.fa-external-link-alt,
+body:not(.dark-mode) .file-card i.fa-trash {
+    color: inherit !important;
+}
+
+/* Ensure all memory card icons are visible */
+body:not(.dark-mode) .memory-compact-card i.fa-chevron-right,
+body:not(.dark-mode) .memory-compact-card i.fa-clock,
+body:not(.dark-mode) .memory-compact-card i.fa-pen,
+body:not(.dark-mode) .memory-compact-card i.fa-trash,
+body:not(.dark-mode) .memory-entry-card i.fa-plus-circle {
+    color: inherit !important;
+}
+
+/* Fix for file card hover states with inline styles */
+body:not(.dark-mode) .file-card:hover [style*="var(--elevated-bg)"] {
+    background: #f8fafc !important;
+}
+
+/* Fix for memory card hover states with inline styles */
+body:not(.dark-mode) .memory-compact-card:hover [style*="var(--elevated-bg)"] {
+    background: #f8fafc !important;
+}
+
+/* Empty state enhancements */
+body:not(.dark-mode) .empty-state::before {
+    opacity: 0.3 !important;
+}
+
+/* Search and filter inputs in Files/Memory sections */
+body:not(.dark-mode) #user-files-search,
+body:not(.dark-mode) #database-project-filter {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) #user-files-search::placeholder,
+body:not(.dark-mode) #database-project-filter::placeholder {
+    color: #94a3b8 !important;
+}
+
+body:not(.dark-mode) #user-files-search:focus,
+body:not(.dark-mode) #database-project-filter:focus {
+    border-color: #0f172a !important;
+    background: #ffffff !important;
+}
+
+/* Upload and action buttons in Files section */
+body:not(.dark-mode) #user-files-upload-btn,
+body:not(.dark-mode) #open-files-cache-folder-btn {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) #user-files-upload-btn:hover,
+body:not(.dark-mode) #open-files-cache-folder-btn:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+/* View mode toggle buttons */
+body:not(.dark-mode) .view-mode-toggle button {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .view-mode-toggle button:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .view-mode-toggle button.active {
+    background: #0f172a !important;
+    border-color: #0f172a !important;
+    color: #ffffff !important;
+}
+
+/* Refresh button in Memory section */
+body:not(.dark-mode) #refresh-memories-btn {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) #refresh-memories-btn:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+/* Add Memory button */
+body:not(.dark-mode) #add-memory-btn {
+    background: #0f172a !important;
+    border-color: #0f172a !important;
+    color: #ffffff !important;
+}
+
+body:not(.dark-mode) #add-memory-btn:hover {
+    background: #1e293b !important;
+    border-color: #1e293b !important;
+}
+
+/* Memory form submit button */
+body:not(.dark-mode) .memory-form button[type="submit"] {
+    background: #0f172a !important;
+    border-color: #0f172a !important;
+    color: #ffffff !important;
+}
+
+body:not(.dark-mode) .memory-form button[type="submit"]:hover {
+    background: #1e293b !important;
+    border-color: #1e293b !important;
+}
+
+/* Memory form cancel button */
+body:not(.dark-mode) .memory-form button[type="button"] {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .memory-form button[type="button"]:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+}
+
+/* Fix for code elements in memory details */
+body:not(.dark-mode) .memory-detail-value code,
+body:not(.dark-mode) .file-card code {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace !important;
+}
+
+/* Ensure proper contrast for all text in cards */
+body:not(.dark-mode) .file-card *:not(i):not(svg),
+body:not(.dark-mode) .memory-compact-card *:not(i):not(svg),
+body:not(.dark-mode) .memory-entry-card *:not(i):not(svg) {
+    color: inherit;
+}
+
+/* Override any remaining dark backgrounds */
+body:not(.dark-mode) .file-card [style*="background-color: var(--bg-tertiary)"],
+body:not(.dark-mode) .file-card [style*="background: var(--bg-tertiary)"] {
+    background: #f8fafc !important;
+    background-color: #f8fafc !important;
+}
+
+body:not(.dark-mode) .file-card [style*="background-color: var(--elevated-bg)"],
+body:not(.dark-mode) .file-card [style*="background: var(--elevated-bg)"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+
+/* Fix for file preview text container */
+body:not(.dark-mode) .file-preview-text {
+    color: #64748b !important;
+    opacity: 1 !important;
+}
+
+body:not(.dark-mode) .file-preview-text span {
+    color: #94a3b8 !important;
+    opacity: 1 !important;
+}
+
+/* Ensure borders are visible */
+body:not(.dark-mode) .file-card [style*="border: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-compact-card [style*="border: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-entry-card [style*="border: 1px solid var(--border-color)"] {
+    border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-card [style*="border-bottom: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-compact-card [style*="border-bottom: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-entry-card [style*="border-bottom: 1px solid var(--border-color)"] {
+    border-bottom-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-card [style*="border-top: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-compact-card [style*="border-top: 1px solid var(--border-color)"],
+body:not(.dark-mode) .memory-entry-card [style*="border-top: 1px solid var(--border-color)"] {
+    border-top-color: #cbd5e1 !important;
+}
+
+/* Final catch-all for any missed inline styles */
+body:not(.dark-mode) .file-card div,
+body:not(.dark-mode) .file-card span,
+body:not(.dark-mode) .memory-compact-card div,
+body:not(.dark-mode) .memory-compact-card span,
+body:not(.dark-mode) .memory-entry-card div,
+body:not(.dark-mode) .memory-entry-card span {
+    /* Ensure text is readable */
+}
+
+/* Specific fix for file icon containers in list view */
+body:not(.dark-mode) .file-card > div > div > div[style*="width: 38px"] {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-mode) .file-card > div > div > div[style*="width: 38px"] i {
+    color: #0f172a !important;
+}
+
+/* Specific fix for metadata grid in list view */
+body:not(.dark-mode) .file-card > div > div > div[style*="display: flex; flex-wrap: wrap"] {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+body:not(.dark-mode) .file-card > div > div > div[style*="display: flex; flex-wrap: wrap"] strong {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .file-card > div > div > div[style*="display: flex; flex-wrap: wrap"] code {
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+/* Ensure all divs with inline background styles are overridden */
+body:not(.dark-mode) .file-card div[style*="background:"],
+body:not(.dark-mode) .file-card div[style*="background-color:"] {
+    /* Let specific rules above handle this */
+}
+
+/* Memory detail grid styling */
+body:not(.dark-mode) .memory-detail-grid {
+    /* Ensure proper spacing and visibility */
+}
+
+body:not(.dark-mode) .memory-detail-grid .memory-detail-section {
+    /* Ensure proper visibility */
+}
+
+/* File card action buttons in grid view */
+body:not(.dark-mode) .file-card > div[style*="padding: 12px"] button {
+    /* Ensure buttons are visible and styled correctly */
+}
+
+/* Memory card action buttons */
+body:not(.dark-mode) .memory-card-actions button {
+    /* Ensure buttons are visible and styled correctly */
+}
+
+/* Hover states for inline styled elements */
+body:not(.dark-mode) .file-card:hover div[style*="var(--hover-bg)"] {
+    background: #e2e8f0 !important;
+}
+
+body:not(.dark-mode) .memory-compact-card:hover div[style*="var(--hover-bg)"] {
+    background: #e2e8f0 !important;
+}
+
+/* Focus states for form inputs */
+body:not(.dark-mode) .memory-form input:focus,
+body:not(.dark-mode) .memory-form textarea:focus {
+    outline: none !important;
+    border-color: #0f172a !important;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Scrollbar for code blocks in memory details */
+body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+}
+
+body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+    border-radius: 3px !important;
+}
+
+body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8 !important;
 }
