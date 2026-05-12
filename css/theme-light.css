@@ -230,7 +230,7 @@ body:not(.dark-mode) .subscription-status-badge {
 }
 
 body:not(.dark-mode) .subscription-status-badge.status-free {
-    color: #0369a1 !important;
+    color: #0f172a !important;
 }
 
 body:not(.dark-mode) .subscription-status-badge.status-pro {
@@ -581,8 +581,8 @@ body:not(.dark-mode) .pricing-plan-card.is-elite {
 }
 
 body:not(.dark-mode) .pricing-plan-card.is-current-plan {
-    border-color: #38bdf8 !important;
-    background: #f0f9ff !important;
+    border-color: #0f172a !important;
+    background: #f1f5f9 !important;
 }
 
 /* ===== MISC ELEMENTS ===== */
@@ -601,8 +601,8 @@ body:not(.dark-mode) .badge {
 }
 
 body:not(.dark-mode) .badge-primary {
-    background: #dbeafe !important;
-    color: #1e40af !important;
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
 }
 
 body:not(.dark-mode) .badge-success {
@@ -714,12 +714,12 @@ body:not(.dark-mode) .session-item:hover {
 }
 
 body:not(.dark-mode) .session-item.selected {
-    background: #e0e7ff !important;
-    border-left: 3px solid #4f46e5 !important;
+    background: #e2e8f0 !important;
+    border-left: 3px solid #0f172a !important;
 }
 
 body:not(.dark-mode) .session-item.selected::before {
-    background: #4f46e5 !important;
+    background: #0f172a !important;
 }
 
 body:not(.dark-mode) .session-item.selected .session-content h3 {
@@ -737,12 +737,12 @@ body:not(.dark-mode) .session-meta {
 
 /* ===== SELECTION CONTROLS ===== */
 body:not(.dark-mode) .use-selected-btn {
-    background: #4f46e5 !important;
+    background: #0f172a !important;
     color: #ffffff !important;
 }
 
 body:not(.dark-mode) .use-selected-btn:hover {
-    background: #4338ca !important;
+    background: #1e293b !important;
 }
 
 body:not(.dark-mode) .clear-selection-btn {
@@ -861,7 +861,7 @@ body:not(.dark-mode) .tool-log-action {
 }
 
 body:not(.dark-mode) .tool-log-icon {
-    color: #4f46e5 !important;
+    color: #0f172a !important;
 }
 
 body:not(.dark-mode) .tool-log-details {
@@ -900,7 +900,7 @@ body:not(.dark-mode) .conversation-turn {
 }
 
 body:not(.dark-mode) .turn-user-message .message-label {
-    color: #4f46e5 !important;
+    color: #0f172a !important;
 }
 
 body:not(.dark-mode) .turn-user-message .message-text {
@@ -1507,9 +1507,9 @@ body:not(.dark-mode) .memory-detail-value.code::-webkit-scrollbar-thumb {
 
 /* Memory Topic Tags */
 body:not(.dark-mode) .topic-tag {
-    background: #dbeafe !important;
-    color: #1e40af !important;
-    border-color: #93c5fd !important;
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    border-color: #94a3b8 !important;
 }
 
 /* Memory Confirmation Modal */
