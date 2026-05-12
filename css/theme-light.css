@@ -980,8 +980,13 @@ body:not(.dark-mode) .file-card:hover {
 
 /* Preview Mode (Grid View) */
 body:not(.dark-mode) .file-preview-content {
-    background-color: #f8fafc !important;
+    /* Don't override background-color if background-image is set (for image previews) */
     border-bottom-color: #cbd5e1 !important;
+}
+
+/* Only apply background color when there's no background-image (non-image files) */
+body:not(.dark-mode) .file-preview-content:not([style*="background-image"]) {
+    background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .file-preview-content i {
@@ -1276,8 +1281,13 @@ body:not(.dark-mode) .memory-confirm-btn-delete:hover {
 
 /* ===== FILE PREVIEW AREAS (GRID VIEW) ===== */
 body:not(.dark-mode) .file-preview-content {
-    background-color: #f8fafc !important;
+    /* Don't override background-color if background-image is set (for image previews) */
     border-bottom-color: #cbd5e1 !important;
+}
+
+/* Only apply background color when there's no background-image (non-image files) */
+body:not(.dark-mode) .file-preview-content:not([style*="background-image"]) {
+    background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .file-preview-content i {
@@ -1454,12 +1464,13 @@ body:not(.dark-mode) .file-card i.fa-trash {
 /* ===== ADDITIONAL INLINE STYLE OVERRIDES FOR LIGHT MODE ===== */
 
 /* Override inline styles that use CSS variables in file cards */
+/* IMPORTANT: Only override background-color, NOT background shorthand, to preserve background-image */
 body:not(.dark-mode) .file-card [style*="var(--elevated-bg)"] {
-    background: #ffffff !important;
+    background-color: #ffffff !important;
 }
 
 body:not(.dark-mode) .file-card [style*="var(--bg-tertiary)"] {
-    background: #f8fafc !important;
+    background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .file-card [style*="var(--text-secondary)"] {
@@ -1471,7 +1482,7 @@ body:not(.dark-mode) .file-card [style*="var(--text-primary)"] {
 }
 
 body:not(.dark-mode) .file-card [style*="var(--hover-bg)"] {
-    background: #f1f5f9 !important;
+    background-color: #f1f5f9 !important;
 }
 
 body:not(.dark-mode) .file-card [style*="var(--border-color)"] {
@@ -1489,11 +1500,11 @@ body:not(.dark-mode) .file-preview-text + div[style*="linear-gradient"] {
 
 /* Memory card inline style overrides */
 body:not(.dark-mode) .memory-compact-card [style*="var(--elevated-bg)"] {
-    background: #ffffff !important;
+    background-color: #ffffff !important;
 }
 
 body:not(.dark-mode) .memory-compact-card [style*="var(--hover-bg)"] {
-    background: #f8fafc !important;
+    background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .memory-compact-card [style*="var(--border-color)"] {
@@ -1513,16 +1524,16 @@ body:not(.dark-mode) .memory-compact-card [style*="var(--accent-color)"] {
 }
 
 body:not(.dark-mode) .memory-compact-card [style*="var(--code-bg)"] {
-    background: #f8fafc !important;
+    background-color: #f8fafc !important;
 }
 
 /* Memory entry card inline style overrides */
 body:not(.dark-mode) .memory-entry-card [style*="var(--elevated-bg)"] {
-    background: #ffffff !important;
+    background-color: #ffffff !important;
 }
 
 body:not(.dark-mode) .memory-entry-card [style*="var(--hover-bg)"] {
-    background: #f8fafc !important;
+    background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .memory-entry-card [style*="var(--border-color)"] {
@@ -1530,7 +1541,7 @@ body:not(.dark-mode) .memory-entry-card [style*="var(--border-color)"] {
 }
 
 body:not(.dark-mode) .memory-entry-card [style*="var(--input-bg)"] {
-    background: #ffffff !important;
+    background-color: #ffffff !important;
 }
 
 body:not(.dark-mode) .memory-entry-card [style*="var(--text-color)"] {
@@ -1703,15 +1714,14 @@ body:not(.dark-mode) .memory-entry-card *:not(i):not(svg) {
 }
 
 /* Override any remaining dark backgrounds */
+/* IMPORTANT: Only override background-color, NOT background shorthand, to preserve background-image */
 body:not(.dark-mode) .file-card [style*="background-color: var(--bg-tertiary)"],
 body:not(.dark-mode) .file-card [style*="background: var(--bg-tertiary)"] {
-    background: #f8fafc !important;
     background-color: #f8fafc !important;
 }
 
 body:not(.dark-mode) .file-card [style*="background-color: var(--elevated-bg)"],
 body:not(.dark-mode) .file-card [style*="background: var(--elevated-bg)"] {
-    background: #ffffff !important;
     background-color: #ffffff !important;
 }
 
