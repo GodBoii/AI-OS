@@ -633,6 +633,280 @@ body:not(.dark-mode) .tooltip::after {
     border-bottom-color: #334155 !important;
 }
 
+/* ===== INFO TOOLTIP (SESSION HISTORY) ===== */
+body:not(.dark-mode) .info-tooltip {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+body:not(.dark-mode) .info-tooltip-arrow {
+    border-bottom-color: #ffffff !important;
+}
+
+body:not(.dark-mode) .info-tooltip-content {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .info-tooltip-content p {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .info-tooltip-content strong {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .info-tooltip-content p:last-child {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .info-tooltip-list li {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .info-tooltip-list li strong {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-info-btn {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .session-history-info-btn:hover {
+    color: #0f172a !important;
+    background: #f1f5f9 !important;
+}
+
+/* ===== REASONING HEADER & SUMMARY ===== */
+body:not(.dark-mode) .reasoning-summary {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .reasoning-summary .summary-text {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .reasoning-summary .summary-chevron {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .thinking-indicator {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .thinking-indicator .summary-text {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .thinking-indicator.steps-done .summary-text {
+    color: #475569 !important;
+}
+
+/* ===== CHAT SELECTION (SESSION ITEMS) ===== */
+body:not(.dark-mode) .session-item {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-item:hover {
+    background: #f1f5f9 !important;
+}
+
+body:not(.dark-mode) .session-item.selected {
+    background: #e0e7ff !important;
+    border-left: 3px solid #4f46e5 !important;
+}
+
+body:not(.dark-mode) .session-item.selected::before {
+    background: #4f46e5 !important;
+}
+
+body:not(.dark-mode) .session-item.selected .session-content h3 {
+    color: #0f172a !important;
+    font-weight: var(--font-semibold) !important;
+}
+
+body:not(.dark-mode) .session-content h3 {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-meta {
+    color: #64748b !important;
+}
+
+/* ===== SELECTION CONTROLS ===== */
+body:not(.dark-mode) .use-selected-btn {
+    background: #4f46e5 !important;
+    color: #ffffff !important;
+}
+
+body:not(.dark-mode) .use-selected-btn:hover {
+    background: #4338ca !important;
+}
+
+body:not(.dark-mode) .clear-selection-btn {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .clear-selection-btn:hover {
+    color: #0f172a !important;
+    background: #f1f5f9 !important;
+}
+
+/* ===== SESSION HISTORY VIEWER ===== */
+body:not(.dark-mode) .session-history-viewer {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .session-history-title {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-content {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-content .message-text {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-content .turn-user-message .message-text {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-content .turn-assistant-response .message-text {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-history-content .thinking-indicator .summary-text {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .session-history-content .thinking-indicator .summary-chevron {
+    color: #475569 !important;
+}
+
+/* ===== CONTEXT WINDOW ===== */
+body:not(.dark-mode) .context-window {
+    background: #ffffff !important;
+}
+
+body:not(.dark-mode) .context-header h2 {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .context-search input {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .context-search input::placeholder {
+    color: #94a3b8 !important;
+}
+
+body:not(.dark-mode) .context-search i {
+    color: #64748b !important;
+}
+
+/* ===== SESSION ACTION BUTTONS ===== */
+body:not(.dark-mode) .session-action-btn {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .session-action-btn:hover {
+    color: #0f172a !important;
+    background: #f1f5f9 !important;
+}
+
+/* ===== SESSION MENU ===== */
+body:not(.dark-mode) .session-menu {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+body:not(.dark-mode) .session-menu-item {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .session-menu-item:hover {
+    background: #f1f5f9 !important;
+}
+
+body:not(.dark-mode) .session-menu-item i {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .session-menu-item:hover i {
+    color: #0f172a !important;
+}
+
+/* ===== DETAILED LOGS & TOOL LOGS ===== */
+body:not(.dark-mode) .detailed-logs {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .log-block {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tool-log-entry {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tool-log-action {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tool-log-icon {
+    color: #4f46e5 !important;
+}
+
+body:not(.dark-mode) .tool-log-details {
+    color: #0f172a !important;
+}
+
+/* ===== MESSAGE CONTENT ===== */
+body:not(.dark-mode) .message-bot .message-content {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .message-bot .message-content h1,
+body:not(.dark-mode) .message-bot .message-content h2,
+body:not(.dark-mode) .message-bot .message-content h3,
+body:not(.dark-mode) .message-bot .message-content h4,
+body:not(.dark-mode) .message-bot .message-content h5,
+body:not(.dark-mode) .message-bot .message-content h6 {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .message-bot .message-content p {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .message-bot .message-content li {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .message-bot .message-content strong {
+    color: #0f172a !important;
+}
+
+/* ===== CONVERSATION TURN ===== */
+body:not(.dark-mode) .conversation-turn {
+    border-bottom-color: #e2e8f0 !important;
+}
+
+body:not(.dark-mode) .turn-user-message .message-label {
+    color: #4f46e5 !important;
+}
+
+body:not(.dark-mode) .turn-user-message .message-text {
+    color: #0f172a !important;
+}
+
 /* ===== SCROLLBAR ===== */
 body:not(.dark-mode) ::-webkit-scrollbar-thumb {
     background: rgba(15, 23, 42, 0.20) !important;
