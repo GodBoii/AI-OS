@@ -27,6 +27,13 @@
     animation: modalSlideIn var(--anim-slow) var(--easing-fluid);
 }
 
+/* Light mode: Ensure window has solid opaque background */
+body:not(.dark-mode) .floating-window {
+    background-color: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
 .floating-window.hidden {
     opacity: 0;
     visibility: hidden;
@@ -130,6 +137,11 @@
     padding: 24px 0;
 }
 
+/* Light mode: Ensure sidebar has proper background */
+body:not(.dark-mode) .tabs-sidebar {
+    background-color: #F5F3EB;
+}
+
 .tab-btn {
     display: flex;
     align-items: center;
@@ -146,6 +158,19 @@
     transition: all var(--anim-ios-normal) var(--easing-ios-spring);
     border-radius: 8px;
     position: relative;
+}
+
+/* Light mode: Ensure tab buttons have dark text */
+body:not(.dark-mode) .tab-btn {
+    color: #475569;
+}
+
+body:not(.dark-mode) .tab-btn:hover {
+    color: #0f172a;
+}
+
+body:not(.dark-mode) .tab-btn.active {
+    color: #0f172a;
 }
 
 .tab-btn::before {
@@ -171,6 +196,11 @@
     font-size: 16px;
     text-align: center;
     transition: transform var(--anim-ios-fast) var(--easing-ios-spring);
+}
+
+/* Light mode: Ensure icons inherit proper color */
+body:not(.dark-mode) .tab-btn i {
+    color: inherit;
 }
 
 .tab-btn:hover {
@@ -199,6 +229,11 @@
     padding: 32px 40px;
     overflow-y: auto;
     background-color: var(--elevated-bg);
+}
+
+/* Light mode: Ensure content area has proper background */
+body:not(.dark-mode) .tab-content-area {
+    background-color: #ffffff;
 }
 
 .tab-content {
@@ -1049,6 +1084,12 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     background-color: var(--elevated-bg);
 }
 
+/* Light mode: Ensure user identity card has proper styling */
+body:not(.dark-mode) .user-identity-card {
+    background-color: #F5F3EB;
+    border-color: #e2e8f0;
+}
+
 .dark-mode .window-header {
     border-bottom: none !important;
 }
@@ -1116,3 +1157,93 @@ NEW STYLES FOR AVATAR & USER IDENTITY CARD
     background-color: var(--hover-bg);
 }
 
+
+
+/* ================================================================
+   LIGHT MODE FIXES - Account Window Visibility & Transparency
+   ================================================================ */
+
+/* Ensure floating window has solid background in light mode */
+body:not(.dark-mode) .floating-window {
+    background-color: #ffffff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Ensure sidebar has proper background in light mode */
+body:not(.dark-mode) .tabs-sidebar {
+    background-color: #F5F3EB !important;
+}
+
+/* Ensure tab buttons and their children have proper colors in light mode */
+body:not(.dark-mode) .tab-btn {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .tab-btn i {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .tab-btn span {
+    color: #475569 !important;
+}
+
+/* Hover state for tab buttons in light mode */
+body:not(.dark-mode) .tab-btn:hover {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tab-btn:hover i {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tab-btn:hover span {
+    color: #0f172a !important;
+}
+
+/* Active state for tab buttons in light mode */
+body:not(.dark-mode) .tab-btn.active {
+    color: #0f172a !important;
+    background-color: rgba(45, 55, 72, 0.08) !important;
+}
+
+body:not(.dark-mode) .tab-btn.active i {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tab-btn.active span {
+    color: #0f172a !important;
+}
+
+/* Ensure content area has proper background in light mode */
+body:not(.dark-mode) .tab-content-area {
+    background-color: #ffffff !important;
+}
+
+/* Ensure window header has proper background in light mode */
+body:not(.dark-mode) .window-header {
+    background-color: #ffffff !important;
+}
+
+/* Ensure user identity card has proper styling in light mode */
+body:not(.dark-mode) .user-identity-card {
+    background-color: #F5F3EB !important;
+    border-color: #e2e8f0 !important;
+}
+
+/* Ensure all text elements in light mode have proper colors */
+body:not(.dark-mode) .window-title {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .tab-heading {
+    color: #0f172a !important;
+}
+
+body:not(.dark-mode) .close-btn {
+    color: #475569 !important;
+}
+
+body:not(.dark-mode) .close-btn:hover {
+    color: #0f172a !important;
+}
