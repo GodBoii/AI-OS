@@ -558,6 +558,54 @@
     color: var(--text-secondary);
 }
 
+.reasoning-thought-block {
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+    animation: fadeIn var(--anim-normal) var(--easing-standard) forwards;
+}
+
+.reasoning-thought-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.reasoning-thought-icon {
+    font-size: 0.95rem;
+    color: var(--accent-color);
+}
+
+.reasoning-thought-content {
+    margin: 0;
+    max-height: 260px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text-color);
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    scrollbar-width: thin;
+}
+
+.dark-mode .reasoning-thought-block {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
+}
+
 .tool-log-icon {
     color: var(--accent-color);
     font-size: 1rem;
