@@ -43,6 +43,7 @@ const validReceiveChannels = [
     'socket-status',
     'socket-connection-status',
     'agent-step',
+    'reasoning-step',
     'image_generated',  // CRITICAL FIX: Allow image_generated events from main process
     'media_generated',
     'webview-created',

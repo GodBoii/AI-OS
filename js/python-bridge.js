@@ -176,6 +176,9 @@ class PythonBridge {
         this.socket.on('agent_step', (data) => {
             this._sendToRenderer('agent-step', data);
         });
+        this.socket.on('reasoning_step', (data) => {
+            this._sendToRenderer('reasoning-step', data);
+        });
         this.socket.on('error', (error) => {
             console.error('Socket.IO error:', error.message || error);
             this._sendToRenderer('socket-error', error);
