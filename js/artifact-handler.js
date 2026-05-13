@@ -43,10 +43,6 @@ class ArtifactHandler {
                         <button class="download-artifact-btn" title="Download">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </button>
-                        <button class="deploy-artifact-btn" title="Deploy HTML Site">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
-                            <span class="deploy-btn-text">Deploy</span>
-                        </button>
                         <button class="close-artifact-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
@@ -62,7 +58,6 @@ class ArtifactHandler {
         container.querySelector('.close-artifact-btn').addEventListener('click', () => this.hideArtifact());
         container.querySelector('.copy-artifact-btn').addEventListener('click', () => this.copyArtifactContent());
         container.querySelector('.download-artifact-btn').addEventListener('click', () => this.downloadArtifact());
-        container.querySelector('.deploy-artifact-btn').addEventListener('click', () => this.deployCurrentArtifact());
 
         this.viewToggleContainer = container.querySelector('.artifact-view-toggle');
         this.viewToggleButtons = Array.from(this.viewToggleContainer.querySelectorAll('.view-toggle-btn'));
@@ -220,7 +215,7 @@ class ArtifactHandler {
                 titleEl.textContent = 'Interactive Browser';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'none';
-                deployBtn.style.display = 'none';
+                if (deployBtn) deployBtn.style.display = 'none';
                 this.renderBrowserView(data);
                 currentArtifactId = this.browserArtifactId;
                 this.artifacts.set(currentArtifactId, { content: data, type });
@@ -230,7 +225,7 @@ class ArtifactHandler {
                 titleEl.textContent = options.title || 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
-                deployBtn.style.display = 'none';
+                if (deployBtn) deployBtn.style.display = 'none';
                 if (data === null) {
                     contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading image...</span></div>';
                 } else {
@@ -242,7 +237,7 @@ class ArtifactHandler {
                 titleEl.textContent = options.title || 'Video Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
-                deployBtn.style.display = 'none';
+                if (deployBtn) deployBtn.style.display = 'none';
                 if (data === null) {
                     contentDiv.innerHTML = '<div class="artifact-loading"><span>Loading video...</span></div>';
                 } else {
@@ -254,7 +249,7 @@ class ArtifactHandler {
                 titleEl.textContent = options.title || 'Diagram Viewer';
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
-                deployBtn.style.display = 'none';
+                if (deployBtn) deployBtn.style.display = 'none';
                 if (viewToggle) {
                     viewToggle.classList.remove('hidden');
                 }
@@ -279,7 +274,7 @@ class ArtifactHandler {
                 copyBtn.style.display = 'inline-flex';
                 downloadBtn.style.display = 'inline-flex';
                 const language = options.language || this.inferLanguageFromType(type);
-                deployBtn.style.display = this.isDeployableLanguage(language) ? 'inline-flex' : 'none';
+                if (deployBtn) deployBtn.style.display = 'none';
                 const viewModeForCode = this.resolveInitialCodeViewMode(language, options.defaultView);
                 const shouldShowToggle = this.supportsPreviewMode(language);
                 if (shouldShowToggle && viewToggle) {
@@ -1449,6 +1444,97 @@ class ArtifactHandler {
         return renderNode(root);
     }
 
+    createPreviewBlobUrl(files, selectedPaths = null) {
+        const selectedSet = selectedPaths
+            ? new Set(selectedPaths.map((item) => String(item || '').replace(/\\/g, '/').toLowerCase()))
+            : null;
+        const sourceFiles = (Array.isArray(files) ? files : [])
+            .filter((file) => file && (!selectedSet || selectedSet.has(String(file.path || '').toLowerCase())));
+        const blobs = new Map();
+        const createdUrls = [];
+
+        const decodeBase64 = (base64) => {
+            const binary = atob(String(base64 || ''));
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        };
+
+        for (const file of sourceFiles) {
+            const path = String(file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+            if (!path) continue;
+            const contentType = file.content_type || this.inferContentTypeFromPath(path);
+            const data = file.content_base64 !== undefined
+                ? decodeBase64(file.content_base64)
+                : String(file.content !== undefined ? file.content : '');
+            const blob = new Blob([data], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            createdUrls.push(url);
+            blobs.set(path.toLowerCase(), url);
+        }
+
+        const resolvePathRef = (fromPath, rawRef) => {
+            const ref = String(rawRef || '').trim();
+            if (!ref || /^(?:https?:)?\/\//i.test(ref) || /^(?:data|blob|mailto|tel):/i.test(ref) || ref.startsWith('#')) {
+                return rawRef;
+            }
+            const [pathPart, suffix = ''] = ref.split(/(?=[?#])/);
+            const dir = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1) : '';
+            const base = pathPart.startsWith('/') ? pathPart.slice(1) : `${dir}${pathPart}`;
+            const normalized = base.split('/').reduce((parts, part) => {
+                if (!part || part === '.') return parts;
+                if (part === '..') parts.pop();
+                else parts.push(part);
+                return parts;
+            }, []).join('/').toLowerCase();
+            return blobs.get(normalized) ? `${blobs.get(normalized)}${suffix}` : rawRef;
+        };
+
+        for (const file of sourceFiles) {
+            const path = String(file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+            if (!/\.css$/i.test(path) || file.content === undefined) continue;
+            const rewrittenCss = String(file.content || '')
+                .replace(/url\(\s*(['"]?)([^)"']+)\1\s*\)/gi, (_m, quote, ref) => `url(${quote || ''}${resolvePathRef(path, ref)}${quote || ''})`)
+                .replace(/@import\s+(?:url\()?\s*(['"])([^"']+)\1\s*\)?/gi, (_m, quote, ref) => `@import ${quote}${resolvePathRef(path, ref)}${quote}`);
+            const cssBlob = new Blob([rewrittenCss], { type: file.content_type || 'text/css' });
+            const cssUrl = URL.createObjectURL(cssBlob);
+            createdUrls.push(cssUrl);
+            blobs.set(path.toLowerCase(), cssUrl);
+        }
+
+        const htmlFile =
+            sourceFiles.find((file) => String(file.path || '').toLowerCase() === 'index.html')
+            || sourceFiles.find((file) => /\.html?$/i.test(String(file.path || '')));
+        if (!htmlFile) {
+            createdUrls.forEach((url) => URL.revokeObjectURL(url));
+            return { url: null, cleanup: () => {} };
+        }
+
+        const htmlPath = String(htmlFile.path || 'index.html').replace(/\\/g, '/').replace(/^\/+/, '');
+        const resolveRef = (rawRef) => {
+            const ref = String(rawRef || '').trim();
+            if (!ref || /^(?:https?:)?\/\//i.test(ref) || /^(?:data|blob|mailto|tel):/i.test(ref) || ref.startsWith('#')) {
+                return rawRef;
+            }
+            return resolvePathRef(htmlPath, rawRef);
+        };
+
+        const originalHtml = String(htmlFile.content || '');
+        const rewrittenHtml = originalHtml
+            .replace(/(<(?:link|script|img|source|video|audio)\b[^>]*?\s(?:href|src)=["'])([^"']+)(["'][^>]*>)/gi, (_m, before, ref, after) => `${before}${resolveRef(ref)}${after}`)
+            .replace(/url\(\s*(['"]?)([^)"']+)\1\s*\)/gi, (_m, quote, ref) => `url(${quote || ''}${resolveRef(ref)}${quote || ''})`);
+        const previewBlob = new Blob([rewrittenHtml], { type: 'text/html' });
+        const previewUrl = URL.createObjectURL(previewBlob);
+        createdUrls.push(previewUrl);
+
+        return {
+            url: previewUrl,
+            cleanup: () => createdUrls.forEach((url) => URL.revokeObjectURL(url))
+        };
+    }
+
     async confirmDeployPreview({ files, rootPrefix, candidateCount, proposedSlug }) {
         const modal = document.getElementById('deploy-preview-modal');
         if (!modal) return { files, slug: proposedSlug };
@@ -1480,18 +1566,27 @@ class ArtifactHandler {
         `;
 
         treeEl.innerHTML = `
-            <div class="deploy-editor-list">
-                ${files.map((file, index) => `
-                    <div class="deploy-editor-row" data-row-index="${index}">
-                        <input class="deploy-editor-include" type="checkbox" checked />
-                        <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
-                        <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
+            <div class="deploy-preview-workbench">
+                <div class="deploy-preview-files">
+                    <div class="deploy-editor-list">
+                        ${files.map((file, index) => `
+                            <div class="deploy-editor-row" data-row-index="${index}">
+                                <input class="deploy-editor-include" type="checkbox" checked />
+                                <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
+                                <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
+                            </div>
+                        `).join('')}
                     </div>
-                `).join('')}
+                    <div class="deploy-editor-tree"></div>
+                </div>
+                <div class="deploy-live-preview">
+                    <div class="deploy-live-preview-header">Live Preview</div>
+                    <iframe class="deploy-live-preview-frame" title="Deployment live preview" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+                </div>
             </div>
-            <div class="deploy-editor-tree"></div>
         `;
 
+        let previewCleanup = null;
         const rebuildTree = () => {
             const rows = Array.from(treeEl.querySelectorAll('.deploy-editor-row'));
             const selectedPaths = rows
@@ -1501,6 +1596,13 @@ class ArtifactHandler {
             const treeHtml = this.buildFileTreeMarkup(selectedPaths);
             const treeContainer = treeEl.querySelector('.deploy-editor-tree');
             if (treeContainer) treeContainer.innerHTML = treeHtml;
+            const frame = treeEl.querySelector('.deploy-live-preview-frame');
+            if (frame) {
+                if (previewCleanup) previewCleanup();
+                const preview = this.createPreviewBlobUrl(files, selectedPaths);
+                previewCleanup = preview.cleanup;
+                frame.src = preview.url || 'about:blank';
+            }
         };
 
         treeEl.querySelectorAll('.deploy-editor-include, .deploy-editor-path').forEach((el) => {
@@ -1542,6 +1644,10 @@ class ArtifactHandler {
         return new Promise((resolve) => {
             const cleanup = () => {
                 modal.classList.add('hidden');
+                if (previewCleanup) {
+                    previewCleanup();
+                    previewCleanup = null;
+                }
                 confirmBtn.removeEventListener('click', onConfirm);
                 cancelBtn.removeEventListener('click', onCancel);
                 closeBtn.removeEventListener('click', onCancel);
@@ -1785,7 +1891,8 @@ class ArtifactHandler {
         container.querySelector('.artifact-title').textContent = 'Sandbox Terminal';
         container.querySelector('.copy-artifact-btn').style.display = 'none';
         container.querySelector('.download-artifact-btn').style.display = 'none';
-        container.querySelector('.deploy-artifact-btn').style.display = 'none';
+        const deployBtn = container.querySelector('.deploy-artifact-btn');
+        if (deployBtn) deployBtn.style.display = 'none';
 
         contentDiv.innerHTML = `
             <div class="terminal-output">
