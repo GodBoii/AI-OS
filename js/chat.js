@@ -1350,6 +1350,15 @@ function setupIpcListeners() {
             const streamConversationId = getStreamConversationId(messageId);
             const messageDiv = getStreamMessageDiv(messageId);
 
+            if (data.reasoning_content && messageId && messageDiv) {
+                appendReasoningContent(messageId, {
+                    content: data.reasoning_content,
+                    agentName: data.agent_name || data.team_name || 'Aetheria_AI',
+                    delegationId: data.delegation_id || null,
+                    delegatedAgent: data.delegated_agent || null,
+                });
+            }
+
             if (done && messageId && messageDiv) {
 
                 const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
@@ -1372,11 +1381,13 @@ function setupIpcListeners() {
                         if (summaryText) {
                             const logCount = messageDiv.querySelectorAll('.log-block').length;
                             const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+                            const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
-                            if (logCount === 0 && toolLogCount === 0) {
+                            if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
                                 summaryText.textContent = "Aetheria AI's Reasoning";
                             } else {
                                 const parts = [];
+                                if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
                                 if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
                                 if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
                                 summaryText.textContent = `Reasoning involved ${parts.join(' and ')}`;
@@ -1731,6 +1742,18 @@ function setupIpcListeners() {
                 liveStepDiv.remove();
             }
         }
+    });
+
+    ipcRenderer.on('reasoning-step', (data) => {
+        const messageId = data?.id;
+        if (!messageId) return;
+
+        appendReasoningContent(messageId, {
+            content: data.step || data.content || data.reasoning_content || '',
+            agentName: data.agent_name || data.team_name || 'Aetheria_AI',
+            delegationId: data.delegation_id || null,
+            delegatedAgent: data.delegated_agent || null,
+        });
     });
 
     const escapeHtml = (text = '') => String(text)
@@ -2200,24 +2223,107 @@ function updateReasoningSummary(messageId) {
     // Count agents and tools from the detailed logs
     const logCount = messageDiv.querySelectorAll('.log-block').length;
     const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+    const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
-    if (logCount === 0 && toolLogCount === 0) {
-        summaryText.textContent = "Reasoning: 0 agents, 0 tools";
+    if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
+        summaryText.textContent = "Aetheria AI's Reasoning";
     } else {
         const parts = [];
+        if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
         if (logCount > 0) parts.push(`${logCount} agent${logCount > 1 ? 's' : ''}`);
         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
         summaryText.textContent = `Reasoning: ${parts.join(', ')}`;
     }
 
     // Make the summary visible and clickable if there's any activity
-    if (logCount > 0 || toolLogCount > 0) {
+    if (logCount > 0 || toolLogCount > 0 || thinkingCount > 0) {
         reasoningSummary.classList.remove('hidden');
         // Auto-expand the dropdown during execution so user can see live updates
         if (!messageDiv.classList.contains('expanded')) {
             messageDiv.classList.add('expanded');
         }
     }
+}
+
+function escapeReasoningHtml(text = '') {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getReasoningOwnerLabel(agentName, delegatedAgent) {
+    return 'Deep reasoning';
+}
+
+function normalizeReasoningText(content) {
+    return String(content || '')
+        .replace(/<\/?reasoning>/gi, '')
+        .replace(/<\/?think>/gi, '');
+}
+
+function appendReasoningContent(messageId, options = {}) {
+    const messageDiv = getStreamMessageDiv(messageId);
+    if (!messageDiv) return;
+
+    const rawText = normalizeReasoningText(options.content);
+    const hasVisibleText = /\S/.test(rawText);
+
+    const delegationId = options.delegationId || null;
+    const delegatedAgent = options.delegatedAgent || null;
+    const agentName = options.agentName || 'Aetheria_AI';
+    const logsContainer = getDelegationLogContainer(
+        messageDiv,
+        messageId,
+        delegationId,
+        delegatedAgent,
+        `${agentName}: delegated reasoning`,
+    );
+    if (!logsContainer) return;
+
+    const ownerKey = String(delegationId ? `${agentName}-${delegationId}` : agentName)
+        .replace(/[^a-zA-Z0-9_-]/g, '_');
+    const blockId = `reasoning-thought-${messageId}-${ownerKey}`;
+    let block = logsContainer.querySelector(`#${blockId}`);
+    if (!block && !hasVisibleText) return;
+
+    if (!block) {
+        block = document.createElement('div');
+        block.id = blockId;
+        block.className = 'reasoning-thought-block';
+        block.dataset.rawReasoning = '';
+        block.innerHTML = `
+            <div class="reasoning-thought-header">
+                <i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i>
+                <span>${escapeReasoningHtml(getReasoningOwnerLabel(agentName, delegatedAgent))}</span>
+            </div>
+            <div class="reasoning-thought-content"></div>
+        `;
+        logsContainer.appendChild(block);
+    }
+
+    const previous = block.dataset.rawReasoning || '';
+    let next = rawText;
+    if (previous && rawText.startsWith(previous)) {
+        next = rawText;
+    } else if (previous && previous.endsWith(rawText)) {
+        return;
+    } else if (previous) {
+        next = `${previous}${rawText}`;
+    }
+
+    if (next === previous) return;
+
+    block.dataset.rawReasoning = next;
+    const contentEl = block.querySelector('.reasoning-thought-content');
+    if (contentEl) {
+        contentEl.textContent = next;
+    }
+
+    updateReasoningSummary(messageId);
+    autoScrollIfSticky();
 }
 
 function createBotMessagePlaceholder(messageId) {
@@ -2444,6 +2550,21 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     // Process events to build the reasoning/log section
     events.forEach(event => {
         const owner = event.agent_name || event.team_name;
+        const eventType = event.type || event.event;
+        const reasoningText = normalizeReasoningText(event.reasoning_content || event.step || event.content_for_reasoning || '');
+
+        if (reasoningText && (eventType === 'reasoning_step' || event.reasoning_content)) {
+            const title = escapeReasoningHtml(getReasoningOwnerLabel(owner || mainAgentName, event.delegated_agent || null));
+            toolLogsHtml += `
+                <div class="reasoning-thought-block">
+                    <div class="reasoning-thought-header">
+                        <i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i>
+                        <span>${title}</span>
+                    </div>
+                    <div class="reasoning-thought-content">${escapeReasoningHtml(reasoningText.trim())}</div>
+                </div>`;
+        }
+
         if (!owner) return;
 
         // Aggregate tool call events into pre-rendered HTML
@@ -2484,12 +2605,14 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
 
     // Create the summary text for the collapsible "Reasoning" header
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
+    const thinkingCount = (toolLogsHtml.match(/reasoning-thought-block/g) || []).length;
     const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
     let summaryText = "Aetheria AI's Reasoning";
-    let hasReasoning = toolLogCount > 0 || agentLogCount > 0;
+    let hasReasoning = toolLogCount > 0 || agentLogCount > 0 || thinkingCount > 0;
 
     if (hasReasoning) {
         const parts = [];
+        if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
         if (agentLogCount > 0) parts.push(`${agentLogCount} agent${agentLogCount > 1 ? 's' : ''}`);
         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
         summaryText = `Reasoning involved ${parts.join(' and ')}`;
