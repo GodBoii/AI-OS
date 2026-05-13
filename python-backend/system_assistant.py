@@ -34,7 +34,7 @@ def get_system_assistant(
         "- Analyze screenshots and images from Circle to Search",
         "",
         "VISUAL ANALYSIS (Circle to Search):",
-        "- When provided with a screenshot, analyze what is visible",
+        "- When provided with a screenshot, analyze what is visible and give short concise response",
         "- Identify text, UI elements, content, or objects in the image",
         "- Provide helpful context or explanations about what you see",
         "- If text is visible, read and explain it",
