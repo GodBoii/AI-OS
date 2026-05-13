@@ -396,7 +396,16 @@
             <div id="project-deploy-title" class="project-deploy-title">Deployable website detected</div>
             <div id="project-deploy-subtitle" class="project-deploy-subtitle">Preview the complete workspace before publishing.</div>
         </div>
-        <button id="project-deploy-btn" class="project-deploy-btn" type="button">
+        <div class="project-deploy-actions">
+            <button id="project-preview-btn" class="project-preview-btn" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0Z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg>
+                <span>Preview</span>
+            </button>
+            <button id="project-deploy-btn" class="project-deploy-btn" type="button">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
@@ -405,7 +414,8 @@
                 <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
             </svg>
             <span>Deploy</span>
-        </button>
+            </button>
+        </div>
     </div>
 
     <div id="project-mode-window" class="project-mode-window hidden">

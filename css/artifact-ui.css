@@ -533,7 +533,7 @@
 }
 
 .deploy-preview-dialog {
-    width: min(1180px, 95vw);
+    width: min(820px, 95vw);
     max-height: 88vh;
     background: var(--window-bg);
     border: 1px solid var(--border-color);
@@ -658,57 +658,9 @@
 .deploy-preview-tree {
     padding: 20px 24px;
     overflow: auto;
-    max-height: 56vh;
+    max-height: 50vh;
     font-size: 13px;
     background: var(--window-bg);
-}
-
-.deploy-preview-workbench {
-    display: grid;
-    grid-template-columns: minmax(320px, 0.95fr) minmax(420px, 1.25fr);
-    gap: 18px;
-    min-height: 420px;
-}
-
-.deploy-preview-files,
-.deploy-live-preview {
-    min-width: 0;
-    min-height: 0;
-}
-
-.deploy-preview-files {
-    overflow: auto;
-}
-
-.deploy-live-preview {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    overflow: hidden;
-    background: #ffffff;
-}
-
-.deploy-live-preview-header {
-    height: 36px;
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--card-bg);
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.deploy-live-preview-frame {
-    flex: 1;
-    width: 100%;
-    min-height: 380px;
-    border: 0;
-    background: #ffffff;
 }
 
 .deploy-editor-list {
@@ -945,14 +897,6 @@
     .deploy-preview-dialog {
         width: 95vw;
         max-height: 92vh;
-    }
-
-    .deploy-preview-workbench {
-        grid-template-columns: 1fr;
-    }
-
-    .deploy-live-preview-frame {
-        min-height: 320px;
     }
 
     .deploy-preview-header {
