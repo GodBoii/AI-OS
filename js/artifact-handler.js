@@ -1444,97 +1444,6 @@ class ArtifactHandler {
         return renderNode(root);
     }
 
-    createPreviewBlobUrl(files, selectedPaths = null) {
-        const selectedSet = selectedPaths
-            ? new Set(selectedPaths.map((item) => String(item || '').replace(/\\/g, '/').toLowerCase()))
-            : null;
-        const sourceFiles = (Array.isArray(files) ? files : [])
-            .filter((file) => file && (!selectedSet || selectedSet.has(String(file.path || '').toLowerCase())));
-        const blobs = new Map();
-        const createdUrls = [];
-
-        const decodeBase64 = (base64) => {
-            const binary = atob(String(base64 || ''));
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i += 1) {
-                bytes[i] = binary.charCodeAt(i);
-            }
-            return bytes;
-        };
-
-        for (const file of sourceFiles) {
-            const path = String(file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
-            if (!path) continue;
-            const contentType = file.content_type || this.inferContentTypeFromPath(path);
-            const data = file.content_base64 !== undefined
-                ? decodeBase64(file.content_base64)
-                : String(file.content !== undefined ? file.content : '');
-            const blob = new Blob([data], { type: contentType });
-            const url = URL.createObjectURL(blob);
-            createdUrls.push(url);
-            blobs.set(path.toLowerCase(), url);
-        }
-
-        const resolvePathRef = (fromPath, rawRef) => {
-            const ref = String(rawRef || '').trim();
-            if (!ref || /^(?:https?:)?\/\//i.test(ref) || /^(?:data|blob|mailto|tel):/i.test(ref) || ref.startsWith('#')) {
-                return rawRef;
-            }
-            const [pathPart, suffix = ''] = ref.split(/(?=[?#])/);
-            const dir = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1) : '';
-            const base = pathPart.startsWith('/') ? pathPart.slice(1) : `${dir}${pathPart}`;
-            const normalized = base.split('/').reduce((parts, part) => {
-                if (!part || part === '.') return parts;
-                if (part === '..') parts.pop();
-                else parts.push(part);
-                return parts;
-            }, []).join('/').toLowerCase();
-            return blobs.get(normalized) ? `${blobs.get(normalized)}${suffix}` : rawRef;
-        };
-
-        for (const file of sourceFiles) {
-            const path = String(file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
-            if (!/\.css$/i.test(path) || file.content === undefined) continue;
-            const rewrittenCss = String(file.content || '')
-                .replace(/url\(\s*(['"]?)([^)"']+)\1\s*\)/gi, (_m, quote, ref) => `url(${quote || ''}${resolvePathRef(path, ref)}${quote || ''})`)
-                .replace(/@import\s+(?:url\()?\s*(['"])([^"']+)\1\s*\)?/gi, (_m, quote, ref) => `@import ${quote}${resolvePathRef(path, ref)}${quote}`);
-            const cssBlob = new Blob([rewrittenCss], { type: file.content_type || 'text/css' });
-            const cssUrl = URL.createObjectURL(cssBlob);
-            createdUrls.push(cssUrl);
-            blobs.set(path.toLowerCase(), cssUrl);
-        }
-
-        const htmlFile =
-            sourceFiles.find((file) => String(file.path || '').toLowerCase() === 'index.html')
-            || sourceFiles.find((file) => /\.html?$/i.test(String(file.path || '')));
-        if (!htmlFile) {
-            createdUrls.forEach((url) => URL.revokeObjectURL(url));
-            return { url: null, cleanup: () => {} };
-        }
-
-        const htmlPath = String(htmlFile.path || 'index.html').replace(/\\/g, '/').replace(/^\/+/, '');
-        const resolveRef = (rawRef) => {
-            const ref = String(rawRef || '').trim();
-            if (!ref || /^(?:https?:)?\/\//i.test(ref) || /^(?:data|blob|mailto|tel):/i.test(ref) || ref.startsWith('#')) {
-                return rawRef;
-            }
-            return resolvePathRef(htmlPath, rawRef);
-        };
-
-        const originalHtml = String(htmlFile.content || '');
-        const rewrittenHtml = originalHtml
-            .replace(/(<(?:link|script|img|source|video|audio)\b[^>]*?\s(?:href|src)=["'])([^"']+)(["'][^>]*>)/gi, (_m, before, ref, after) => `${before}${resolveRef(ref)}${after}`)
-            .replace(/url\(\s*(['"]?)([^)"']+)\1\s*\)/gi, (_m, quote, ref) => `url(${quote || ''}${resolveRef(ref)}${quote || ''})`);
-        const previewBlob = new Blob([rewrittenHtml], { type: 'text/html' });
-        const previewUrl = URL.createObjectURL(previewBlob);
-        createdUrls.push(previewUrl);
-
-        return {
-            url: previewUrl,
-            cleanup: () => createdUrls.forEach((url) => URL.revokeObjectURL(url))
-        };
-    }
-
     async confirmDeployPreview({ files, rootPrefix, candidateCount, proposedSlug }) {
         const modal = document.getElementById('deploy-preview-modal');
         if (!modal) return { files, slug: proposedSlug };
@@ -1566,27 +1475,18 @@ class ArtifactHandler {
         `;
 
         treeEl.innerHTML = `
-            <div class="deploy-preview-workbench">
-                <div class="deploy-preview-files">
-                    <div class="deploy-editor-list">
-                        ${files.map((file, index) => `
-                            <div class="deploy-editor-row" data-row-index="${index}">
-                                <input class="deploy-editor-include" type="checkbox" checked />
-                                <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
-                                <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
-                            </div>
-                        `).join('')}
+            <div class="deploy-editor-list">
+                ${files.map((file, index) => `
+                    <div class="deploy-editor-row" data-row-index="${index}">
+                        <input class="deploy-editor-include" type="checkbox" checked />
+                        <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
+                        <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
                     </div>
-                    <div class="deploy-editor-tree"></div>
-                </div>
-                <div class="deploy-live-preview">
-                    <div class="deploy-live-preview-header">Live Preview</div>
-                    <iframe class="deploy-live-preview-frame" title="Deployment live preview" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
-                </div>
+                `).join('')}
             </div>
+            <div class="deploy-editor-tree"></div>
         `;
 
-        let previewCleanup = null;
         const rebuildTree = () => {
             const rows = Array.from(treeEl.querySelectorAll('.deploy-editor-row'));
             const selectedPaths = rows
@@ -1596,13 +1496,6 @@ class ArtifactHandler {
             const treeHtml = this.buildFileTreeMarkup(selectedPaths);
             const treeContainer = treeEl.querySelector('.deploy-editor-tree');
             if (treeContainer) treeContainer.innerHTML = treeHtml;
-            const frame = treeEl.querySelector('.deploy-live-preview-frame');
-            if (frame) {
-                if (previewCleanup) previewCleanup();
-                const preview = this.createPreviewBlobUrl(files, selectedPaths);
-                previewCleanup = preview.cleanup;
-                frame.src = preview.url || 'about:blank';
-            }
         };
 
         treeEl.querySelectorAll('.deploy-editor-include, .deploy-editor-path').forEach((el) => {
@@ -1644,10 +1537,6 @@ class ArtifactHandler {
         return new Promise((resolve) => {
             const cleanup = () => {
                 modal.classList.add('hidden');
-                if (previewCleanup) {
-                    previewCleanup();
-                    previewCleanup = null;
-                }
                 confirmBtn.removeEventListener('click', onConfirm);
                 cancelBtn.removeEventListener('click', onCancel);
                 closeBtn.removeEventListener('click', onCancel);

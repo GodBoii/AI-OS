@@ -313,6 +313,14 @@ body:not(.dark-mode) .project-redeploy-btn {
     line-height: 1.35;
 }
 
+.project-deploy-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.project-preview-btn,
 .project-deploy-btn {
     display: inline-flex;
     align-items: center;
@@ -329,14 +337,32 @@ body:not(.dark-mode) .project-redeploy-btn {
     transition: all 0.18s ease;
 }
 
+.project-preview-btn {
+    border-color: rgba(148, 163, 184, 0.26);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-color);
+    font-weight: 700;
+}
+
+.project-preview-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.10);
+    transform: translateY(-1px);
+}
+
 .project-deploy-btn:hover:not(:disabled) {
     transform: translateY(-1px);
     box-shadow: 0 8px 18px rgba(245, 158, 11, 0.22);
 }
 
+.project-preview-btn:disabled,
 .project-deploy-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+body:not(.dark-mode) .project-preview-btn {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(15, 23, 42, 0.12);
 }
 
 body:not(.dark-mode) .project-deploy-bar {
