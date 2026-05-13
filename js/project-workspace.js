@@ -300,6 +300,7 @@ class ProjectWorkspace {
             deployTitle: document.getElementById('project-deploy-title'),
             deploySubtitle: document.getElementById('project-deploy-subtitle'),
             deployBtn: document.getElementById('project-deploy-btn'),
+            previewBtn: document.getElementById('project-preview-btn'),
         };
     }
 
@@ -311,6 +312,7 @@ class ProjectWorkspace {
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
         this.el.redeployBtn?.addEventListener('click', () => this.redeployCurrentWorkspace());
+        this.el.previewBtn?.addEventListener('click', () => this.previewCurrentWorkspace());
         this.el.deployBtn?.addEventListener('click', () => this.deployCurrentWorkspace());
         // modeToggleBtn removed from DOM — mode is now controlled via super-header
         this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
@@ -1245,6 +1247,9 @@ class ProjectWorkspace {
         if (this.el.deployBtn) {
             this.el.deployBtn.disabled = !deployable;
         }
+        if (this.el.previewBtn) {
+            this.el.previewBtn.disabled = !deployable;
+        }
     }
 
     getDirtySummaryLine(summary = null) {
@@ -1564,6 +1569,88 @@ class ProjectWorkspace {
             this.setStatus(`Preparing deploy preview... ${Math.min(index + batch.length, paths.length)}/${paths.length}`);
         }
         return files;
+    }
+
+    choosePreviewEntryPath(files) {
+        const normalized = Array.isArray(files) ? files : [];
+        const index = normalized.find((file) => String(file.path || '').toLowerCase() === 'index.html');
+        if (index) return String(index.path);
+        const nestedIndex = normalized.find((file) => /(^|\/)index\.html?$/i.test(String(file.path || '')));
+        if (nestedIndex) return String(nestedIndex.path);
+        const firstHtml = normalized.find((file) => /\.html?$/i.test(String(file.path || '')));
+        return firstHtml ? String(firstHtml.path) : null;
+    }
+
+    decodeBase64ToBytes(base64) {
+        const binary = atob(String(base64 || ''));
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes;
+    }
+
+    async writePreviewFiles(files) {
+        const basePath = await window.electron?.ipcRenderer?.invoke?.('get-path', 'temp');
+        if (!basePath) {
+            throw new Error('Unable to resolve preview temp folder.');
+        }
+
+        const conversationPart = String(this.getConversationId() || 'workspace').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 48);
+        const previewRoot = window.electron.path.join(
+            basePath,
+            'aetheria-workspace-previews',
+            `${conversationPart}-${Date.now()}`
+        );
+        await window.electron.fs.promises.mkdir(previewRoot, { recursive: true });
+
+        for (const file of files) {
+            const rawPath = String(file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+            if (!rawPath || rawPath.split('/').includes('..')) continue;
+
+            const targetPath = window.electron.path.join(previewRoot, ...rawPath.split('/'));
+            const targetDir = window.electron.path.dirname(targetPath);
+            await window.electron.fs.promises.mkdir(targetDir, { recursive: true });
+
+            if (file.content_base64 !== undefined) {
+                await window.electron.fs.promises.writeFile(targetPath, this.decodeBase64ToBytes(file.content_base64));
+            } else {
+                await window.electron.fs.promises.writeFile(targetPath, String(file.content || ''), 'utf8');
+            }
+        }
+
+        return previewRoot;
+    }
+
+    async previewCurrentWorkspace() {
+        if (this.el.previewBtn) {
+            this.el.previewBtn.disabled = true;
+        }
+        this.setStatus('Preparing local preview...');
+
+        try {
+            const files = await this.collectWorkspaceFilesForDeploy();
+            const entryPath = this.choosePreviewEntryPath(files);
+            if (!entryPath) {
+                throw new Error('No HTML entry file found for preview.');
+            }
+
+            const previewRoot = await this.writePreviewFiles(files);
+            const indexPath = window.electron.path.join(previewRoot, ...entryPath.replace(/\\/g, '/').split('/'));
+            const openResult = await window.electron.shell.openPath(indexPath);
+            if (openResult) {
+                throw new Error(openResult);
+            }
+
+            this.setStatus(`Preview opened from ${entryPath}.`);
+            window.artifactHandler?.showNotification?.('Preview opened in your browser', 'success');
+        } catch (error) {
+            console.error('Workspace preview failed:', error);
+            this.setStatus(`Preview failed: ${error.message}`);
+            window.artifactHandler?.showNotification?.(`Preview failed: ${error.message}`, 'error');
+        } finally {
+            this.updateDeployUI();
+        }
     }
 
     async deployCurrentWorkspace() {
