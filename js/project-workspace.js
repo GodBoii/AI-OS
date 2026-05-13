@@ -296,6 +296,10 @@ class ProjectWorkspace {
             redeployTitle: document.getElementById('project-redeploy-title'),
             redeploySubtitle: document.getElementById('project-redeploy-subtitle'),
             redeployBtn: document.getElementById('project-redeploy-btn'),
+            deployBar: document.getElementById('project-deploy-bar'),
+            deployTitle: document.getElementById('project-deploy-title'),
+            deploySubtitle: document.getElementById('project-deploy-subtitle'),
+            deployBtn: document.getElementById('project-deploy-btn'),
         };
     }
 
@@ -307,6 +311,7 @@ class ProjectWorkspace {
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
         this.el.redeployBtn?.addEventListener('click', () => this.redeployCurrentWorkspace());
+        this.el.deployBtn?.addEventListener('click', () => this.deployCurrentWorkspace());
         // modeToggleBtn removed from DOM — mode is now controlled via super-header
         this.el.modeLocalBtn?.addEventListener('click', () => this.switchToLocalMode());
         this.el.modeCloudBtn?.addEventListener('click', () => this.switchToCloudMode());
@@ -1143,6 +1148,7 @@ class ProjectWorkspace {
                     this.updateRedeployUI({ visible: false, dirty: false });
                 }
                 this.latestSyncedPaths = [];
+                this.updateDeployUI([]);
                 this.el.tree.innerHTML = '<div class="project-workspace-status">No files found yet.</div>';
                 this.setStatus(mode === 'local'
                     ? 'No local files found in selected folder.'
@@ -1157,11 +1163,13 @@ class ProjectWorkspace {
             this.latestSyncedPaths = [...paths];
             this.selectedFilePath = null;
             this.renderTreeFromPaths(paths);
+            this.updateDeployUI(paths);
             this.setPreviewPlaceholder(`Loaded ${paths.length} files. Click a file to preview.`);
             this.setStatus(`Loaded ${paths.length} file${paths.length === 1 ? '' : 's'} from ${this.currentTreeSource}.`);
             await this.refreshDeploymentModificationStatus();
         } catch (error) {
             this.latestSyncedPaths = [];
+            this.updateDeployUI([]);
             this.setStatus(`Sync failed: ${error.message}`);
             this.updateRedeployUI({
                 visible: this.getExecutionTarget() === 'cloud' && Boolean(this.activeProject?.site_id),
@@ -1214,6 +1222,28 @@ class ProjectWorkspace {
         if (this.el.redeployBtn) {
             this.el.redeployBtn.classList.toggle('hidden', !visible || !dirty);
             this.el.redeployBtn.disabled = Boolean(busy);
+        }
+    }
+
+    updateDeployUI(paths = this.latestSyncedPaths) {
+        const htmlFiles = (Array.isArray(paths) ? paths : [])
+            .map((item) => String(item || '').trim())
+            .filter((item) => /\.html?$/i.test(item));
+        const deployable = htmlFiles.length > 0;
+        this.el.deployBar?.classList.toggle('hidden', !deployable);
+        if (this.el.deployTitle) {
+            this.el.deployTitle.textContent = deployable
+                ? 'Deployable website detected'
+                : 'No deployable website detected';
+        }
+        if (this.el.deploySubtitle) {
+            const entry = htmlFiles.find((item) => item.toLowerCase().endsWith('index.html')) || htmlFiles[0];
+            this.el.deploySubtitle.textContent = deployable
+                ? `Preview and deploy ${entry}${htmlFiles.length > 1 ? ` plus ${htmlFiles.length - 1} HTML file${htmlFiles.length === 2 ? '' : 's'}` : ''}.`
+                : 'Add an HTML file to enable deployment.';
+        }
+        if (this.el.deployBtn) {
+            this.el.deployBtn.disabled = !deployable;
         }
     }
 
@@ -1451,6 +1481,215 @@ class ProjectWorkspace {
                 subtitle: error.message || 'Unable to publish workspace changes.',
             });
             this.setStatus(`Re-deploy failed: ${error.message}`);
+        }
+    }
+
+    async readWorkspaceFileForDeploy(path) {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return null;
+
+        if (this.currentTreeSource === 'local' || this.getExecutionTarget() === 'local') {
+            const conversationId = await this.ensureConversationId();
+            const state = this.getState(conversationId);
+            const rootPath = state?.local_context?.root_path;
+            if (!rootPath) throw new Error('No local workspace selected');
+            const payload = await this.callLocalInvoke('project-local-file-content', {
+                conversationId,
+                rootPath,
+                path: normalizedPath,
+            });
+            if (!payload?.success) {
+                throw new Error(payload?.error || `Failed to read ${normalizedPath}`);
+            }
+            return {
+                path: normalizedPath,
+                content: payload?.is_binary ? undefined : String(payload?.content || ''),
+                content_base64: payload?.content_base64 || undefined,
+                content_type: window.artifactHandler?.inferContentTypeFromPath
+                    ? window.artifactHandler.inferContentTypeFromPath(normalizedPath)
+                    : 'application/octet-stream',
+            };
+        }
+
+        if (this.currentTreeSource === 'deployment' && this.activeProject?.site_id) {
+            const query = new URLSearchParams({
+                site_id: String(this.activeProject.site_id),
+                path: normalizedPath,
+                include_base64: '1',
+                ...(this.activeProject?.deployment_id ? { deployment_id: String(this.activeProject.deployment_id) } : {})
+            });
+            const payload = await this.callApi(`/api/deploy/file-content?${query.toString()}`, 'GET');
+            return {
+                path: normalizedPath,
+                content: payload?.is_binary ? undefined : String(payload?.content || ''),
+                content_base64: payload?.content_base64 || undefined,
+                content_type: window.artifactHandler?.inferContentTypeFromPath
+                    ? window.artifactHandler.inferContentTypeFromPath(normalizedPath)
+                    : 'application/octet-stream',
+            };
+        }
+
+        const conversationId = window.currentConversationId;
+        if (!conversationId) {
+            throw new Error('No active conversation for workspace deployment');
+        }
+        const payload = await this.callApi('/api/project/workspace/file-content', 'POST', {
+            conversation_id: conversationId,
+            path: normalizedPath,
+        });
+        return {
+            path: normalizedPath,
+            content: payload?.is_binary ? undefined : String(payload?.content || ''),
+            content_base64: payload?.content_base64 || undefined,
+            content_type: window.artifactHandler?.inferContentTypeFromPath
+                ? window.artifactHandler.inferContentTypeFromPath(normalizedPath)
+                : 'application/octet-stream',
+        };
+    }
+
+    async collectWorkspaceFilesForDeploy() {
+        const paths = Array.from(new Set((this.latestSyncedPaths || [])
+            .map((item) => String(item || '').replace(/\\/g, '/').trim())
+            .filter(Boolean)));
+        if (!paths.some((item) => /\.html?$/i.test(item))) {
+            throw new Error('No HTML files found in the project workspace.');
+        }
+
+        const files = [];
+        const batchSize = 5;
+        for (let index = 0; index < paths.length; index += batchSize) {
+            const batch = paths.slice(index, index + batchSize);
+            const resolved = await Promise.all(batch.map((path) => this.readWorkspaceFileForDeploy(path)));
+            files.push(...resolved.filter(Boolean));
+            this.setStatus(`Preparing deploy preview... ${Math.min(index + batch.length, paths.length)}/${paths.length}`);
+        }
+        return files;
+    }
+
+    async deployCurrentWorkspace() {
+        const handler = window.artifactHandler;
+        if (!handler) {
+            this.setStatus('Deploy tools are not ready yet.');
+            return;
+        }
+        if (handler.deployInProgress) {
+            handler.showNotification?.('Deploy already in progress', 'info');
+            return;
+        }
+
+        const session = await window.electron?.auth?.getSession?.();
+        if (!session?.access_token) {
+            handler.showNotification?.('Please sign in before deploying', 'error');
+            return;
+        }
+
+        handler.deployInProgress = true;
+        if (this.el.deployBtn) {
+            this.el.deployBtn.disabled = true;
+        }
+        this.setStatus('Preparing deploy preview...');
+
+        try {
+            const existingTarget = handler.getExistingDeployTarget?.();
+            const siteId = existingTarget?.site_id
+                || ((window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `site-${Date.now()}`);
+            const projectName = this.activeProject?.project_name
+                || this.activeProject?.repo_name
+                || this.activeProject?.slug
+                || 'Project Workspace Site';
+            const generatedSlug = existingTarget?.slug || handler.slugify(projectName);
+            const rawFiles = await this.collectWorkspaceFilesForDeploy();
+            const htmlFile = rawFiles.find((file) => String(file.path || '').toLowerCase() === 'index.html')
+                || rawFiles.find((file) => /\.html?$/i.test(String(file.path || '')));
+            const draft = handler.buildDeploymentDraft(rawFiles, htmlFile?.content || '');
+            let filesToDeploy = draft.files;
+            if (!filesToDeploy.length) {
+                throw new Error('No deployable files found in the workspace.');
+            }
+
+            const deploySelection = await handler.confirmDeployPreview({
+                files: filesToDeploy,
+                rootPrefix: draft.rootPrefix,
+                candidateCount: draft.candidateCount,
+                proposedSlug: generatedSlug,
+            });
+            if (!deploySelection) {
+                handler.showNotification?.('Deploy canceled', 'info');
+                return;
+            }
+
+            filesToDeploy = deploySelection.files;
+            if (!filesToDeploy.some((file) => String(file.path || '').toLowerCase() === 'index.html')) {
+                throw new Error('Deployment must include index.html');
+            }
+
+            const uploadPayload = await handler.materializeDeployFiles(filesToDeploy);
+            let finalSlug = deploySelection.slug;
+            try {
+                await handler.deployApi('/api/deploy/site/init', session.access_token, {
+                    site_id: siteId,
+                    project_name: projectName,
+                    slug: finalSlug,
+                });
+            } catch (initError) {
+                const message = String(initError?.message || '').toLowerCase();
+                const isSlugConflict = message.includes('already assigned') || message.includes('already exists') || message.includes('duplicate');
+                if (!existingTarget?.site_id && isSlugConflict) {
+                    finalSlug = handler.getFallbackSlug(finalSlug, siteId);
+                    await handler.deployApi('/api/deploy/site/init', session.access_token, {
+                        site_id: siteId,
+                        project_name: projectName,
+                        slug: finalSlug,
+                    });
+                    handler.showNotification?.(`Slug unavailable, using '${finalSlug}' instead.`, 'info');
+                } else {
+                    throw initError;
+                }
+            }
+
+            await handler.deployApi('/api/deploy/assign-subdomain', session.access_token, { site_id: siteId });
+            const upload = await handler.deployApi('/api/deploy/upload-site', session.access_token, {
+                site_id: siteId,
+                files: uploadPayload,
+            });
+            const activated = await handler.deployApi('/api/deploy/activate', session.access_token, {
+                site_id: siteId,
+                deployment_id: upload.deployment_id,
+            });
+
+            const liveUrl = activated?.url || `https://${finalSlug}.pawsitivestrides.store`;
+            const hostname = activated?.url ? new URL(activated.url).hostname : `${finalSlug}.pawsitivestrides.store`;
+            handler.rememberDeployTarget?.({
+                site_id: siteId,
+                project_name: projectName,
+                slug: finalSlug,
+                hostname,
+                deployment_id: upload.deployment_id,
+            });
+            this.ensureContext({
+                site_id: siteId,
+                deployment_id: upload.deployment_id,
+                project_name: projectName,
+                slug: finalSlug,
+                hostname,
+                version: upload.version,
+                r2_prefix: upload.r2_prefix,
+            }, { syncUi: true });
+            this.setStatus(`Deployed ${uploadPayload.length} file${uploadPayload.length === 1 ? '' : 's'} to ${liveUrl}.`);
+            handler.showNotification?.(`Deployed: ${liveUrl}`, 'success');
+            if (window.AIOS?.loadDeployments) {
+                window.AIOS.loadDeployments(false, { force: true });
+            }
+            if (window.electron?.shell?.openExternal) {
+                window.electron.shell.openExternal(liveUrl);
+            }
+        } catch (error) {
+            console.error('Workspace deploy failed:', error);
+            this.setStatus(`Deploy failed: ${error.message}`);
+            handler.showNotification?.(`Deploy failed: ${error.message}`, 'error');
+        } finally {
+            handler.deployInProgress = false;
+            this.updateDeployUI();
         }
     }
 

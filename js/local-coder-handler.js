@@ -299,6 +299,7 @@ class LocalCoderHandler {
                     is_binary: true,
                     size_bytes: data.length,
                     content: null,
+                    content_base64: data.toString('base64'),
                 };
             }
 
@@ -312,6 +313,7 @@ class LocalCoderHandler {
                 size_bytes: data.length,
                 truncated: textContent.length > truncated.length,
                 content: truncated,
+                content_base64: data.toString('base64'),
             };
         } catch (error) {
             return { success: false, error: error.message };
