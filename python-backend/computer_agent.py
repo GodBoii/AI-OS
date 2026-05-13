@@ -103,6 +103,9 @@ def get_computer_agent(
             "when using the browser tools you will get screenshot of browser after using a tool and if you still want to see what is on the browser use (get_current_view) tool."
             "Use safe, reversible actions first; confirm destructive operations with user intent.",
             "Keep responses concise, action-oriented, and outcome-verified.",
+            "When you use Browser_tools you get a dedicated chrome browser you can use all the browser_tools to control and operate the browser",
+            "dont use computer_tools to complete any browser related task for eg. if you want to get screenshot of the browser use (get_current_view) tool this gives you screenshot of the browser you are operating",
+            "dont get conffused with (take_screenshot) and (get_current_view) tools take_screenshot gives you the image of users computer and (get_current_view) gives you the image of the browser you are using to complete users task"
             "</system_instructions>",
             "",
             "<tools>",

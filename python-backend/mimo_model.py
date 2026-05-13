@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from agno.models.message import Message
 from agno.models.openai.like import OpenAILike
+from agno.models.response import ModelResponse
 
 
 MIMO_OPENAI_BASE_URL = os.getenv(
@@ -34,6 +35,18 @@ class XiaomiMiMoModel(OpenAILike):
             message_dict["reasoning_content"] = message.reasoning_content
 
         return message_dict
+
+    def _parse_provider_response_delta(self, response_delta: Any) -> ModelResponse:
+        model_response = super()._parse_provider_response_delta(response_delta)
+
+        # Agno Team streaming only yields content events when `.content` is not
+        # None. MiMo streams thinking as reasoning-only deltas, so expose an
+        # empty content delta to let the existing event pipeline carry
+        # `reasoning_content` without adding text to the final answer.
+        if model_response.reasoning_content is not None and model_response.content is None:
+            model_response.content = ""
+
+        return model_response
 
 
 def get_mimo_model(model: str) -> XiaomiMiMoModel:
