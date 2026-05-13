@@ -945,6 +945,7 @@ def run_agent_and_stream(
         accumulated_log_content: Dict[str, List[str]] = {}
         log_owner_order: List[str] = []
         final_owner_name = None
+        emitted_reasoning_content: Dict[str, str] = {}
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -972,6 +973,28 @@ def run_agent_and_stream(
                 continue
 
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
+            owner_reasoning_key = owner_name or "Aetheria_AI"
+            chunk_reasoning_content = getattr(chunk, 'reasoning_content', None)
+            if chunk_reasoning_content:
+                reasoning_text = str(chunk_reasoning_content)
+                previous_reasoning = emitted_reasoning_content.get(owner_reasoning_key, "")
+                reasoning_delta = reasoning_text
+                if previous_reasoning and reasoning_text.startswith(previous_reasoning):
+                    reasoning_delta = reasoning_text[len(previous_reasoning):]
+
+                if reasoning_delta.strip():
+                    socketio.emit("reasoning_step", {
+                        "id": message_id,
+                        "agent_name": owner_name,
+                        "step": reasoning_delta
+                    }, room=room_name)
+                    accumulated_events.append({
+                        "type": "reasoning_step",
+                        "agent_name": owner_name,
+                        "step": reasoning_delta,
+                    })
+
+                emitted_reasoning_content[owner_reasoning_key] = reasoning_text
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 is_final = (
@@ -1048,9 +1071,9 @@ def run_agent_and_stream(
                     "tool": tool_payload,
                 })
             # Handle reasoning events
-            elif chunk.event == TeamRunEvent.reasoning_step.value:
-                reasoning_step = getattr(chunk, 'reasoning_step', None)
-                if reasoning_step:
+            elif chunk.event in (RunEvent.reasoning_step.value, TeamRunEvent.reasoning_step.value):
+                reasoning_step = getattr(chunk, 'reasoning_step', None) or getattr(chunk, 'reasoning_content', None)
+                if reasoning_step and not chunk_reasoning_content:
                     reasoning_text = str(reasoning_step)
                     socketio.emit("reasoning_step", {
                         "id": message_id,

@@ -138,6 +138,7 @@ class AgentDelegationTools(Toolkit):
             )
 
         final_chunks: list[str] = []
+        emitted_reasoning_content: Dict[str, str] = {}
 
         try:
             for chunk in child_agent.run(
@@ -155,6 +156,30 @@ class AgentDelegationTools(Toolkit):
                 owner_name = owner_name or (
                     "Aetheria_Coder" if delegated_agent == "coder" else "Aetheria_Computer"
                 )
+
+                owner_reasoning_key = f"{owner_name}:{delegation_id}"
+                chunk_reasoning_content = getattr(chunk, "reasoning_content", None)
+                if chunk_reasoning_content:
+                    reasoning_text = str(chunk_reasoning_content)
+                    previous_reasoning = emitted_reasoning_content.get(owner_reasoning_key, "")
+                    reasoning_delta = reasoning_text
+                    if previous_reasoning and reasoning_text.startswith(previous_reasoning):
+                        reasoning_delta = reasoning_text[len(previous_reasoning):]
+
+                    if reasoning_delta.strip():
+                        self._emit(
+                            "reasoning_step",
+                            {
+                                "id": self.message_id,
+                                "agent_name": owner_name,
+                                "step": reasoning_delta,
+                                "delegation_id": delegation_id,
+                                "delegated_agent": delegated_agent,
+                                "frame_type": frame_type,
+                            },
+                        )
+
+                    emitted_reasoning_content[owner_reasoning_key] = reasoning_text
 
                 if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                     if chunk.content:
