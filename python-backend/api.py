@@ -2092,6 +2092,7 @@ def project_workspace_file_content():
                 "is_binary": True,
                 "size_bytes": len(data),
                 "content": None,
+                "content_base64": encoded,
             }), 200
 
         text_content = data.decode("utf-8", errors="replace")
@@ -2104,6 +2105,7 @@ def project_workspace_file_content():
             "size_bytes": len(data),
             "truncated": len(text_content) > len(truncated),
             "content": truncated,
+            "content_base64": encoded,
         }), 200
     except Exception as e:
         logger.error(f"project/workspace/file-content failed: {e}", exc_info=True)
