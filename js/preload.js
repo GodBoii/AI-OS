@@ -237,9 +237,9 @@ contextBridge.exposeInMainWorld(
             console.log('[preload.js] Auth service initialized:', result);
             return result;
         },
-        signUp: async (email, password, name) => {
+        signUp: async (email, password, name, phoneNumber) => {
             console.log('[preload.js] signUp called with email:', email);
-            const result = await authService.signUp(email, password, name);
+            const result = await authService.signUp(email, password, name, phoneNumber);
             console.log('[preload.js] signUp result:', result);
             return result;
         },
