@@ -1525,3 +1525,100 @@
 .inner-content {
     padding: 0;
 }
+
+.tool-preview-ppt {
+    display: grid;
+    gap: 12px;
+}
+
+.tool-preview-ppt-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.tool-preview-ppt-title {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.tool-preview-ppt-meta,
+.tool-preview-ppt-summary,
+.tool-preview-ppt-slide-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.tool-preview-ppt-download {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.tool-preview-ppt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.tool-preview-ppt-slide,
+.tool-preview-ppt-template {
+    position: relative;
+    min-height: 110px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    padding: 12px;
+}
+
+.tool-preview-ppt-slide-num {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+.tool-preview-ppt-slide-title {
+    margin-right: 18px;
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+
+.tool-preview-ppt-slide ul {
+    margin: 8px 0 0;
+    padding-left: 16px;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.tool-preview-ppt-badges {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.tool-preview-ppt-badges span {
+    font-size: 0.66rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 2px 6px;
+    color: var(--text-secondary);
+}
+
+.tool-preview-ppt-template-list {
+    display: grid;
+    gap: 8px;
+}
+
+.tool-preview-ppt-template span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 4px;
+}

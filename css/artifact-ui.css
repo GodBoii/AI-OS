@@ -1105,3 +1105,111 @@
     }
 }
 
+.presentation-artifact {
+    width: min(1120px, 100%);
+    margin: 0 auto;
+    padding: 22px;
+    color: var(--text-primary);
+}
+
+.presentation-artifact-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 18px 0 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.presentation-artifact-kicker {
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.presentation-artifact-hero h2 {
+    margin: 8px 0;
+    font-size: 1.8rem;
+}
+
+.presentation-artifact-hero p {
+    max-width: 680px;
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.presentation-artifact-meta {
+    min-width: 210px;
+    display: grid;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+}
+
+.presentation-artifact-meta span {
+    padding: 7px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.presentation-artifact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+    padding-top: 18px;
+}
+
+.presentation-slide-card {
+    position: relative;
+    min-height: 160px;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.presentation-slide-number {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+}
+
+.presentation-slide-card h3 {
+    margin: 0 22px 8px 0;
+    font-size: 1rem;
+    line-height: 1.25;
+}
+
+.presentation-slide-card p,
+.presentation-slide-card li {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.presentation-slide-card ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+}
+
+.presentation-slide-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.presentation-slide-badges span {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    border: 1px solid color-mix(in srgb, var(--primary-color) 36%, transparent);
+    border-radius: 999px;
+    padding: 3px 7px;
+}
+
