@@ -527,6 +527,27 @@ class SessionContentViewer {
                 }
 
                 try {
+                    const mimeType = metadata.mime_type || '';
+                    const ext = filename.split('.').pop().toLowerCase();
+                    if (mimeType.includes('presentation') || ext === 'pptx' || ext === 'ppt') {
+                        this.hide();
+                        artifactHandler.showArtifact('presentation', {
+                            title: filename,
+                            filename,
+                            mime_type: mimeType || 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                            download_url: file.download_url,
+                            inline: {
+                                topic: filename,
+                                slide_count: metadata.slide_count || 0,
+                                slides: metadata.slides || []
+                            }
+                        }, file.reference_id || null, {
+                            title: filename,
+                            mimeType: mimeType || 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                        });
+                        return;
+                    }
+
                     console.log('[SessionContentViewer] Fetching artifact from:', file.download_url.substring(0, 100) + '...');
                     const response = await fetch(file.download_url);
 
@@ -745,6 +766,8 @@ class SessionContentViewer {
             'markdown': 'fab fa-markdown',
             'txt': 'fas fa-file-alt',
             'pdf': 'fas fa-file-pdf',
+            'ppt': 'fas fa-file-powerpoint',
+            'pptx': 'fas fa-file-powerpoint',
             'doc': 'fas fa-file-word',
             'docx': 'fas fa-file-word',
             'xls': 'fas fa-file-excel',
@@ -777,6 +800,8 @@ class SessionContentViewer {
             'markdown': 'markdown',
             'txt': 'txt',
             'pdf': 'pdf',
+            'ppt': 'pptx',
+            'pptx': 'pptx',
             'doc': 'doc',
             'docx': 'docx',
             'xls': 'xls',
