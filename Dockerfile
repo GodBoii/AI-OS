@@ -7,6 +7,8 @@ RUN apt-get update \
     build-essential \
     gcc \
     g++ \
+    nodejs \
+    npm \
     python3-dev \
     libffi-dev \
     libssl-dev \
@@ -18,6 +20,12 @@ WORKDIR /app
 COPY python-backend/requirements.txt . 
 
 RUN pip install --no-cache-dir -r requirements.txt
+
+# The presentation tool runs inside this Python backend container but renders
+# editable .pptx files with a Node renderer. Install pptxgenjs outside /app so
+# docker-compose's ./python-backend:/app bind mount cannot hide node_modules.
+RUN npm install --prefix /opt/aetheria-ppt pptxgenjs@4.0.1
+ENV NODE_PATH=/opt/aetheria-ppt/node_modules
 
 # Install Playwright browser binaries in a deterministic location for
 # server-side browser automation used by mobile/web sessions.
