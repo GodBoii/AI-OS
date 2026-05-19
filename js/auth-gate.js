@@ -174,6 +174,18 @@
 
                         <div class="ag-field">
                             <div class="ag-input-wrap">
+                                <input class="ag-input" type="tel" id="ag-signup-phone"
+                                       placeholder="+91 98765 43210" autocomplete="tel" inputmode="tel" required>
+                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.91.33 1.8.62 2.65a2 2 0 0 1-.45 2.11L8.09 9.67a16 16 0 0 0 6.24 6.24l1.19-1.19a2 2 0 0 1 2.11-.45c.85.29 1.74.5 2.65.62A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="ag-field">
+                            <div class="ag-input-wrap">
                                 <input class="ag-input" type="password" id="ag-signup-password"
                                        placeholder="Min. 6 characters" autocomplete="new-password" required>
                                 <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
@@ -327,6 +339,7 @@
         if (formPanel) {
             // Step 1: make it block so layout starts
             formPanel.style.display = 'flex';
+            formPanel.style.pointerEvents = 'auto';
             // Step 2: transition opacity in after one frame
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -378,10 +391,15 @@
 
         const name     = document.getElementById('ag-signup-name')?.value?.trim();
         const email    = document.getElementById('ag-signup-email')?.value?.trim();
+        const phone    = document.getElementById('ag-signup-phone')?.value?.trim();
         const password = document.getElementById('ag-signup-password')?.value;
 
-        if (!name || !email || !password) {
+        if (!name || !email || !phone || !password) {
             _setError('ag-signup-error', 'All fields are required.');
+            return;
+        }
+        if (!/^\+[1-9]\d{7,14}$/.test(phone.replace(/[\s().-]/g, ''))) {
+            _setError('ag-signup-error', 'Enter a valid mobile number with country code, for example +919876543210.');
             return;
         }
         if (password.length < 6) {
@@ -393,7 +411,7 @@
         _setLoading('ag-signup-submit', true, 'Creating account…');
 
         try {
-            const result = await _authService.signUp(email, password, name);
+            const result = await _authService.signUp(email, password, name, phone);
             if (result.success) {
                 _setError('ag-signup-error', '');
                 // Show a soft success message and switch to login
@@ -565,6 +583,7 @@
         }
         if (formPanel) {
             formPanel.style.display = 'flex';
+            formPanel.style.pointerEvents = 'auto';
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     formPanel.style.opacity = '1';
