@@ -22,6 +22,7 @@ from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from media_tools import MediaTools
 from mimo_model import get_mimo_model
+from ppt_tools import build_presentation_agent
 from supabase_tools import SupabaseTools
 from user_file_vault_tools import UserFileVaultTools
 from vercel_tools import VercelTools
@@ -178,6 +179,18 @@ def get_llm_os(
     can_delegate_coder = bool(has_socket_context and coding_assistant)
     can_delegate_computer = bool(has_socket_context and enable_computer_control and redis_client_instance)
 
+    if has_socket_context:
+        members.append(
+            build_presentation_agent(
+                user_id=user_id,
+                session_id=session_id,
+                message_id=message_id,
+                socketio=socketio_instance,
+                sid=sid,
+                debug_mode=debug_mode,
+            )
+        )
+
     if can_delegate_coder or can_delegate_computer:
         direct_tools.append(
             AgentDelegationTools(
@@ -232,6 +245,7 @@ def get_llm_os(
                 "",
                 "<members>",
                 "- assistant: platform operations specialist. Route GitHub, Vercel, and Supabase work to this member instead of trying to perform those operations directly.",
+                "- presentation_agent: native PowerPoint specialist. Route requests to create, edit, outline, or download PowerPoint/PPT/PPTX decks to this member. The member creates editable .pptx files using native PowerPoint elements, not HTML/CSS slide exports.",
                 "</members>",
             ]
         )
