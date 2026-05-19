@@ -245,6 +245,21 @@ class ArtifactHandler {
                 }
                 break;
 
+            case 'presentation':
+                titleEl.textContent = options.title || data?.title || data?.filename || 'PowerPoint Deck';
+                copyBtn.style.display = 'none';
+                downloadBtn.style.display = 'inline-flex';
+                if (deployBtn) deployBtn.style.display = 'none';
+                this.renderPresentation(data, contentDiv);
+                currentArtifactId = currentArtifactId || data?.artifact_id || data?.output_id || `presentation-${Date.now()}`;
+                this.artifacts.set(currentArtifactId, {
+                    content: data,
+                    type: 'presentation',
+                    title: options.title || data?.title || data?.filename || 'PowerPoint Deck',
+                    mimeType: options.mimeType || data?.mime_type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                });
+                break;
+
             case 'mermaid':
                 titleEl.textContent = options.title || 'Diagram Viewer';
                 copyBtn.style.display = 'inline-flex';
@@ -433,6 +448,52 @@ class ArtifactHandler {
         }
         video.appendChild(source);
         container.appendChild(video);
+    }
+
+    renderPresentation(metadata, container) {
+        container.innerHTML = '';
+        const inline = metadata?.inline || {};
+        const slides = Array.isArray(inline.slides) ? inline.slides : [];
+        const templateName = metadata?.template?.name || metadata?.template?.id || 'Native PowerPoint';
+        const deck = document.createElement('div');
+        deck.className = 'presentation-artifact';
+        deck.innerHTML = `
+            <div class="presentation-artifact-hero">
+                <div>
+                    <div class="presentation-artifact-kicker">Editable .pptx</div>
+                    <h2>${this.escapeHtml(metadata?.title || inline.topic || 'PowerPoint deck')}</h2>
+                    <p>${this.escapeHtml(metadata?.summary || `${slides.length || inline.slide_count || 0} slides generated with native PowerPoint elements.`)}</p>
+                </div>
+                <div class="presentation-artifact-meta">
+                    <span>${this.escapeHtml(String(inline.slide_count || slides.length || 0))} slides</span>
+                    <span>${this.escapeHtml(templateName)}</span>
+                    <span>${this.escapeHtml(metadata?.filename || 'presentation.pptx')}</span>
+                </div>
+            </div>
+            <div class="presentation-artifact-grid">
+                ${slides.map((slide) => this.renderPresentationSlideCard(slide)).join('') || '<div class="presentation-artifact-empty">No slide preview data available.</div>'}
+            </div>
+        `;
+        container.appendChild(deck);
+    }
+
+    renderPresentationSlideCard(slide = {}) {
+        const badges = [
+            slide.has_chart ? 'Chart' : '',
+            slide.has_table ? 'Table' : '',
+            slide.has_diagram ? 'Diagram' : '',
+            Array.isArray(slide.metrics) && slide.metrics.length ? 'Metrics' : '',
+        ].filter(Boolean);
+        const bullets = Array.isArray(slide.bullets) ? slide.bullets.slice(0, 3) : [];
+        return `
+            <article class="presentation-slide-card">
+                <div class="presentation-slide-number">${this.escapeHtml(String(slide.index || ''))}</div>
+                <h3>${this.escapeHtml(slide.title || `Slide ${slide.index || ''}`)}</h3>
+                ${slide.subtitle ? `<p>${this.escapeHtml(String(slide.subtitle))}</p>` : ''}
+                ${badges.length ? `<div class="presentation-slide-badges">${badges.map((badge) => `<span>${this.escapeHtml(badge)}</span>`).join('')}</div>` : ''}
+                ${bullets.length ? `<ul>${bullets.map((bullet) => `<li>${this.escapeHtml(String(bullet))}</li>`).join('')}</ul>` : ''}
+            </article>
+        `;
     }
 
     renderMermaidView(content, container, mode = 'preview') {
@@ -930,6 +991,23 @@ class ArtifactHandler {
                 extension = artifact.type === 'video'
                     ? '.mp4'
                     : this.extensionFromMimeType(artifact.mimeType || 'image/png');
+            } else if (artifact.type === 'presentation') {
+                const metadata = artifact.content || {};
+                const url = metadata.download_url;
+                if (!url) {
+                    this.showNotification('Download URL is not available yet', 'error');
+                    return;
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const bytes = new Uint8Array(await response.arrayBuffer());
+                content = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+                encoding = 'binary';
+                const safeTitle = (metadata.filename || artifact.title || 'presentation').replace(/[\\/:*?"<>|]+/g, '_');
+                suggestedName = safeTitle.replace(/\.pptx$/i, '');
+                extension = '.pptx';
             }
         }
 
@@ -981,7 +1059,11 @@ class ArtifactHandler {
             const result = await window.electron.ipcRenderer.invoke('show-save-dialog', {
                 title: 'Save File',
                 defaultPath: suggestedName + extension,
-                filters: [{ name: 'Media', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4'] }, { name: 'All Files', extensions: ['*'] }]
+                filters: [
+                    { name: 'PowerPoint', extensions: ['pptx'] },
+                    { name: 'Media', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
             });
             
             if (result.canceled || !result.filePath) return;
