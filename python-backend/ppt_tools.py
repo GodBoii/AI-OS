@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -389,8 +390,20 @@ class PresentationTools(Toolkit):
         if not (self.user_id and self.session_id):
             return None
         try:
-            return get_persistence_service().create_artifact(
-                execution_id=f"presentation-tool-{uuid.uuid4()}",
+            persistence = get_persistence_service()
+            execution_id = persistence.create_execution_record(
+                user_id=str(self.user_id),
+                session_id=str(self.session_id),
+                sandbox_id="presentation-tools",
+                command=f"create_presentation {filename}",
+                message_id=self.message_id,
+            )
+            if not execution_id:
+                logger.warning("Could not create execution record for presentation artifact")
+                return None
+
+            artifact_id = persistence.create_artifact(
+                execution_id=execution_id,
                 user_id=str(self.user_id),
                 session_id=str(self.session_id),
                 sandbox_id="presentation-tools",
@@ -399,6 +412,15 @@ class PresentationTools(Toolkit):
                 mime_type=mimetypes.guess_type(filename)[0] or PPTX_MIME_TYPE,
                 message_id=self.message_id,
             )
+            try:
+                persistence.db.table("sandbox_executions").update({
+                    "status": "COMPLETED" if artifact_id else "FAILED",
+                    "exit_code": 0 if artifact_id else 1,
+                    "finished_at": datetime.utcnow().isoformat(),
+                }).eq("execution_id", execution_id).execute()
+            except Exception as exc:
+                logger.warning("Failed to finalize presentation execution %s: %s", execution_id, exc)
+            return artifact_id
         except Exception as exc:
             logger.warning("Failed to persist presentation artifact: %s", exc, exc_info=True)
             return None

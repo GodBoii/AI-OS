@@ -993,12 +993,19 @@ class ArtifactHandler {
                     : this.extensionFromMimeType(artifact.mimeType || 'image/png');
             } else if (artifact.type === 'presentation') {
                 const metadata = artifact.content || {};
-                const url = metadata.download_url;
+                const url = await this.resolvePresentationDownloadUrl(metadata);
                 if (!url) {
-                    this.showNotification('Download URL is not available yet', 'error');
+                    this.showNotification('Presentation file is not available for download yet', 'error');
                     return;
                 }
-                const response = await fetch(url);
+                let response = await fetch(url);
+                if (!response.ok && metadata.artifact_id) {
+                    delete metadata.download_url;
+                    const refreshedUrl = await this.resolvePresentationDownloadUrl(metadata);
+                    if (refreshedUrl && refreshedUrl !== url) {
+                        response = await fetch(refreshedUrl);
+                    }
+                }
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -1082,6 +1089,43 @@ class ArtifactHandler {
         } catch (error) {
             console.error('Error saving file:', error);
             this.showNotification('Error: ' + error.message, 'error');
+        }
+    }
+
+    async resolvePresentationDownloadUrl(metadata) {
+        if (metadata?.download_url) {
+            return metadata.download_url;
+        }
+
+        const artifactId = metadata?.artifact_id;
+        if (!artifactId) {
+            return null;
+        }
+
+        try {
+            const session = await window.electron?.auth?.getSession?.();
+            const token = session?.access_token;
+            if (!token) {
+                return null;
+            }
+
+            const response = await fetch(
+                `${this.backendBaseUrl}/api/sandbox/artifacts/${encodeURIComponent(artifactId)}`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const payload = await response.json();
+            const downloadUrl = payload?.artifact?.download_url;
+            if (downloadUrl) {
+                metadata.download_url = downloadUrl;
+            }
+            return downloadUrl || null;
+        } catch (error) {
+            console.error('Failed to resolve presentation download URL:', error);
+            return null;
         }
     }
 
