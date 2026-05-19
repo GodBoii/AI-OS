@@ -46,6 +46,7 @@ const validReceiveChannels = [
     'reasoning-step',
     'image_generated',  // CRITICAL FIX: Allow image_generated events from main process
     'media_generated',
+    'presentation_generated',
     'webview-created',
     'webview-closed',
     'webview-navigation-updated',

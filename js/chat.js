@@ -577,7 +577,9 @@ function getComputerToolMetadata(tool) {
     });
     const metadata = toolOutput?.metadata || directMetadata;
     const metadataKind = metadata?.kind || null;
-    const isSupportedKind = metadataKind === 'computer_tool_output' || metadataKind === 'google_sheets_tool_output';
+    const isSupportedKind = metadataKind === 'computer_tool_output'
+        || metadataKind === 'google_sheets_tool_output'
+        || metadataKind === 'presentation_tool_output';
     if (!metadata || !isSupportedKind) {
         console.log('[ToolPreview] No usable metadata found', {
             metadataKind: metadata?.kind || null,
@@ -721,6 +723,74 @@ function buildSheetsInfoMarkup(metadata, inline = {}) {
     `;
 }
 
+function buildPresentationMarkup(metadata, inline = {}) {
+    const slides = Array.isArray(inline.slides) ? inline.slides : [];
+    const templateName = metadata?.template?.name || metadata?.template?.id || '';
+    const size = Number(inline.size_bytes || 0);
+    const sizeLabel = size > 0 ? `${(size / 1024 / 1024).toFixed(size > 1024 * 1024 ? 2 : 3)} MB` : '';
+    const downloadUrl = getSafeToolPreviewUrl(metadata?.download_url || '');
+    const slideCards = slides.slice(0, 12).map((slide) => {
+        const badges = [
+            slide.has_chart ? 'Chart' : '',
+            slide.has_table ? 'Table' : '',
+            slide.has_diagram ? 'Diagram' : '',
+            Array.isArray(slide.metrics) && slide.metrics.length ? 'Metrics' : '',
+        ].filter(Boolean);
+        const bullets = Array.isArray(slide.bullets) ? slide.bullets.slice(0, 3) : [];
+        return `
+            <div class="tool-preview-ppt-slide">
+                <div class="tool-preview-ppt-slide-num">${escapeToolPreviewHtml(String(slide.index || ''))}</div>
+                <div class="tool-preview-ppt-slide-title">${escapeToolPreviewHtml(String(slide.title || `Slide ${slide.index || ''}`))}</div>
+                ${slide.subtitle ? `<div class="tool-preview-ppt-slide-subtitle">${escapeToolPreviewHtml(String(slide.subtitle))}</div>` : ''}
+                ${badges.length ? `<div class="tool-preview-ppt-badges">${badges.map((badge) => `<span>${escapeToolPreviewHtml(badge)}</span>`).join('')}</div>` : ''}
+                ${bullets.length ? `<ul>${bullets.map((bullet) => `<li>${escapeToolPreviewHtml(String(bullet))}</li>`).join('')}</ul>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="tool-preview-card tool-preview-ppt">
+            <div class="tool-preview-ppt-head">
+                <div>
+                    <div class="tool-preview-ppt-title">${escapeToolPreviewHtml(metadata.title || inline.topic || 'PowerPoint deck')}</div>
+                    <div class="tool-preview-ppt-meta">
+                        ${escapeToolPreviewHtml(String(inline.slide_count || slides.length || 0))} slides
+                        ${templateName ? ` - ${escapeToolPreviewHtml(String(templateName))}` : ''}
+                        ${sizeLabel ? ` - ${escapeToolPreviewHtml(sizeLabel)}` : ''}
+                    </div>
+                </div>
+                ${downloadUrl ? `<button type="button" class="tool-preview-ppt-download" data-ppt-download="${downloadUrl}" data-ppt-filename="${escapeToolPreviewHtml(metadata.filename || 'presentation.pptx')}">Download</button>` : ''}
+            </div>
+            ${metadata.summary ? `<div class="tool-preview-ppt-summary">${escapeToolPreviewHtml(metadata.summary)}</div>` : ''}
+            <div class="tool-preview-ppt-grid">${slideCards || '<div class="tool-preview-ppt-empty">No slide preview data available.</div>'}</div>
+        </div>
+    `;
+}
+
+async function savePresentationFromUrl(downloadUrl, filename = 'presentation.pptx') {
+    const safeUrl = getSafeToolPreviewUrl(downloadUrl);
+    if (!safeUrl) return;
+    const response = await fetch(safeUrl);
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    const contentBase64 = bufferToBase64(await response.arrayBuffer());
+    const result = await window.electron.ipcRenderer.invoke('show-save-dialog', {
+        title: 'Save PowerPoint',
+        defaultPath: filename || 'presentation.pptx',
+        filters: [
+            { name: 'PowerPoint Presentation', extensions: ['pptx'] },
+            { name: 'All Files', extensions: ['*'] }
+        ]
+    });
+    if (result?.canceled || !result?.filePath) return;
+    await window.electron.ipcRenderer.invoke('save-file', {
+        filePath: result.filePath,
+        content: contentBase64,
+        encoding: 'base64'
+    });
+}
+
 function shouldAutoOpenSheetsArtifact(metadata) {
     if (!metadata || metadata.kind !== 'google_sheets_tool_output') return false;
     const operation = String(metadata.operation || '').toLowerCase();
@@ -826,6 +896,26 @@ async function buildToolPreviewMarkup(metadata) {
             return buildSheetsInfoMarkup(metadata, inline);
         }
         return buildSheetsInfoMarkup(metadata, inline);
+    }
+
+    if (metadata.kind === 'presentation_tool_output') {
+        if (previewType === 'presentation_templates') {
+            const templates = Array.isArray(inline.templates) ? inline.templates : [];
+            return `
+                <div class="tool-preview-card tool-preview-ppt">
+                    <div class="tool-preview-ppt-title">${escapeToolPreviewHtml(metadata.title || 'Presentation templates')}</div>
+                    <div class="tool-preview-ppt-template-list">
+                        ${templates.map((tpl) => `
+                            <div class="tool-preview-ppt-template">
+                                <strong>${escapeToolPreviewHtml(tpl.name || tpl.id)}</strong>
+                                <span>${escapeToolPreviewHtml(tpl.description || '')}</span>
+                            </div>
+                        `).join('') || 'No templates available.'}
+                    </div>
+                </div>
+            `;
+        }
+        return buildPresentationMarkup(metadata, inline);
     }
 
     if (previewType === 'image' && metadata.relativePath) {
@@ -1289,6 +1379,22 @@ async function startNewConversation() {
  * Set up IPC listeners for communication with python-bridge.js
  */
 function setupIpcListeners() {
+    document.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-ppt-download]');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+            await savePresentationFromUrl(button.dataset.pptDownload, button.dataset.pptFilename || 'presentation.pptx');
+        } catch (error) {
+            console.error('[PresentationPreview] Download failed:', error);
+            alert(`Failed to download presentation: ${error.message}`);
+        } finally {
+            button.disabled = false;
+        }
+    });
+
     window.addEventListener('offline', () => {
         connectionStatus = false;
         const message = 'You are offline. Chat will reconnect when internet is available.';
@@ -1550,6 +1656,27 @@ function setupIpcListeners() {
         handleGeneratedMediaEvent(data, data?.mediaType || 'image');
     });
 
+    ipcRenderer.on('presentation_generated', (data) => {
+        const metadata = data?.metadata || null;
+        const artifactId = metadata?.artifact_id || metadata?.output_id;
+        const conversationId = data?.conversationId || currentConversationId;
+        if (metadata && artifactId && artifactHandler && isConversationActive(conversationId) && !isProjectWorkspaceMode()) {
+            artifactHandler.showArtifact('presentation', metadata, artifactId, {
+                title: metadata.title || metadata.filename || 'PowerPoint deck',
+                mimeType: metadata.mime_type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            });
+        }
+        if (conversationId) {
+            invalidateContentForConversation(conversationId);
+            document.dispatchEvent(new CustomEvent('session-content:updated', {
+                detail: { conversationId, type: 'artifact' }
+            }));
+            if (isConversationActive(conversationId)) {
+                checkAndShowContentButton();
+            }
+        }
+    });
+
     ipcRenderer.on('agent-step', async (data) => {
         const {
             id: messageId,
@@ -1700,6 +1827,21 @@ function setupIpcListeners() {
                     title: metadata.title || 'Google Sheets update',
                     language: 'html',
                     defaultView: 'preview'
+                });
+            }
+
+            if (
+                metadata &&
+                metadata.kind === 'presentation_tool_output' &&
+                metadata.preview_type === 'presentation' &&
+                artifactHandler &&
+                isConversationActive(streamConversationId) &&
+                !isProjectWorkspaceMode()
+            ) {
+                const artifactId = metadata.artifact_id || metadata.output_id || `presentation-${Date.now()}`;
+                artifactHandler.showArtifact('presentation', metadata, artifactId, {
+                    title: metadata.title || metadata.filename || 'PowerPoint deck',
+                    mimeType: metadata.mime_type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
                 });
             }
 
