@@ -721,6 +721,12 @@ button.secondary:hover {
     display: block;
 }
 
+.auth-form input {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-app-region: no-drag;
+}
+
 .auth-error {
     color: var(--danger-color);
     font-size: 14px;
