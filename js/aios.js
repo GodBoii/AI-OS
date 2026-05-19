@@ -156,6 +156,7 @@ class AIOS {
             loginPassword: document.getElementById('loginPassword'),
             signupName: document.getElementById('signupName'),
             signupEmail: document.getElementById('signupEmail'),
+            signupPhone: document.getElementById('signupPhone'),
             signupPassword: document.getElementById('signupPassword'),
             confirmPassword: document.getElementById('confirmPassword'),
             loginError: document.getElementById('login-error'),
@@ -2716,10 +2717,15 @@ class AIOS {
         if (!this.authService) return;
         const name = this.elements.signupName ? this.elements.signupName.value : '';
         const email = this.elements.signupEmail.value;
+        const phone = this.elements.signupPhone ? this.elements.signupPhone.value : '';
         const password = this.elements.signupPassword.value;
         const confirmPassword = this.elements.confirmPassword.value;
-        if (!name || !email || !password || !confirmPassword) {
+        if (!name || !email || !phone || !password || !confirmPassword) {
             this.elements.signupError.textContent = 'All fields are required';
+            return;
+        }
+        if (!/^\+[1-9]\d{7,14}$/.test(phone.trim().replace(/[\s().-]/g, ''))) {
+            this.elements.signupError.textContent = 'Enter a valid mobile number with country code, for example +919876543210.';
             return;
         }
         if (password !== confirmPassword) {
@@ -2727,7 +2733,7 @@ class AIOS {
             return;
         }
         try {
-            const result = await this.authService.signUp(email, password, name.trim());
+            const result = await this.authService.signUp(email, password, name.trim(), phone.trim());
             if (result.success) {
                 this.elements.signupForm.reset();
                 this.elements.signupError.textContent = '';

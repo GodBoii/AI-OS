@@ -78,16 +78,29 @@ class AuthService {
         });
     }
 
-    async signUp(email, password, name) {
+    normalizePhoneNumber(phoneNumber) {
+        const rawPhoneNumber = typeof phoneNumber === 'string' ? phoneNumber.trim() : '';
+        const normalizedPhoneNumber = rawPhoneNumber.replace(/[\s().-]/g, '');
+
+        if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhoneNumber)) {
+            throw new Error('Enter a valid mobile number with country code, for example +919876543210.');
+        }
+
+        return normalizedPhoneNumber;
+    }
+
+    async signUp(email, password, name, phoneNumber) {
         try {
             await this.ensureInitialized();
             const processedName = typeof name === 'string' ? name.trim() : '';
+            const processedPhoneNumber = this.normalizePhoneNumber(phoneNumber);
             const { data, error } = await this.supabase.auth.signUp({
                 email: email,
                 password: password,
                 options: {
                     data: {
-                        name: processedName
+                        name: processedName,
+                        phone_number: processedPhoneNumber
                     }
                 }
             });
