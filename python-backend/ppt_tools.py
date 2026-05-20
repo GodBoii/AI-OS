@@ -24,23 +24,43 @@ PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.p
 TEMPLATES: Dict[str, Dict[str, str]] = {
     "aetheria_modern": {
         "name": "Aetheria Modern",
-        "description": "Clean AI, product, and strategy deck with editorial title slides.",
+        "description": "Clean editorial deck for AI strategy and product narratives.",
         "best_for": "AI strategy, product plans, operational reviews",
     },
     "executive": {
         "name": "Executive Boardroom",
-        "description": "Quiet boardroom style with dark ink, metric rails, and readable tables.",
+        "description": "Refined boardroom aesthetic with crisp data hierarchy.",
         "best_for": "business reviews, leadership updates, investor summaries",
     },
     "startup_pitch": {
         "name": "Startup Pitch",
-        "description": "High-contrast pitch-deck rhythm with bold proof points.",
+        "description": "High-contrast dark deck with bold metrics for investors.",
         "best_for": "startup fundraising, product launches, market narratives",
     },
     "academic": {
         "name": "Academic Research",
-        "description": "Formal readable research presentation with citations and evidence layouts.",
+        "description": "Formal scholarly layout with readable evidence and citations.",
         "best_for": "research talks, coursework, technical explainers",
+    },
+    "creative_portfolio": {
+        "name": "Creative Portfolio",
+        "description": "Bold expressive deck with vibrant gradients and asymmetric layouts.",
+        "best_for": "design portfolios, creative briefs, brand pitches",
+    },
+    "minimal_zen": {
+        "name": "Minimal Zen",
+        "description": "Ultra-clean whitespace design with restrained single-accent palette.",
+        "best_for": "thought leadership, keynotes, minimalist reports",
+    },
+    "tech_dark": {
+        "name": "Tech Neon",
+        "description": "Dark engineering theme with electric neon accents and sharp edges.",
+        "best_for": "technical demos, developer talks, product launches",
+    },
+    "corporate_gradient": {
+        "name": "Corporate Horizon",
+        "description": "Professional gradient-rich deck with structured visual hierarchy.",
+        "best_for": "quarterly reports, all-hands meetings, client proposals",
     },
 }
 
@@ -161,7 +181,7 @@ class PresentationTools(Toolkit):
                 types include title, content, two_column, comparison, image, visual.
                 Slides can include bullets/content, metrics, chart.data, table,
                 nodes/steps, callout, notes, and captions.
-            template: One of aetheria_modern, executive, startup_pitch, academic.
+            template: One of aetheria_modern, executive, startup_pitch, academic, creative_portfolio, minimal_zen, tech_dark, corporate_gradient.
             filename: Optional output filename ending in .pptx.
         """
         try:
