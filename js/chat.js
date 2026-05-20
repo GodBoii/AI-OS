@@ -15,8 +15,7 @@ import {
     PRESENTATION_TEMPLATES,
     buildPresentationTemplateInstruction,
     getSelectedPresentationTemplate,
-    isPresentationRequest,
-    setSelectedPresentationTemplate
+    isPresentationRequest
 } from './presentation-templates.js';
 
 // Use the exposed electron APIs instead of direct requires
@@ -51,7 +50,6 @@ let welcomeDisplay = null;
 let floatingWindowManager = null;
 let audioInputHandler = null;
 let connectionStatus = false;
-let presentationTemplateApprovalBypassOnce = false;
 const conversationThreads = new Map();
 const conversationLabels = new Map();
 const queuedConversations = new Map();
@@ -2860,99 +2858,6 @@ function getPresentationMessageForBackend(message) {
     return `${message}${buildPresentationTemplateInstruction(selectedTemplate)}`;
 }
 
-function shouldAskPresentationTemplateApproval(message) {
-    if (presentationTemplateApprovalBypassOnce) {
-        presentationTemplateApprovalBypassOnce = false;
-        return false;
-    }
-    return isPresentationRequest(message) && !getSelectedPresentationTemplate();
-}
-
-function removeExistingPresentationApproval() {
-    getActiveConversationThread()?.querySelectorAll('.ppt-hitl-message').forEach((node) => node.remove());
-}
-
-function showPresentationTemplateApproval(message) {
-    const activeThread = getActiveConversationThread();
-    if (!activeThread) return false;
-
-    removeExistingPresentationApproval();
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message message-bot ppt-hitl-message';
-    messageDiv.innerHTML = `
-        <div class="ppt-hitl-card">
-            <div class="ppt-hitl-header">
-                <div>
-                    <div class="ppt-hitl-kicker">PowerPoint approval</div>
-                    <h3>Aetheria is ready to create this deck.</h3>
-                    <p>Continue with automatic styling, or choose a stock template before the presentation agent starts.</p>
-                    <div class="ppt-hitl-request">${escapeToolPreviewHtml(message)}</div>
-                </div>
-                <button type="button" class="ppt-hitl-expand" data-action="expand-templates">
-                    <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
-                    Browse all
-                </button>
-            </div>
-            <div class="ppt-hitl-template-strip">
-                ${PRESENTATION_TEMPLATES.slice(0, 4).map((template) => getHitlTemplateButtonHtml(template)).join('')}
-            </div>
-            <div class="ppt-hitl-more hidden">
-                ${PRESENTATION_TEMPLATES.map((template) => getHitlTemplateButtonHtml(template, true)).join('')}
-            </div>
-            <div class="ppt-hitl-actions">
-                <span class="ppt-hitl-selection">No template selected. Aetheria can choose one.</span>
-                <button type="button" class="ppt-hitl-continue" data-action="continue">Continue</button>
-            </div>
-        </div>
-    `;
-
-    const applySelection = (templateId) => {
-        const template = setSelectedPresentationTemplate(templateId);
-        if (!template) return;
-        messageDiv.querySelectorAll('[data-template-id]').forEach((button) => {
-            button.classList.toggle('selected', button.dataset.templateId === template.id);
-        });
-        const selection = messageDiv.querySelector('.ppt-hitl-selection');
-        if (selection) {
-            selection.textContent = `${template.name} selected.`;
-        }
-    };
-
-    messageDiv.querySelectorAll('[data-template-id]').forEach((button) => {
-        button.addEventListener('click', () => applySelection(button.dataset.templateId));
-    });
-
-    messageDiv.querySelector('[data-action="expand-templates"]')?.addEventListener('click', () => {
-        messageDiv.querySelector('.ppt-hitl-more')?.classList.toggle('hidden');
-    });
-
-    messageDiv.querySelector('[data-action="continue"]')?.addEventListener('click', () => {
-        messageDiv.classList.add('approved');
-        presentationTemplateApprovalBypassOnce = true;
-        handleSendMessage();
-    });
-
-    activeThread.appendChild(messageDiv);
-    scrollActiveConversationToBottom();
-    return true;
-}
-
-function getHitlTemplateButtonHtml(template, full = false) {
-    const colors = template.colors || [];
-    return `
-        <button type="button" class="ppt-hitl-template ${full ? 'full' : ''}" data-template-id="${escapeToolPreviewHtml(template.id)}">
-            <span class="ppt-hitl-thumb" style="--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};">
-                <span></span><i></i><b></b>
-            </span>
-            <span class="ppt-hitl-template-copy">
-                <strong>${escapeToolPreviewHtml(template.name)}</strong>
-                ${full ? `<small>${escapeToolPreviewHtml(template.bestFor)}</small>` : ''}
-            </span>
-        </button>
-    `;
-}
-
 async function handleSendMessage() {
     const floatingInput = document.getElementById('floating-input');
     const sendMessageBtn = document.getElementById('send-message');
@@ -2966,11 +2871,6 @@ async function handleSendMessage() {
 
     // Allow sending even with just context sessions selected
     if (!message && attachedFiles.length === 0 && selectedSessions.length === 0) return;
-
-    if (message && shouldAskPresentationTemplateApproval(message)) {
-        showPresentationTemplateApproval(message);
-        return;
-    }
 
     floatingInput.disabled = true;
     sendMessageBtn.disabled = true;
