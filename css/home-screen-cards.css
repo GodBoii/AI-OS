@@ -1,17 +1,22 @@
 /* ================================================================= */
-/* WELCOME OVERVIEW CARDS                                            */
+/* HOME SCREEN — Pills + Carousel + Context Content                  */
 /* ================================================================= */
 
+/* ── Outer wrapper (same ID/class for show/hide compat) ── */
 .home-suggestions-wrapper {
     position: fixed;
     left: 50%;
-    bottom: 2.2%;
+    top: 56%;
     transform: translateX(-50%);
-    width: min(80%, 1100px);
+    width: min(72%, 860px);
     z-index: var(--z-welcome-message, 998);
     pointer-events: auto;
     opacity: 0;
     visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     transition:
         opacity 0.62s cubic-bezier(0.16, 1, 0.3, 1),
         transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
@@ -33,195 +38,706 @@
     transform: translateX(-50%) translateY(18px);
 }
 
-.welcome-chip-rail {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-    align-items: stretch;
-}
+/* ================================================================= */
+/* PILLS ROW                                                          */
+/* ================================================================= */
 
-.welcome-chip-item {
-    min-height: 315px;
-    animation: welcomeOverviewRise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.welcome-chip-item:nth-child(1) {
-    animation-delay: 0.08s;
-}
-
-.welcome-chip-item:nth-child(2) {
-    animation-delay: 0.16s;
-}
-
-.welcome-chip-item:nth-child(3) {
-    animation-delay: 0.24s;
-}
-
-.welcome-chip {
-    height: 100%;
-    max-height: 315px;
+.home-pills-row {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 20px;
-    border: 1px solid;
-    box-shadow:
-        0 20px 46px rgba(0, 0, 0, 0.18),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(26px) saturate(165%);
-    -webkit-backdrop-filter: blur(26px) saturate(165%);
-    transition:
-        transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-        border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-        background 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    animation: welcomeOverviewRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
 
-.welcome-chip:hover {
-    transform: translateY(-4px);
-}
-
-.dark-mode .welcome-chip {
-    background: rgba(20, 20, 22, 0.88);
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow:
-        0 24px 56px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        inset 0 -8px 18px rgba(255, 255, 255, 0.02);
-}
-
-.dark-mode .welcome-chip:hover {
-    background: rgba(26, 26, 28, 0.92);
-    border-color: rgba(255, 255, 255, 0.16);
-    box-shadow:
-        0 28px 62px rgba(0, 0, 0, 0.52),
-        inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-body:not(.dark-mode) .welcome-chip {
-    background: rgba(247, 242, 233, 0.92);
-    border-color: rgba(44, 36, 28, 0.12);
-    box-shadow:
-        0 20px 44px rgba(73, 58, 38, 0.14),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
-body:not(.dark-mode) .welcome-chip:hover {
-    background: rgba(250, 245, 236, 0.97);
-    border-color: rgba(44, 36, 28, 0.18);
-    box-shadow:
-        0 24px 50px rgba(73, 58, 38, 0.18),
-        inset 0 1px 0 rgba(255, 255, 255, 1);
-}
-
-.welcome-chip-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid;
-}
-
-.dark-mode .welcome-chip-header {
-    border-color: rgba(255, 255, 255, 0.08);
-}
-
-body:not(.dark-mode) .welcome-chip-header {
-    border-color: rgba(44, 36, 28, 0.1);
-}
-
-.welcome-chip-badge {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    min-width: 0;
-    width: 100%;
-}
-
-.welcome-chip-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 12px;
+.home-pill {
     display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        color 0.22s ease;
+}
+
+.home-pill i {
+    font-size: 0.86rem;
+}
+
+.home-pill:hover {
+    transform: translateY(-2px);
+}
+
+.home-pill:active {
+    transform: translateY(0) scale(0.97);
+    transition-duration: 0.08s;
+}
+
+/* ── Dark mode pill ── */
+.dark-mode .home-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.dark-mode .home-pill:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .home-pill.active {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 1);
+    box-shadow:
+        0 2px 12px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── Light mode pill ── */
+body:not(.dark-mode) .home-pill {
+    background: rgba(44, 36, 28, 0.04);
+    border-color: rgba(44, 36, 28, 0.12);
+    color: rgba(44, 36, 28, 0.72);
+}
+
+body:not(.dark-mode) .home-pill:hover {
+    background: rgba(44, 36, 28, 0.08);
+    border-color: rgba(44, 36, 28, 0.2);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+body:not(.dark-mode) .home-pill.active {
+    background: rgba(44, 36, 28, 0.1);
+    border-color: rgba(44, 36, 28, 0.26);
+    color: rgba(16, 14, 11, 1);
+}
+
+/* ================================================================= */
+/* CAROUSEL — Auto-rotating feature showcase card                     */
+/* ================================================================= */
+.home-carousel {
+    position: fixed;
+    bottom: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(72%, 620px);
+    z-index: var(--z-welcome-message, 998);
+    pointer-events: auto;
+    animation: carouselRiseCenter 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+.home-carousel.hidden {
+    display: none;
+}
+
+.carousel-track {
+    position: relative;
+    width: 100%;
+    min-height: 100px;
+    border-radius: 18px;
+    border: 1px solid;
+    overflow: hidden;
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+.dark-mode .carousel-track {
+    background: rgba(20, 20, 22, 0.82);
+    border-color: rgba(255, 255, 255, 0.09);
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+body:not(.dark-mode) .carousel-track {
+    background: rgba(247, 242, 233, 0.88);
+    border-color: rgba(44, 36, 28, 0.1);
+    box-shadow:
+        0 16px 48px rgba(73, 58, 38, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.carousel-slide {
+    display: none;
+    padding: 24px 28px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    animation: carouselFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.carousel-slide.active {
+    display: flex;
+}
+
+@keyframes carouselFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.carousel-slide-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.carousel-slide-copy h4 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.carousel-slide-copy p {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    font-weight: 400;
+}
+
+.dark-mode .carousel-slide-copy h4 { color: rgba(255, 255, 255, 0.95); }
+.dark-mode .carousel-slide-copy p { color: rgba(255, 255, 255, 0.55); }
+body:not(.dark-mode) .carousel-slide-copy h4 { color: rgba(16, 14, 11, 0.94); }
+body:not(.dark-mode) .carousel-slide-copy p { color: rgba(44, 36, 28, 0.6); }
+
+.carousel-slide-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 0.95rem;
+    font-size: 1.15rem;
 }
 
-.dark-mode .welcome-chip-icon {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.96);
+.dark-mode .carousel-slide-icon {
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-body:not(.dark-mode) .welcome-chip-icon {
+body:not(.dark-mode) .carousel-slide-icon {
     background: rgba(44, 36, 28, 0.06);
-    color: rgba(20, 17, 12, 0.92);
-    border: 1px solid rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.7);
+    border: 1px solid rgba(44, 36, 28, 0.08);
 }
 
-.welcome-chip-heading {
-    min-width: 0;
+/* ── Pagination dots ── */
+.carousel-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding-top: 12px;
+}
+
+.carousel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.dark-mode .carousel-dot {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .carousel-dot.active {
+    background: rgba(255, 255, 255, 0.7);
+    transform: scale(1.3);
+}
+
+body:not(.dark-mode) .carousel-dot {
+    background: rgba(44, 36, 28, 0.18);
+}
+
+body:not(.dark-mode) .carousel-dot.active {
+    background: rgba(44, 36, 28, 0.6);
+    transform: scale(1.3);
+}
+
+/* ================================================================= */
+/* PILL CONTENT — Context-specific area below pills                   */
+/* ================================================================= */
+
+.home-pill-content {
+    width: 100%;
+    animation: pillContentReveal 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.home-pill-content.hidden {
+    display: none;
+}
+
+@keyframes pillContentReveal {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ================================================================= */
+/* TEMPLATES — Horizontal scroll row                                  */
+/* ================================================================= */
+
+/* ── Scroll wrapper with arrows ── */
+.templates-scroll-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.scroll-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-65%);
+    z-index: 3;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.72rem;
+    transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        opacity 0.25s ease;
+}
+
+.scroll-arrow.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.scroll-arrow-left {
+    left: -16px;
+}
+
+.scroll-arrow-right {
+    right: -16px;
+}
+
+.scroll-arrow:hover {
+    transform: translateY(-65%) scale(1.1);
+}
+
+.dark-mode .scroll-arrow {
+    background: rgba(30, 30, 32, 0.92);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.dark-mode .scroll-arrow:hover {
+    background: rgba(50, 50, 54, 0.95);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+body:not(.dark-mode) .scroll-arrow {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(44, 36, 28, 0.15);
+    color: rgba(16, 14, 11, 0.8);
+    box-shadow: 0 4px 16px rgba(73, 58, 38, 0.12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+body:not(.dark-mode) .scroll-arrow:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(44, 36, 28, 0.25);
+}
+
+.templates-scroll-row {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 2px 10px;
+    /* Hidden scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.templates-scroll-row::-webkit-scrollbar {
+    display: none;
+}
+
+.template-scroll-card {
+    flex: 0 0 260px;
+    scroll-snap-align: start;
+    border-radius: 16px;
+    border: 1px solid;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+        transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.24s ease,
+        box-shadow 0.24s ease;
+}
+
+.template-scroll-card:hover {
+    transform: translateY(-4px);
+}
+
+.dark-mode .template-scroll-card {
+    background: rgba(20, 20, 22, 0.82);
+    border-color: rgba(255, 255, 255, 0.09);
+    box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .template-scroll-card:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 14px 40px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .template-scroll-card.selected {
+    border-color: rgba(125, 211, 252, 0.6);
+    box-shadow:
+        0 0 0 1px rgba(125, 211, 252, 0.2),
+        0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+body:not(.dark-mode) .template-scroll-card {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(44, 36, 28, 0.1);
+    box-shadow:
+        0 8px 28px rgba(73, 58, 38, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body:not(.dark-mode) .template-scroll-card:hover {
+    border-color: rgba(44, 36, 28, 0.18);
+    box-shadow: 0 14px 40px rgba(73, 58, 38, 0.15);
+}
+
+body:not(.dark-mode) .template-scroll-card.selected {
+    border-color: rgba(35, 100, 170, 0.5);
+    box-shadow:
+        0 0 0 1px rgba(35, 100, 170, 0.15),
+        0 8px 28px rgba(73, 58, 38, 0.1);
+}
+
+/* ── Canvas wrap + eye icon ── */
+.template-scroll-canvas-wrap {
+    position: relative;
+    padding: 12px 12px 0;
+}
+
+.template-scroll-canvas-wrap .ppt-template-canvas {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--ppt-bg);
+    border: 1px solid rgba(127, 127, 127, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    display: block;
+}
+
+.template-preview-btn {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.82rem;
+    z-index: 2;
+    transition:
+        transform 0.18s ease,
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.template-preview-btn:hover {
+    transform: scale(1.1);
+}
+
+.dark-mode .template-preview-btn {
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.dark-mode .template-preview-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+body:not(.dark-mode) .template-preview-btn {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(44, 36, 28, 0.15);
+    color: rgba(16, 14, 11, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+body:not(.dark-mode) .template-preview-btn:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(44, 36, 28, 0.25);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+/* ── Selected badge ── */
+.template-selected-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 18px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    z-index: 2;
+}
+
+.dark-mode .template-selected-badge {
+    background: rgba(125, 211, 252, 0.9);
+    color: #0a0e17;
+}
+
+body:not(.dark-mode) .template-selected-badge {
+    background: rgba(35, 100, 170, 0.85);
+    color: #fff;
+}
+
+/* ── Template info ── */
+.template-scroll-info {
+    padding: 10px 14px 14px;
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.welcome-chip-title {
-    margin: 0;
-    font-size: 0.9rem;
-    line-height: 1.15;
+.template-scroll-info strong {
+    font-size: 0.88rem;
     font-weight: 700;
-    letter-spacing: -0.015em;
+    line-height: 1.25;
 }
 
-.dark-mode .welcome-chip-title {
-    color: rgba(255, 255, 255, 0.96);
+.template-scroll-info small {
+    font-size: 0.76rem;
+    line-height: 1.4;
 }
 
-body:not(.dark-mode) .welcome-chip-title {
-    color: rgba(19, 17, 14, 0.96);
-}
+.dark-mode .template-scroll-info strong { color: rgba(255, 255, 255, 0.92); }
+.dark-mode .template-scroll-info small { color: rgba(255, 255, 255, 0.5); }
+body:not(.dark-mode) .template-scroll-info strong { color: rgba(16, 14, 11, 0.92); }
+body:not(.dark-mode) .template-scroll-info small { color: rgba(44, 36, 28, 0.58); }
 
-.welcome-chip-description {
-    margin: 0;
+/* ── Hint text ── */
+.templates-scroll-hint {
+    padding-top: 4px;
     font-size: 0.72rem;
-    line-height: 1.45;
-    font-weight: 500;
+    text-align: center;
 }
 
-.dark-mode .welcome-chip-description {
-    color: rgba(255, 255, 255, 0.62);
+.dark-mode .templates-scroll-hint { color: rgba(255, 255, 255, 0.4); }
+body:not(.dark-mode) .templates-scroll-hint { color: rgba(44, 36, 28, 0.5); }
+
+/* ================================================================= */
+/* PROMPT GRID — Website & Design starters                            */
+/* ================================================================= */
+
+.prompt-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
 }
 
-body:not(.dark-mode) .welcome-chip-description {
-    color: rgba(44, 36, 28, 0.62);
-}
-
-.welcome-chip-content {
-    flex: 1;
-    min-height: 0;
+.prompt-card {
     display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition:
+        transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease;
 }
 
-.welcome-chip-footer {
+.prompt-card:hover {
+    transform: translateY(-3px);
+}
+
+.prompt-card:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 0.08s;
+}
+
+.dark-mode .prompt-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .prompt-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+body:not(.dark-mode) .prompt-card {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+body:not(.dark-mode) .prompt-card:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(44, 36, 28, 0.18);
+    box-shadow: 0 8px 24px rgba(73, 58, 38, 0.1);
+}
+
+.prompt-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.88rem;
+}
+
+.dark-mode .prompt-card-icon {
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.65);
+}
+
+body:not(.dark-mode) .prompt-card-icon {
+    background: rgba(44, 36, 28, 0.06);
+    color: rgba(44, 36, 28, 0.6);
+}
+
+.prompt-card-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.prompt-card-copy strong {
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.prompt-card-copy small {
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.dark-mode .prompt-card-copy strong { color: rgba(255, 255, 255, 0.92); }
+.dark-mode .prompt-card-copy small { color: rgba(255, 255, 255, 0.48); }
+body:not(.dark-mode) .prompt-card-copy strong { color: rgba(16, 14, 11, 0.92); }
+body:not(.dark-mode) .prompt-card-copy small { color: rgba(44, 36, 28, 0.55); }
+
+/* ================================================================= */
+/* SESSIONS & TASKS — List views                                      */
+/* ================================================================= */
+
+.home-tasks-content {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
-    flex-wrap: wrap;
+}
+
+.home-tasks-footer {
+    display: flex;
+    justify-content: flex-start;
+}
+
+/* ================================================================= */
+/* SHARED: Card empty state + List items + Action buttons             */
+/* (preserved from original — needed by sessions/tasks views)         */
+/* ================================================================= */
+
+.welcome-card-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 24px 16px;
+    border-radius: 14px;
+    border: 1px solid;
+}
+
+.dark-mode .welcome-card-empty {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.56);
+}
+
+body:not(.dark-mode) .welcome-card-empty {
+    background: rgba(44, 36, 28, 0.035);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(44, 36, 28, 0.56);
 }
 
 .welcome-card-action {
     border: 1px solid;
     border-radius: 999px;
-    padding: 9px 13px;
+    padding: 9px 16px;
     font-size: 0.76rem;
     font-weight: 700;
+    font-family: inherit;
     cursor: pointer;
     transition:
         transform 0.2s ease,
@@ -244,11 +760,6 @@ body:not(.dark-mode) .welcome-chip-description {
     border-color: rgba(255, 255, 255, 0.18);
 }
 
-.dark-mode .welcome-card-action.secondary {
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.7);
-}
-
 body:not(.dark-mode) .welcome-card-action {
     background: rgba(44, 36, 28, 0.06);
     color: rgba(19, 17, 14, 0.92);
@@ -260,114 +771,19 @@ body:not(.dark-mode) .welcome-card-action:hover {
     border-color: rgba(44, 36, 28, 0.18);
 }
 
-body:not(.dark-mode) .welcome-card-action.secondary {
-    background: rgba(44, 36, 28, 0.03);
-    color: rgba(44, 36, 28, 0.7);
-}
-
-.welcome-card-footnote {
-    font-size: 0.74rem;
-    line-height: 1.4;
-}
-
-.dark-mode .welcome-card-footnote {
-    color: rgba(255, 255, 255, 0.5);
-}
-
-body:not(.dark-mode) .welcome-card-footnote {
-    color: rgba(44, 36, 28, 0.56);
-}
-
-.welcome-card-empty,
-.welcome-prompt-block {
-    height: 100%;
-    min-height: 0;
-    border-radius: 14px;
-    border: 1px solid;
-    padding: 10px 12px;
-}
-
-.dark-mode .welcome-card-empty,
-.dark-mode .welcome-prompt-block {
-    background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.08);
-}
-
-body:not(.dark-mode) .welcome-card-empty,
-body:not(.dark-mode) .welcome-prompt-block {
-    background: rgba(44, 36, 28, 0.035);
-    border-color: rgba(44, 36, 28, 0.1);
-}
-
-.welcome-card-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    font-size: 0.8rem;
-    line-height: 1.5;
-}
-
-.dark-mode .welcome-card-empty {
-    color: rgba(255, 255, 255, 0.66);
-}
-
-body:not(.dark-mode) .welcome-card-empty {
-    color: rgba(44, 36, 28, 0.66);
-}
-
-.welcome-prompt-block {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.welcome-prompt-meta {
-    font-size: 0.74rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-}
-
-.dark-mode .welcome-prompt-meta {
-    color: rgba(255, 255, 255, 0.48);
-}
-
-body:not(.dark-mode) .welcome-prompt-meta {
-    color: rgba(44, 36, 28, 0.52);
-}
-
-.welcome-prompt-text {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-size: 0.8rem;
-    line-height: 1.5;
-}
-
-.dark-mode .welcome-prompt-text {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-body:not(.dark-mode) .welcome-prompt-text {
-    color: rgba(16, 14, 11, 0.92);
-}
-
 .welcome-list {
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-height: 0;
+    max-height: 280px;
     overflow-y: auto;
-    /* Hide scrollbar while maintaining scroll functionality */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .welcome-list::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+    display: none;
 }
 
 .welcome-list-item {
@@ -378,9 +794,10 @@ body:not(.dark-mode) .welcome-prompt-text {
     gap: 12px;
     border: 1px solid;
     border-radius: 13px;
-    padding: 9px 10px;
+    padding: 10px 12px;
     cursor: pointer;
     text-align: left;
+    font-family: inherit;
     transition:
         transform 0.2s ease,
         background 0.2s ease,
@@ -401,119 +818,152 @@ body:not(.dark-mode) .welcome-prompt-text {
 .dark-mode .welcome-list-item:hover {
     background: rgba(255, 255, 255, 0.07);
     border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 }
 
-.welcome-prompt-suggestions {
+body:not(.dark-mode) .welcome-list-item {
+    background: rgba(44, 36, 28, 0.035);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.94);
+}
+
+body:not(.dark-mode) .welcome-list-item:hover {
+    background: rgba(44, 36, 28, 0.08);
+    border-color: rgba(44, 36, 28, 0.15);
+    box-shadow: 0 6px 18px rgba(73, 58, 38, 0.08);
+}
+
+.welcome-list-copy {
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 4px;
-    min-height: 0;
-    overflow: hidden;
+    gap: 4px;
+    flex: 1;
 }
 
-.welcome-prompt-suggestions-label {
-    font-size: 0.72rem;
+.welcome-list-title {
+    font-size: 0.79rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.dark-mode .welcome-prompt-suggestions-label {
-    color: rgba(255, 255, 255, 0.6);
+.welcome-list-meta {
+    font-size: 0.7rem;
+    font-weight: 500;
 }
 
-body:not(.dark-mode) .welcome-prompt-suggestions-label {
-    color: rgba(44, 36, 28, 0.6);
-}
+.dark-mode .welcome-list-meta { color: rgba(255, 255, 255, 0.5); }
+body:not(.dark-mode) .welcome-list-meta { color: rgba(44, 36, 28, 0.55); }
 
-.welcome-prompt-suggestions-list {
+/* ================================================================= */
+/* TEMPLATE DRAWER — Full browser overlay (preserved from original)   */
+/* ================================================================= */
+
+.ppt-template-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    overflow-y: auto;
-    padding-right: 2px;
-    /* Hide scrollbar while maintaining scroll functionality */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
-.welcome-prompt-suggestions-list::-webkit-scrollbar {
-    display: none; /* Chrome, Safari, Opera */
+.ppt-template-drawer.hidden {
+    display: none;
 }
 
-.welcome-prompt-chip {
+.ppt-template-drawer-panel {
+    width: min(960px, 94vw);
+    max-height: min(740px, 88vh);
+    overflow: hidden;
     border: 1px solid;
-    border-radius: 999px;
-    padding: 10px 16px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    line-height: 1.4;
-    cursor: pointer;
-    white-space: normal;
-    text-align: left;
-    transition:
-        transform 0.18s ease,
-        background 0.18s ease,
-        border-color 0.18s ease;
+    border-radius: 18px;
+    padding: 18px;
 }
 
-.welcome-prompt-chip:hover {
-    transform: translateY(-1px);
-}
-
-.dark-mode .welcome-prompt-chip {
-    background: rgba(255, 255, 255, 0.05);
+.dark-mode .ppt-template-drawer-panel {
+    background: rgba(18, 18, 20, 0.96);
     border-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 
-.dark-mode .welcome-prompt-chip:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.18);
-}
-
-body:not(.dark-mode) .welcome-prompt-chip {
-    background: rgba(44, 36, 28, 0.05);
+body:not(.dark-mode) .ppt-template-drawer-panel {
+    background: rgba(255, 255, 255, 0.96);
     border-color: rgba(44, 36, 28, 0.12);
-    color: rgba(16, 14, 11, 0.92);
+    box-shadow: 0 24px 70px rgba(73, 58, 38, 0.18);
 }
 
-body:not(.dark-mode) .welcome-prompt-chip:hover {
-    background: rgba(44, 36, 28, 0.1);
-    border-color: rgba(44, 36, 28, 0.18);
+.ppt-template-drawer-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
 }
 
-.welcome-template-card-summary {
+.ppt-template-drawer-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.ppt-template-drawer-header p {
+    margin: 4px 0 0;
+    font-size: 0.78rem;
+    opacity: 0.68;
+}
+
+.ppt-template-drawer-close {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.dark-mode .ppt-template-drawer-close {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.86);
+}
+
+body:not(.dark-mode) .ppt-template-drawer-close {
+    background: rgba(44, 36, 28, 0.04);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.86);
+}
+
+.ppt-template-drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    max-height: calc(88vh - 130px);
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.ppt-template-drawer-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.ppt-template-drawer-card {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-height: 0;
 }
 
-.welcome-template-mini-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.welcome-template-hint,
-.ppt-template-best {
-    font-size: 0.72rem;
-    line-height: 1.35;
-}
-
-.dark-mode .welcome-template-hint,
-.dark-mode .ppt-template-best {
-    color: rgba(255, 255, 255, 0.56);
-}
-
-body:not(.dark-mode) .welcome-template-hint,
-body:not(.dark-mode) .ppt-template-best {
-    color: rgba(44, 36, 28, 0.6);
-}
-
+/* ── Template preview button (used in drawer) ── */
 .ppt-template-preview {
     width: 100%;
     display: flex;
@@ -524,6 +974,7 @@ body:not(.dark-mode) .ppt-template-best {
     padding: 10px;
     cursor: pointer;
     text-align: left;
+    font-family: inherit;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 
@@ -561,6 +1012,7 @@ body:not(.dark-mode) .ppt-template-preview.selected {
     border-color: rgba(35, 100, 170, 0.5);
 }
 
+/* ── Template canvas (shared by scroll cards + drawer) ── */
 .ppt-template-canvas {
     position: relative;
     flex: 0 0 112px;
@@ -667,105 +1119,13 @@ body:not(.dark-mode) .ppt-template-preview.selected {
     text-overflow: ellipsis;
 }
 
-.ppt-template-drawer {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 28px;
-    background: rgba(0, 0, 0, 0.42);
-    backdrop-filter: blur(12px);
+.ppt-template-best {
+    font-size: 0.72rem;
+    line-height: 1.35;
 }
 
-.ppt-template-drawer.hidden {
-    display: none;
-}
-
-.ppt-template-drawer-panel {
-    width: min(960px, 94vw);
-    max-height: min(740px, 88vh);
-    overflow: hidden;
-    border: 1px solid;
-    border-radius: 18px;
-    padding: 18px;
-}
-
-.dark-mode .ppt-template-drawer-panel {
-    background: rgba(18, 18, 20, 0.96);
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
-}
-
-body:not(.dark-mode) .ppt-template-drawer-panel {
-    background: rgba(255, 255, 255, 0.96);
-    border-color: rgba(44, 36, 28, 0.12);
-    box-shadow: 0 24px 70px rgba(73, 58, 38, 0.18);
-}
-
-.ppt-template-drawer-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 16px;
-}
-
-.ppt-template-drawer-header h3 {
-    margin: 0;
-    font-size: 1rem;
-}
-
-.ppt-template-drawer-header p {
-    margin: 4px 0 0;
-    font-size: 0.78rem;
-    opacity: 0.68;
-}
-
-.ppt-template-drawer-close {
-    width: 34px;
-    height: 34px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid;
-    border-radius: 10px;
-    cursor: pointer;
-}
-
-.dark-mode .ppt-template-drawer-close {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.86);
-}
-
-body:not(.dark-mode) .ppt-template-drawer-close {
-    background: rgba(44, 36, 28, 0.04);
-    border-color: rgba(44, 36, 28, 0.1);
-    color: rgba(16, 14, 11, 0.86);
-}
-
-.ppt-template-drawer-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    max-height: calc(88vh - 130px);
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-.ppt-template-drawer-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-.ppt-template-drawer-card {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+.dark-mode .ppt-template-best { color: rgba(255, 255, 255, 0.56); }
+body:not(.dark-mode) .ppt-template-best { color: rgba(44, 36, 28, 0.6); }
 
 /* ================================================================= */
 /* SLIDE PREVIEW TOGGLE                                              */
@@ -783,6 +1143,7 @@ body:not(.dark-mode) .ppt-template-drawer-close {
     cursor: pointer;
     font-size: 0.72rem;
     font-weight: 600;
+    font-family: inherit;
     transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 
@@ -900,29 +1261,19 @@ body:not(.dark-mode) .ppt-slide-preview-item:hover {
     line-height: 1.2;
 }
 
-.dark-mode .ppt-slide-preview-info strong {
-    color: rgba(255, 255, 255, 0.92);
-}
-
-body:not(.dark-mode) .ppt-slide-preview-info strong {
-    color: rgba(16, 14, 11, 0.92);
-}
+.dark-mode .ppt-slide-preview-info strong { color: rgba(255, 255, 255, 0.92); }
+body:not(.dark-mode) .ppt-slide-preview-info strong { color: rgba(16, 14, 11, 0.92); }
 
 .ppt-slide-preview-info small {
     font-size: 0.62rem;
     line-height: 1.3;
 }
 
-.dark-mode .ppt-slide-preview-info small {
-    color: rgba(255, 255, 255, 0.52);
-}
-
-body:not(.dark-mode) .ppt-slide-preview-info small {
-    color: rgba(44, 36, 28, 0.56);
-}
+.dark-mode .ppt-slide-preview-info small { color: rgba(255, 255, 255, 0.52); }
+body:not(.dark-mode) .ppt-slide-preview-info small { color: rgba(44, 36, 28, 0.56); }
 
 /* ================================================================= */
-/* SLIDE MINI-CANVAS – Base                                          */
+/* SLIDE MINI-CANVAS — All layout variants (preserved)                */
 /* ================================================================= */
 
 .ppt-slide-canvas {
@@ -935,7 +1286,6 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     border: 1px solid rgba(127, 127, 127, 0.18);
 }
 
-/* Shared micro-elements */
 .sc-kicker {
     position: absolute;
     left: 8%;
@@ -988,10 +1338,7 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     opacity: 0.35;
 }
 
-/* ================================================================= */
-/* Layout: Bullets                                                    */
-/* ================================================================= */
-
+/* Layout: Bullets */
 .layout-bullets .sc-bullet {
     position: absolute;
     left: 10%;
@@ -1019,10 +1366,7 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     opacity: 0.4;
 }
 
-/* ================================================================= */
-/* Layout: Two Column                                                 */
-/* ================================================================= */
-
+/* Layout: Two Column */
 .layout-twocol .sc-col {
     position: absolute;
     top: 34%;
@@ -1032,20 +1376,10 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     border: 1.5px solid;
 }
 
-.layout-twocol .sc-col.left {
-    left: 6%;
-    border-color: var(--ppt-a);
-}
+.layout-twocol .sc-col.left { left: 6%; border-color: var(--ppt-a); }
+.layout-twocol .sc-col.right { right: 6%; border-color: var(--ppt-b); }
 
-.layout-twocol .sc-col.right {
-    right: 6%;
-    border-color: var(--ppt-b);
-}
-
-/* ================================================================= */
-/* Layout: Chart                                                      */
-/* ================================================================= */
-
+/* Layout: Chart */
 .layout-chart .sc-bar {
     position: absolute;
     left: 10%;
@@ -1053,41 +1387,16 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     border-radius: 0 3px 3px 0;
 }
 
-.layout-chart .sc-bar.b1 {
-    top: 34%;
-    width: 62%;
-    background: var(--ppt-a);
-}
+.layout-chart .sc-bar.b1 { top: 34%; width: 62%; background: var(--ppt-a); }
+.layout-chart .sc-bar.b2 { top: 47%; width: 45%; background: var(--ppt-b); }
+.layout-chart .sc-bar.b3 { top: 60%; width: 74%; background: var(--ppt-c); }
+.layout-chart .sc-bar.b4 { top: 73%; width: 38%; background: var(--ppt-a); opacity: 0.6; }
 
-.layout-chart .sc-bar.b2 {
-    top: 47%;
-    width: 45%;
-    background: var(--ppt-b);
-}
-
-.layout-chart .sc-bar.b3 {
-    top: 60%;
-    width: 74%;
-    background: var(--ppt-c);
-}
-
-.layout-chart .sc-bar.b4 {
-    top: 73%;
-    width: 38%;
-    background: var(--ppt-a);
-    opacity: 0.6;
-}
-
-/* ================================================================= */
-/* Layout: Table                                                      */
-/* ================================================================= */
-
+/* Layout: Table */
 .layout-table .sc-table-header {
     position: absolute;
-    left: 8%;
-    top: 33%;
-    width: 84%;
-    height: 10%;
+    left: 8%; top: 33%;
+    width: 84%; height: 10%;
     border-radius: 3px 3px 0 0;
     background: var(--ppt-a);
 }
@@ -1095,8 +1404,7 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
 .layout-table .sc-table-row {
     position: absolute;
     left: 8%;
-    width: 84%;
-    height: 10%;
+    width: 84%; height: 10%;
     border-bottom: 1px solid var(--ppt-a);
     opacity: 0.2;
 }
@@ -1104,46 +1412,29 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
 .layout-table .sc-table-row:nth-child(4) { top: 43%; }
 .layout-table .sc-table-row:nth-child(5) { top: 53%; opacity: 0.12; }
 .layout-table .sc-table-row:nth-child(6) { top: 63%; }
+.layout-table .sc-table-row.alt { background: var(--ppt-a); opacity: 0.06; }
 
-.layout-table .sc-table-row.alt {
-    background: var(--ppt-a);
-    opacity: 0.06;
-}
-
-/* ================================================================= */
-/* Layout: Flow                                                       */
-/* ================================================================= */
-
+/* Layout: Flow */
 .layout-flow .sc-flow-row {
     position: absolute;
-    left: 6%;
-    right: 6%;
-    top: 40%;
-    height: 32%;
+    left: 6%; right: 6%; top: 40%; height: 32%;
     display: flex;
     align-items: center;
     gap: 3%;
 }
 
 .layout-flow .sc-flow-box {
-    flex: 1;
-    height: 100%;
+    flex: 1; height: 100%;
     border-radius: 4px;
     border: 1.5px solid var(--ppt-a);
     opacity: 0.55;
 }
 
-.layout-flow .sc-flow-box:nth-child(3) {
-    border-color: var(--ppt-b);
-}
-
-.layout-flow .sc-flow-box:nth-child(5) {
-    border-color: var(--ppt-c);
-}
+.layout-flow .sc-flow-box:nth-child(3) { border-color: var(--ppt-b); }
+.layout-flow .sc-flow-box:nth-child(5) { border-color: var(--ppt-c); }
 
 .layout-flow .sc-flow-arrow {
-    width: 0;
-    height: 0;
+    width: 0; height: 0;
     border-left: 4px solid var(--ppt-a);
     border-top: 3px solid transparent;
     border-bottom: 3px solid transparent;
@@ -1151,16 +1442,11 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     flex-shrink: 0;
 }
 
-/* ================================================================= */
-/* Layout: Visual                                                     */
-/* ================================================================= */
-
+/* Layout: Visual */
 .layout-visual .sc-image-placeholder {
     position: absolute;
-    left: 8%;
-    top: 32%;
-    width: 84%;
-    height: 44%;
+    left: 8%; top: 32%;
+    width: 84%; height: 44%;
     border-radius: 5px;
     border: 1.5px solid var(--ppt-a);
     opacity: 0.35;
@@ -1171,17 +1457,82 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
 
 .layout-visual .sc-caption {
     position: absolute;
-    left: 8%;
-    bottom: 8%;
-    width: 50%;
-    height: 4%;
+    left: 8%; bottom: 8%;
+    width: 50%; height: 4%;
     border-radius: 999px;
     background: var(--ppt-a);
     opacity: 0.3;
 }
 
+/* ================================================================= */
+/* ANIMATIONS                                                         */
+/* ================================================================= */
+
+@keyframes welcomeOverviewRise {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes carouselRiseCenter {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ================================================================= */
+/* RESPONSIVE                                                         */
+/* ================================================================= */
+
+@media (max-width: 1200px) {
+    .home-suggestions-wrapper {
+        width: min(84%, 860px);
+    }
+}
+
+@media (max-width: 960px) {
+    .home-suggestions-wrapper {
+        width: min(90%, 860px);
+    }
+
+    .prompt-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .template-scroll-card {
+        flex: 0 0 230px;
+    }
+}
+
 @media (max-width: 720px) {
-    .welcome-template-mini-grid,
+    .home-suggestions-wrapper {
+        width: 94%;
+        bottom: 2%;
+    }
+
+    .home-pills-row {
+        gap: 6px;
+    }
+
+    .home-pill {
+        padding: 7px 12px;
+        font-size: 0.76rem;
+    }
+
+    .template-scroll-card {
+        flex: 0 0 200px;
+    }
+
     .ppt-template-drawer-grid {
         grid-template-columns: 1fr;
     }
@@ -1191,98 +1542,230 @@ body:not(.dark-mode) .ppt-slide-preview-info small {
     }
 }
 
-body:not(.dark-mode) .welcome-list-item {
-    background: rgba(44, 36, 28, 0.035);
-    border-color: rgba(44, 36, 28, 0.1);
-    color: rgba(16, 14, 11, 0.94);
+@media (max-width: 480px) {
+    .home-pill span {
+        display: none;
+    }
+
+    .home-pill {
+        padding: 8px 12px;
+    }
+
+    .carousel-slide {
+        padding: 18px 20px;
+    }
+
+    .template-scroll-card {
+        flex: 0 0 180px;
+    }
 }
 
-body:not(.dark-mode) .welcome-list-item:hover {
-    background: rgba(44, 36, 28, 0.08);
-    border-color: rgba(44, 36, 28, 0.15);
-    box-shadow: 0 10px 22px rgba(73, 58, 38, 0.1);
-}
+/* ================================================================= */
+/* TEMPLATE PREVIEW OVERLAY — Single-template slide layout viewer     */
+/* ================================================================= */
 
-.welcome-list-copy {
-    min-width: 0;
+.template-preview-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s 0.3s;
 }
 
-.welcome-list-title {
-    font-size: 0.79rem;
+.template-preview-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s 0s;
+}
+
+.template-preview-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.template-preview-panel {
+    width: min(560px, 92vw);
+    max-height: min(620px, 86vh);
+    overflow-y: auto;
+    border: 1px solid;
+    border-radius: 18px;
+    padding: 20px;
+    animation: pillContentReveal 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.template-preview-panel::-webkit-scrollbar {
+    display: none;
+}
+
+.dark-mode .template-preview-panel {
+    background: rgba(18, 18, 20, 0.96);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+        0 24px 70px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+body:not(.dark-mode) .template-preview-panel {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(44, 36, 28, 0.12);
+    box-shadow: 0 24px 70px rgba(73, 58, 38, 0.18);
+}
+
+.template-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.template-preview-header-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.template-preview-header-info .mini-canvas {
+    flex: 0 0 80px;
+    aspect-ratio: 16 / 10;
+    border-radius: 8px;
+    display: block;
+}
+
+.template-preview-header-info h3 {
+    margin: 0;
+    font-size: 0.95rem;
     font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
-.welcome-list-meta {
-    font-size: 0.7rem;
-    font-weight: 500;
+.template-preview-header-info p {
+    margin: 3px 0 0;
+    font-size: 0.76rem;
+    line-height: 1.4;
 }
 
-.dark-mode .welcome-list-meta {
-    color: rgba(255, 255, 255, 0.56);
+.dark-mode .template-preview-header-info p { color: rgba(255, 255, 255, 0.55); }
+body:not(.dark-mode) .template-preview-header-info p { color: rgba(44, 36, 28, 0.6); }
+
+.template-preview-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+    transition: background 0.18s ease;
 }
 
-body:not(.dark-mode) .welcome-list-meta {
-    color: rgba(44, 36, 28, 0.62);
+.dark-mode .template-preview-close-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.86);
 }
 
-@keyframes welcomeOverviewRise {
-    from {
-        opacity: 0;
-        transform: translateY(18px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.dark-mode .template-preview-close-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
 }
 
-@media (max-width: 1200px) {
-    .home-suggestions-wrapper {
-        width: min(88%, 1100px);
-        bottom: 2%;
-    }
+body:not(.dark-mode) .template-preview-close-btn {
+    background: rgba(44, 36, 28, 0.04);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(16, 14, 11, 0.86);
 }
 
-@media (max-width: 960px) {
-    .home-suggestions-wrapper {
-        width: min(92%, 1100px);
-        bottom: 1.6%;
-    }
-
-    .welcome-chip-rail {
-        grid-template-columns: 1fr;
-    }
-
-    .welcome-chip-item {
-        min-height: 290px;
-    }
-
-    .welcome-chip {
-        max-height: 290px;
-    }
+body:not(.dark-mode) .template-preview-close-btn:hover {
+    background: rgba(44, 36, 28, 0.08);
 }
 
-@media (max-width: 640px) {
-    .home-suggestions-wrapper {
-        width: 96%;
-        bottom: 1.2%;
-    }
+.template-preview-subtitle {
+    font-size: 0.74rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    padding-left: 2px;
+}
 
-    .welcome-chip {
-        padding: 12px;
-        border-radius: 16px;
-        max-height: 270px;
-    }
+.dark-mode .template-preview-subtitle { color: rgba(255, 255, 255, 0.45); }
+body:not(.dark-mode) .template-preview-subtitle { color: rgba(44, 36, 28, 0.5); }
 
-    .welcome-chip-item {
-        min-height: 270px;
-    }
+.template-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.template-preview-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.template-preview-select-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        background 0.2s ease;
+}
+
+.template-preview-select-btn:hover {
+    transform: translateY(-1px);
+}
+
+.dark-mode .template-preview-select-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.dark-mode .template-preview-select-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.dark-mode .template-preview-select-btn.selected {
+    background: rgba(125, 211, 252, 0.2);
+    border-color: rgba(125, 211, 252, 0.5);
+    color: rgba(125, 211, 252, 1);
+}
+
+body:not(.dark-mode) .template-preview-select-btn {
+    background: rgba(44, 36, 28, 0.06);
+    border-color: rgba(44, 36, 28, 0.14);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+body:not(.dark-mode) .template-preview-select-btn:hover {
+    background: rgba(44, 36, 28, 0.1);
+}
+
+body:not(.dark-mode) .template-preview-select-btn.selected {
+    background: rgba(35, 100, 170, 0.1);
+    border-color: rgba(35, 100, 170, 0.4);
+    color: rgba(35, 100, 170, 1);
 }
