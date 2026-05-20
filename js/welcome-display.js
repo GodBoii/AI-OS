@@ -197,7 +197,7 @@ class WelcomeDisplay {
                 <div class="welcome-template-mini-grid">
                     ${featured.map((template) => this.getTemplatePreviewHtml(template, selected?.id === template.id, 'mini')).join('')}
                 </div>
-                <div class="welcome-template-hint">Click the card to browse all stock templates.</div>
+                <div class="welcome-template-hint">Click the card to browse all ${PRESENTATION_TEMPLATES.length} stock templates.</div>
             </div>
         `;
     }
@@ -217,6 +217,74 @@ class WelcomeDisplay {
                 </span>
             </button>
         `;
+    }
+
+    getSlideCanvasHtml(layout, colors) {
+        const style = `--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};`;
+        const layouts = {
+            'title': `
+                <span class="ppt-slide-canvas layout-title" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-lg"></span>
+                    <span class="sc-subtitle"></span>
+                    <span class="sc-arc"></span>
+                </span>`,
+            'bullets': `
+                <span class="ppt-slide-canvas layout-bullets" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-bullet"></span>
+                    <span class="sc-bullet short"></span>
+                    <span class="sc-bullet"></span>
+                    <span class="sc-bullet short"></span>
+                    <span class="sc-callout"></span>
+                </span>`,
+            'two-col': `
+                <span class="ppt-slide-canvas layout-twocol" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-col left"></span>
+                    <span class="sc-col right"></span>
+                </span>`,
+            'chart': `
+                <span class="ppt-slide-canvas layout-chart" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-bar b1"></span>
+                    <span class="sc-bar b2"></span>
+                    <span class="sc-bar b3"></span>
+                    <span class="sc-bar b4"></span>
+                </span>`,
+            'table': `
+                <span class="ppt-slide-canvas layout-table" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-table-header"></span>
+                    <span class="sc-table-row"></span>
+                    <span class="sc-table-row alt"></span>
+                    <span class="sc-table-row"></span>
+                </span>`,
+            'flow': `
+                <span class="ppt-slide-canvas layout-flow" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-flow-row">
+                        <span class="sc-flow-box"></span>
+                        <span class="sc-flow-arrow"></span>
+                        <span class="sc-flow-box"></span>
+                        <span class="sc-flow-arrow"></span>
+                        <span class="sc-flow-box"></span>
+                    </span>
+                </span>`,
+            'visual': `
+                <span class="ppt-slide-canvas layout-visual" style="${style}">
+                    <span class="sc-kicker"></span>
+                    <span class="sc-title-sm"></span>
+                    <span class="sc-image-placeholder"></span>
+                    <span class="sc-caption"></span>
+                </span>`
+        };
+        return layouts[layout] || layouts['bullets'];
     }
 
     getSessionsCardHtml() {
@@ -410,16 +478,66 @@ class WelcomeDisplay {
         const selected = getSelectedPresentationTemplate();
         const grid = this.templateDrawer.querySelector('.ppt-template-drawer-grid');
         if (!grid) return;
-        grid.innerHTML = PRESENTATION_TEMPLATES.map((template) => `
-            <div class="ppt-template-drawer-item">
-                ${this.getTemplatePreviewHtml(template, selected?.id === template.id, 'full')}
-                <div class="ppt-template-best">${this.escapeHtml(template.bestFor)}</div>
-            </div>
-        `).join('');
-        grid.querySelectorAll('[data-template-id]').forEach((button) => {
-            button.addEventListener('click', () => {
+        grid.innerHTML = PRESENTATION_TEMPLATES.map((template) => {
+            const slides = Array.isArray(template.slides) ? template.slides : [];
+            const isSelected = selected?.id === template.id;
+            const colors = template.colors || [];
+            return `
+                <div class="ppt-template-drawer-item" data-drawer-template="${this.escapeHtml(template.id)}">
+                    <div class="ppt-template-drawer-card">
+                        ${this.getTemplatePreviewHtml(template, isSelected, 'full')}
+                        <div class="ppt-template-best">${this.escapeHtml(template.bestFor)}</div>
+                        ${slides.length ? `
+                            <button type="button" class="ppt-slide-preview-toggle" data-toggle-slides="${this.escapeHtml(template.id)}">
+                                <span>Preview ${slides.length} slide layouts</span>
+                                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    ${slides.length ? `
+                        <div class="ppt-slide-preview-panel hidden" data-slide-panel="${this.escapeHtml(template.id)}">
+                            <div class="ppt-slide-preview-grid">
+                                ${slides.map((slide) => `
+                                    <div class="ppt-slide-preview-item">
+                                        ${this.getSlideCanvasHtml(slide.previewLayout, colors)}
+                                        <div class="ppt-slide-preview-info">
+                                            <strong>${this.escapeHtml(slide.label)}</strong>
+                                            <small>${this.escapeHtml(slide.description)}</small>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+        grid.querySelectorAll('.ppt-template-preview[data-template-id]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
                 this.selectTemplate(button.dataset.templateId);
                 this.closeTemplateDrawer();
+            });
+        });
+        grid.querySelectorAll('[data-toggle-slides]').forEach((toggle) => {
+            toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const templateId = toggle.dataset.toggleSlides;
+                const panel = grid.querySelector(`[data-slide-panel="${templateId}"]`);
+                if (!panel) return;
+                const isHidden = panel.classList.contains('hidden');
+                grid.querySelectorAll('.ppt-slide-preview-panel').forEach((p) => p.classList.add('hidden'));
+                grid.querySelectorAll('.ppt-slide-preview-toggle').forEach((t) => {
+                    t.classList.remove('expanded');
+                    t.querySelector('i')?.classList.remove('fa-chevron-up');
+                    t.querySelector('i')?.classList.add('fa-chevron-down');
+                });
+                if (isHidden) {
+                    panel.classList.remove('hidden');
+                    toggle.classList.add('expanded');
+                    toggle.querySelector('i')?.classList.remove('fa-chevron-down');
+                    toggle.querySelector('i')?.classList.add('fa-chevron-up');
+                }
             });
         });
     }

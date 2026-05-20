@@ -684,8 +684,8 @@ body:not(.dark-mode) .ppt-template-preview.selected {
 }
 
 .ppt-template-drawer-panel {
-    width: min(900px, 94vw);
-    max-height: min(680px, 86vh);
+    width: min(960px, 94vw);
+    max-height: min(740px, 88vh);
     overflow: hidden;
     border: 1px solid;
     border-radius: 18px;
@@ -750,7 +750,7 @@ body:not(.dark-mode) .ppt-template-drawer-close {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-    max-height: calc(86vh - 130px);
+    max-height: calc(88vh - 130px);
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -758,13 +758,436 @@ body:not(.dark-mode) .ppt-template-drawer-close {
 .ppt-template-drawer-item {
     display: flex;
     flex-direction: column;
+    gap: 0;
+}
+
+.ppt-template-drawer-card {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
+}
+
+/* ================================================================= */
+/* SLIDE PREVIEW TOGGLE                                              */
+/* ================================================================= */
+
+.ppt-slide-preview-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid;
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.ppt-slide-preview-toggle:hover {
+    transform: translateY(-1px);
+}
+
+.ppt-slide-preview-toggle i {
+    font-size: 0.62rem;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark-mode .ppt-slide-preview-toggle {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.dark-mode .ppt-slide-preview-toggle:hover,
+.dark-mode .ppt-slide-preview-toggle.expanded {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(125, 211, 252, 0.5);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-toggle {
+    background: rgba(44, 36, 28, 0.03);
+    border-color: rgba(44, 36, 28, 0.1);
+    color: rgba(44, 36, 28, 0.75);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-toggle:hover,
+body:not(.dark-mode) .ppt-slide-preview-toggle.expanded {
+    background: rgba(44, 36, 28, 0.06);
+    border-color: rgba(35, 100, 170, 0.4);
+    color: rgba(16, 14, 11, 0.92);
+}
+
+/* ================================================================= */
+/* SLIDE PREVIEW PANEL                                               */
+/* ================================================================= */
+
+.ppt-slide-preview-panel {
+    overflow: hidden;
+    padding: 10px 0 0;
+    animation: slidePreviewOpen 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ppt-slide-preview-panel.hidden {
+    display: none;
+}
+
+@keyframes slidePreviewOpen {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        max-height: 600px;
+        transform: translateY(0);
+    }
+}
+
+.ppt-slide-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+}
+
+.ppt-slide-preview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+    border: 1px solid;
+    border-radius: 10px;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    cursor: default;
+}
+
+.ppt-slide-preview-item:hover {
+    transform: translateY(-2px);
+}
+
+.dark-mode .ppt-slide-preview-item {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .ppt-slide-preview-item:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-item {
+    background: rgba(44, 36, 28, 0.02);
+    border-color: rgba(44, 36, 28, 0.08);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-item:hover {
+    border-color: rgba(44, 36, 28, 0.16);
+    box-shadow: 0 6px 16px rgba(73, 58, 38, 0.1);
+}
+
+.ppt-slide-preview-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ppt-slide-preview-info strong {
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+.dark-mode .ppt-slide-preview-info strong {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-info strong {
+    color: rgba(16, 14, 11, 0.92);
+}
+
+.ppt-slide-preview-info small {
+    font-size: 0.62rem;
+    line-height: 1.3;
+}
+
+.dark-mode .ppt-slide-preview-info small {
+    color: rgba(255, 255, 255, 0.52);
+}
+
+body:not(.dark-mode) .ppt-slide-preview-info small {
+    color: rgba(44, 36, 28, 0.56);
+}
+
+/* ================================================================= */
+/* SLIDE MINI-CANVAS – Base                                          */
+/* ================================================================= */
+
+.ppt-slide-canvas {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--ppt-bg);
+    border: 1px solid rgba(127, 127, 127, 0.18);
+}
+
+/* Shared micro-elements */
+.sc-kicker {
+    position: absolute;
+    left: 8%;
+    top: 10%;
+    width: 6%;
+    height: 6%;
+    border-radius: 2px;
+    background: var(--ppt-a);
+}
+
+.sc-title-lg {
+    position: absolute;
+    left: 8%;
+    top: 30%;
+    width: 58%;
+    height: 9%;
+    border-radius: 999px;
+    background: var(--ppt-a);
+}
+
+.sc-title-sm {
+    position: absolute;
+    left: 8%;
+    top: 20%;
+    width: 48%;
+    height: 7%;
+    border-radius: 999px;
+    background: var(--ppt-a);
+}
+
+.sc-subtitle {
+    position: absolute;
+    left: 8%;
+    top: 56%;
+    width: 44%;
+    height: 5%;
+    border-radius: 999px;
+    background: var(--ppt-a);
+    opacity: 0.45;
+}
+
+.sc-arc {
+    position: absolute;
+    right: -6%;
+    top: -14%;
+    width: 28%;
+    height: 46%;
+    border-radius: 50%;
+    border: 2px solid var(--ppt-a);
+    opacity: 0.35;
+}
+
+/* ================================================================= */
+/* Layout: Bullets                                                    */
+/* ================================================================= */
+
+.layout-bullets .sc-bullet {
+    position: absolute;
+    left: 10%;
+    width: 44%;
+    height: 4.5%;
+    border-radius: 999px;
+    background: var(--ppt-a);
+    opacity: 0.5;
+}
+
+.layout-bullets .sc-bullet:nth-child(3) { top: 34%; }
+.layout-bullets .sc-bullet:nth-child(4) { top: 43%; }
+.layout-bullets .sc-bullet:nth-child(5) { top: 52%; }
+.layout-bullets .sc-bullet:nth-child(6) { top: 61%; }
+.layout-bullets .sc-bullet.short { width: 32%; }
+
+.layout-bullets .sc-callout {
+    position: absolute;
+    right: 6%;
+    top: 34%;
+    width: 26%;
+    height: 34%;
+    border-radius: 5px;
+    border: 1.5px solid var(--ppt-a);
+    opacity: 0.4;
+}
+
+/* ================================================================= */
+/* Layout: Two Column                                                 */
+/* ================================================================= */
+
+.layout-twocol .sc-col {
+    position: absolute;
+    top: 34%;
+    width: 40%;
+    height: 50%;
+    border-radius: 5px;
+    border: 1.5px solid;
+}
+
+.layout-twocol .sc-col.left {
+    left: 6%;
+    border-color: var(--ppt-a);
+}
+
+.layout-twocol .sc-col.right {
+    right: 6%;
+    border-color: var(--ppt-b);
+}
+
+/* ================================================================= */
+/* Layout: Chart                                                      */
+/* ================================================================= */
+
+.layout-chart .sc-bar {
+    position: absolute;
+    left: 10%;
+    height: 8%;
+    border-radius: 0 3px 3px 0;
+}
+
+.layout-chart .sc-bar.b1 {
+    top: 34%;
+    width: 62%;
+    background: var(--ppt-a);
+}
+
+.layout-chart .sc-bar.b2 {
+    top: 47%;
+    width: 45%;
+    background: var(--ppt-b);
+}
+
+.layout-chart .sc-bar.b3 {
+    top: 60%;
+    width: 74%;
+    background: var(--ppt-c);
+}
+
+.layout-chart .sc-bar.b4 {
+    top: 73%;
+    width: 38%;
+    background: var(--ppt-a);
+    opacity: 0.6;
+}
+
+/* ================================================================= */
+/* Layout: Table                                                      */
+/* ================================================================= */
+
+.layout-table .sc-table-header {
+    position: absolute;
+    left: 8%;
+    top: 33%;
+    width: 84%;
+    height: 10%;
+    border-radius: 3px 3px 0 0;
+    background: var(--ppt-a);
+}
+
+.layout-table .sc-table-row {
+    position: absolute;
+    left: 8%;
+    width: 84%;
+    height: 10%;
+    border-bottom: 1px solid var(--ppt-a);
+    opacity: 0.2;
+}
+
+.layout-table .sc-table-row:nth-child(4) { top: 43%; }
+.layout-table .sc-table-row:nth-child(5) { top: 53%; opacity: 0.12; }
+.layout-table .sc-table-row:nth-child(6) { top: 63%; }
+
+.layout-table .sc-table-row.alt {
+    background: var(--ppt-a);
+    opacity: 0.06;
+}
+
+/* ================================================================= */
+/* Layout: Flow                                                       */
+/* ================================================================= */
+
+.layout-flow .sc-flow-row {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    top: 40%;
+    height: 32%;
+    display: flex;
+    align-items: center;
+    gap: 3%;
+}
+
+.layout-flow .sc-flow-box {
+    flex: 1;
+    height: 100%;
+    border-radius: 4px;
+    border: 1.5px solid var(--ppt-a);
+    opacity: 0.55;
+}
+
+.layout-flow .sc-flow-box:nth-child(3) {
+    border-color: var(--ppt-b);
+}
+
+.layout-flow .sc-flow-box:nth-child(5) {
+    border-color: var(--ppt-c);
+}
+
+.layout-flow .sc-flow-arrow {
+    width: 0;
+    height: 0;
+    border-left: 4px solid var(--ppt-a);
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+    opacity: 0.4;
+    flex-shrink: 0;
+}
+
+/* ================================================================= */
+/* Layout: Visual                                                     */
+/* ================================================================= */
+
+.layout-visual .sc-image-placeholder {
+    position: absolute;
+    left: 8%;
+    top: 32%;
+    width: 84%;
+    height: 44%;
+    border-radius: 5px;
+    border: 1.5px solid var(--ppt-a);
+    opacity: 0.35;
+    background: linear-gradient(135deg, transparent 45%, var(--ppt-a) 45%, var(--ppt-a) 46%, transparent 46%),
+                linear-gradient(225deg, transparent 45%, var(--ppt-a) 45%, var(--ppt-a) 46%, transparent 46%);
+    background-size: 100% 100%;
+}
+
+.layout-visual .sc-caption {
+    position: absolute;
+    left: 8%;
+    bottom: 8%;
+    width: 50%;
+    height: 4%;
+    border-radius: 999px;
+    background: var(--ppt-a);
+    opacity: 0.3;
 }
 
 @media (max-width: 720px) {
     .welcome-template-mini-grid,
     .ppt-template-drawer-grid {
         grid-template-columns: 1fr;
+    }
+
+    .ppt-slide-preview-grid {
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
     }
 }
 
