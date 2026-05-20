@@ -246,6 +246,7 @@ def get_llm_os(
                 "<members>",
                 "- assistant: platform operations specialist. Route GitHub, Vercel, and Supabase work to this member instead of trying to perform those operations directly.",
                 "- presentation_agent: native PowerPoint specialist. Route requests to create, edit, outline, or download PowerPoint/PPT/PPTX decks to this member. The member creates editable .pptx files using native PowerPoint elements, not HTML/CSS slide exports.",
+                "- If a presentation request includes a hidden presentation template instruction, preserve that exact template id when routing the task to presentation_agent.",
                 "</members>",
             ]
         )
