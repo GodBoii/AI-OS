@@ -1,11 +1,17 @@
 import UserProfileService from './user-profile-service.js';
+import {
+    PRESENTATION_TEMPLATES,
+    clearSelectedPresentationTemplate,
+    getSelectedPresentationTemplate,
+    setSelectedPresentationTemplate
+} from './presentation-templates.js';
 
 const CARD_CONFIG = [
     {
-        key: 'prompt',
-        icon: 'fa-regular fa-pen-to-square',
-        title: 'Current Prompt',
-        description: 'Your draft stays visible here while you type.'
+        key: 'templates',
+        icon: 'fa-regular fa-file-powerpoint',
+        title: 'Stock PPT Templates',
+        description: 'Choose a deck style before asking for slides.'
     },
     {
         key: 'sessions',
@@ -21,19 +27,6 @@ const CARD_CONFIG = [
     }
 ];
 
-const PROMPT_SUGGESTIONS = [
-    'Draft a clear product spec from these notes.',
-    'Summarize this topic with sources and key takeaways.',
-    'Generate a clean UI plan for this screen.',
-    'Write a friendly, concise email reply.',
-    'Break this task into actionable steps.',
-    'Review this code for bugs and improvements.',
-    'Debug this error and suggest a fix.',
-    'Write comprehensive documentation for this feature.',
-    'Refactor this code for better readability.',
-    'Create unit tests for this function.'
-];
-
 class WelcomeDisplay {
     constructor() {
         this.isVisible = false;
@@ -47,6 +40,7 @@ class WelcomeDisplay {
         this.recentTasks = [];
         this.cardElements = new Map();
         this.handleInputChange = this.handleInputChange.bind(this);
+        this.templateDrawer = null;
     }
 
     initialize() {
@@ -153,13 +147,23 @@ class WelcomeDisplay {
         const refs = this.cardElements.get(key);
         if (!refs) return;
 
-        if (key === 'prompt') {
-            refs.content.innerHTML = this.getPromptCardHtml();
-            refs.footer.innerHTML = '';
-            refs.content.querySelectorAll('[data-prompt]').forEach((button) => {
-                button.addEventListener('click', () => {
-                    this.applyPromptSuggestion(button.dataset.prompt);
+        if (key === 'templates') {
+            refs.content.innerHTML = this.getTemplateCardHtml();
+            refs.footer.innerHTML = `<button type="button" class="welcome-card-action secondary" data-action="clear-template">Auto choose</button>`;
+            refs.root.onclick = (event) => {
+                if (event.target.closest('[data-action="clear-template"]') || event.target.closest('[data-template-id]')) return;
+                this.openTemplateDrawer();
+            };
+            refs.content.querySelectorAll('[data-template-id]').forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    this.selectTemplate(button.dataset.templateId);
                 });
+            });
+            refs.footer.querySelector('[data-action="clear-template"]')?.addEventListener('click', (event) => {
+                event.stopPropagation();
+                clearSelectedPresentationTemplate();
+                this.renderCard('templates');
             });
             return;
         }
@@ -182,31 +186,36 @@ class WelcomeDisplay {
         }
     }
 
-    getPromptCardHtml() {
-        const value = this.getCurrentPromptText().trim();
-        const promptBlock = value
-            ? `
-                <div class="welcome-prompt-block">
-                    <div class="welcome-prompt-meta">${value.length} characters</div>
-                    <div class="welcome-prompt-text">${this.escapeHtml(value)}</div>
-                </div>
-            `
-            : '';
-
-        const suggestions = PROMPT_SUGGESTIONS.map((prompt) => `
-            <button type="button" class="welcome-prompt-chip" data-prompt="${this.escapeHtml(prompt)}">
-                ${this.escapeHtml(prompt)}
-            </button>
-        `).join('');
-
+    getTemplateCardHtml() {
+        const selected = getSelectedPresentationTemplate();
+        const featured = selected
+            ? [selected, ...PRESENTATION_TEMPLATES.filter((template) => template.id !== selected.id)].slice(0, 3)
+            : PRESENTATION_TEMPLATES.slice(0, 3);
         return `
-            ${promptBlock}
-            <div class="welcome-prompt-suggestions">
-                <div class="welcome-prompt-suggestions-label">Ready to go</div>
-                <div class="welcome-prompt-suggestions-list">
-                    ${suggestions}
+            <div class="welcome-template-card-summary">
+                <div class="welcome-prompt-suggestions-label">${selected ? `Selected: ${this.escapeHtml(selected.shortName)}` : 'Select a template'}</div>
+                <div class="welcome-template-mini-grid">
+                    ${featured.map((template) => this.getTemplatePreviewHtml(template, selected?.id === template.id, 'mini')).join('')}
                 </div>
+                <div class="welcome-template-hint">Click the card to browse all stock templates.</div>
             </div>
+        `;
+    }
+
+    getTemplatePreviewHtml(template, selected = false, size = 'full') {
+        const colors = template.colors || [];
+        return `
+            <button type="button" class="ppt-template-preview ${size === 'mini' ? 'mini' : ''} ${selected ? 'selected' : ''}" data-template-id="${this.escapeHtml(template.id)}">
+                <span class="ppt-template-canvas" style="--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};">
+                    <span class="ppt-template-line title"></span>
+                    <span class="ppt-template-line short"></span>
+                    <span class="ppt-template-bars"><i></i><i></i><i></i></span>
+                </span>
+                <span class="ppt-template-copy">
+                    <strong>${this.escapeHtml(template.name)}</strong>
+                    ${size === 'mini' ? '' : `<small>${this.escapeHtml(template.description)}</small>`}
+                </span>
+            </button>
         `;
     }
 
@@ -271,6 +280,11 @@ class WelcomeDisplay {
 
         const input = document.getElementById('floating-input');
         input?.addEventListener('input', this.handleInputChange);
+
+        window.addEventListener('presentation-template:selected', () => {
+            this.renderCard('templates');
+            this.renderTemplateDrawer();
+        });
     }
 
     handleInputChange() {
@@ -338,7 +352,7 @@ class WelcomeDisplay {
     }
 
     syncPromptCard() {
-        this.renderCard('prompt');
+        this.renderCard('templates');
     }
 
     getCurrentPromptText() {
@@ -353,13 +367,61 @@ class WelcomeDisplay {
         input.setSelectionRange(length, length);
     }
 
-    applyPromptSuggestion(prompt) {
-        const input = document.getElementById('floating-input');
-        if (!input) return;
-        input.value = prompt;
-        input.style.height = 'auto';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+    selectTemplate(templateId) {
+        const template = setSelectedPresentationTemplate(templateId);
+        if (!template) return;
         this.focusInput();
+    }
+
+    openTemplateDrawer() {
+        if (!this.templateDrawer) {
+            this.templateDrawer = document.createElement('div');
+            this.templateDrawer.className = 'ppt-template-drawer hidden';
+            this.templateDrawer.innerHTML = `
+                <div class="ppt-template-drawer-panel" role="dialog" aria-modal="true" aria-label="Stock PPT templates">
+                    <div class="ppt-template-drawer-header">
+                        <div>
+                            <h3>Stock PPT Templates</h3>
+                            <p>Select a style, then ask Aetheria to create a deck.</p>
+                        </div>
+                        <button type="button" class="ppt-template-drawer-close" aria-label="Close template browser">
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div class="ppt-template-drawer-grid"></div>
+                </div>
+            `;
+            document.body.appendChild(this.templateDrawer);
+            this.templateDrawer.addEventListener('click', (event) => {
+                if (event.target === this.templateDrawer) this.closeTemplateDrawer();
+            });
+            this.templateDrawer.querySelector('.ppt-template-drawer-close')?.addEventListener('click', () => this.closeTemplateDrawer());
+        }
+        this.renderTemplateDrawer();
+        this.templateDrawer.classList.remove('hidden');
+    }
+
+    closeTemplateDrawer() {
+        this.templateDrawer?.classList.add('hidden');
+    }
+
+    renderTemplateDrawer() {
+        if (!this.templateDrawer) return;
+        const selected = getSelectedPresentationTemplate();
+        const grid = this.templateDrawer.querySelector('.ppt-template-drawer-grid');
+        if (!grid) return;
+        grid.innerHTML = PRESENTATION_TEMPLATES.map((template) => `
+            <div class="ppt-template-drawer-item">
+                ${this.getTemplatePreviewHtml(template, selected?.id === template.id, 'full')}
+                <div class="ppt-template-best">${this.escapeHtml(template.bestFor)}</div>
+            </div>
+        `).join('');
+        grid.querySelectorAll('[data-template-id]').forEach((button) => {
+            button.addEventListener('click', () => {
+                this.selectTemplate(button.dataset.templateId);
+                this.closeTemplateDrawer();
+            });
+        });
     }
 
     openTasksPanel() {
