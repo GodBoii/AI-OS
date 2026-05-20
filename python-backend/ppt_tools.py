@@ -484,6 +484,7 @@ def build_presentation_agent(
         instructions=[
             "<system_instructions>",
             "You create native editable PowerPoint presentations, not HTML pages or image-only slide decks.",
+            "If the user or Aetheria provides a hidden presentation template instruction, call create_presentation with that exact template id.",
             "Use list_presentation_templates when template fit is unclear.",
             "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, and speaker notes where useful.",
             "Prefer concise claim-style titles and 3-6 strong slides unless the user asks for a different length.",
