@@ -471,28 +471,64 @@ class ArtifactHandler {
                 </div>
             </div>
             <div class="presentation-artifact-grid">
-                ${slides.map((slide) => this.renderPresentationSlideCard(slide)).join('') || '<div class="presentation-artifact-empty">No slide preview data available.</div>'}
+                ${slides.map((slide) => this.renderPresentationSlideCard(slide, metadata?.template)).join('') || '<div class="presentation-artifact-empty">No slide preview data available.</div>'}
             </div>
         `;
         container.appendChild(deck);
     }
 
-    renderPresentationSlideCard(slide = {}) {
+    renderPresentationSlideCard(slide = {}, template = {}) {
         const badges = [
             slide.has_chart ? 'Chart' : '',
             slide.has_table ? 'Table' : '',
             slide.has_diagram ? 'Diagram' : '',
+            slide.has_visual ? 'Visual' : '',
             Array.isArray(slide.metrics) && slide.metrics.length ? 'Metrics' : '',
         ].filter(Boolean);
         const bullets = Array.isArray(slide.bullets) ? slide.bullets.slice(0, 3) : [];
         return `
             <article class="presentation-slide-card">
                 <div class="presentation-slide-number">${this.escapeHtml(String(slide.index || ''))}</div>
+                ${this.renderPresentationSlideThumbnail(slide, template)}
                 <h3>${this.escapeHtml(slide.title || `Slide ${slide.index || ''}`)}</h3>
                 ${slide.subtitle ? `<p>${this.escapeHtml(String(slide.subtitle))}</p>` : ''}
                 ${badges.length ? `<div class="presentation-slide-badges">${badges.map((badge) => `<span>${this.escapeHtml(badge)}</span>`).join('')}</div>` : ''}
                 ${bullets.length ? `<ul>${bullets.map((bullet) => `<li>${this.escapeHtml(String(bullet))}</li>`).join('')}</ul>` : ''}
             </article>
+        `;
+    }
+
+    renderPresentationSlideThumbnail(slide = {}, template = {}) {
+        const colors = template?.colors || {};
+        const style = [
+            `--ppt-bg:#${this.escapeHtml(colors.background || 'F5F6F0')}`,
+            `--ppt-surface:#${this.escapeHtml(colors.surface || 'FFFFFF')}`,
+            `--ppt-ink:#${this.escapeHtml(colors.ink || '17202A')}`,
+            `--ppt-muted:#${this.escapeHtml(colors.muted || '5A6474')}`,
+            `--ppt-a:#${this.escapeHtml(colors.accent || '1B5299')}`,
+            `--ppt-b:#${this.escapeHtml(colors.accent2 || 'E8553D')}`,
+            `--ppt-c:#${this.escapeHtml(colors.accent3 || '1A936F')}`
+        ].join(';');
+        const layout = String(slide.layout || slide.type || 'content').toLowerCase();
+        const chartBars = '<i></i><i></i><i></i><i></i>';
+        const cards = '<i></i><i></i><i></i>';
+        return `
+            <div class="presentation-slide-thumb presentation-slide-thumb-${this.escapeHtml(layout)}" style="${style}">
+                <span class="thumb-kicker"></span>
+                <span class="thumb-title"></span>
+                ${layout === 'title'
+                    ? '<span class="thumb-hero"></span><span class="thumb-metrics"><i></i><i></i><i></i></span>'
+                    : layout === 'two_column'
+                        ? '<span class="thumb-column one"></span><span class="thumb-column two"></span>'
+                        : slide.has_chart
+                            ? `<span class="thumb-chart">${chartBars}</span>`
+                            : slide.has_table
+                                ? '<span class="thumb-table"><i></i><i></i><i></i></span>'
+                                : slide.has_diagram
+                                    ? '<span class="thumb-flow"><i></i><i></i><i></i></span>'
+                                    : `<span class="thumb-cards">${cards}</span><span class="thumb-visual"></span>`
+                }
+            </div>
         `;
     }
 

@@ -732,20 +732,53 @@ function buildSheetsInfoMarkup(metadata, inline = {}) {
 function buildPresentationMarkup(metadata, inline = {}) {
     const slides = Array.isArray(inline.slides) ? inline.slides : [];
     const templateName = metadata?.template?.name || metadata?.template?.id || '';
+    const templateColors = metadata?.template?.colors || {};
     const size = Number(inline.size_bytes || 0);
     const sizeLabel = size > 0 ? `${(size / 1024 / 1024).toFixed(size > 1024 * 1024 ? 2 : 3)} MB` : '';
     const downloadUrl = getSafeToolPreviewUrl(metadata?.download_url || '');
+    const buildThumb = (slide = {}) => {
+        const style = [
+            `--ppt-bg:#${escapeToolPreviewHtml(templateColors.background || 'F5F6F0')}`,
+            `--ppt-surface:#${escapeToolPreviewHtml(templateColors.surface || 'FFFFFF')}`,
+            `--ppt-ink:#${escapeToolPreviewHtml(templateColors.ink || '17202A')}`,
+            `--ppt-muted:#${escapeToolPreviewHtml(templateColors.muted || '5A6474')}`,
+            `--ppt-a:#${escapeToolPreviewHtml(templateColors.accent || '1B5299')}`,
+            `--ppt-b:#${escapeToolPreviewHtml(templateColors.accent2 || 'E8553D')}`,
+            `--ppt-c:#${escapeToolPreviewHtml(templateColors.accent3 || '1A936F')}`
+        ].join(';');
+        const layout = String(slide.layout || slide.type || 'content').toLowerCase();
+        return `
+            <div class="tool-preview-ppt-thumb tool-preview-ppt-thumb-${escapeToolPreviewHtml(layout)}" style="${style}">
+                <span class="thumb-kicker"></span>
+                <span class="thumb-title"></span>
+                ${layout === 'title'
+                    ? '<span class="thumb-hero"></span><span class="thumb-metrics"><i></i><i></i><i></i></span>'
+                    : layout === 'two_column'
+                        ? '<span class="thumb-column one"></span><span class="thumb-column two"></span>'
+                        : slide.has_chart
+                            ? '<span class="thumb-chart"><i></i><i></i><i></i><i></i></span>'
+                            : slide.has_table
+                                ? '<span class="thumb-table"><i></i><i></i><i></i></span>'
+                                : slide.has_diagram
+                                    ? '<span class="thumb-flow"><i></i><i></i><i></i></span>'
+                                    : '<span class="thumb-cards"><i></i><i></i><i></i></span><span class="thumb-visual"></span>'
+                }
+            </div>
+        `;
+    };
     const slideCards = slides.slice(0, 12).map((slide) => {
         const badges = [
             slide.has_chart ? 'Chart' : '',
             slide.has_table ? 'Table' : '',
             slide.has_diagram ? 'Diagram' : '',
+            slide.has_visual ? 'Visual' : '',
             Array.isArray(slide.metrics) && slide.metrics.length ? 'Metrics' : '',
         ].filter(Boolean);
         const bullets = Array.isArray(slide.bullets) ? slide.bullets.slice(0, 3) : [];
         return `
             <div class="tool-preview-ppt-slide">
                 <div class="tool-preview-ppt-slide-num">${escapeToolPreviewHtml(String(slide.index || ''))}</div>
+                ${buildThumb(slide)}
                 <div class="tool-preview-ppt-slide-title">${escapeToolPreviewHtml(String(slide.title || `Slide ${slide.index || ''}`))}</div>
                 ${slide.subtitle ? `<div class="tool-preview-ppt-slide-subtitle">${escapeToolPreviewHtml(String(slide.subtitle))}</div>` : ''}
                 ${badges.length ? `<div class="tool-preview-ppt-badges">${badges.map((badge) => `<span>${escapeToolPreviewHtml(badge)}</span>`).join('')}</div>` : ''}
