@@ -208,19 +208,17 @@ function addDecorativeSystem(slide, template, variant = 'content') {
   });
   slide.addShape(currentPptx.ShapeType.arc, {
     x: 7.42, y: -0.74, w: 2.94, h: 2.94,
-    adjustPoint: 0.65,
     line: { color: template.accent, transparency: dark ? 32 : 42, width: variant === 'title' ? 3 : 1.6 },
   });
   slide.addShape(currentPptx.ShapeType.arc, {
     x: -0.82, y: 4.12, w: 1.9, h: 1.9,
-    adjustPoint: 0.42,
     line: { color: template.accent2, transparency: dark ? 48 : 58, width: 1.4 },
   });
   if (variant !== 'title') {
     slide.addShape(currentPptx.ShapeType.rect, {
       x: 0, y: 0.1, w: 0.08, h: 5.525,
       fill: { color: wash, transparency: dark ? 12 : 0 },
-      line: { color: wash, transparency: 100 },
+      line: null,
     });
   }
 }
@@ -380,11 +378,27 @@ function addAbstractVisual(slide, template, opts = {}) {
     [x + w / 2, y + h / 2, template.accent2],
   ];
   for (let i = 0; i < points.length - 1; i += 1) {
-    slide.addShape(currentPptx.ShapeType.line, {
-      x: points[i][0] + 0.08, y: points[i][1] + 0.08,
-      w: points[i + 1][0] - points[i][0], h: points[i + 1][1] - points[i][1],
+    const x1 = points[i][0] + 0.08;
+    const y1 = points[i][1] + 0.08;
+    const x2 = points[i + 1][0] + 0.08;
+    const y2 = points[i + 1][1] + 0.08;
+
+    const lx = Math.min(x1, x2);
+    const ly = Math.min(y1, y2);
+    const lw = Math.max(0.01, Math.abs(x2 - x1));
+    const lh = Math.max(0.01, Math.abs(y2 - y1));
+
+    const lineOpts = {
+      x: lx,
+      y: ly,
+      w: lw,
+      h: lh,
       line: { color: template.muted, transparency: 58, width: 0.8 },
-    });
+    };
+    if ((x2 - x1) * (y2 - y1) < 0) {
+      lineOpts.flipH = true;
+    }
+    slide.addShape(currentPptx.ShapeType.line, lineOpts);
   }
   points.forEach(([px, py, color], i) => {
     slide.addShape(currentPptx.ShapeType.ellipse, {
@@ -396,7 +410,7 @@ function addAbstractVisual(slide, template, opts = {}) {
   slide.addShape(currentPptx.ShapeType.rect, {
     x: x + 0.26, y: y + h - 0.28, w: w - 0.52, h: 0.04,
     fill: { color: template.accent, transparency: 20 },
-    line: { color: template.accent, transparency: 100 },
+    line: null,
   });
 }
 
@@ -428,40 +442,102 @@ function addMetricRail(slide, metrics, template, opts = {}) {
   });
 }
 
-function addSimpleBarChart(slide, chart, template, opts = {}) {
-  const data = Array.isArray(chart?.data) ? chart.data.slice(0, 6) : [];
-  if (!data.length) return false;
-  const x = opts.x ?? 0.72;
+function parseChartData(chart) {
+  if (!chart) return null;
+  const chartData = chart.data || chart;
+  if (!chartData) return null;
+
+  // Case 1: 2D Array (e.g. [["Industry", "2024", "2028"], ["Healthcare", 15, 45]])
+  if (Array.isArray(chartData) && chartData.length > 0 && Array.isArray(chartData[0])) {
+    const headers = chartData[0];
+    const rows = chartData.slice(1);
+    if (headers.length < 2 || rows.length === 0) return null;
+
+    const seriesCount = headers.length - 1;
+    const labels = rows.map((row) => String(row[0] || ''));
+    const seriesList = [];
+    for (let col = 1; col <= seriesCount; col += 1) {
+      const name = String(headers[col] || `Series ${col}`);
+      const values = rows.map((row) => {
+        const val = Number(row[col]);
+        return isNaN(val) ? 0 : val;
+      });
+      seriesList.push({ name, labels, values });
+    }
+    return seriesList;
+  }
+
+  // Case 2: Array of objects (e.g. [{ name: "Actual", labels: [...], values: [...] }])
+  if (Array.isArray(chartData) && chartData.length > 0 && typeof chartData[0] === 'object') {
+    if (chartData[0].labels && chartData[0].values) {
+      return chartData.map((s) => ({
+        name: String(s.name || s.series || 'Series'),
+        labels: Array.isArray(s.labels) ? s.labels.map(String) : [],
+        values: Array.isArray(s.values) ? s.values.map(Number).map((v) => isNaN(v) ? 0 : v) : [],
+      }));
+    }
+
+    // Case 3: Flat array of points (e.g. [{ label: "Healthcare", value: 15 }])
+    const labels = chartData.map((item) => String(item.label || item.name || item.category || ''));
+    const values = chartData.map((item) => {
+      const val = Number(item.value || item.val || 0);
+      return isNaN(val) ? 0 : val;
+    });
+    return [{
+      name: String(chart.title || 'Value'),
+      labels,
+      values,
+    }];
+  }
+
+  return null;
+}
+
+function addNativeChart(slide, chart, template, opts = {}) {
+  if (!chart) return false;
+  const chartData = parseChartData(chart);
+  if (!chartData || chartData.length === 0) return false;
+
+  const x = opts.x ?? 0.78;
   const y = opts.y ?? 1.82;
-  const w = opts.w ?? 8.35;
-  const rowH = opts.rowH ?? 0.42;
-  const maxValue = Math.max(...data.map((d) => Number(d.value) || 0), 1);
-  slide.addText(chart.title || 'Evidence', {
-    x, y: y - 0.35, w, h: 0.22,
-    fontFace: template.fontFace, fontSize: 8.5, bold: true,
-    color: template.muted, margin: 0,
-  });
-  data.forEach((point, i) => {
-    const value = Number(point.value) || 0;
-    const barW = Math.max(0.1, (w - 2.15) * value / maxValue);
-    const rowY = y + i * rowH;
-    slide.addText(normalizeText(point.label || point.name || `Item ${i + 1}`), {
-      x, y: rowY + 0.03, w: 1.75, h: 0.18,
-      fontFace: template.fontFace, fontSize: 7.3, color: template.ink,
-      margin: 0, fit: 'shrink',
+  const w = opts.w ?? 8.02;
+  const h = opts.h ?? 2.8;
+
+  const chartType = String(chart.chart_type || chart.type || 'bar').toLowerCase();
+  let pptxChartType = currentPptx.ChartType.bar;
+  if (chartType === 'line') pptxChartType = currentPptx.ChartType.line;
+  else if (chartType === 'pie') pptxChartType = currentPptx.ChartType.pie;
+  else if (chartType === 'doughnut') pptxChartType = currentPptx.ChartType.doughnut;
+  else if (chartType === 'area') pptxChartType = currentPptx.ChartType.area;
+
+  const colors = [template.accent, template.accent2, template.accent3];
+
+  try {
+    slide.addChart(pptxChartType, chartData, {
+      x, y, w, h,
+      title: chart.title || chart.name || '',
+      showTitle: !!(chart.title || chart.name),
+      titleColor: template.ink,
+      titleFontFace: template.headingFace,
+      titleFontSize: 11,
+      chartColors: colors,
+      showLegend: chartData.length > 1 || chartType === 'pie' || chartType === 'doughnut',
+      legendColor: template.muted,
+      legendFontFace: template.fontFace,
+      legendFontSize: 8,
+      catAxisLabelColor: template.muted,
+      catAxisLabelFontFace: template.fontFace,
+      catAxisLabelFontSize: 8,
+      valAxisLabelColor: template.muted,
+      valAxisLabelFontFace: template.fontFace,
+      valAxisLabelFontSize: 8,
+      barDir: chartType === 'bar' ? 'bar' : 'col',
     });
-    slide.addShape(currentPptx.ShapeType.rect, {
-      x: x + 1.95, y: rowY + 0.05, w: barW, h: 0.16,
-      fill: { color: i % 3 === 0 ? template.accent : (i % 3 === 1 ? template.accent2 : template.accent3) },
-      line: { color: i % 3 === 0 ? template.accent : (i % 3 === 1 ? template.accent2 : template.accent3) },
-    });
-    slide.addText(normalizeText(point.display || value), {
-      x: x + 2.05 + barW, y: rowY + 0.03, w: 0.72, h: 0.18,
-      fontFace: template.fontFace, fontSize: 7.3, bold: true,
-      color: template.ink, margin: 0,
-    });
-  });
-  return true;
+    return true;
+  } catch (err) {
+    console.error('Error adding native chart:', err);
+    return false;
+  }
 }
 
 function addDiagram(slide, nodes, template, opts = {}) {
@@ -494,7 +570,7 @@ function addDiagram(slide, nodes, template, opts = {}) {
       slide.addShape(currentPptx.ShapeType.chevron, {
         x: boxX + boxW + 0.035, y: y + 0.42, w: 0.09, h: 0.22,
         fill: { color: template.muted, transparency: 35 },
-        line: { color: template.muted, transparency: 100 },
+        line: null,
       });
     }
   });
@@ -568,25 +644,35 @@ function buildContentSlide(pptx, slideData, ctx) {
   addSectionLabel(slide, slideData.kicker || slideData.section || (slideData.chart ? 'Evidence' : slideData.table ? 'Data' : (slideData.nodes || slideData.steps) ? 'Process' : 'Insight'), template);
   addTitle(slide, slideData.title, template);
 
-  const chartDone = addSimpleBarChart(slide, slideData.chart, template, { x: 0.78, y: 1.82, w: 8.02, rowH: 0.46 });
-  const tableDone = !chartDone && addTable(slide, slideData.table, template, { x: 0.76, y: 1.76, w: 8.26, rowH: 0.38 });
+  const hasMetrics = Array.isArray(slideData.metrics) && slideData.metrics.length > 0;
+  const chartDone = addNativeChart(slide, slideData.chart, template, { x: 0.78, y: 1.82, w: 8.02, h: hasMetrics ? 2.2 : 2.8 });
+  const tableDone = !chartDone && addTable(slide, slideData.table, template, { x: 0.76, y: 1.76, w: 8.26, rowH: hasMetrics ? 0.32 : 0.38 });
   const diagramDone = !chartDone && !tableDone && addDiagram(slide, slideData.nodes || slideData.steps, template, { x: 0.78, y: 2.02, w: 8.22 });
 
   if (!chartDone && !tableDone && !diagramDone) {
     const sourceItems = slideData.bullets || slideData.content || slideData.points;
-    const cardsDone = addInsightCards(slide, sourceItems, template, { x: 0.68, y: 1.68, w: 6.06, maxItems: 4, cardH: 0.62, gap: 0.14 });
+    const cardH = hasMetrics ? 0.52 : 0.62;
+    const gap = hasMetrics ? 0.1 : 0.14;
+    const yStart = hasMetrics ? 1.48 : 1.68;
+    const visualH = hasMetrics ? 2.10 : 2.46;
+    const calloutY = hasMetrics ? 3.68 : 4.10;
+    const calloutH = hasMetrics ? 0.3 : 0.36;
+
+    const cardsDone = addInsightCards(slide, sourceItems, template, { x: 0.68, y: yStart, w: 6.06, maxItems: hasMetrics ? 3 : 4, cardH, gap });
     if (!cardsDone) {
-      addTextList(slide, sourceItems, template, { x: 0.78, y: 1.72, w: 5.8, maxItems: 5 });
+      addTextList(slide, sourceItems, template, { x: 0.78, y: yStart, w: 5.8, maxItems: hasMetrics ? 4 : 5 });
     }
-    addAbstractVisual(slide, template, { x: 7.06, y: 1.62, w: 2.2, h: 2.46 });
+    addAbstractVisual(slide, template, { x: 7.06, y: yStart, w: 2.2, h: visualH });
     slide.addText(normalizeText(slideData.callout || slideData.summary || cleanBullets(sourceItems)[0] || 'Key idea'), {
-      x: 7.18, y: 4.1, w: 1.96, h: 0.36,
-      fontFace: template.headingFace, fontSize: 10.5, bold: true,
+      x: 7.18, y: calloutY, w: 1.96, h: calloutH,
+      fontFace: template.headingFace, fontSize: hasMetrics ? 9.5 : 10.5, bold: true,
       color: template.accent, margin: 0.01, fit: 'shrink',
       align: 'center',
     });
   }
-  addMetricRail(slide, slideData.metrics, template, { x: 0.66, y: 4.34, w: 8.65, maxItems: 4, h: 0.56 });
+  if (hasMetrics) {
+    addMetricRail(slide, slideData.metrics, template, { x: 0.66, y: 4.18, w: 8.65, maxItems: 4, h: 0.54 });
+  }
   addFooter(slide, template, index, totalSlides, topic);
   return slide;
 }
@@ -603,8 +689,8 @@ function buildTwoColumnSlide(pptx, slideData, ctx) {
   const rightTitle = slideData.right_title || slideData.right?.title || 'Target state';
   const fallbackItems = cleanBullets(slideData.bullets || slideData.content || slideData.points);
   const midpoint = Math.ceil(fallbackItems.length / 2);
-  const leftContent = slideData.left_content || slideData.left?.content || slideData.left?.bullets || fallbackItems.slice(0, midpoint);
-  const rightContent = slideData.right_content || slideData.right?.content || slideData.right?.bullets || fallbackItems.slice(midpoint);
+  const leftContent = slideData.left_content || slideData.left_bullets || slideData.left?.content || slideData.left?.bullets || fallbackItems.slice(0, midpoint);
+  const rightContent = slideData.right_content || slideData.right_bullets || slideData.right?.content || slideData.right?.bullets || fallbackItems.slice(midpoint);
   [
     { x: 0.66, title: leftTitle, content: leftContent, color: template.accent },
     { x: 5.08, title: rightTitle, content: rightContent, color: template.accent2 },
