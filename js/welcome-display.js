@@ -10,11 +10,11 @@ import {
    PILL CONFIGURATION
    ═══════════════════════════════════════════════════════════════════ */
 const PILL_CONFIG = [
-    { key: 'templates', icon: 'fa-regular fa-file-powerpoint', label: 'Create slides' },
-    { key: 'website', icon: 'fa-solid fa-laptop-code', label: 'Build website' },
-    { key: 'sessions', icon: 'fa-regular fa-clock', label: 'Past Chats' },
-    { key: 'tasks', icon: 'fa-regular fa-circle-check', label: 'Tasks' },
-    { key: 'design', icon: 'fa-solid fa-palette', label: 'Design' }
+    { key: 'templates', icon: 'fa-solid fa-wand-magic-sparkles', label: 'Create slides' },
+    { key: 'website', icon: 'fa-solid fa-window-maximize', label: 'Build website' },
+    { key: 'sessions', icon: 'fa-solid fa-clock-rotate-left', label: 'Past Chats' },
+    { key: 'tasks', icon: 'fa-solid fa-list-check', label: 'Tasks' },
+    { key: 'design', icon: 'fa-solid fa-swatchbook', label: 'Design' }
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -24,22 +24,22 @@ const CAROUSEL_SLIDES = [
     {
         title: 'Create Presentations',
         desc: 'Design stunning slide decks with 8 professional templates and AI-powered content generation.',
-        icon: 'fa-regular fa-file-powerpoint'
+        image: 'assets/stock1.png'
     },
     {
         title: 'Build & Deploy',
         desc: 'Full-stack web development with live preview and one-click deployment to production.',
-        icon: 'fa-solid fa-rocket'
+        image: 'assets/stock3_rocket.png'
     },
     {
         title: 'Computer Agent',
         desc: 'AI-powered desktop automation that sees and controls your screen natively.',
-        icon: 'fa-solid fa-desktop'
+        image: 'assets/stock5_sandbox.png'
     },
     {
         title: 'Coder Workspace',
         desc: 'Write, debug, and ship code with an integrated cloud and local development environment.',
-        icon: 'fa-solid fa-code'
+        image: 'assets/stock2_github.png'
     }
 ];
 
@@ -193,8 +193,8 @@ class WelcomeDisplay {
                     <h4>${slide.title}</h4>
                     <p>${slide.desc}</p>
                 </div>
-                <div class="carousel-slide-icon">
-                    <i class="${slide.icon}" aria-hidden="true"></i>
+                <div class="carousel-slide-image">
+                    <img src="${slide.image}" alt="${slide.title}" />
                 </div>
             </div>
         `).join('');
