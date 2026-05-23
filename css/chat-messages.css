@@ -1575,6 +1575,194 @@
     padding: 12px;
 }
 
+.tool-preview-ppt-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-bottom: 10px;
+    overflow: hidden;
+    border-radius: 7px;
+    background: var(--ppt-bg);
+    border: 1px solid color-mix(in srgb, var(--ppt-ink) 14%, transparent);
+}
+
+.tool-preview-ppt-thumb::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb::after {
+    content: "";
+    position: absolute;
+    right: -13%;
+    top: -30%;
+    width: 34%;
+    aspect-ratio: 1;
+    border: 2px solid color-mix(in srgb, var(--ppt-a) 68%, transparent);
+    border-radius: 50%;
+}
+
+.tool-preview-ppt-thumb .thumb-kicker,
+.tool-preview-ppt-thumb .thumb-title,
+.tool-preview-ppt-thumb .thumb-hero,
+.tool-preview-ppt-thumb .thumb-visual,
+.tool-preview-ppt-thumb .thumb-column,
+.tool-preview-ppt-thumb .thumb-cards i,
+.tool-preview-ppt-thumb .thumb-metrics i,
+.tool-preview-ppt-thumb .thumb-chart i,
+.tool-preview-ppt-thumb .thumb-table i,
+.tool-preview-ppt-thumb .thumb-flow i {
+    position: absolute;
+    display: block;
+}
+
+.tool-preview-ppt-thumb .thumb-kicker {
+    left: 8%;
+    top: 14%;
+    width: 8%;
+    height: 6%;
+    border-radius: 2px;
+    background: var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb .thumb-title {
+    left: 8%;
+    top: 28%;
+    width: 50%;
+    height: 7%;
+    border-radius: 999px;
+    background: var(--ppt-ink);
+}
+
+.tool-preview-ppt-thumb .thumb-hero {
+    right: 9%;
+    top: 22%;
+    width: 27%;
+    height: 43%;
+    border-radius: 6px;
+    border: 1px solid var(--ppt-a);
+    background: color-mix(in srgb, var(--ppt-surface) 86%, var(--ppt-a));
+}
+
+.tool-preview-ppt-thumb .thumb-metrics {
+    position: absolute;
+    left: 8%;
+    right: 9%;
+    bottom: 13%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5%;
+}
+
+.tool-preview-ppt-thumb .thumb-metrics i {
+    position: static;
+    height: 13px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--ppt-surface) 86%, var(--ppt-a));
+    border: 1px solid color-mix(in srgb, var(--ppt-a) 50%, transparent);
+}
+
+.tool-preview-ppt-thumb .thumb-cards i {
+    left: 8%;
+    width: 52%;
+    height: 13%;
+    border-radius: 5px;
+    background: var(--ppt-surface);
+    border-left: 3px solid var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb .thumb-cards i:nth-child(1) { top: 44%; }
+.tool-preview-ppt-thumb .thumb-cards i:nth-child(2) { top: 60%; border-left-color: var(--ppt-b); }
+.tool-preview-ppt-thumb .thumb-cards i:nth-child(3) { top: 76%; border-left-color: var(--ppt-c); }
+
+.tool-preview-ppt-thumb .thumb-visual {
+    right: 9%;
+    top: 44%;
+    width: 24%;
+    height: 38%;
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 35% 34%, var(--ppt-a) 0 8%, transparent 9%),
+        radial-gradient(circle at 67% 62%, var(--ppt-b) 0 8%, transparent 9%),
+        linear-gradient(135deg, color-mix(in srgb, var(--ppt-surface) 85%, var(--ppt-a)), var(--ppt-surface));
+    border: 1px solid color-mix(in srgb, var(--ppt-a) 46%, transparent);
+}
+
+.tool-preview-ppt-thumb .thumb-column {
+    top: 45%;
+    width: 37%;
+    height: 36%;
+    border-radius: 5px;
+    background: var(--ppt-surface);
+}
+
+.tool-preview-ppt-thumb .thumb-column.one {
+    left: 8%;
+    border: 1px solid var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb .thumb-column.two {
+    right: 8%;
+    border: 1px solid var(--ppt-b);
+}
+
+.tool-preview-ppt-thumb .thumb-chart {
+    position: absolute;
+    left: 9%;
+    right: 11%;
+    top: 48%;
+    display: grid;
+    gap: 6px;
+}
+
+.tool-preview-ppt-thumb .thumb-chart i {
+    position: static;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb .thumb-chart i:nth-child(2) { width: 76%; background: var(--ppt-b); }
+.tool-preview-ppt-thumb .thumb-chart i:nth-child(3) { width: 92%; background: var(--ppt-c); }
+.tool-preview-ppt-thumb .thumb-chart i:nth-child(4) { width: 54%; opacity: 0.65; }
+
+.tool-preview-ppt-thumb .thumb-table {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 47%;
+    display: grid;
+    gap: 4px;
+}
+
+.tool-preview-ppt-thumb .thumb-table i {
+    position: static;
+    height: 8px;
+    background: var(--ppt-surface);
+    border-top: 3px solid var(--ppt-a);
+}
+
+.tool-preview-ppt-thumb .thumb-flow {
+    position: absolute;
+    left: 9%;
+    right: 9%;
+    top: 53%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8%;
+}
+
+.tool-preview-ppt-thumb .thumb-flow i {
+    position: static;
+    height: 20px;
+    border-radius: 5px;
+    background: var(--ppt-surface);
+    border: 1px solid var(--ppt-a);
+}
+
 .tool-preview-ppt-slide-num {
     position: absolute;
     top: 8px;

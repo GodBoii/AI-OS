@@ -1171,6 +1171,195 @@
     background: var(--bg-secondary);
 }
 
+.presentation-slide-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-bottom: 14px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--ppt-bg);
+    border: 1px solid color-mix(in srgb, var(--ppt-ink) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
+}
+
+.presentation-slide-thumb::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 5px;
+    background: var(--ppt-a);
+}
+
+.presentation-slide-thumb::after {
+    content: "";
+    position: absolute;
+    right: -12%;
+    top: -28%;
+    width: 35%;
+    aspect-ratio: 1;
+    border: 3px solid color-mix(in srgb, var(--ppt-a) 68%, transparent);
+    border-radius: 50%;
+}
+
+.presentation-slide-thumb .thumb-kicker,
+.presentation-slide-thumb .thumb-title,
+.presentation-slide-thumb .thumb-hero,
+.presentation-slide-thumb .thumb-visual,
+.presentation-slide-thumb .thumb-column,
+.presentation-slide-thumb .thumb-cards i,
+.presentation-slide-thumb .thumb-metrics i,
+.presentation-slide-thumb .thumb-chart i,
+.presentation-slide-thumb .thumb-table i,
+.presentation-slide-thumb .thumb-flow i {
+    position: absolute;
+    display: block;
+}
+
+.presentation-slide-thumb .thumb-kicker {
+    left: 8%;
+    top: 14%;
+    width: 7%;
+    height: 5%;
+    border-radius: 2px;
+    background: var(--ppt-a);
+}
+
+.presentation-slide-thumb .thumb-title {
+    left: 8%;
+    top: 28%;
+    width: 48%;
+    height: 7%;
+    border-radius: 999px;
+    background: var(--ppt-ink);
+}
+
+.presentation-slide-thumb .thumb-hero {
+    right: 9%;
+    top: 20%;
+    width: 26%;
+    height: 45%;
+    border-radius: 8px;
+    border: 1px solid var(--ppt-a);
+    background: color-mix(in srgb, var(--ppt-surface) 86%, var(--ppt-a));
+}
+
+.presentation-slide-thumb .thumb-metrics {
+    position: absolute;
+    left: 8%;
+    right: 9%;
+    bottom: 13%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5%;
+}
+
+.presentation-slide-thumb .thumb-metrics i {
+    position: static;
+    height: 18px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--ppt-surface) 86%, var(--ppt-a));
+    border: 1px solid color-mix(in srgb, var(--ppt-a) 50%, transparent);
+}
+
+.presentation-slide-thumb .thumb-cards i {
+    left: 8%;
+    width: 52%;
+    height: 13%;
+    border-radius: 5px;
+    background: var(--ppt-surface);
+    border-left: 4px solid var(--ppt-a);
+}
+
+.presentation-slide-thumb .thumb-cards i:nth-child(1) { top: 44%; }
+.presentation-slide-thumb .thumb-cards i:nth-child(2) { top: 60%; border-left-color: var(--ppt-b); }
+.presentation-slide-thumb .thumb-cards i:nth-child(3) { top: 76%; border-left-color: var(--ppt-c); }
+
+.presentation-slide-thumb .thumb-visual {
+    right: 9%;
+    top: 44%;
+    width: 24%;
+    height: 38%;
+    border-radius: 7px;
+    background:
+        radial-gradient(circle at 35% 34%, var(--ppt-a) 0 8%, transparent 9%),
+        radial-gradient(circle at 67% 62%, var(--ppt-b) 0 8%, transparent 9%),
+        linear-gradient(135deg, color-mix(in srgb, var(--ppt-surface) 85%, var(--ppt-a)), var(--ppt-surface));
+    border: 1px solid color-mix(in srgb, var(--ppt-a) 46%, transparent);
+}
+
+.presentation-slide-thumb .thumb-column {
+    top: 45%;
+    width: 37%;
+    height: 36%;
+    border-radius: 6px;
+    background: var(--ppt-surface);
+}
+
+.presentation-slide-thumb .thumb-column.one {
+    left: 8%;
+    border: 1px solid var(--ppt-a);
+}
+
+.presentation-slide-thumb .thumb-column.two {
+    right: 8%;
+    border: 1px solid var(--ppt-b);
+}
+
+.presentation-slide-thumb .thumb-chart {
+    position: absolute;
+    left: 9%;
+    right: 11%;
+    top: 48%;
+    display: grid;
+    gap: 8px;
+}
+
+.presentation-slide-thumb .thumb-chart i {
+    position: static;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--ppt-a);
+}
+
+.presentation-slide-thumb .thumb-chart i:nth-child(2) { width: 76%; background: var(--ppt-b); }
+.presentation-slide-thumb .thumb-chart i:nth-child(3) { width: 92%; background: var(--ppt-c); }
+.presentation-slide-thumb .thumb-chart i:nth-child(4) { width: 54%; opacity: 0.65; }
+
+.presentation-slide-thumb .thumb-table {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 47%;
+    display: grid;
+    gap: 5px;
+}
+
+.presentation-slide-thumb .thumb-table i {
+    position: static;
+    height: 10px;
+    background: var(--ppt-surface);
+    border-top: 3px solid var(--ppt-a);
+}
+
+.presentation-slide-thumb .thumb-flow {
+    position: absolute;
+    left: 9%;
+    right: 9%;
+    top: 53%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8%;
+}
+
+.presentation-slide-thumb .thumb-flow i {
+    position: static;
+    height: 26px;
+    border-radius: 5px;
+    background: var(--ppt-surface);
+    border: 1px solid var(--ppt-a);
+}
+
 .presentation-slide-number {
     position: absolute;
     top: 12px;
