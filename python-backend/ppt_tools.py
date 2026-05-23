@@ -21,46 +21,100 @@ logger = logging.getLogger(__name__)
 
 PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-TEMPLATES: Dict[str, Dict[str, str]] = {
+TEMPLATE_LAYOUTS = [
+    {
+        "type": "title",
+        "name": "Cover",
+        "usage": "Opening slide with large editorial title, subtitle, visual system panel, and optional metrics.",
+    },
+    {
+        "type": "content",
+        "name": "Insight Cards",
+        "usage": "Claim-style slide with 3-4 short insight cards, side visual, and optional callout.",
+    },
+    {
+        "type": "two_column",
+        "name": "Comparison",
+        "usage": "Two filled comparison panels; include left/right titles and bullets whenever possible.",
+    },
+    {
+        "type": "chart",
+        "name": "Evidence Chart",
+        "usage": "Content slide with chart.data values for simple bar evidence.",
+    },
+    {
+        "type": "table",
+        "name": "Structured Table",
+        "usage": "Content slide with table rows for comparison matrices, plans, or structured facts.",
+    },
+    {
+        "type": "diagram",
+        "name": "Process Flow",
+        "usage": "Content slide with nodes or steps for workflows, systems, and timelines.",
+    },
+    {
+        "type": "image",
+        "name": "Visual Explanation",
+        "usage": "Visual slide with image_path when available, otherwise a designed abstract visual and supporting cards.",
+    },
+]
+
+TEMPLATES: Dict[str, Dict[str, Any]] = {
     "aetheria_modern": {
         "name": "Aetheria Modern",
         "description": "Clean editorial deck for AI strategy and product narratives.",
         "best_for": "AI strategy, product plans, operational reviews",
+        "design_brief": "Editorial, spacious, sharp blue/red/green accents, visual systems, insight cards, and restrained business polish.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "executive": {
         "name": "Executive Boardroom",
         "description": "Refined boardroom aesthetic with crisp data hierarchy.",
         "best_for": "business reviews, leadership updates, investor summaries",
+        "design_brief": "Boardroom-ready, calm, metric-led, structured comparisons, polished evidence, and premium whitespace.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "startup_pitch": {
         "name": "Startup Pitch",
         "description": "High-contrast dark deck with bold metrics for investors.",
         "best_for": "startup fundraising, product launches, market narratives",
+        "design_brief": "High-contrast, energetic, metric-first, product/storytelling slides with strong visual hierarchy.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "academic": {
         "name": "Academic Research",
         "description": "Formal scholarly layout with readable evidence and citations.",
         "best_for": "research talks, coursework, technical explainers",
+        "design_brief": "Scholarly, readable, evidence-heavy, citation-friendly, with structured findings and methodology diagrams.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "creative_portfolio": {
         "name": "Creative Portfolio",
         "description": "Bold expressive deck with vibrant gradients and asymmetric layouts.",
         "best_for": "design portfolios, creative briefs, brand pitches",
+        "design_brief": "Expressive, asymmetric, colorful, showcase-oriented, with strong visual slides and bold story beats.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "minimal_zen": {
         "name": "Minimal Zen",
         "description": "Ultra-clean whitespace design with restrained single-accent palette.",
         "best_for": "thought leadership, keynotes, minimalist reports",
+        "design_brief": "Minimal, quiet, highly legible, generous whitespace, fewer words, and carefully paced emphasis.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "tech_dark": {
         "name": "Tech Neon",
         "description": "Dark engineering theme with electric neon accents and sharp edges.",
         "best_for": "technical demos, developer talks, product launches",
+        "design_brief": "Dark technical interface style, neon accents, architecture/process diagrams, specs, and benchmark evidence.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
     "corporate_gradient": {
         "name": "Corporate Horizon",
         "description": "Professional gradient-rich deck with structured visual hierarchy.",
         "best_for": "quarterly reports, all-hands meetings, client proposals",
+        "design_brief": "Corporate, confident, structured, client-ready, with KPI evidence, process slides, and organized summaries.",
+        "layouts": TEMPLATE_LAYOUTS,
     },
 }
 
@@ -178,9 +232,11 @@ class PresentationTools(Toolkit):
         Args:
             topic: Presentation title or topic.
             slides: List of slide dictionaries, or a JSON string. Supported slide
-                types include title, content, two_column, comparison, image, visual.
-                Slides can include bullets/content, metrics, chart.data, table,
-                nodes/steps, callout, notes, and captions.
+                types include title/cover, content, two_column/comparison, chart,
+                table, diagram/process, image/visual. Slides should include
+                structured fields whenever possible: bullets/content, left/right
+                comparison content, metrics, chart.data, table rows, nodes/steps,
+                callout, notes, captions, visual_summary, or image_path.
             template: One of aetheria_modern, executive, startup_pitch, academic, creative_portfolio, minimal_zen, tech_dark, corporate_gradient.
             filename: Optional output filename ending in .pptx.
         """
@@ -506,7 +562,9 @@ def build_presentation_agent(
             "You create native editable PowerPoint presentations, not HTML pages or image-only slide decks.",
             "If the user or Aetheria provides a hidden presentation template instruction, call create_presentation with that exact template id.",
             "Use list_presentation_templates when template fit is unclear.",
-            "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, and speaker notes where useful.",
+            "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, visual summaries, and speaker notes where useful.",
+            "Do not make a deck that is only title plus plain bullet slides. Use the backend template layouts: cover, insight cards, comparison, evidence chart, table, process/diagram, and visual explanation.",
+            "When making comparison slides, always provide left/right titles and left/right bullet content. When making chart slides, provide chart.data. When making process slides, provide nodes or steps.",
             "Prefer concise claim-style titles and 3-6 strong slides unless the user asks for a different length.",
             "Use chart.data for simple bar evidence, table for comparison rows, nodes/steps for workflow diagrams, and metrics for rails.",
             "Return the artifact result naturally and mention that the file is downloadable and editable in PowerPoint.",
