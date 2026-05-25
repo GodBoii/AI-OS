@@ -8,7 +8,7 @@ class AIOS {
         this.userDataPath = null;
         this.userData = null;
         this.authService = null;
-        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
+        this.backendBaseUrl = 'https://api.aetheriaai.website';
         this.deploymentsCache = [];
         this.deploymentsLastLoadedAt = 0;
         this.deploymentsLoadPromise = null;

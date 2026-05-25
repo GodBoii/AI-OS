@@ -7,7 +7,7 @@ class ArtifactHandler {
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
-        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
+        this.backendBaseUrl = 'https://api.aetheriaai.website';
         this.deployInProgress = false;
         this.deployTargetsByConversation = new Map();
         // Track workspace state before hiding for overlays
@@ -1893,10 +1893,10 @@ class ArtifactHandler {
                 deployment_id: upload.deployment_id
             });
 
-            const liveUrl = activated?.url || `https://${finalSlug}.pawsitivestrides.store`;
+            const liveUrl = activated?.url || `https://${finalSlug}.aetheriaai.website`;
             const resolvedHostname = activated?.url
                 ? new URL(activated.url).hostname
-                : (existingTarget?.hostname || `${finalSlug}.pawsitivestrides.store`);
+                : (existingTarget?.hostname || `${finalSlug}.aetheriaai.website`);
 
             this.rememberDeployTarget({
                 site_id: siteId,
