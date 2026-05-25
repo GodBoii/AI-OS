@@ -5,7 +5,7 @@ const config = {
     // Backend connection settings
     backend: {
         // URL for the Python backend running in Docker
-        url: 'https://api.pawsitivestrides.store',
+        url: 'https://api.aetheriaai.website',
 
         // Maximum number of reconnection attempts
         maxReconnectAttempts: 50,
