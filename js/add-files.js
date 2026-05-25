@@ -382,7 +382,7 @@ class FileAttachmentHandler {
         }
 
         // --- FIX #1: Use the correct, new backend URL ---
-        const response = await fetch('https://api.pawsitivestrides.store/api/generate-upload-url', {
+        const response = await fetch('https://api.aetheriaai.website/api/generate-upload-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

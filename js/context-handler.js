@@ -1049,7 +1049,7 @@ class ContextHandler {
                 return false;
             }
 
-            const response = await fetch(`https://api.pawsitivestrides.store/api/sessions/${sessionId}/content`, {
+            const response = await fetch(`https://api.aetheriaai.website/api/sessions/${sessionId}/content`, {
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
                 }
