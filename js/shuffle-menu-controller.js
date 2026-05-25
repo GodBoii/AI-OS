@@ -9,7 +9,7 @@ class ShuffleMenuController {
         this.isOpen = false;
         this.activeItems = new Set();
         this.animationFrame = null;
-        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
+        this.backendBaseUrl = 'https://api.aetheriaai.website';
         this.connectedIntegrationStatus = {};
         this.userModifiedProviders = new Set();
         this.integrationTools = [
