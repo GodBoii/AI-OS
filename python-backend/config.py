@@ -43,8 +43,11 @@ def _default_cors_origins():
         "https://localhost",
         "capacitor://localhost",
         "ionic://localhost",
-        "https://api.pawsitivestrides.store",
+        "https://api.aetheriaai.website",
         "https://api.aetheriaai.online",
+        "https://aetheria-ai-website.vercel.app",
+        "https://aetheriaai.website",
+        "https://www.aetheriaai.website",
     }
     frontend_origin = _origin_from_url(FRONTEND_URL)
     if frontend_origin:
@@ -56,7 +59,7 @@ ALLOWED_CORS_ORIGINS = sorted(set(_default_cors_origins()) | set(_split_csv(os.g
 ALLOWED_CORS_SUFFIXES = _split_csv(
     os.getenv(
         "ALLOWED_CORS_SUFFIXES",
-        ".api.pawsitivestrides.store,.api.aetheriaai.online",
+        ".api.aetheriaai.website,.api.aetheriaai.online,.aetheriaai.website",
     )
 )
 

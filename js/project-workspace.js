@@ -1,6 +1,6 @@
 class ProjectWorkspace {
     constructor() {
-        this.backendBaseUrl = 'https://api.pawsitivestrides.store';
+        this.backendBaseUrl = 'https://api.aetheriaai.website';
         this.activeProject = null;
         this.currentTreeSource = null;
         this.latestSyncedPaths = [];
@@ -1744,8 +1744,8 @@ class ProjectWorkspace {
                 deployment_id: upload.deployment_id,
             });
 
-            const liveUrl = activated?.url || `https://${finalSlug}.pawsitivestrides.store`;
-            const hostname = activated?.url ? new URL(activated.url).hostname : `${finalSlug}.pawsitivestrides.store`;
+            const liveUrl = activated?.url || `https://${finalSlug}.aetheriaai.website`;
+            const hostname = activated?.url ? new URL(activated.url).hostname : `${finalSlug}.aetheriaai.website`;
             handler.rememberDeployTarget?.({
                 site_id: siteId,
                 project_name: projectName,
