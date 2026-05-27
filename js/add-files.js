@@ -115,14 +115,14 @@ class FileAttachmentHandler {
         // Create the drag overlay element
         this.dragOverlay = this.createDragOverlay();
 
-        // We attach drag listeners to the entire document body so that
-        // dragging files anywhere over the app window triggers the overlay,
-        // but the overlay itself is anchored to the input container.
-        const chatContainer = document.getElementById('chat-container') || document.body;
+        // We attach drag listeners to document.body so that dragging files
+        // anywhere over the app window triggers the overlay — this avoids
+        // issues with pointer-events:none on child elements (.chat-window)
+        // that would otherwise prevent events from reaching #chat-container.
+        const dropTarget = document.body;
 
-        chatContainer.addEventListener('dragenter', (e) => {
+        dropTarget.addEventListener('dragenter', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             this.dragCounter++;
             // Only show overlay if dragging files (not text/other drags)
             if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
@@ -130,17 +130,15 @@ class FileAttachmentHandler {
             }
         });
 
-        chatContainer.addEventListener('dragover', (e) => {
+        dropTarget.addEventListener('dragover', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             if (e.dataTransfer) {
                 e.dataTransfer.dropEffect = 'copy';
             }
         });
 
-        chatContainer.addEventListener('dragleave', (e) => {
+        dropTarget.addEventListener('dragleave', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             this.dragCounter--;
             if (this.dragCounter <= 0) {
                 this.dragCounter = 0;
@@ -148,9 +146,8 @@ class FileAttachmentHandler {
             }
         });
 
-        chatContainer.addEventListener('drop', (e) => {
+        dropTarget.addEventListener('drop', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             this.dragCounter = 0;
             
             // Trigger success animation
@@ -217,9 +214,8 @@ class FileAttachmentHandler {
                 </div>
             </div>
         `;
-        // Append to the chat container so it overlays the chat area
-        const chatContainer = document.getElementById('chat-container') || document.body;
-        chatContainer.appendChild(overlay);
+        // Append to document body so it is always visible regardless of chat-container state
+        document.body.appendChild(overlay);
         
         // Initialize particle system
         this.initParticleSystem(overlay);
