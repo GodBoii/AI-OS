@@ -704,11 +704,26 @@ def run_agent_and_stream(
     run_state_manager: RunStateManager = None,  # NEW: optional, safe for assistant path
 ):
     """
-    Orchestrates a full agent run, ensuring all real-time tools receive the
-    necessary per-request dependencies for communication.
+    FUNCTION DESCRIPTION:
+    Orchestrates the lifecycle of a single prompt-response turn for the agent. It retrieves user configuration,
+    bootstraps the local workspace files, loads historical chat context, constructs prompt prefixes, 
+    initializes the proper Agno agent team (based on active layout mode), processes file attachments,
+    streams live reasoning/output chunks, and updates database run summaries and token counts on completion.
 
-    Emits to the conversation room (conv:{conversation_id}) so any reconnected
-    client with the same conversationId will receive the stream.
+    UPSTREAM CALLER:
+    - Called asynchronously within a background runner thread by `on_send_message()` in `python-backend/sockets.py`.
+
+    DOWNSTREAM IMPACT & WEBSOCKET EMISSIONS:
+    - Emits real-time chunks to `conv:{conversation_id}` room, which triggers frontend render routines in `js/chat.js`
+      (specifically matching listeners: `reasoning_step`, `agent_step`, `response`, and `run_completed`).
+    - Modifies database runs in Supabase ('agno_sessions') via connection_manager.
+    - Triggers Convex database writes for billing/usage telemetry via `convex_usage_service.record_token_usage`.
+
+    COMPONENTS & HELPERS CALLED:
+    - `connection_manager.get_session()` to fetch Redis configurations.
+    - `_ensure_project_workspace_bootstrap()` to copy project files from storage into the sandbox.
+    - `get_coder_agent()`, `get_computer_agent()`, `get_system_assistant()`, or `get_llm_os()` in `assistant.py` (and relevant files) to build the Agno Team.
+    - `_log_request_tokens()` to aggregate run/session usage and invoke Convex recording.
     """
     # Durable room name - survives SID changes
     room_name = f"conv:{conversation_id}"

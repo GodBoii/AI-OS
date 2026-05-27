@@ -30,6 +30,19 @@ from vercel_tools import VercelTools
 logger = logging.getLogger(__name__)
 
 
+# FUNCTION DESCRIPTION:
+# Factory function that builds and returns the core Aetheria AI Agent Team (Team class instance).
+# It compiles system prompts, configures agentic database memory (PostgresDb), and dynamically
+# registers specialized toolkits (Gmail, Drive, Sheets, Browser, Media Tools, WhatsApp) and
+# binds platform operations sub-agents (GitHub, Vercel, Supabase) and presentation specialists based on active parameters.
+#
+# UPSTREAM CALLER:
+# - Called by `run_agent_and_stream()` in `python-backend/agent_runner.py` during session execution initialization.
+#
+# DOWNSTREAM IMPACT:
+# - Changing registered tool arguments here directly impacts the LLM's system instructions and action capabilities.
+# - Tool parameters (e.g. `enable_google_sheets`) must correspond directly with the config keys synchronized in
+#   `on_send_message()` (`python-backend/sockets.py`) and toggled on the UI panel in `js/chat.js`.
 def get_llm_os(
     user_id: Optional[str] = None,
     session_info: Optional[Dict[str, Any]] = None,
