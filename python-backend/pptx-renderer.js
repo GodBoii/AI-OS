@@ -195,29 +195,42 @@ function addBg(slide, template) {
 
 function addDecorativeSystem(slide, template, variant = 'content') {
   const dark = isDarkTemplate(template);
-  const wash = dark ? mixColor(template.surface, template.accent, 0.18) : mixColor(template.background, template.accent, 0.08);
+  const wash = dark ? mixColor(template.surface, template.accent, 0.12) : mixColor(template.background, template.accent, 0.05);
   slide.addShape(currentPptx.ShapeType.rect, {
     x: 0, y: 0, w: 10, h: 5.625,
     fill: { color: template.background },
     line: { color: template.background },
   });
+  
+  // Premium bleed accent line
   slide.addShape(currentPptx.ShapeType.rect, {
-    x: 0, y: 0, w: 10, h: variant === 'title' ? 0.16 : 0.1,
+    x: 0, y: 0, w: 10, h: variant === 'title' ? 0.22 : 0.08,
     fill: { color: template.accent },
     line: { color: template.accent },
   });
-  slide.addShape(currentPptx.ShapeType.arc, {
-    x: 7.42, y: -0.74, w: 2.94, h: 2.94,
-    line: { color: template.accent, transparency: dark ? 32 : 42, width: variant === 'title' ? 3 : 1.6 },
+
+  // Sleek geometric accents
+  slide.addShape(currentPptx.ShapeType.rtTriangle, {
+    x: 8.8, y: 0, w: 1.2, h: 1.2,
+    fill: { color: template.accent2, transparency: dark ? 65 : 75 },
+    line: null,
+    flipH: true,
+    flipV: true
   });
-  slide.addShape(currentPptx.ShapeType.arc, {
-    x: -0.82, y: 4.12, w: 1.9, h: 1.9,
-    line: { color: template.accent2, transparency: dark ? 48 : 58, width: 1.4 },
-  });
-  if (variant !== 'title') {
+
+  if (variant === 'title') {
+    slide.addShape(currentPptx.ShapeType.arc, {
+      x: 7.2, y: -1.2, w: 4.5, h: 4.5,
+      line: { color: template.accent, transparency: dark ? 35 : 45, width: 2.5 },
+    });
+    slide.addShape(currentPptx.ShapeType.ellipse, {
+      x: -0.8, y: 4.2, w: 2.5, h: 2.5,
+      line: { color: template.accent2, transparency: dark ? 55 : 65, width: 1.2 },
+    });
+  } else {
     slide.addShape(currentPptx.ShapeType.rect, {
-      x: 0, y: 0.1, w: 0.08, h: 5.525,
-      fill: { color: wash, transparency: dark ? 12 : 0 },
+      x: 0, y: 0.08, w: 0.06, h: 5.545,
+      fill: { color: wash, transparency: dark ? 10 : 0 },
       line: null,
     });
   }
@@ -256,10 +269,10 @@ function addKicker(slide, text, template) {
 
 function addTitle(slide, title, template, opts = {}) {
   slide.addText(normalizeText(title, 'Untitled slide'), {
-    x: opts.x ?? 0.52, y: opts.y ?? 0.66, w: opts.w ?? 8.7, h: opts.h ?? 0.82,
-    fontFace: template.headingFace, fontSize: opts.size ?? 25,
+    x: opts.x ?? 0.54, y: opts.y ?? 0.62, w: opts.w ?? 8.7, h: opts.h ?? 0.86,
+    fontFace: template.headingFace, fontSize: opts.size ?? 28,
     bold: true, color: template.ink, margin: 0.02,
-    breakLine: false, fit: 'shrink',
+    breakLine: false, fit: 'shrink', charSpace: -0.5,
   });
 }
 
@@ -364,52 +377,49 @@ function addAbstractVisual(slide, template, opts = {}) {
   const w = opts.w ?? 2.28;
   const h = opts.h ?? 2.74;
   const dark = isDarkTemplate(template);
+  
   slide.addShape(currentPptx.ShapeType.roundRect, {
     x, y, w, h,
-    rectRadius: 0.06,
-    fill: { color: dark ? mixColor(template.surface, template.accent, 0.1) : 'FFFFFF', transparency: dark ? 4 : 0 },
-    line: { color: template.accent, transparency: 55, width: 0.8 },
+    rectRadius: 0.04,
+    fill: { color: dark ? mixColor(template.surface, template.accent, 0.08) : template.surface, transparency: dark ? 4 : 0 },
+    line: { color: template.accent, transparency: 65, width: 0.6 },
   });
-  const points = [
-    [x + 0.42, y + 0.48, template.accent],
-    [x + w - 0.44, y + 0.74, template.accent2],
-    [x + 0.62, y + h - 0.72, template.accent3],
-    [x + w - 0.62, y + h - 0.5, template.accent],
-    [x + w / 2, y + h / 2, template.accent2],
-  ];
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const x1 = points[i][0] + 0.08;
-    const y1 = points[i][1] + 0.08;
-    const x2 = points[i + 1][0] + 0.08;
-    const y2 = points[i + 1][1] + 0.08;
 
-    const lx = Math.min(x1, x2);
-    const ly = Math.min(y1, y2);
-    const lw = Math.max(0.01, Math.abs(x2 - x1));
-    const lh = Math.max(0.01, Math.abs(y2 - y1));
+  // Premium data-art grid
+  const cols = 5;
+  const rows = 6;
+  const stepX = (w - 0.4) / cols;
+  const stepY = (h - 0.6) / rows;
+  const colors = [template.accent, template.accent2, template.accent3];
+  
+  for (let r = 0; r <= rows; r++) {
+    for (let c = 0; c <= cols; c++) {
+      const cx = x + 0.2 + (c * stepX);
+      const cy = y + 0.3 + (r * stepY);
+      
+      // Dots grid
+      slide.addShape(currentPptx.ShapeType.ellipse, {
+        x: cx - 0.03, y: cy - 0.03, w: 0.06, h: 0.06,
+        fill: { color: template.muted, transparency: 75 },
+        line: null
+      });
 
-    const lineOpts = {
-      x: lx,
-      y: ly,
-      w: lw,
-      h: lh,
-      line: { color: template.muted, transparency: 58, width: 0.8 },
-    };
-    if ((x2 - x1) * (y2 - y1) < 0) {
-      lineOpts.flipH = true;
+      // Occasional colored geometric elements
+      if ((r + c) % 4 === 1 && r < rows && c < cols) {
+        const shapeColor = colors[(r * c) % colors.length];
+        slide.addShape(currentPptx.ShapeType.rect, {
+          x: cx + 0.05, y: cy + 0.05, w: stepX - 0.1, h: stepY - 0.1,
+          fill: { color: shapeColor, transparency: dark ? 25 : 35 },
+          line: { color: shapeColor, transparency: 40, width: 0.8 },
+        });
+      }
     }
-    slide.addShape(currentPptx.ShapeType.line, lineOpts);
   }
-  points.forEach(([px, py, color], i) => {
-    slide.addShape(currentPptx.ShapeType.ellipse, {
-      x: px, y: py, w: i === 4 ? 0.34 : 0.22, h: i === 4 ? 0.34 : 0.22,
-      fill: { color },
-      line: { color, transparency: 15 },
-    });
-  });
+
+  // Accent bar
   slide.addShape(currentPptx.ShapeType.rect, {
-    x: x + 0.26, y: y + h - 0.28, w: w - 0.52, h: 0.04,
-    fill: { color: template.accent, transparency: 20 },
+    x: x + 0.15, y: y + h - 0.25, w: w - 0.3, h: 0.06,
+    fill: { color: template.accent, transparency: 15 },
     line: null,
   });
 }
@@ -418,25 +428,34 @@ function addMetricRail(slide, metrics, template, opts = {}) {
   const items = Array.isArray(metrics) ? metrics.slice(0, opts.maxItems || 3) : [];
   if (!items.length) return;
   const x0 = opts.x ?? 0.58;
-  const y = opts.y ?? 4.1;
-  const gap = 0.14;
+  const y = opts.y ?? 4.15;
+  const gap = 0.16;
   const w = ((opts.w ?? 8.84) - gap * (items.length - 1)) / items.length;
   items.forEach((metric, idx) => {
     const x = x0 + idx * (w + gap);
+    
     slide.addShape(currentPptx.ShapeType.roundRect, {
-      x, y, w, h: opts.h ?? 0.72,
-      rectRadius: 0.05,
-      fill: { color: template.surface, transparency: template.background === '101828' ? 88 : 0 },
-      line: { color: template.accent, transparency: 62, width: 0.8 },
+      x, y, w, h: opts.h ?? 0.76,
+      rectRadius: 0.04,
+      fill: { color: template.surface, transparency: isDarkTemplate(template) ? 8 : 0 },
+      line: { color: template.accent, transparency: 52, width: 0.8 },
     });
+
+    slide.addShape(currentPptx.ShapeType.rect, {
+      x, y, w: 0.06, h: opts.h ?? 0.76,
+      fill: { color: template.accent },
+      line: null,
+    });
+
     slide.addText(normalizeText(metric.value || metric.metric || ''), {
-      x: x + 0.14, y: y + 0.12, w: w - 0.28, h: 0.24,
-      fontFace: template.headingFace, fontSize: 14, bold: true,
-      color: template.accent, margin: 0, fit: 'shrink',
+      x: x + 0.16, y: y + 0.14, w: w - 0.32, h: 0.26,
+      fontFace: template.headingFace, fontSize: 16, bold: true,
+      color: template.accent, margin: 0, fit: 'shrink', charSpace: -0.2
     });
+    
     slide.addText(normalizeText(metric.label || metric.name || ''), {
-      x: x + 0.14, y: y + 0.39, w: w - 0.28, h: 0.2,
-      fontFace: template.fontFace, fontSize: 6.8, bold: true,
+      x: x + 0.16, y: y + 0.44, w: w - 0.32, h: 0.2,
+      fontFace: template.fontFace, fontSize: 7.2, bold: true,
       color: template.muted, margin: 0, fit: 'shrink',
     });
   });
