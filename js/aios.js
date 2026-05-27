@@ -42,6 +42,12 @@ class AIOS {
     async init() {
         if (this.initialized) return;
 
+        // FUNCTION DESCRIPTION:
+        // Core application lifecycle initializer. Loads path configs, registers
+        // authentication listeners, caches DOM references, sets up pricing, usage graphs,
+        // and database filters.
+        // UPSTREAM CALLERS: Called during client app boot.
+        // DOWNSTREAM IMPACT: Updates layout modes and triggers integration connection status checks.
         await this._initializePaths();
 
         try {
@@ -567,6 +573,13 @@ class AIOS {
      * @param {object|null} user - The user object from the auth service, or null if logged out.
      */
     updateUserUI(user) {
+        // FUNCTION DESCRIPTION:
+        // Centralized utility to update user profile cards and navigation avatars throughout the layout.
+        // It updates initials/image avatars, user name, and user email displays in the setting tabs.
+        // UPSTREAM CALLERS:
+        // - Triggered by `authService.onAuthChange` upon user login or logout changes.
+        // DOWNSTREAM IMPACT:
+        // - Modifies HTML contents of settings avatars and account panels.
         const containers = [this.elements.settingsAvatarContainer, this.elements.accountAvatar];
 
         // Reset all containers

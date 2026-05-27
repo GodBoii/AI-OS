@@ -393,6 +393,20 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
     }
 }
 
+// FUNCTION DESCRIPTION:
+// Coordinates transitioning the client interface to a selected conversation thread. 
+// If the conversation being left has a running background process, it flags it as a background run
+// (triggering the sidebar brain indicator). It then toggles CSS visibility flags across all message list container threads,
+// removes the newly activated thread from the background stack tray, synchronizes local displays, and triggers scroll resets.
+//
+// UPSTREAM CALLERS:
+// - sidebar button click listeners.
+// - background sidebar tray check buttons (`ensureBackgroundConversation` triggers).
+//
+// DOWNSTREAM IMPACT:
+// - Updates the global state `currentConversationId`.
+// - Alters visibility of `.conversation-thread` divs in the DOM.
+// - Redraws active layouts, sidebar icons, and welcome boards.
 function switchConversation(conversationId) {
     if (!conversationId) return;
 
@@ -1488,6 +1502,20 @@ function setupIpcListeners() {
         }
     });
 
+    // FUNCTION DESCRIPTION:
+    // Core event listener for streaming text response packages.
+    // It maps stream IDs to DOM message elements, appends incoming tokens to text containers,
+    // formats raw markdown into HTML layout elements, triggers syntax highlighting,
+    // handles collapsible logs for sub-agents, and inserts action buttons when streaming terminates.
+    //
+    // UPSTREAM CALLERS:
+    // - Triggered by Electron IPC event `chat-response`, forwarded from `js/python-bridge.js`
+    //   upon receiving socket emissions of event `response` from `python-backend/agent_runner.py`.
+    //
+    // DOWNSTREAM IMPACT:
+    // - Updates message list threads inside the `#chat-messages` DOM.
+    // - Triggers scroll position adjustments (`autoScrollIfSticky()`).
+    // - Promotes background tasks queue changes if target message is running in background.
     ipcRenderer.on('chat-response', async (data) => {
         try {
             if (!data) return;
