@@ -2728,6 +2728,9 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     // The final, synthesized content is on the top-level run object.
     const finalContent = run.content || '';
 
+    // Aggregate reasoning content by owner key to avoid showing each token as a separate block
+    const reasoningByOwner = new Map();
+
     // Process events to build the reasoning/log section
     events.forEach(event => {
         const owner = event.agent_name || event.team_name;
@@ -2735,15 +2738,9 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         const reasoningText = normalizeReasoningText(event.reasoning_content || event.step || event.content_for_reasoning || '');
 
         if (reasoningText && (eventType === 'reasoning_step' || event.reasoning_content)) {
-            const title = escapeReasoningHtml(getReasoningOwnerLabel(owner || mainAgentName, event.delegated_agent || null));
-            toolLogsHtml += `
-                <div class="reasoning-thought-block">
-                    <div class="reasoning-thought-header">
-                        <i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i>
-                        <span>${title}</span>
-                    </div>
-                    <div class="reasoning-thought-content">${escapeReasoningHtml(reasoningText.trim())}</div>
-                </div>`;
+            const ownerKey = getReasoningOwnerLabel(owner || mainAgentName, event.delegated_agent || null);
+            const existing = reasoningByOwner.get(ownerKey) || '';
+            reasoningByOwner.set(ownerKey, existing + reasoningText);
         }
 
         if (!owner) return;
@@ -2780,6 +2777,19 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
                     </div>`;
             }
         }
+    });
+
+    // Render aggregated reasoning blocks (one per owner instead of one per token)
+    reasoningByOwner.forEach((text, ownerKey) => {
+        const title = escapeReasoningHtml(ownerKey);
+        toolLogsHtml = `
+            <div class="reasoning-thought-block">
+                <div class="reasoning-thought-header">
+                    <i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i>
+                    <span>${title}</span>
+                </div>
+                <div class="reasoning-thought-content">${escapeReasoningHtml(text.trim())}</div>
+            </div>` + toolLogsHtml;
     });
 
     // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---

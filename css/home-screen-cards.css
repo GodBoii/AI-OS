@@ -434,56 +434,67 @@ body:not(.dark-mode) .scroll-arrow:hover {
     border: 1px solid;
     cursor: pointer;
     overflow: hidden;
+    position: relative;
     transition:
-        transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-        border-color 0.24s ease,
-        box-shadow 0.24s ease;
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .template-scroll-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-6px);
 }
 
 .dark-mode .template-scroll-card {
-    background: rgba(20, 20, 22, 0.82);
-    border-color: rgba(255, 255, 255, 0.09);
+    background: rgba(20, 20, 22, 0.65);
+    border-color: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     box-shadow:
         0 8px 28px rgba(0, 0, 0, 0.35),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .dark-mode .template-scroll-card:hover {
-    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.25);
     box-shadow:
-        0 14px 40px rgba(0, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        0 18px 48px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .dark-mode .template-scroll-card.selected {
-    border-color: rgba(125, 211, 252, 0.6);
+    border-color: rgba(125, 211, 252, 0.7);
+    background: rgba(125, 211, 252, 0.05);
     box-shadow:
-        0 0 0 1px rgba(125, 211, 252, 0.2),
-        0 8px 28px rgba(0, 0, 0, 0.35);
+        0 0 0 1px rgba(125, 211, 252, 0.3),
+        0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 body:not(.dark-mode) .template-scroll-card {
-    background: rgba(255, 255, 255, 0.92);
-    border-color: rgba(44, 36, 28, 0.1);
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(44, 36, 28, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     box-shadow:
-        0 8px 28px rgba(73, 58, 38, 0.1),
+        0 8px 24px rgba(73, 58, 38, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 body:not(.dark-mode) .template-scroll-card:hover {
-    border-color: rgba(44, 36, 28, 0.18);
-    box-shadow: 0 14px 40px rgba(73, 58, 38, 0.15);
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(44, 36, 28, 0.22);
+    box-shadow: 
+        0 16px 42px rgba(73, 58, 38, 0.18),
+        0 0 20px rgba(0, 0, 0, 0.03);
 }
 
 body:not(.dark-mode) .template-scroll-card.selected {
-    border-color: rgba(35, 100, 170, 0.5);
+    border-color: rgba(35, 100, 170, 0.6);
+    background: rgba(35, 100, 170, 0.03);
     box-shadow:
-        0 0 0 1px rgba(35, 100, 170, 0.15),
-        0 8px 28px rgba(73, 58, 38, 0.1);
+        0 0 0 1px rgba(35, 100, 170, 0.2),
+        0 12px 32px rgba(73, 58, 38, 0.12);
 }
 
 /* ── Canvas wrap + eye icon ── */
@@ -499,86 +510,115 @@ body:not(.dark-mode) .template-scroll-card.selected {
     overflow: hidden;
     border-radius: 10px;
     background: var(--ppt-bg);
-    border: 1px solid rgba(127, 127, 127, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    box-shadow: 
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 4px 12px rgba(0, 0, 0, 0.1);
     display: block;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+}
+
+.template-scroll-card:hover .ppt-template-canvas {
+    transform: scale(1.02);
+    box-shadow: 
+        inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+        0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .template-preview-btn {
     position: absolute;
-    top: 18px;
-    right: 18px;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    top: 20px;
+    right: 20px;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
     border: 1px solid;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     z-index: 2;
+    opacity: 0;
+    transform: translateY(4px) scale(0.95);
     transition:
-        transform 0.18s ease,
-        background 0.18s ease,
-        border-color 0.18s ease;
+        all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.template-scroll-card:hover .template-preview-btn {
+    opacity: 1;
+    transform: translateY(0) scale(1);
 }
 
 .template-preview-btn:hover {
-    transform: scale(1.1);
+    transform: translateY(0) scale(1.1) !important;
 }
 
 .dark-mode .template-preview-btn {
-    background: rgba(0, 0, 0, 0.6);
-    border-color: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(18, 18, 20, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .dark-mode .template-preview-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.4);
     color: #fff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 body:not(.dark-mode) .template-preview-btn {
-    background: rgba(255, 255, 255, 0.8);
-    border-color: rgba(44, 36, 28, 0.15);
-    color: rgba(16, 14, 11, 0.7);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(44, 36, 28, 0.2);
+    color: rgba(16, 14, 11, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 12px rgba(73, 58, 38, 0.15);
 }
 
 body:not(.dark-mode) .template-preview-btn:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(44, 36, 28, 0.25);
-    color: rgba(16, 14, 11, 0.92);
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(44, 36, 28, 0.35);
+    color: rgba(16, 14, 11, 1);
+    box-shadow: 0 6px 16px rgba(73, 58, 38, 0.2);
 }
 
 /* ── Selected badge ── */
 .template-selected-badge {
     position: absolute;
-    bottom: 8px;
-    left: 18px;
-    width: 24px;
-    height: 24px;
+    bottom: 12px;
+    left: 20px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.62rem;
+    font-size: 0.65rem;
     z-index: 2;
+    animation: badgePop 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes badgePop {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
 .dark-mode .template-selected-badge {
-    background: rgba(125, 211, 252, 0.9);
+    background: rgba(125, 211, 252, 1);
     color: #0a0e17;
+    border: 2px solid rgba(18, 18, 20, 0.9);
 }
 
 body:not(.dark-mode) .template-selected-badge {
-    background: rgba(35, 100, 170, 0.85);
+    background: rgba(35, 100, 170, 1);
     color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.9);
 }
 
 /* ── Template info ── */
@@ -1250,36 +1290,39 @@ body:not(.dark-mode) .ppt-slide-preview-toggle.expanded {
 .ppt-slide-preview-item {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 6px;
+    gap: 6px;
+    padding: 8px;
     border: 1px solid;
-    border-radius: 10px;
-    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-    cursor: default;
+    border-radius: 12px;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    cursor: pointer;
+    background: transparent;
 }
 
 .ppt-slide-preview-item:hover {
-    transform: translateY(-2px);
+    transform: translateY(-3px);
 }
 
 .dark-mode .ppt-slide-preview-item {
-    background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.06);
 }
 
 .dark-mode .ppt-slide-preview-item:hover {
-    border-color: rgba(255, 255, 255, 0.16);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 body:not(.dark-mode) .ppt-slide-preview-item {
-    background: rgba(44, 36, 28, 0.02);
-    border-color: rgba(44, 36, 28, 0.08);
+    background: rgba(44, 36, 28, 0.01);
+    border-color: rgba(44, 36, 28, 0.06);
 }
 
 body:not(.dark-mode) .ppt-slide-preview-item:hover {
-    border-color: rgba(44, 36, 28, 0.16);
-    box-shadow: 0 6px 16px rgba(73, 58, 38, 0.1);
+    background: rgba(44, 36, 28, 0.03);
+    border-color: rgba(44, 36, 28, 0.18);
+    box-shadow: 0 8px 24px rgba(73, 58, 38, 0.12);
 }
 
 .ppt-slide-preview-info {
