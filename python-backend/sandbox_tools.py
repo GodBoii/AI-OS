@@ -698,6 +698,19 @@ class SandboxTools(Toolkit):
             logger.error("read_file failed: %s", exc, exc_info=True)
             return f"Error reading file: {exc}"
 
+    # FUNCTION DESCRIPTION:
+    # Writes UTF-8 text or Base64 binary bytes to a file inside the sandboxed workspace.
+    # It routes paths through safe workspace normalizations, invokes the sandbox manager REST API,
+    # and registers the file modification history.
+    #
+    # UPSTREAM CALLERS:
+    # - Called directly by Agno agents (e.g. Coder agent) during code generation tasks.
+    # - Called by workspace bootstrappers like `_ensure_project_workspace_bootstrap()`.
+    #
+    # DOWNSTREAM IMPACT:
+    # - Modifies container storage in the Docker sandbox instance.
+    # - Triggers `_persist_file_tool_activity()` which saves the modification details to Supabase
+    #   'session_content' history tables, allowing downstream runners to build historical context maps.
     def write_file(
         self,
         file_path: str,
@@ -860,6 +873,21 @@ class SandboxTools(Toolkit):
             logger.error("edit_file failed: %s", exc, exc_info=True)
             return f"Error editing file: {exc}"
 
+    # FUNCTION DESCRIPTION:
+    # Executes a shell command inside the container using the Sandbox Manager API.
+    # It logs starting states, saves execution details, gathers exit codes / streams,
+    # and schedules async artifact scanners.
+    #
+    # UPSTREAM CALLERS:
+    # - Called directly by Coder and Computer Agno agents during system tasks.
+    #
+    # DOWNSTREAM IMPACT:
+    # - Spawns command processes inside the Docker container.
+    # - Updates the execution database table 'sandbox_executions' via `persistence_service`.
+    # - Emits WebSocket signals to the client (`sandbox-command-started`, `sandbox-command-finished`)
+    #   which trigger CLI status displays in `js/chat.js`.
+    # - Spawns `_detect_and_emit_artifacts_async()` to sweep filesystem updates, push new files to
+    #   Supabase storage, and trigger visual panels in `js/artifact-handler.js`.
     def execute_in_sandbox(self, command: str) -> str:
         """
         Executes a shell command inside an isolated sandbox environment.

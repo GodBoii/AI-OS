@@ -113,6 +113,13 @@ def _sanitize_tool_config_for_user(config_data: Dict[str, Any], user_id: str) ->
     return sanitized
 
 
+# FUNCTION DESCRIPTION:
+# Injects core database, session state, and execution state services from the Flask application factory.
+# UPSTREAM CALLER:
+# - Called by `create_app()` in `python-backend/factory.py` during startup initialization.
+# DOWNSTREAM IMPACT:
+# - Binds global instances used across all event handlers in this module (`connection_manager_service`, `redis_client_instance`, `run_state_manager_instance`).
+# - Launches the asynchronous screenshot listener thread `listen_for_browser_screenshots`.
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
     global connection_manager_service, redis_client_instance, run_state_manager_instance
@@ -420,6 +427,21 @@ def handle_mobile_command_result(data: Dict[str, Any]):
         logger.warning("Received mobile command result with no request_id.")
 
 
+# FUNCTION DESCRIPTION:
+# Primary Socket.IO entry point for client messages. It verifies user auth tokens using Supabase Auth,
+# subscribes the connection socket to a conversation-specific WebSocket room `conv:{conversation_id}`,
+# synchronizes incoming settings (modes, cloud/local targets) with Redis session keys,
+# verifies pricing/usage limits, logs uploaded files in Supabase 'session_content', and
+# spawns the background execution thread `run_agent_and_stream`.
+#
+# UPSTREAM CALLER:
+# - Invoked by client socket emissions of `send_message` from `js/chat.js` (specifically `on_send_message()` handlers).
+#
+# DOWNSTREAM IMPACT:
+# - Spawns background Eventlet thread running `run_agent_and_stream()`.
+# - Modifies Redis database keys under namespace `session:{conversationId}`.
+# - Spawns background title generation via `generate_and_save_title`.
+# - Emits back socket messages on validation failures (e.g. `error`, `status`).
 @socketio.on("send_message")
 def on_send_message(data: str):
     """The main message handler for incoming chat messages."""
