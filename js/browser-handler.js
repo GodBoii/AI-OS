@@ -269,7 +269,42 @@ class BrowserHandler {
                     result = await this.getView();
                     break;
                 case 'click':
-                    await this.page.click(`[data-aios-id="${commandPayload.element_id}"]`);
+                    {
+                        const clickSelector = `[data-aios-id="${commandPayload.element_id}"]`;
+                        
+                        // Scroll element into view first (critical for off-screen elements)
+                        await this.page.$eval(clickSelector, (el) => {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                        }).catch(() => {});
+                        await new Promise(resolve => setTimeout(resolve, 300));
+
+                        // Try standard click first
+                        try {
+                            await this.page.click(clickSelector, { timeout: 5000 });
+                        } catch (clickError) {
+                            // If standard click fails (element obscured/intercepted), try alternative strategies
+                            console.log(`BrowserHandler: Standard click failed for element ${commandPayload.element_id}, trying alternatives...`);
+
+                            try {
+                                // Strategy 2: Force click via JavaScript (bypasses overlay intercepts)
+                                await this.page.$eval(clickSelector, (el) => {
+                                    el.focus();
+                                    el.click();
+                                    // Also dispatch pointer events for frameworks that listen to those
+                                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                                });
+                            } catch (jsClickError) {
+                                // Strategy 3: Click by coordinates (last resort)
+                                const box = await this.page.$eval(clickSelector, (el) => {
+                                    const rect = el.getBoundingClientRect();
+                                    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+                                });
+                                await this.page.mouse.click(box.x, box.y);
+                            }
+                        }
+                    }
                     await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
@@ -277,27 +312,78 @@ class BrowserHandler {
                     {
                         const selector = `[data-aios-id="${commandPayload.element_id}"]`;
                         const clearExisting = commandPayload.clear_existing !== false;
-                        await this.page.focus(selector);
+                        const text = commandPayload.text;
 
-                        if (clearExisting) {
-                            await this.page.$eval(selector, (el) => {
-                                const element = el;
-                                const tag = (element.tagName || '').toLowerCase();
-                                const isFormField = tag === 'input' || tag === 'textarea';
-                                if (isFormField && typeof element.value === 'string') {
-                                    element.value = '';
-                                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                                    element.dispatchEvent(new Event('change', { bubbles: true }));
-                                    return;
-                                }
-                                if (element.isContentEditable) {
-                                    element.textContent = '';
-                                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                                }
-                            }).catch(() => {});
+                        // Determine element type for appropriate input strategy
+                        const elementInfo = await this.page.$eval(selector, (el) => {
+                            return {
+                                tag: el.tagName.toLowerCase(),
+                                isContentEditable: el.isContentEditable,
+                                type: el.getAttribute('type') || '',
+                                role: el.getAttribute('role') || ''
+                            };
+                        }).catch(() => null);
+
+                        if (!elementInfo) {
+                            result = { status: 'error', error: `Element with id ${commandPayload.element_id} not found.` };
+                            break;
                         }
 
-                        await this.page.type(selector, commandPayload.text);
+                        // Click the element first to ensure it's focused (critical for reply boxes)
+                        await this.page.click(selector).catch(() => {});
+                        await new Promise(resolve => setTimeout(resolve, 200));
+
+                        // Focus the element explicitly
+                        await this.page.focus(selector).catch(() => {});
+                        await new Promise(resolve => setTimeout(resolve, 100));
+
+                        if (elementInfo.isContentEditable || elementInfo.role === 'textbox') {
+                            // ContentEditable strategy (Slack, Gmail, Teams reply boxes, etc.)
+                            if (clearExisting) {
+                                // Select all and delete for contenteditable
+                                await this.page.keyboard.down('Control');
+                                await this.page.keyboard.press('a');
+                                await this.page.keyboard.up('Control');
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                                await this.page.keyboard.press('Backspace');
+                                await new Promise(resolve => setTimeout(resolve, 100));
+                            }
+
+                            // Type character by character for contenteditable (more reliable than bulk)
+                            // Some apps (Slack, Discord) intercept programmatic input events
+                            // Using keyboard.type() with delay simulates real key presses
+                            await this.page.keyboard.type(text, { delay: 30 });
+
+                        } else if (elementInfo.tag === 'input' || elementInfo.tag === 'textarea') {
+                            // Standard form field strategy
+                            if (clearExisting) {
+                                await this.page.$eval(selector, (el) => {
+                                    el.value = '';
+                                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                }).catch(() => {});
+
+                                // Also use keyboard select-all + delete as fallback
+                                await this.page.keyboard.down('Control');
+                                await this.page.keyboard.press('a');
+                                await this.page.keyboard.up('Control');
+                                await this.page.keyboard.press('Backspace');
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                            }
+
+                            // Type using Puppeteer's type method (dispatches proper keydown/keyup)
+                            await this.page.type(selector, text, { delay: 20 });
+
+                        } else {
+                            // Fallback: try focus + keyboard.type
+                            if (clearExisting) {
+                                await this.page.keyboard.down('Control');
+                                await this.page.keyboard.press('a');
+                                await this.page.keyboard.up('Control');
+                                await this.page.keyboard.press('Backspace');
+                            }
+                            await this.page.keyboard.type(text, { delay: 30 });
+                        }
                     }
                     await this._stabilizeAfterInteraction(3000);
                     result = await this.getView();
@@ -370,6 +456,82 @@ class BrowserHandler {
                     await new Promise(resolve => setTimeout(resolve, 500)); 
                     result = await this.getView();
                     break;
+                case 'focus_element':
+                    {
+                        const focusSelector = `[data-aios-id="${commandPayload.element_id}"]`;
+                        await this.page.$eval(focusSelector, (el) => {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }).catch(() => {});
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        await this.page.click(focusSelector).catch(() => {});
+                        await this.page.focus(focusSelector).catch(() => {});
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                    result = await this.getView();
+                    break;
+                case 'click_by_text':
+                    {
+                        const searchText = commandPayload.text;
+                        const elementType = commandPayload.element_type || '';
+                        
+                        // Build XPath or use text content matching
+                        const clicked = await this.page.evaluate(({ searchText, elementType }) => {
+                            // Strategy 1: Exact text match across interactive elements
+                            const interactiveSelectors = elementType
+                                ? elementType
+                                : 'a, button, [role="button"], [role="link"], [role="menuitem"], [role="tab"], input[type="submit"], input[type="button"]';
+                            
+                            const candidates = Array.from(document.querySelectorAll(interactiveSelectors));
+                            
+                            // Try exact match first
+                            let target = candidates.find(el => {
+                                const text = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+                                return text === searchText;
+                            });
+                            
+                            // Try contains match
+                            if (!target) {
+                                const lowerSearch = searchText.toLowerCase();
+                                target = candidates.find(el => {
+                                    const text = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().toLowerCase();
+                                    return text.includes(lowerSearch);
+                                });
+                            }
+
+                            // Try aria-label match
+                            if (!target) {
+                                target = candidates.find(el => {
+                                    const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                                    return label.includes(searchText.toLowerCase());
+                                });
+                            }
+                            
+                            if (target) {
+                                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                target.click();
+                                return { found: true, text: target.innerText?.substring(0, 80) || '', tag: target.tagName };
+                            }
+                            return { found: false };
+                        }, { searchText, elementType });
+
+                        if (clicked.found) {
+                            await this._stabilizeAfterInteraction(3000);
+                            result = await this.getView();
+                            result.message = `Clicked element with text: "${clicked.text}" (${clicked.tag})`;
+                        } else {
+                            result = { status: 'error', error: `No clickable element found with text: "${searchText}"` };
+                        }
+                    }
+                    break;
+                case 'click_coordinates':
+                    {
+                        const cx = commandPayload.x;
+                        const cy = commandPayload.y;
+                        await this.page.mouse.click(cx, cy);
+                    }
+                    await this._stabilizeAfterInteraction(3000);
+                    result = await this.getView();
+                    break;
                 case 'select_option':
                     await this.page.select(`[data-aios-id="${commandPayload.element_id}"]`, commandPayload.value);
                     result = await this.getView();
@@ -381,7 +543,25 @@ class BrowserHandler {
                     result = { status: 'success', message: `Alert handler for '${commandPayload.alert_action}' is ready.` };
                     break;
                 case 'press_key':
-                    await this.page.keyboard.press(commandPayload.key);
+                    {
+                        const keyInput = commandPayload.key;
+                        // Support key combinations like "Control+Enter", "Shift+Tab", etc.
+                        if (keyInput.includes('+')) {
+                            const parts = keyInput.split('+');
+                            const modifiers = parts.slice(0, -1);
+                            const finalKey = parts[parts.length - 1];
+                            
+                            for (const mod of modifiers) {
+                                await this.page.keyboard.down(mod);
+                            }
+                            await this.page.keyboard.press(finalKey);
+                            for (const mod of modifiers.reverse()) {
+                                await this.page.keyboard.up(mod);
+                            }
+                        } else {
+                            await this.page.keyboard.press(keyInput);
+                        }
+                    }
                     await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
@@ -464,10 +644,46 @@ class BrowserHandler {
         if (!this.isConnected) return { status: 'error', error: 'Browser not connected.' };
         try {
             const interactive_elements = await this.page.evaluate(() => {
-                const elements = Array.from(document.querySelectorAll('a, button, input, textarea, select, [role="button"]'));
+                // Comprehensive selector covering ALL interactive element types
+                const selectors = [
+                    'a[href]',
+                    'button',
+                    'input',
+                    'textarea',
+                    'select',
+                    '[role="button"]',
+                    '[role="link"]',
+                    '[role="textbox"]',
+                    '[role="searchbox"]',
+                    '[role="combobox"]',
+                    '[role="menuitem"]',
+                    '[role="tab"]',
+                    '[role="option"]',
+                    '[role="switch"]',
+                    '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[contenteditable="true"]',
+                    '[contenteditable=""]',
+                    '[tabindex]:not([tabindex="-1"])',
+                    '[onclick]',
+                    '[data-action]',
+                    '[data-testid]',
+                    'summary',
+                    'details',
+                    'label[for]'
+                ];
+
+                const elements = Array.from(document.querySelectorAll(selectors.join(', ')));
                 const visibleElements = [];
                 let nextId = Number(window.__aiosNextElementId || 1);
+
+                // Deduplicate (same element can match multiple selectors)
+                const seen = new WeakSet();
+
                 elements.forEach((el) => {
+                    if (seen.has(el)) return;
+                    seen.add(el);
+
                     const rect = el.getBoundingClientRect();
                     const style = window.getComputedStyle(el);
                     const isVisible = (
@@ -475,32 +691,72 @@ class BrowserHandler {
                         rect.height > 0 &&
                         style.visibility !== 'hidden' &&
                         style.display !== 'none' &&
+                        style.opacity !== '0' &&
                         rect.bottom >= 0 &&
                         rect.right >= 0 &&
                         rect.top <= window.innerHeight &&
                         rect.left <= window.innerWidth
                     );
+
                     if (isVisible) {
                         let elementId = el.getAttribute('data-aios-id');
                         if (!elementId) {
                             elementId = String(nextId++);
                             el.setAttribute('data-aios-id', elementId);
                         }
+
+                        const tag = el.tagName.toLowerCase();
+                        const role = el.getAttribute('role') || '';
+                        const type = el.getAttribute('type') || '';
+                        const placeholder = el.getAttribute('placeholder') || '';
+                        const ariaLabel = el.getAttribute('aria-label') || '';
+                        const title = el.getAttribute('title') || '';
+                        const name = el.getAttribute('name') || '';
+                        const isEditable = el.isContentEditable || tag === 'textarea' || (tag === 'input' && !['checkbox','radio','submit','button','file','hidden','image','reset'].includes(type));
+                        const isFocused = document.activeElement === el;
+                        const value = el.value || '';
+                        const textContent = (el.innerText || '').trim().substring(0, 100);
+                        
+                        // Get parent context for better identification
+                        const parentLabel = el.closest('label')?.innerText?.trim()?.substring(0, 60) || '';
+                        const ariaDescribedBy = el.getAttribute('aria-describedby') || '';
+                        const dataTestId = el.getAttribute('data-testid') || '';
+
                         visibleElements.push({
-                            id: Number(elementId), tag: el.tagName.toLowerCase(),
-                            text: el.innerText || el.value || el.getAttribute('aria-label') || '',
-                            ariaLabel: el.getAttribute('aria-label') || '',
+                            id: Number(elementId),
+                            tag: tag,
+                            type: type,
+                            role: role,
+                            text: textContent,
+                            value: value.substring(0, 100),
+                            placeholder: placeholder,
+                            ariaLabel: ariaLabel,
+                            title: title,
+                            name: name,
+                            isEditable: isEditable,
+                            isFocused: isFocused,
+                            isContentEditable: el.isContentEditable,
+                            parentLabel: parentLabel,
+                            dataTestId: dataTestId,
+                            // Bounding box for coordinate-based fallback
+                            bounds: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
                         });
                     }
                 });
                 window.__aiosNextElementId = nextId;
                 return visibleElements;
             });
+
             const screenshot_base64 = await this.page.screenshot({ encoding: 'base64' });
             const screenshot_path = await this._uploadScreenshot(screenshot_base64);
             const viewData = {
-                status: 'success', title: await this.page.title(),
-                url: this.page.url(), interactive_elements: interactive_elements,
+                status: 'success',
+                title: await this.page.title(),
+                url: this.page.url(),
+                interactive_elements: interactive_elements,
+                element_count: interactive_elements.length,
+                editable_elements: interactive_elements.filter(e => e.isEditable).length,
+                focused_element: interactive_elements.find(e => e.isFocused) || null
             };
             if (screenshot_path) {
                 viewData.screenshot_path = screenshot_path;

@@ -48,6 +48,7 @@ class BrowserTools(Toolkit):
                 self.extract_text_from_element, self.get_element_attributes,
                 self.extract_table_data, self.refresh_page,
                 self.wait_for_element, self.manage_cookies,
+                self.focus_element, self.click_by_text, self.click_coordinates,
             ],
         )
 
@@ -168,6 +169,26 @@ class BrowserTools(Toolkit):
         description: str = "",
         clear_existing: bool = True
     ) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Type text into an element. Handles both standard inputs AND contenteditable 
+        elements (like reply/compose boxes in Slack, Gmail, Discord, Teams, etc.).
+        
+        The tool automatically detects the element type and uses the appropriate strategy:
+        - For <input>/<textarea>: clears via value reset + types via DOM
+        - For contenteditable/[role="textbox"]: clicks to focus, Ctrl+A to select, 
+          then types character-by-character with real key events
+        
+        Args:
+            element_id: The element ID from get_current_view()
+            text: The text to type
+            description: Optional description of the target element
+            clear_existing: Whether to clear existing content first (default True)
+        
+        Tips for reply/compose boxes:
+        1. First call focus_element(element_id) to activate the reply box
+        2. Then call type_text(element_id, "your message")
+        3. Then call press_key("Enter") or press_key("Control+Enter") to send
+        """
         return self._send_command_and_wait({
             'action': 'type',
             'element_id': element_id,
@@ -214,9 +235,25 @@ class BrowserTools(Toolkit):
         return self._send_command_and_wait({'action': 'handle_alert', 'alert_action': action})
 
     def press_key(self, key: str) -> Union[Dict[str, Any], ToolResult]:
-        allowed_keys = {'Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp'}
-        if key not in allowed_keys:
-            return {"status": "error", "error": f"Invalid key. Allowed keys are: {', '.join(allowed_keys)}"}
+        """
+        Press a keyboard key or key combination in the browser.
+        
+        Args:
+            key: Key to press. Can be a single key or a combination with '+'.
+            
+            Single keys: Enter, Escape, Tab, ArrowDown, ArrowUp, ArrowLeft, 
+                         ArrowRight, Backspace, Delete, Space, Home, End, 
+                         PageUp, PageDown, F1-F12
+            
+            Combinations (use '+' separator):
+                - Control+Enter  (send message in most chat apps)
+                - Control+a      (select all text)
+                - Shift+Enter    (new line without sending)
+                - Control+Shift+Enter
+                - Alt+Enter
+        
+        Example: press_key("Control+Enter") to send a message in Slack/Teams/Gmail
+        """
         return self._send_command_and_wait({'action': 'press_key', 'key': key})
 
     def extract_text_from_element(self, element_id: int) -> Union[Dict[str, Any], ToolResult]:
@@ -238,3 +275,56 @@ class BrowserTools(Toolkit):
         if action not in ['accept_all', 'clear_all']:
             return {"status": "error", "error": "Invalid cookie action. Must be 'accept_all' or 'clear_all'."}
         return self._send_command_and_wait({'action': 'manage_cookies', 'cookie_action': action})
+
+    def focus_element(self, element_id: int) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Explicitly focus an element by scrolling it into view and clicking it.
+        
+        Use this BEFORE type_text when the target is a reply box, compose field,
+        or contenteditable area that needs activation before accepting input.
+        
+        Args:
+            element_id: The element ID from get_current_view()
+        """
+        return self._send_command_and_wait({
+            'action': 'focus_element',
+            'element_id': element_id
+        })
+
+    def click_by_text(self, text: str, element_type: str = "") -> Union[Dict[str, Any], ToolResult]:
+        """
+        Click an interactive element by its visible text content.
+        
+        This is more reliable than using element_id when dealing with dynamic UIs
+        where IDs may change. Searches buttons, links, and interactive elements.
+        
+        Args:
+            text: The visible text of the element to click (e.g., "Send", "Reply", "Submit")
+            element_type: Optional CSS selector to narrow the search (e.g., "button" to only match buttons)
+        
+        Examples:
+            - click_by_text("Reply") - click a Reply button
+            - click_by_text("Send", "button") - click specifically a button labeled Send
+            - click_by_text("Sign in") - click a sign-in link or button
+        """
+        payload = {'action': 'click_by_text', 'text': text}
+        if element_type:
+            payload['element_type'] = element_type
+        return self._send_command_and_wait(payload)
+
+    def click_coordinates(self, x: int, y: int) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Click at specific pixel coordinates on the page.
+        
+        Use this as a LAST RESORT when element_id click and text-based click both fail.
+        Coordinates are relative to the page viewport (visible area).
+        
+        Args:
+            x: X coordinate (pixels from left edge of viewport)
+            y: Y coordinate (pixels from top edge of viewport)
+        """
+        return self._send_command_and_wait({
+            'action': 'click_coordinates',
+            'x': x,
+            'y': y
+        })
