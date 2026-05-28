@@ -1,213 +1,293 @@
 # python-backend/task_poller.py
 """
-Background Task Polling Service
-Checks for pending tasks every 60 seconds and triggers autonomous execution
+Schedule-Aware Task Polling Service
+Single background thread that checks for due tasks every 60 seconds.
+Uses atomic DB status transition to prevent duplicate execution across workers.
 """
 
 import logging
 import time
 import threading
 import os
-from typing import List, Dict, Any
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+
 import redis
 import config
 from supabase_client import supabase_client
-from task_executor import run_autonomous_task
 
 logger = logging.getLogger(__name__)
 
 
 class TaskPoller:
     """
-    Background service that polls for pending tasks and executes them autonomously.
+    Background service that polls for scheduled tasks and executes them.
+    Only ONE instance across all workers will actually process tasks,
+    enforced by atomic DB status transitions (pending -> in_progress).
     """
-    
-    def __init__(self, poll_interval: int = 43200):
-        """
-        Initialize the task poller.
-        
-        Args:
-            poll_interval: Seconds between each poll (default: 43200 = 12 hours)
-        """
+
+    def __init__(self, poll_interval: int = 60):
         self.poll_interval = poll_interval
         self.running = False
         self.thread = None
-        self.processing_tasks = set()  # Track tasks currently being processed
-        self.worker_id = f"{os.getpid()}:{threading.get_ident()}"
-        self.leader_lock_key = "locks:task-poller:leader"
-        self.leader_lock_ttl = max(60, min(self.poll_interval, 300))
         self.redis_client = redis.from_url(config.REDIS_URL, decode_responses=True)
-        
+        self.worker_id = f"{os.getpid()}:{threading.get_ident()}"
+        self.lock_key = "locks:task-poller:leader"
+
     def start(self):
         """Start the background polling thread."""
         if self.running:
-            logger.warning("Task poller already running")
             return
-        
+
         self.running = True
         self.thread = threading.Thread(target=self._poll_loop, daemon=True)
         self.thread.start()
         logger.info(f"Task poller started (interval: {self.poll_interval}s)")
-    
+
     def stop(self):
         """Stop the background polling thread."""
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        logger.info("Task poller stopped")
-    
+
     def _poll_loop(self):
-        """Main polling loop that runs in background thread."""
-        logger.info("🔄 Task poller loop started")
+        """Main polling loop. Uses Redis lock so only one worker polls."""
+        # Random startup delay (1-5s) to stagger workers
+        import random
+        time.sleep(random.uniform(1, 5))
+
         while self.running:
             try:
-                logger.debug(f"🔍 Scanning for pending tasks...")
-                if self._acquire_leader_lock():
-                    self._check_and_execute_pending_tasks()
-                else:
-                    logger.debug("Task poller leadership held by another worker; skipping this cycle")
-            except Exception as e:
-                logger.error(f"❌ Error in task polling loop: {e}")
-            
-            # Sleep for poll interval
-            logger.debug(f"💤 Sleeping for {self.poll_interval} seconds")
-            time.sleep(self.poll_interval)
-    
-    def _acquire_leader_lock(self) -> bool:
-        """
-        Ensure only one Gunicorn worker polls pending tasks per cycle.
-
-        Each worker has its own Python globals, so the in-process singleton is
-        not enough once Gunicorn runs multiple workers. Redis SET NX gives us a
-        cross-process leadership lock.
-        """
-        return bool(
-            self.redis_client.set(
-                self.leader_lock_key,
-                self.worker_id,
-                nx=True,
-                ex=self.leader_lock_ttl,
-            )
-        )
-
-    def _check_and_execute_pending_tasks(self):
-        """
-        Query database for pending tasks and execute them.
-        Only processes tasks that aren't already being processed.
-        """
-        try:
-            # Query for pending tasks
-            logger.debug("📊 Querying database for pending tasks...")
-            response = supabase_client.table("tasks").select("id, user_id, text, description, priority, deadline, tags").eq("status", "pending").execute()
-            
-            if not response.data:
-                logger.debug("✅ No pending tasks found")
-                return
-            
-            pending_tasks = response.data
-            logger.info(f"📋 Found {len(pending_tasks)} pending task(s)")
-            
-            for task in pending_tasks:
-                task_id = task['id']
-                user_id = task['user_id']
-                task_title = task['text']
-                
-                # Skip if already processing
-                if task_id in self.processing_tasks:
-                    logger.debug(f"⏭️  Task {task_id} already being processed, skipping")
-                    continue
-                
-                # Mark as processing
-                self.processing_tasks.add(task_id)
-                logger.info(f"🚀 Starting execution for task {task_id}")
-                logger.info(f"   Title: {task_title}")
-                logger.info(f"   User: {user_id}")
-                
-                # Update status to in_progress to prevent duplicate processing
-                try:
-                    supabase_client.table("tasks").update({
-                        "status": "in_progress"
-                    }).eq("id", task_id).execute()
-                    logger.debug(f"✏️  Updated task {task_id} status to 'in_progress'")
-                except Exception as e:
-                    logger.error(f"❌ Failed to update task status: {e}")
-                    self.processing_tasks.discard(task_id)
-                    continue
-                
-                # Spawn execution in separate thread to avoid blocking
-                execution_thread = threading.Thread(
-                    target=self._execute_task_wrapper,
-                    args=(task_id, user_id, task_title),
-                    daemon=True
+                # Try to acquire leader lock for this cycle (expires in 55s)
+                acquired = self.redis_client.set(
+                    self.lock_key, self.worker_id, nx=True, ex=55
                 )
-                execution_thread.start()
-                logger.debug(f"🧵 Spawned execution thread for task {task_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error checking pending tasks: {e}")
-    
-    def _execute_task_wrapper(self, task_id: str, user_id: str, task_title: str):
-        """
-        Wrapper to execute task and handle cleanup.
-        
-        Args:
-            task_id: Task ID to execute
-            user_id: User ID who owns the task
-            task_title: Task title for logging
-        """
+                if acquired:
+                    self._check_and_execute_due_tasks()
+            except Exception as e:
+                logger.error(f"Error in task poll loop: {e}")
+
+            time.sleep(self.poll_interval)
+
+    def _check_and_execute_due_tasks(self):
+        """Query for pending tasks that are due and execute them."""
         try:
-            logger.info(f"🤖 Executing task agent for: {task_title}")
-            # Execute the task (no sid since this is background)
-            run_autonomous_task(task_id, user_id, sid=None)
+            now = datetime.now(timezone.utc)
+
+            # Fetch all pending tasks
+            response = supabase_client.table("tasks").select(
+                "id, user_id, text, description, priority, deadline, tags, metadata, status"
+            ).eq("status", "pending").execute()
+
+            if not response.data:
+                return
+
+            for task in response.data:
+                if self._is_task_due(task, now):
+                    self._dispatch_task(task)
+
         except Exception as e:
-            logger.error(f"❌ Error executing task {task_id}: {e}")
-            # Revert status back to pending on failure
+            logger.error(f"Error checking due tasks: {e}")
+
+    def _is_task_due(self, task: Dict[str, Any], now: datetime) -> bool:
+        """Check if task's scheduled time has passed."""
+        metadata = task.get('metadata', {}) or {}
+        next_run_at = metadata.get('next_run_at')
+
+        # Check next_run_at from metadata first
+        if next_run_at:
+            scheduled = self._parse_datetime(next_run_at)
+            if scheduled:
+                return now >= scheduled
+
+        # Fallback: check deadline field
+        deadline = task.get('deadline')
+        if deadline:
+            deadline_dt = self._parse_datetime(deadline)
+            if deadline_dt:
+                return now >= deadline_dt
+
+        # No schedule = immediate execution
+        if not next_run_at and not deadline:
+            return True
+
+        return False
+
+    def _parse_datetime(self, dt_str: str) -> Optional[datetime]:
+        """Parse ISO datetime string to timezone-aware UTC datetime."""
+        if not dt_str:
+            return None
+        try:
+            # Handle various formats
+            dt_str = dt_str.strip()
+            
+            # If it has timezone info (e.g., +05:30, +00:00, Z)
+            if '+' in dt_str[10:] or dt_str.endswith('Z'):
+                dt_str = dt_str.replace('Z', '+00:00')
+                dt = datetime.fromisoformat(dt_str)
+                # Convert to UTC
+                return dt.astimezone(timezone.utc)
+            else:
+                # No timezone info — assume it's already UTC
+                dt = datetime.fromisoformat(dt_str)
+                return dt.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Failed to parse datetime '{dt_str}': {e}")
+            return None
+
+    def _dispatch_task(self, task: Dict[str, Any]):
+        """Atomically claim and execute a task."""
+        task_id = task['id']
+        user_id = task['user_id']
+
+        # Atomic claim: only update if still pending (prevents duplicate execution)
+        try:
+            result = supabase_client.table("tasks").update({
+                "status": "in_progress"
+            }).eq("id", task_id).eq("status", "pending").execute()
+
+            # If no rows updated, another worker already claimed it
+            if not result.data:
+                return
+
+        except Exception as e:
+            logger.error(f"Failed to claim task {task_id}: {e}")
+            return
+
+        logger.info(f"Executing task: {task.get('text')} (id: {task_id})")
+
+        # Execute in a separate thread to not block polling
+        execution_thread = threading.Thread(
+            target=self._execute_wrapper,
+            args=(task_id, user_id, task),
+            daemon=True
+        )
+        execution_thread.start()
+
+    def _execute_wrapper(self, task_id: str, user_id: str, task: Dict[str, Any]):
+        """Execute task and handle recurring schedule."""
+        try:
+            from task_executor import run_autonomous_task
+            run_autonomous_task(task_id, user_id, sid=None)
+
+            # Handle recurring schedule after success
+            self._handle_recurring(task_id, task)
+
+        except Exception as e:
+            logger.error(f"Task execution failed for {task_id}: {e}")
+            # Revert to pending
             try:
                 supabase_client.table("tasks").update({
                     "status": "pending"
                 }).eq("id", task_id).execute()
-                logger.warning(f"⏪ Reverted task {task_id} status to 'pending' after failure")
-            except Exception as revert_error:
-                logger.error(f"❌ Failed to revert task status: {revert_error}")
-        finally:
-            # Remove from processing set
-            self.processing_tasks.discard(task_id)
-            logger.info(f"✅ Finished processing task {task_id}")
+            except Exception:
+                pass
+
+    def _handle_recurring(self, task_id: str, task: Dict[str, Any]):
+        """For recurring tasks: compute next run and reset to pending."""
+        metadata = task.get('metadata', {}) or {}
+        repeat = metadata.get('repeat', 'none')
+
+        if not repeat or repeat == 'none':
+            return  # One-time task, stays completed
+
+        from datetime import timedelta
+
+        next_run = self._compute_next_run(metadata, repeat)
+        if not next_run:
+            return
+
+        updated_metadata = dict(metadata)
+        updated_metadata['next_run_at'] = next_run.isoformat()
+        updated_metadata['last_run_at'] = datetime.now(timezone.utc).isoformat()
+
+        try:
+            supabase_client.table("tasks").update({
+                "status": "pending",
+                "metadata": updated_metadata,
+                "deadline": next_run.isoformat(),
+                "task_work": None
+            }).eq("id", task_id).execute()
+            logger.info(f"Recurring task {task_id} rescheduled -> {next_run.isoformat()}")
+        except Exception as e:
+            logger.error(f"Failed to reschedule task {task_id}: {e}")
+
+    def _compute_next_run(self, metadata: Dict[str, Any], repeat: str) -> Optional[datetime]:
+        """Compute next execution time based on repeat pattern."""
+        from datetime import timedelta
+
+        base_str = metadata.get('next_run_at')
+        base = self._parse_datetime(base_str) if base_str else datetime.now(timezone.utc)
+        if not base:
+            base = datetime.now(timezone.utc)
+
+        schedule_time = metadata.get('schedule_time', '09:00')
+        try:
+            hour, minute = map(int, schedule_time.split(':'))
+        except (ValueError, TypeError):
+            hour, minute = 9, 0
+
+        # Get user timezone offset from metadata
+        tz_offset_minutes = metadata.get('tz_offset_minutes', 0)
+
+        if repeat == 'daily':
+            next_day = base + timedelta(days=1)
+            return next_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        elif repeat == 'weekdays':
+            next_day = base + timedelta(days=1)
+            while next_day.weekday() >= 5:
+                next_day += timedelta(days=1)
+            return next_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        elif repeat == 'weekly':
+            return (base + timedelta(weeks=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        elif repeat == 'monthly':
+            month = base.month + 1
+            year = base.year
+            if month > 12:
+                month = 1
+                year += 1
+            day = min(base.day, 28)
+            return datetime(year, month, day, hour, minute, 0, tzinfo=timezone.utc)
+
+        elif repeat == 'custom':
+            custom_interval = metadata.get('custom_interval', {})
+            value = int(custom_interval.get('value', 1))
+            unit = custom_interval.get('unit', 'days')
+
+            if unit == 'hours':
+                return base + timedelta(hours=value)
+            elif unit == 'days':
+                return (base + timedelta(days=value)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+            elif unit == 'weeks':
+                return (base + timedelta(weeks=value)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        return None
 
 
-# Global instance
-_task_poller_instance = None
+# ---------------------------------------------------------------------------
+# Global singleton with proper dedup
+# ---------------------------------------------------------------------------
+_poller_instance = None
+_poller_lock = threading.Lock()
 
 
-def get_task_poller(poll_interval: int = 43200) -> TaskPoller:
-    """
-    Get or create the global task poller instance.
-    
-    Args:
-        poll_interval: Seconds between polls (default: 43200 = 12 hours)
-    
-    Returns:
-        TaskPoller instance
-    """
-    global _task_poller_instance
-    if _task_poller_instance is None:
-        _task_poller_instance = TaskPoller(poll_interval=poll_interval)
-    return _task_poller_instance
-
-
-def start_task_poller(poll_interval: int = 43200):
-    """
-    Start the global task poller.
-    
-    Args:
-        poll_interval: Seconds between polls (default: 43200 = 12 hours)
-    """
-    poller = get_task_poller(poll_interval)
-    poller.start()
+def start_task_poller(poll_interval: int = 60):
+    """Start the global task poller (only one per process)."""
+    global _poller_instance
+    with _poller_lock:
+        if _poller_instance is not None:
+            return  # Already running in this process
+        _poller_instance = TaskPoller(poll_interval=poll_interval)
+        _poller_instance.start()
 
 
 def stop_task_poller():
     """Stop the global task poller."""
-    global _task_poller_instance
-    if _task_poller_instance:
-        _task_poller_instance.stop()
+    global _poller_instance
+    with _poller_lock:
+        if _poller_instance:
+            _poller_instance.stop()
+            _poller_instance = None
