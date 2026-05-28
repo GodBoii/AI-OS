@@ -502,6 +502,13 @@ def on_send_message(data: str):
                 session_config,
                 device_type=device_type
             )
+
+            # --- Title Generation for New Sessions ---
+            user_msg_content = data.get("message", "")
+            if user_msg_content:
+                import time
+                current_ts = int(time.time())
+                eventlet.spawn(generate_and_save_title, conversation_id, str(user.id), user_msg_content, current_ts)
         else:
             # Keep routing and workspace state fresh for existing sessions.
             session_data = connection_manager_service.get_session(conversation_id) or {}
@@ -517,13 +524,6 @@ def on_send_message(data: str):
                 json.dumps(session_data),
                 ex=connection_manager_service.SESSION_TTL,
             )
-
-            # --- Title Generation for New Sessions ---
-            user_msg_content = data.get("message", "")
-            if user_msg_content:
-                import time
-                current_ts = int(time.time())
-                eventlet.spawn(generate_and_save_title, conversation_id, str(user.id), user_msg_content, current_ts)
 
         try:
             enforce_usage_limit(str(user.id))
