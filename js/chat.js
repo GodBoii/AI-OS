@@ -89,6 +89,21 @@ const supportedFileTypes = {
 function setCurrentConversationId(conversationId) {
     currentConversationId = conversationId;
     window.currentConversationId = conversationId;
+
+    // Update the title bar when switching conversations
+    const titleBar = document.getElementById('conversation-title-bar');
+    const titleText = document.getElementById('conversation-title-text');
+    if (titleBar && titleText) {
+        const label = conversationLabels.get(conversationId);
+        if (label) {
+            titleText.textContent = label;
+            titleBar.classList.remove('hidden');
+            titleBar.classList.add('fade-in');
+        } else {
+            titleBar.classList.add('hidden');
+            titleBar.classList.remove('fade-in');
+        }
+    }
 }
 
 function getChatMessagesRoot() {
@@ -1421,6 +1436,13 @@ async function startNewConversation() {
     // Dispatch custom event for welcome display
     document.dispatchEvent(new CustomEvent('conversationCleared'));
 
+    // Hide conversation title bar
+    const titleBar = document.getElementById('conversation-title-bar');
+    if (titleBar) {
+        titleBar.classList.add('hidden');
+        titleBar.classList.remove('fade-in');
+    }
+
     // Reset input container to centered position
     if (window.conversationStateManager) {
         console.log('Calling onConversationCleared to center input');
@@ -1717,6 +1739,24 @@ function setupIpcListeners() {
 
     ipcRenderer.on('image_generated', (data) => {
         handleGeneratedMediaEvent(data, 'image');
+    });
+
+    ipcRenderer.on('conversation_title', (data) => {
+        if (!data) return;
+        const { conversationId, title } = data;
+        if (conversationId && title && conversationId === currentConversationId) {
+            const titleBar = document.getElementById('conversation-title-bar');
+            const titleText = document.getElementById('conversation-title-text');
+            if (titleBar && titleText) {
+                titleText.textContent = title;
+                titleBar.classList.remove('hidden');
+                titleBar.classList.add('fade-in');
+            }
+        }
+        // Also update the conversation label in the sidebar
+        if (conversationId && title) {
+            updateConversationLabel(conversationId, title);
+        }
     });
 
     ipcRenderer.on('media_generated', (data) => {
