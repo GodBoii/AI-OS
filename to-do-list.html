@@ -1,210 +1,282 @@
 <div id="to-do-list-container" class="to-do-list-container hidden">
-    <div class="to-do-list-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                class="lucide lucide-list-todo" style="color: var(--accent-color);">
-                <rect x="3" y="5" width="6" height="6" rx="1" />
-                <path d="m3 17 2 2 4-4" />
-                <path d="M13 6h8" />
-                <path d="M13 12h8" />
-                <path d="M13 18h8" />
-            </svg>
-            <h2 style="margin: 0; padding: 0;">Tasks</h2>
+    <!-- Task List View (shown when tasks panel is open) -->
+    <div class="tasks-fullscreen-view">
+        <!-- Task cards area -->
+        <div class="tasks-cards-area" id="tasks-cards-area">
+            <!-- Empty state shown when no tasks -->
+            <div class="tasks-empty-state" id="tasks-empty-state">
+                <div class="tasks-empty-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="5" width="6" height="6" rx="1" />
+                        <path d="m3 17 2 2 4-4" />
+                        <path d="M13 6h8" />
+                        <path d="M13 12h8" />
+                        <path d="M13 18h8" />
+                    </svg>
+                </div>
+                <p class="tasks-empty-text">No tasks yet</p>
+                <p class="tasks-empty-subtext">Create automated tasks that run on schedule</p>
+            </div>
+            <!-- Task cards will be rendered here -->
+            <div class="tasks-grid" id="tasks-grid"></div>
         </div>
+
+        <!-- Floating Add Button -->
+        <button class="tasks-add-fab" id="tasks-add-fab" aria-label="Create new task" title="Create new task">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+            </svg>
+        </button>
     </div>
-    <div class="to-do-list-content">
-        <ul id="task-list">
-            <!-- Tasks will be added here -->
-        </ul>
-    </div>
-    <div class="to-do-list-input-area">
-        <div class="button-container">
-            <button id="context-btn" aria-label="User Context"><svg xmlns="http://www.w3.org/2000/svg" width="16"
-                    height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-cog">
-                    <circle cx="18" cy="15" r="3" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M10 15H6a4 4 0 0 0-4 4v2" />
-                    <path d="m21.7 16.4-.9-.3" />
-                    <path d="m15.2 13.9-.9-.3" />
-                    <path d="m16.6 18.7.3-.9" />
-                    <path d="m19.1 12.2.3-.9" />
-                    <path d="m19.6 18.7-.4-1" />
-                    <path d="m16.8 12.3-.4-1" />
-                    <path d="m14.3 16.6 1-.4" />
-                    <path d="m20.7 13.8 1-.4" />
-                </svg></button>
-            <button id="add-task-btn" aria-label="Add Task"><svg xmlns="http://www.w3.org/2000/svg" width="16"
-                    height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus">
+</div>
+
+<!-- Enhanced Task Creation Modal -->
+<div id="new-task-modal" class="task-modal-overlay hidden">
+    <div class="task-modal">
+        <div class="task-modal-header">
+            <h3>Create Task</h3>
+            <button class="task-modal-close" id="cancel-task-btn" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="task-modal-body">
+            <!-- Basic Info -->
+            <div class="task-form-section">
+                <div class="task-form-group">
+                    <label for="task-name">Task Name <span class="required">*</span></label>
+                    <input type="text" id="task-name" placeholder="What should the AI do?" autocomplete="off">
+                </div>
+                <div class="task-form-group">
+                    <label for="task-description">Description</label>
+                    <textarea id="task-description" placeholder="Provide additional context or details..." rows="3"></textarea>
+                </div>
+            </div>
+
+            <!-- Schedule & Repeat -->
+            <div class="task-form-section">
+                <div class="task-form-section-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    Schedule & Repeat
+                </div>
+                <div class="task-form-row">
+                    <div class="task-form-group task-form-half">
+                        <label for="task-schedule-time">Run At</label>
+                        <input type="time" id="task-schedule-time" value="09:00">
+                    </div>
+                    <div class="task-form-group task-form-half">
+                        <label for="task-schedule-date">Start Date</label>
+                        <input type="date" id="task-schedule-date">
+                    </div>
+                </div>
+                <div class="task-form-group">
+                    <label for="task-repeat">Repeat</label>
+                    <select id="task-repeat">
+                        <option value="none">Don't repeat (run once)</option>
+                        <option value="daily">Every day</option>
+                        <option value="weekdays">Weekdays (Mon-Fri)</option>
+                        <option value="weekly">Every week</option>
+                        <option value="monthly">Every month</option>
+                        <option value="custom">Custom interval</option>
+                    </select>
+                </div>
+                <div class="task-form-group task-custom-interval hidden" id="task-custom-interval-group">
+                    <label for="task-custom-interval">Run every</label>
+                    <div class="task-form-row">
+                        <input type="number" id="task-custom-interval-value" min="1" value="2" style="width: 80px;">
+                        <select id="task-custom-interval-unit">
+                            <option value="hours">hours</option>
+                            <option value="days" selected>days</option>
+                            <option value="weeks">weeks</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools Selection -->
+            <div class="task-form-section">
+                <div class="task-form-section-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                    </svg>
+                    Tools & Capabilities
+                </div>
+                <div class="task-tools-grid" id="task-tools-grid">
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="internet_search" checked>
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            Web Search
+                        </span>
+                    </label>
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="browser">
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="2" x2="22" y1="7" y2="7"/></svg>
+                            Server Browser
+                        </span>
+                    </label>
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="email">
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                            Email
+                        </span>
+                    </label>
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="google_drive">
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                            Google Drive
+                        </span>
+                    </label>
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="google_sheets">
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="3" y2="21"/></svg>
+                            Google Sheets
+                        </span>
+                    </label>
+                    <label class="task-tool-chip">
+                        <input type="checkbox" value="github">
+                        <span class="task-tool-chip-label">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+                            GitHub
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Custom Instructions -->
+            <div class="task-form-section">
+                <div class="task-form-section-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
+                    </svg>
+                    Custom Instructions
+                </div>
+                <div class="task-form-group">
+                    <textarea id="task-instructions" placeholder="Give the AI specific instructions for this task. E.g., 'Summarize in bullet points', 'Use formal tone', 'Focus on financial data'..." rows="4"></textarea>
+                </div>
+            </div>
+
+            <!-- Priority & Tags -->
+            <div class="task-form-section">
+                <div class="task-form-row">
+                    <div class="task-form-group task-form-half">
+                        <label for="task-priority">Priority</label>
+                        <select id="task-priority">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                    <div class="task-form-group task-form-half">
+                        <label for="task-tags">Tags</label>
+                        <input type="text" id="task-tags" placeholder="comma-separated">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="task-modal-footer">
+            <button class="task-btn task-btn-secondary" id="cancel-task-btn-footer">Cancel</button>
+            <button class="task-btn task-btn-primary" id="save-task-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M5 12h14" />
                     <path d="M12 5v14" />
-                </svg></button>
+                </svg>
+                Create Task
+            </button>
         </div>
     </div>
 </div>
 
-<!-- New Task Modal -->
-<div id="new-task-modal" class="modal-overlay hidden">
-    <div class="modal">
-        <div class="modal-header">
-            <h3>New Task</h3>
+<!-- Task Detail/Work Modal -->
+<div id="task-detail-modal" class="task-modal-overlay hidden">
+    <div class="task-modal task-detail-modal">
+        <div class="task-modal-header">
+            <h3 id="task-detail-title">Task Details</h3>
+            <button class="task-modal-close" id="close-task-detail-btn" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            </button>
         </div>
-        <div class="modal-content">
-            <div class="form-group">
-                <label for="task-name">Task Name*</label>
-                <input type="text" id="task-name" placeholder="Enter task name..." required>
-            </div>
-            <div class="form-group">
-                <label for="task-description">Description (Optional)</label>
-                <textarea id="task-description" placeholder="Enter task description..."></textarea>
-            </div>
-            <div class="form-group">
-                <label for="task-priority">Priority (Optional)</label>
-                <select id="task-priority">
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="task-deadline">Deadline (Optional)</label>
-                <input type="datetime-local" id="task-deadline">
-            </div>
-            <div class="form-group">
-                <label for="task-tags">Tags (Optional, comma-separated)</label>
-                <input type="text" id="task-tags" placeholder="Enter tags...">
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" id="cancel-task-btn">Cancel</button>
-            <button class="btn btn-primary" id="save-task-btn">Add Task</button>
+        <div class="task-modal-body" id="task-detail-body">
+            <!-- Populated dynamically -->
         </div>
     </div>
 </div>
 
-<!-- User Context Modal -->
-<div id="user-context-modal" class="modal-overlay hidden">
-    <div class="modal">
-        <div class="modal-header">
+<!-- User Context Modal (kept for compatibility) -->
+<div id="user-context-modal" class="task-modal-overlay hidden">
+    <div class="task-modal">
+        <div class="task-modal-header">
             <h3>User Context</h3>
+            <button class="task-modal-close" id="cancel-context-btn" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            </button>
         </div>
-        <div class="modal-content">
-            <!-- Personal Information -->
-            <h4>Personal Information</h4>
-            <div class="form-group">
-                <label for="user-name">Name (Optional)</label>
-                <input type="text" id="user-name" placeholder="Enter your name...">
+        <div class="task-modal-body">
+            <div class="task-form-section">
+                <div class="task-form-section-title">Personal Information</div>
+                <div class="task-form-group"><label for="user-name">Name</label><input type="text" id="user-name" placeholder="Your name..."></div>
+                <div class="task-form-group"><label for="user-email">Email</label><input type="email" id="user-email" placeholder="Your email..."></div>
+                <div class="task-form-group"><label for="user-location">Location</label><input type="text" id="user-location" placeholder="Your location..."></div>
+                <div class="task-form-group"><label for="user-timezone">Timezone</label><input type="text" id="user-timezone" placeholder="Your timezone..."></div>
+                <div class="task-form-group"><label for="user-language">Language</label><input type="text" id="user-language" placeholder="Preferred language..."></div>
             </div>
-            <div class="form-group">
-                <label for="user-email">Email (Optional)</label>
-                <input type="email" id="user-email" placeholder="Enter your email...">
+            <div class="task-form-section">
+                <div class="task-form-section-title">Preferences</div>
+                <div class="task-form-group"><label for="working-hours">Working Hours</label><input type="text" id="working-hours" placeholder="e.g., 9:00-17:00"></div>
+                <div class="task-form-group"><label for="communication-preference">Communication</label><select id="communication-preference"><option value="">Select...</option><option value="email">Email</option><option value="chat">Chat</option><option value="voice">Voice</option></select></div>
+                <div class="task-form-group"><label for="notification-preference">Notifications</label><select id="notification-preference"><option value="">Select...</option><option value="immediate">Immediate</option><option value="batched">Batched</option><option value="scheduled">Scheduled</option></select></div>
+                <div class="task-form-group"><label for="task-prioritization">Task Priority Mode</label><select id="task-prioritization"><option value="">Select...</option><option value="deadline">Deadline-based</option><option value="priority">Priority-based</option><option value="fifo">First In, First Out</option></select></div>
             </div>
-            <div class="form-group">
-                <label for="user-location">Location (Optional)</label>
-                <input type="text" id="user-location" placeholder="Enter your location...">
+            <div class="task-form-section">
+                <div class="task-form-section-title">Agent Capabilities</div>
+                <div class="task-form-group"><label for="allowed-actions">Allowed Actions</label><input type="text" id="allowed-actions" placeholder="comma-separated"></div>
+                <div class="task-form-group"><label for="restricted-domains">Restricted Domains</label><input type="text" id="restricted-domains" placeholder="comma-separated"></div>
+                <div class="task-form-group"><label for="api-keys">API Keys (JSON)</label><textarea id="api-keys" placeholder='{"service": "key"}'></textarea></div>
+                <div class="task-form-group"><label for="tools">Tools</label><input type="text" id="tools" placeholder="comma-separated"></div>
             </div>
-            <div class="form-group">
-                <label for="user-timezone">Timezone (Optional)</label>
-                <input type="text" id="user-timezone" placeholder="Enter your timezone...">
+            <div class="task-form-section">
+                <div class="task-form-section-title">Goals</div>
+                <div class="task-form-group"><label for="short-term-goals">Short-term Goals</label><textarea id="short-term-goals" placeholder="comma-separated"></textarea></div>
+                <div class="task-form-group"><label for="long-term-goals">Long-term Goals</label><textarea id="long-term-goals" placeholder="comma-separated"></textarea></div>
+                <div class="task-form-group"><label for="constraints">Constraints</label><textarea id="constraints" placeholder="comma-separated"></textarea></div>
             </div>
-            <div class="form-group">
-                <label for="user-language">Preferred Language (Optional)</label>
-                <input type="text" id="user-language" placeholder="Enter your preferred language...">
-            </div>
-
-            <!-- Preferences -->
-            <h4>Preferences</h4>
-            <div class="form-group">
-                <label for="working-hours">Working Hours (Optional)</label>
-                <input type="text" id="working-hours" placeholder="e.g., 9:00-17:00">
-            </div>
-            <div class="form-group">
-                <label for="communication-preference">Communication Preference (Optional)</label>
-                <select id="communication-preference">
-                    <option value="">Select preference...</option>
-                    <option value="email">Email</option>
-                    <option value="chat">Chat</option>
-                    <option value="voice">Voice</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="notification-preference">Notification Preference (Optional)</label>
-                <select id="notification-preference">
-                    <option value="">Select preference...</option>
-                    <option value="immediate">Immediate</option>
-                    <option value="batched">Batched</option>
-                    <option value="scheduled">Scheduled</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="task-prioritization">Task Prioritization (Optional)</label>
-                <select id="task-prioritization">
-                    <option value="">Select preference...</option>
-                    <option value="deadline">Deadline-based</option>
-                    <option value="priority">Priority-based</option>
-                    <option value="fifo">First In, First Out</option>
-                </select>
-            </div>
-
-            <!-- Capabilities -->
-            <h4>Agent Capabilities</h4>
-            <div class="form-group">
-                <label for="allowed-actions">Allowed Actions (Optional, comma-separated)</label>
-                <input type="text" id="allowed-actions" placeholder="e.g., read_files,send_emails,api_calls">
-            </div>
-            <div class="form-group">
-                <label for="restricted-domains">Restricted Domains (Optional, comma-separated)</label>
-                <input type="text" id="restricted-domains" placeholder="e.g., example.com,restricted.org">
-            </div>
-            <div class="form-group">
-                <label for="api-keys">API Keys (Optional, JSON format)</label>
-                <textarea id="api-keys" placeholder='{"service1": "key1", "service2": "key2"}'></textarea>
-            </div>
-            <div class="form-group">
-                <label for="tools">Available Tools (Optional, comma-separated)</label>
-                <input type="text" id="tools" placeholder="e.g., calculator,text_editor,file_browser">
-            </div>
-
-            <!-- Goals -->
-            <h4>Goals and Constraints</h4>
-            <div class="form-group">
-                <label for="short-term-goals">Short-term Goals (Optional, comma-separated)</label>
-                <textarea id="short-term-goals" placeholder="Enter your short-term goals..."></textarea>
-            </div>
-            <div class="form-group">
-                <label for="long-term-goals">Long-term Goals (Optional, comma-separated)</label>
-                <textarea id="long-term-goals" placeholder="Enter your long-term goals..."></textarea>
-            </div>
-            <div class="form-group">
-                <label for="constraints">Constraints (Optional, comma-separated)</label>
-                <textarea id="constraints" placeholder="Enter any constraints or limitations..."></textarea>
-            </div>
-
-            <!-- System Access -->
-            <h4>System Access</h4>
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="filesystem-access">
-                <label for="filesystem-access">Allow Filesystem Access</label>
-            </div>
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="network-access">
-                <label for="network-access">Allow Network Access</label>
-            </div>
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="api-access">
-                <label for="api-access">Allow API Access</label>
-            </div>
-            <div class="form-group">
-                <label for="credentials">Credentials (Optional, JSON format)</label>
-                <textarea id="credentials"
-                    placeholder='{"service1": {"username": "user1", "password": "pass1"}}'></textarea>
+            <div class="task-form-section">
+                <div class="task-form-section-title">System Access</div>
+                <div class="task-form-group checkbox-group"><input type="checkbox" id="filesystem-access"><label for="filesystem-access">Filesystem Access</label></div>
+                <div class="task-form-group checkbox-group"><input type="checkbox" id="network-access"><label for="network-access">Network Access</label></div>
+                <div class="task-form-group checkbox-group"><input type="checkbox" id="api-access"><label for="api-access">API Access</label></div>
+                <div class="task-form-group"><label for="credentials">Credentials (JSON)</label><textarea id="credentials" placeholder='{"service": {"user": "...", "pass": "..."}}'></textarea></div>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" id="cancel-context-btn">Cancel</button>
-            <button class="btn btn-primary" id="save-context-btn">Save</button>
+        <div class="task-modal-footer">
+            <button class="task-btn task-btn-secondary" id="cancel-context-btn-footer">Cancel</button>
+            <button class="task-btn task-btn-primary" id="save-context-btn">Save Context</button>
         </div>
     </div>
 </div>
