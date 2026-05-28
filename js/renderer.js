@@ -405,11 +405,18 @@ class UIManager {
 
     updateToDoListVisibility(isOpen) {
         document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
-        // Add body class to enable CSS-based layout shifts
+        // Full-screen takeover: hide chat and floating input when tasks open
+        document.getElementById('chat-container')?.classList.toggle('hidden', isOpen);
+        document.getElementById('floating-input-container')?.classList.toggle('hidden', isOpen);
         document.body.classList.toggle('tasks-panel-open', isOpen);
         if (window.floatingWindowManager) {
             if (isOpen) window.floatingWindowManager.onWindowOpen('tasks');
             else window.floatingWindowManager.onWindowClose('tasks');
+        }
+        // Restore chat when tasks close (if chat was open before)
+        if (!isOpen && this.state.getState().isChatOpen) {
+            document.getElementById('chat-container')?.classList.remove('hidden');
+            document.getElementById('floating-input-container')?.classList.remove('hidden');
         }
     }
 
