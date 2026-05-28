@@ -244,6 +244,18 @@ class ComputerControlHandler {
                     result = await this._getSystemInfo();
                     break;
 
+                case 'list_installed_apps':
+                    result = await this._listInstalledApplications();
+                    break;
+
+                case 'get_screen_elements':
+                    result = await this._getScreenElements(commandPayload);
+                    break;
+
+                case 'find_element_by_text':
+                    result = await this._findElementByText(commandPayload);
+                    break;
+
                 case 'watch_directory':
                     result = await this._watchDirectory(commandPayload);
                     break;
@@ -618,6 +630,17 @@ class ComputerControlHandler {
                         displays: result.displays || null
                     }
                 };
+            case 'list_installed_apps':
+                return {
+                    ...base,
+                    preview_type: 'list',
+                    title: 'Installed applications',
+                    inline: {
+                        count: result.count || 0,
+                        platform: result.platform || null,
+                        items: Array.isArray(result.apps) ? result.apps.slice(0, 15).map(a => ({ name: a.name, type: a.type })) : []
+                    }
+                };
             default:
                 return {
                     ...base,
@@ -749,13 +772,90 @@ class ComputerControlHandler {
         };
     }
 
-    // ===== INTERACTION METHODS =====
+    // ===== INTERACTION METHODS (Humanized Physics) =====
+
+    /**
+     * Generate a natural cubic Bezier mouse path with Fitts's Law easing.
+     * Mimics human hand movement: slow start, fast middle, decelerating end.
+     */
+    _generateBezierPath(start, end, pointsCount = 30) {
+        const path = [];
+        const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+        
+        // Scale control point randomness with distance (humans overshoot more on long moves)
+        const spread = Math.min(150, distance * 0.4);
+
+        const control1 = {
+            x: start.x + (end.x - start.x) * 0.25 + (Math.random() - 0.5) * spread,
+            y: start.y + (end.y - start.y) * 0.25 + (Math.random() - 0.5) * spread
+        };
+        const control2 = {
+            x: start.x + (end.x - start.x) * 0.75 + (Math.random() - 0.5) * spread,
+            y: start.y + (end.y - start.y) * 0.75 + (Math.random() - 0.5) * spread
+        };
+
+        // Human velocity curve: ease-in-out cubic (slow start, rapid middle, decelerate end)
+        const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        for (let i = 0; i <= pointsCount; i++) {
+            const tRaw = i / pointsCount;
+            const t = easeInOutCubic(tRaw);
+
+            const x = Math.round(
+                Math.pow(1 - t, 3) * start.x +
+                3 * Math.pow(1 - t, 2) * t * control1.x +
+                3 * (1 - t) * Math.pow(t, 2) * control2.x +
+                Math.pow(t, 3) * end.x
+            );
+            const y = Math.round(
+                Math.pow(1 - t, 3) * start.y +
+                3 * Math.pow(1 - t, 2) * t * control1.y +
+                3 * (1 - t) * Math.pow(t, 2) * control2.y +
+                Math.pow(t, 3) * end.y
+            );
+
+            path.push({ x, y });
+        }
+        return path;
+    }
+
+    /**
+     * Random delay within a range (ms). Used for humanized timing.
+     */
+    _randomDelay(min, max) {
+        return new Promise(resolve => setTimeout(resolve, min + Math.random() * (max - min)));
+    }
+
+    /**
+     * Apply a small random offset to a target coordinate (±pixels).
+     * Simulates human targeting tolerance.
+     */
+    _applyClickOffset(value, maxOffset = 3) {
+        return value + Math.round((Math.random() - 0.5) * 2 * maxOffset);
+    }
 
     async _moveMouse(commandPayload) {
         const { x, y, smooth } = commandPayload;
-        
+
         if (smooth) {
-            await mouse.move(straightTo(new Point(x, y)));
+            // Use Bezier curve path for natural movement
+            const currentPos = await mouse.getPosition();
+            const start = { x: currentPos.x, y: currentPos.y };
+            const end = { x, y };
+            const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+
+            // Adjust point count based on distance (Fitts's Law: longer = more points)
+            const pointsCount = Math.max(15, Math.min(60, Math.round(distance / 15)));
+            const bezierPath = this._generateBezierPath(start, end, pointsCount);
+
+            // Walk along the Bezier path with variable timing
+            for (let i = 1; i < bezierPath.length; i++) {
+                await mouse.setPosition(new Point(bezierPath[i].x, bezierPath[i].y));
+                // Variable delay between points (faster in middle, slower at edges)
+                const progress = i / bezierPath.length;
+                const baseDelay = progress < 0.2 || progress > 0.8 ? 8 : 3;
+                await this._randomDelay(baseDelay, baseDelay + 5);
+            }
         } else {
             await mouse.setPosition(new Point(x, y));
         }
@@ -770,16 +870,40 @@ class ComputerControlHandler {
         const { button = 'left', double = false, x, y } = commandPayload;
 
         if (x !== undefined && y !== undefined) {
-            await mouse.setPosition(new Point(x, y));
+            // Apply minor random offset to target (±3px human targeting tolerance)
+            const offsetX = this._applyClickOffset(x, 3);
+            const offsetY = this._applyClickOffset(y, 3);
+
+            // Use Bezier movement to reach the click target
+            const currentPos = await mouse.getPosition();
+            const start = { x: currentPos.x, y: currentPos.y };
+            const end = { x: offsetX, y: offsetY };
+            const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+            const pointsCount = Math.max(10, Math.min(40, Math.round(distance / 20)));
+            const bezierPath = this._generateBezierPath(start, end, pointsCount);
+
+            for (let i = 1; i < bezierPath.length; i++) {
+                await mouse.setPosition(new Point(bezierPath[i].x, bezierPath[i].y));
+                await this._randomDelay(2, 6);
+            }
         }
 
-        const mouseButton = button === 'right' ? Button.RIGHT : 
+        const mouseButton = button === 'right' ? Button.RIGHT :
                            button === 'middle' ? Button.MIDDLE : Button.LEFT;
 
+        // Humanized click: press, hold for 50-150ms, then release
         if (double) {
-            await mouse.doubleClick(mouseButton);
+            await mouse.pressButton(mouseButton);
+            await this._randomDelay(50, 120);
+            await mouse.releaseButton(mouseButton);
+            await this._randomDelay(80, 160); // Inter-click delay for double-click
+            await mouse.pressButton(mouseButton);
+            await this._randomDelay(50, 120);
+            await mouse.releaseButton(mouseButton);
         } else {
-            await mouse.click(mouseButton);
+            await mouse.pressButton(mouseButton);
+            await this._randomDelay(50, 150);
+            await mouse.releaseButton(mouseButton);
         }
 
         return {
@@ -790,7 +914,16 @@ class ComputerControlHandler {
 
     async _typeText(commandPayload) {
         const { text } = commandPayload;
-        await keyboard.type(text);
+
+        // Humanized typing: variable inter-key delay (40ms-180ms per character)
+        for (let i = 0; i < text.length; i++) {
+            await keyboard.type(text[i]);
+            // Variable delay: faster for common letter sequences, slower for shifts
+            const baseDelay = 40;
+            const variance = 140; // max additional delay
+            const delay = baseDelay + Math.random() * variance;
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
 
         return {
             status: 'success',
@@ -836,8 +969,22 @@ class ComputerControlHandler {
             return Key[k.toUpperCase()] || k;
         });
 
-        await keyboard.pressKey(...nutKeys);
-        await keyboard.releaseKey(...nutKeys);
+        // Humanized key chord: slight delay (10-30ms) between pressing each modifier
+        for (let i = 0; i < nutKeys.length; i++) {
+            await keyboard.pressKey(nutKeys[i]);
+            if (i < nutKeys.length - 1) {
+                await this._randomDelay(10, 30);
+            }
+        }
+        // Brief hold at the end
+        await this._randomDelay(30, 80);
+        // Release in reverse order (natural human behavior)
+        for (let i = nutKeys.length - 1; i >= 0; i--) {
+            await keyboard.releaseKey(nutKeys[i]);
+            if (i > 0) {
+                await this._randomDelay(5, 15);
+            }
+        }
 
         return {
             status: 'success',
@@ -848,11 +995,15 @@ class ComputerControlHandler {
     async _scroll(commandPayload) {
         const { direction, amount = 3 } = commandPayload;
         
-        const scrollAmount = direction === 'down' ? -amount : amount;
-        
-        for (let i = 0; i < Math.abs(amount); i++) {
-            await mouse.scrollDown(scrollAmount > 0 ? 1 : -1);
-            await new Promise(resolve => setTimeout(resolve, 50));
+        // Humanized scrolling: variable delays between scroll ticks
+        for (let i = 0; i < amount; i++) {
+            if (direction === 'down') {
+                await mouse.scrollDown(1);
+            } else {
+                await mouse.scrollUp(1);
+            }
+            // Variable delay between scroll steps (humans don't scroll at constant speed)
+            await this._randomDelay(30, 100);
         }
 
         return {
@@ -864,9 +1015,35 @@ class ComputerControlHandler {
     async _dragDrop(commandPayload) {
         const { from_x, from_y, to_x, to_y } = commandPayload;
 
-        await mouse.setPosition(new Point(from_x, from_y));
+        // Move to start with Bezier curve
+        const currentPos = await mouse.getPosition();
+        const startPath = this._generateBezierPath(
+            { x: currentPos.x, y: currentPos.y },
+            { x: from_x, y: from_y },
+            15
+        );
+        for (let i = 1; i < startPath.length; i++) {
+            await mouse.setPosition(new Point(startPath[i].x, startPath[i].y));
+            await this._randomDelay(3, 7);
+        }
+
+        // Press and hold
         await mouse.pressButton(Button.LEFT);
-        await mouse.move(straightTo(new Point(to_x, to_y)));
+        await this._randomDelay(80, 150);
+
+        // Drag along Bezier curve to destination
+        const dragPath = this._generateBezierPath(
+            { x: from_x, y: from_y },
+            { x: to_x, y: to_y },
+            25
+        );
+        for (let i = 1; i < dragPath.length; i++) {
+            await mouse.setPosition(new Point(dragPath[i].x, dragPath[i].y));
+            await this._randomDelay(5, 12);
+        }
+
+        // Brief pause before release (human hesitation at target)
+        await this._randomDelay(50, 120);
         await mouse.releaseButton(Button.LEFT);
 
         return {
@@ -1214,6 +1391,302 @@ class ComputerControlHandler {
             })),
             idle_time: powerMonitor.getSystemIdleTime()
         };
+    }
+
+    // ===== SCREEN ELEMENT DETECTION =====
+
+    /**
+     * Get interactive screen elements using Windows UI Automation (PowerShell).
+     * Returns buttons, links, text fields with their coordinates for precise targeting.
+     */
+    async _getScreenElements(commandPayload) {
+        const { window_title, element_type } = commandPayload;
+
+        if (this.platform !== 'win32') {
+            return { status: 'error', error: 'Screen element detection is currently only supported on Windows.' };
+        }
+
+        try {
+            // Use UI Automation via PowerShell to get interactive elements
+            let psFilter = '';
+            if (element_type) {
+                const typeMap = {
+                    'button': 'Button',
+                    'edit': 'Edit',
+                    'text': 'Text',
+                    'link': 'Hyperlink',
+                    'checkbox': 'CheckBox',
+                    'radio': 'RadioButton',
+                    'combobox': 'ComboBox',
+                    'list': 'List',
+                    'menu': 'MenuItem',
+                    'tab': 'TabItem',
+                };
+                psFilter = typeMap[element_type] ? `| Where-Object { $_.Current.ControlType.ProgrammaticName -eq 'ControlType.${typeMap[element_type]}' }` : '';
+            }
+
+            let windowFilter = '';
+            if (window_title) {
+                windowFilter = `$window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${window_title.replace(/'/g, "''")}')));\nif (-not $window) { $window = [System.Windows.Automation.AutomationElement]::RootElement }`;
+            } else {
+                windowFilter = '$window = [System.Windows.Automation.AutomationElement]::RootElement';
+            }
+
+            const psScript = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+${windowFilter}
+$elements = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) ${psFilter}
+$results = @()
+$count = 0
+foreach ($el in $elements) {
+    if ($count -ge 50) { break }
+    try {
+        $rect = $el.Current.BoundingRectangle
+        if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
+            $results += @{
+                Name = $el.Current.Name
+                ControlType = $el.Current.ControlType.ProgrammaticName
+                X = [int]($rect.X + $rect.Width / 2)
+                Y = [int]($rect.Y + $rect.Height / 2)
+                Width = [int]$rect.Width
+                Height = [int]$rect.Height
+                IsEnabled = $el.Current.IsEnabled
+                AutomationId = $el.Current.AutomationId
+            }
+            $count++
+        }
+    } catch {}
+}
+$results | ConvertTo-Json -Compress
+`.trim();
+
+            const { stdout } = await execAsync(
+                `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
+                { timeout: 15000 }
+            );
+
+            let elements = [];
+            if (stdout && stdout.trim()) {
+                const parsed = JSON.parse(stdout);
+                elements = Array.isArray(parsed) ? parsed : [parsed];
+            }
+
+            return {
+                status: 'success',
+                elements: elements,
+                count: elements.length
+            };
+        } catch (error) {
+            return { status: 'error', error: `Element detection failed: ${error.message}` };
+        }
+    }
+
+    /**
+     * Find a specific UI element by its visible text/label and return its click coordinates.
+     * Useful for "click the Save button" type commands — gives exact coordinates.
+     */
+    async _findElementByText(commandPayload) {
+        const { text, window_title } = commandPayload;
+
+        if (this.platform !== 'win32') {
+            return { status: 'error', error: 'Element finder is currently only supported on Windows.' };
+        }
+
+        if (!text) {
+            return { status: 'error', error: 'Text parameter is required.' };
+        }
+
+        try {
+            const searchText = text.replace(/'/g, "''");
+            let windowScope = '$root = [System.Windows.Automation.AutomationElement]::RootElement';
+            if (window_title) {
+                const safeTitle = window_title.replace(/'/g, "''");
+                windowScope = `$root = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${safeTitle}'))); if (-not $root) { $root = [System.Windows.Automation.AutomationElement]::RootElement }`;
+            }
+
+            const psScript = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+${windowScope}
+$condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${searchText}')
+$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+$results = @()
+foreach ($el in $elements) {
+    try {
+        $rect = $el.Current.BoundingRectangle
+        if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
+            $results += @{
+                Name = $el.Current.Name
+                ControlType = $el.Current.ControlType.ProgrammaticName
+                CenterX = [int]($rect.X + $rect.Width / 2)
+                CenterY = [int]($rect.Y + $rect.Height / 2)
+                Width = [int]$rect.Width
+                Height = [int]$rect.Height
+            }
+        }
+    } catch {}
+}
+$results | ConvertTo-Json -Compress
+`.trim();
+
+            const { stdout } = await execAsync(
+                `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
+                { timeout: 10000 }
+            );
+
+            let elements = [];
+            if (stdout && stdout.trim()) {
+                const parsed = JSON.parse(stdout);
+                elements = Array.isArray(parsed) ? parsed : [parsed];
+            }
+
+            if (elements.length === 0) {
+                return { status: 'error', error: `No element found with text: "${text}"` };
+            }
+
+            return {
+                status: 'success',
+                elements: elements,
+                count: elements.length,
+                // Provide the first match's center as the recommended click target
+                recommended_click: {
+                    x: elements[0].CenterX,
+                    y: elements[0].CenterY
+                }
+            };
+        } catch (error) {
+            return { status: 'error', error: `Element search failed: ${error.message}` };
+        }
+    }
+
+    // ===== APPLICATION DISCOVERY =====
+
+    async _listInstalledApplications() {
+        try {
+            let apps = [];
+
+            if (this.platform === 'win32') {
+                // Strategy 1: Get-StartApps (UWP + Start Menu shortcuts - fast)
+                try {
+                    const { stdout: startAppsJson } = await execAsync(
+                        'powershell -NoProfile -Command "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress"',
+                        { timeout: 15000 }
+                    );
+                    const startApps = JSON.parse(startAppsJson);
+                    const startList = Array.isArray(startApps) ? startApps : [startApps];
+                    startList.forEach(item => {
+                        if (item && item.Name) {
+                            apps.push({
+                                name: item.Name,
+                                id: item.AppID || null,
+                                type: 'start_menu',
+                                source: 'Get-StartApps'
+                            });
+                        }
+                    });
+                } catch (e) {
+                    console.warn('ComputerControlHandler: Get-StartApps failed:', e.message);
+                }
+
+                // Strategy 2: Registry Uninstall keys (legacy desktop apps)
+                const registryPaths = [
+                    'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+                    'HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+                    'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+                ];
+
+                for (const regPath of registryPaths) {
+                    try {
+                        const psCmd = `powershell -NoProfile -Command "Get-ItemProperty '${regPath}' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -ne $null } | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation | ConvertTo-Json -Compress"`;
+                        const { stdout: regJson } = await execAsync(psCmd, { timeout: 15000 });
+                        if (regJson && regJson.trim()) {
+                            const regApps = JSON.parse(regJson);
+                            const regList = Array.isArray(regApps) ? regApps : [regApps];
+                            regList.forEach(item => {
+                                if (item && item.DisplayName) {
+                                    // Avoid duplicates from Start Menu
+                                    const alreadyExists = apps.some(a =>
+                                        a.name.toLowerCase() === item.DisplayName.toLowerCase()
+                                    );
+                                    if (!alreadyExists) {
+                                        apps.push({
+                                            name: item.DisplayName,
+                                            version: item.DisplayVersion || null,
+                                            publisher: item.Publisher || null,
+                                            install_location: item.InstallLocation || null,
+                                            type: 'registry_uninstall',
+                                            source: regPath.includes('Wow6432Node') ? 'registry_32bit' : 'registry_64bit'
+                                        });
+                                    }
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        // Silently continue if one registry path fails
+                        console.warn(`ComputerControlHandler: Registry scan failed for ${regPath}:`, e.message);
+                    }
+                }
+
+            } else if (this.platform === 'darwin') {
+                // macOS: Scan application directories
+                const appDirs = ['/Applications', `${os.homedir()}/Applications`, '/System/Applications'];
+                for (const dir of appDirs) {
+                    try {
+                        const files = await fs.readdir(dir);
+                        files.filter(f => f.endsWith('.app')).forEach(app => {
+                            apps.push({
+                                name: app.replace('.app', ''),
+                                path: path.join(dir, app),
+                                type: 'mac_bundle',
+                                source: dir
+                            });
+                        });
+                    } catch (e) { /* directory may not exist */ }
+                }
+
+            } else {
+                // Linux: Parse .desktop entry files
+                const desktopDirs = [
+                    '/usr/share/applications',
+                    '/usr/local/share/applications',
+                    `${os.homedir()}/.local/share/applications`
+                ];
+                for (const dir of desktopDirs) {
+                    try {
+                        const files = await fs.readdir(dir);
+                        for (const file of files.filter(f => f.endsWith('.desktop'))) {
+                            try {
+                                const content = await fs.readFile(path.join(dir, file), 'utf8');
+                                const nameMatch = content.match(/^Name=(.+)$/m);
+                                const execMatch = content.match(/^Exec=(.+)$/m);
+                                const iconMatch = content.match(/^Icon=(.+)$/m);
+                                const catMatch = content.match(/^Categories=(.+)$/m);
+                                if (nameMatch) {
+                                    apps.push({
+                                        name: nameMatch[1].trim(),
+                                        exec: execMatch ? execMatch[1].trim() : null,
+                                        icon: iconMatch ? iconMatch[1].trim() : null,
+                                        categories: catMatch ? catMatch[1].trim() : null,
+                                        type: 'desktop_entry',
+                                        source: dir
+                                    });
+                                }
+                            } catch (e) { /* skip unreadable files */ }
+                        }
+                    } catch (e) { /* directory may not exist */ }
+                }
+            }
+
+            return {
+                status: 'success',
+                apps: apps,
+                count: apps.length,
+                platform: this.platform
+            };
+        } catch (error) {
+            return { status: 'error', error: error.message };
+        }
     }
 
     async _watchDirectory(commandPayload) {
