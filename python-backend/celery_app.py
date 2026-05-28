@@ -19,6 +19,6 @@ celery_app = Celery(__name__)
 # This is the critical step that provides the Redis broker URL to Celery.
 celery_app.conf.update(config.CELERY_CONFIG)
 
-# Optional: If you later create a `tasks.py` file to define your Celery tasks,
-# this line will automatically discover them. It's good practice to include it now.
+# Optional: If you later create a tasks.py file to define Celery tasks,
+# uncomment the line below to auto-discover them.
 # celery_app.autodiscover_tasks(['tasks'])
