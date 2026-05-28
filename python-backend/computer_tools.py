@@ -86,6 +86,13 @@ class ComputerTools(Toolkit):
                 self.get_volume,
                 self.set_volume,
                 self.get_system_info,
+                
+                # Application Discovery
+                self.list_installed_apps,
+                
+                # Screen Element Detection (Accessibility API)
+                self.get_screen_elements,
+                self.find_element_by_text,
             ],
         )
 
@@ -231,6 +238,9 @@ class ComputerTools(Toolkit):
             'get_volume': 'Checked system volume',
             'set_volume': f"Set volume to {payload.get('volume', '?')}%",
             'get_system_info': 'Retrieved system information',
+            'list_installed_apps': 'Scanning installed applications',
+            'get_screen_elements': 'Reading UI elements from screen',
+            'find_element_by_text': f"Searching for element: {payload.get('text', '?')}",
         }
         
         message = action_messages.get(action, f"Executed {action.replace('_', ' ')}")
@@ -683,3 +693,63 @@ class ComputerTools(Toolkit):
         Use this to understand the user's system configuration.
         """
         return self._send_command_and_wait({'action': 'get_system_info'})
+
+    # ===== APPLICATION DISCOVERY =====
+
+    def list_installed_apps(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        List all installed applications on the host operating system.
+        
+        Returns names, identifiers, versions, publishers, and launching commands.
+        
+        On Windows: Scans Start Menu (Get-StartApps) and Registry Uninstall keys
+        for both UWP/Store apps and legacy desktop applications.
+        On macOS: Scans /Applications and ~/Applications for .app bundles.
+        On Linux: Parses .desktop entry files from standard application directories.
+        
+        Use this to discover what software is available to open on the user's computer
+        before attempting to launch an application.
+        """
+        return self._send_command_and_wait({'action': 'list_installed_apps'})
+
+    # ===== SCREEN ELEMENT DETECTION =====
+
+    def get_screen_elements(self, window_title: Optional[str] = None, element_type: Optional[str] = None) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Get interactive UI elements on screen using the OS accessibility tree.
+        Returns element names, types, and exact screen coordinates for precise clicking.
+        
+        Args:
+            window_title: Optional window title to scope the search to a specific window.
+            element_type: Optional filter for element type. 
+                          Options: 'button', 'edit', 'text', 'link', 'checkbox', 
+                          'radio', 'combobox', 'list', 'menu', 'tab'
+        
+        Use this instead of guessing coordinates from screenshots. It gives you
+        the exact center coordinates of every interactive element.
+        Currently supported on Windows only (uses UI Automation API).
+        """
+        payload = {'action': 'get_screen_elements'}
+        if window_title:
+            payload['window_title'] = window_title
+        if element_type:
+            payload['element_type'] = element_type
+        return self._send_command_and_wait(payload)
+
+    def find_element_by_text(self, text: str, window_title: Optional[str] = None) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Find a specific UI element by its visible text/label and get its click coordinates.
+        
+        Args:
+            text: The exact visible text of the element (e.g., "Save", "OK", "File")
+            window_title: Optional window title to scope the search
+        
+        Returns the element's center coordinates so you can click it precisely.
+        Much more accurate than estimating coordinates from a screenshot.
+        
+        Example: find_element_by_text("Save") → returns {x: 450, y: 320} → click_mouse(x=450, y=320)
+        """
+        payload = {'action': 'find_element_by_text', 'text': text}
+        if window_title:
+            payload['window_title'] = window_title
+        return self._send_command_and_wait(payload)
