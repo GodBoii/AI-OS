@@ -4,6 +4,7 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 from agno.models.groq import Groq
 from supabase_client import supabase_client
+from extensions import socketio
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,13 @@ def generate_and_save_title(conversation_id: str, user_id: str, first_message: s
         # Insert into Supabase
         result = supabase_client.from_("session_titles").insert(data).execute()
         logger.info(f"Successfully saved title for session {conversation_id}")
+
+        # Emit the title to the conversation room so the frontend can display it live
+        room_name = f"conv:{conversation_id}"
+        socketio.emit("conversation_title", {
+            "conversationId": conversation_id,
+            "title": title
+        }, room=room_name)
 
     except Exception as e:
         logger.error(f"Error in generate_and_save_title for session {conversation_id}: {e}")
