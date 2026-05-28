@@ -216,6 +216,10 @@ class PythonBridge {
             this._sendToRenderer('task_execution_status', data);
         });
 
+        this.socket.on('conversation_title', (data) => {
+            this._sendToRenderer('conversation_title', data);
+        });
+
         this.socket.on('sandbox-command-started', (data) => {
             this._sendToRenderer('sandbox-command-started', data);
         });

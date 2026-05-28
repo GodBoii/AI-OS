@@ -83,7 +83,9 @@ const validReceiveChannels = [
     'user-context-saved',
     'user-context-retrieved',
     // Agent run lifecycle
-    'run-completed'
+    'run-completed',
+    // Conversation title from backend
+    'conversation_title'
 ];
 
 const validInvokeChannels = [
