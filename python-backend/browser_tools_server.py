@@ -76,7 +76,8 @@ class ServerBrowserTools(Toolkit):
                 self.go_forward, self.refresh_page, self.extract_text_from_element,
                 self.extract_table_data, self.wait_for_element,
                 self.list_tabs, self.open_new_tab, self.switch_to_tab, self.close_tab,
-                self.close_browser
+                self.close_browser, self.press_key,
+                self.focus_element, self.click_by_text, self.click_coordinates,
             ],
         )
     
@@ -412,7 +413,7 @@ class ServerBrowserTools(Toolkit):
         return self._process_view_result(result)
     
     def get_current_view(self) -> Union[Dict[str, Any], ToolResult]:
-        """Get current page view with screenshot."""
+        """Get current page view with screenshot and comprehensive interactive element detection."""
         async def _get_view():
             try:
                 page = await self._get_or_create_page()
@@ -422,16 +423,80 @@ class ServerBrowserTools(Toolkit):
                 
                 screenshot_path = await self._capture_screenshot()
                 
-                # Extract visible text
-                text_content = await page.evaluate('''() => {
-                    return document.body.innerText.substring(0, 5000);
+                # Comprehensive element detection (matches client-side browser-handler.js)
+                interactive_elements = await page.evaluate('''() => {
+                    const selectors = [
+                        'a[href]', 'button', 'input', 'textarea', 'select',
+                        '[role="button"]', '[role="link"]', '[role="textbox"]',
+                        '[role="searchbox"]', '[role="combobox"]', '[role="menuitem"]',
+                        '[role="tab"]', '[role="option"]', '[role="switch"]',
+                        '[role="checkbox"]', '[role="radio"]',
+                        '[contenteditable="true"]', '[contenteditable=""]',
+                        '[tabindex]:not([tabindex="-1"])',
+                        '[onclick]', '[data-action]', 'summary', 'label[for]'
+                    ];
+
+                    const elements = Array.from(document.querySelectorAll(selectors.join(', ')));
+                    const visibleElements = [];
+                    const seen = new WeakSet();
+                    let nextId = Number(window.__aiosNextElementId || 1);
+
+                    elements.forEach((el) => {
+                        if (seen.has(el)) return;
+                        seen.add(el);
+
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        const isVisible = (
+                            rect.width > 0 && rect.height > 0 &&
+                            style.visibility !== 'hidden' && style.display !== 'none' &&
+                            style.opacity !== '0' &&
+                            rect.bottom >= 0 && rect.right >= 0 &&
+                            rect.top <= window.innerHeight && rect.left <= window.innerWidth
+                        );
+
+                        if (isVisible) {
+                            let elementId = el.getAttribute('data-aios-id');
+                            if (!elementId) {
+                                elementId = String(nextId++);
+                                el.setAttribute('data-aios-id', elementId);
+                            }
+
+                            const tag = el.tagName.toLowerCase();
+                            const type = el.getAttribute('type') || '';
+                            const role = el.getAttribute('role') || '';
+                            const isEditable = el.isContentEditable || tag === 'textarea' || 
+                                (tag === 'input' && !['checkbox','radio','submit','button','file','hidden','image','reset'].includes(type));
+
+                            visibleElements.push({
+                                id: Number(elementId),
+                                tag: tag,
+                                type: type,
+                                role: role,
+                                text: (el.innerText || '').trim().substring(0, 100),
+                                value: (el.value || '').substring(0, 100),
+                                placeholder: el.getAttribute('placeholder') || '',
+                                ariaLabel: el.getAttribute('aria-label') || '',
+                                name: el.getAttribute('name') || '',
+                                isEditable: isEditable,
+                                isFocused: document.activeElement === el,
+                                isContentEditable: el.isContentEditable,
+                                bounds: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+                            });
+                        }
+                    });
+                    window.__aiosNextElementId = nextId;
+                    return visibleElements;
                 }''')
                 
                 return {
                     "status": "success",
                     "url": page.url,
                     "title": await page.title(),
-                    "text_preview": text_content[:500],
+                    "interactive_elements": interactive_elements,
+                    "element_count": len(interactive_elements),
+                    "editable_elements": len([e for e in interactive_elements if e.get('isEditable')]),
+                    "focused_element": next((e for e in interactive_elements if e.get('isFocused')), None),
                     "screenshot_path": screenshot_path
                 }
             except Exception as e:
@@ -441,13 +506,38 @@ class ServerBrowserTools(Toolkit):
         result = self._run_async(_get_view())
         return self._process_view_result(result)
     
-    def click(self, selector: str, description: str = "") -> Union[Dict[str, Any], ToolResult]:
-        """Click element by CSS selector."""
+    def click(self, element_id: int, description: str = "") -> Union[Dict[str, Any], ToolResult]:
+        """Click element by its assigned ID from get_current_view()."""
         async def _click():
             try:
                 page = await self._get_or_create_page()
-                await page.click(selector, timeout=10000)
-                await page.wait_for_load_state('networkidle', timeout=10000)
+                selector = f'[data-aios-id="{element_id}"]'
+                
+                # Scroll into view first
+                await page.evaluate(f'''(sel) => {{
+                    const el = document.querySelector(sel);
+                    if (el) el.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                }}''', selector)
+                await page.wait_for_timeout(300)
+                
+                # Try standard click
+                try:
+                    await page.click(selector, timeout=5000)
+                except Exception:
+                    # Fallback: force click via JS
+                    await page.evaluate(f'''(sel) => {{
+                        const el = document.querySelector(sel);
+                        if (el) {{
+                            el.focus();
+                            el.click();
+                            el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true }}));
+                        }}
+                    }}''', selector)
+                
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=10000)
+                except Exception:
+                    pass
                 
                 # Fire screenshot capture in background
                 asyncio.create_task(self._capture_and_emit_screenshot_async('click', page.url))
@@ -456,7 +546,7 @@ class ServerBrowserTools(Toolkit):
                 
                 return {
                     "status": "success",
-                    "message": f"Clicked: {description or selector}",
+                    "message": f"Clicked: {description or f'element #{element_id}'}",
                     "url": page.url,
                     "screenshot_path": screenshot_path
                 }
@@ -467,18 +557,71 @@ class ServerBrowserTools(Toolkit):
         result = self._run_async(_click())
         return self._process_view_result(result)
     
-    def type_text(self, selector: str, text: str, description: str = "") -> Union[Dict[str, Any], ToolResult]:
-        """Type text into element."""
+    def type_text(self, element_id: int, text: str, description: str = "", clear_existing: bool = True) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Type text into an element. Handles both standard inputs and contenteditable elements
+        (like reply boxes in Slack, Gmail, Teams, etc.).
+        
+        Args:
+            element_id: The element ID from get_current_view()
+            text: Text to type
+            description: Optional description of what we're typing into
+            clear_existing: Whether to clear existing text first (default True)
+        """
         async def _type():
             try:
                 page = await self._get_or_create_page()
-                await page.fill(selector, text, timeout=10000)
+                selector = f'[data-aios-id="{element_id}"]'
+                
+                # Determine element type
+                element_info = await page.evaluate(f'''(sel) => {{
+                    const el = document.querySelector(sel);
+                    if (!el) return null;
+                    return {{
+                        tag: el.tagName.toLowerCase(),
+                        isContentEditable: el.isContentEditable,
+                        type: el.getAttribute('type') || '',
+                        role: el.getAttribute('role') || ''
+                    }};
+                }}''', selector)
+                
+                if not element_info:
+                    return {"status": "error", "error": f"Element #{element_id} not found"}
+                
+                # Click to focus first (critical for reply boxes)
+                try:
+                    await page.click(selector, timeout=5000)
+                except Exception:
+                    pass
+                await page.wait_for_timeout(200)
+                
+                if element_info.get('isContentEditable') or element_info.get('role') == 'textbox':
+                    # ContentEditable strategy
+                    if clear_existing:
+                        await page.keyboard.press('Control+a')
+                        await page.wait_for_timeout(50)
+                        await page.keyboard.press('Backspace')
+                        await page.wait_for_timeout(100)
+                    
+                    await page.keyboard.type(text, delay=30)
+                else:
+                    # Standard input/textarea
+                    if clear_existing:
+                        try:
+                            await page.fill(selector, '', timeout=5000)
+                        except Exception:
+                            pass
+                        await page.keyboard.press('Control+a')
+                        await page.keyboard.press('Backspace')
+                        await page.wait_for_timeout(50)
+                    
+                    await page.type(selector, text, delay=20)
                 
                 screenshot_path = await self._capture_screenshot()
                 
                 return {
                     "status": "success",
-                    "message": f"Typed text into: {description or selector}",
+                    "message": f"Typed text into: {description or f'element #{element_id}'}",
                     "screenshot_path": screenshot_path
                 }
             except Exception as e:
@@ -766,6 +909,168 @@ class ServerBrowserTools(Toolkit):
                 return {"status": "error", "error": str(e)}
         
         return self._run_async(_close())
+
+    def press_key(self, key: str) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Press a keyboard key or combination in the browser.
+        
+        Args:
+            key: Single key or combination with '+' separator.
+                 Examples: "Enter", "Escape", "Tab", "Control+Enter", "Shift+Enter", "Control+a"
+        """
+        async def _press_key():
+            try:
+                page = await self._get_or_create_page()
+                
+                if '+' in key:
+                    # Key combination
+                    parts = key.split('+')
+                    modifiers = parts[:-1]
+                    final_key = parts[-1]
+                    for mod in modifiers:
+                        await page.keyboard.down(mod)
+                    await page.keyboard.press(final_key)
+                    for mod in reversed(modifiers):
+                        await page.keyboard.up(mod)
+                else:
+                    await page.keyboard.press(key)
+                
+                await page.wait_for_timeout(500)
+                screenshot_path = await self._capture_screenshot()
+                
+                return {
+                    "status": "success",
+                    "message": f"Pressed: {key}",
+                    "screenshot_path": screenshot_path
+                }
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
+        
+        result = self._run_async(_press_key())
+        return self._process_view_result(result)
+
+    def focus_element(self, element_id: int) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Explicitly focus an element by scrolling it into view and clicking it.
+        Use BEFORE type_text for reply boxes and contenteditable areas.
+        
+        Args:
+            element_id: The element ID from get_current_view()
+        """
+        async def _focus():
+            try:
+                page = await self._get_or_create_page()
+                selector = f'[data-aios-id="{element_id}"]'
+                
+                await page.evaluate(f'''(sel) => {{
+                    const el = document.querySelector(sel);
+                    if (el) el.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                }}''', selector)
+                await page.wait_for_timeout(200)
+                try:
+                    await page.click(selector, timeout=5000)
+                except Exception:
+                    pass
+                await page.wait_for_timeout(200)
+                
+                screenshot_path = await self._capture_screenshot()
+                return {
+                    "status": "success",
+                    "message": f"Focused element #{element_id}",
+                    "screenshot_path": screenshot_path
+                }
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
+        
+        result = self._run_async(_focus())
+        return self._process_view_result(result)
+
+    def click_by_text(self, text: str, element_type: str = "") -> Union[Dict[str, Any], ToolResult]:
+        """
+        Click an interactive element by its visible text content.
+        More reliable than element_id for dynamic UIs.
+        
+        Args:
+            text: Visible text of the element (e.g., "Send", "Reply", "Submit")
+            element_type: Optional CSS selector to narrow search (e.g., "button")
+        """
+        async def _click_text():
+            try:
+                page = await self._get_or_create_page()
+                
+                clicked = await page.evaluate('''({ searchText, elementType }) => {
+                    const interactiveSelectors = elementType || 
+                        'a, button, [role="button"], [role="link"], [role="menuitem"], [role="tab"], input[type="submit"], input[type="button"]';
+                    const candidates = Array.from(document.querySelectorAll(interactiveSelectors));
+                    
+                    let target = candidates.find(el => {
+                        const t = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim();
+                        return t === searchText;
+                    });
+                    
+                    if (!target) {
+                        const lower = searchText.toLowerCase();
+                        target = candidates.find(el => {
+                            const t = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().toLowerCase();
+                            return t.includes(lower);
+                        });
+                    }
+
+                    if (!target) {
+                        target = candidates.find(el => {
+                            const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                            return label.includes(searchText.toLowerCase());
+                        });
+                    }
+                    
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        target.click();
+                        return { found: true, text: (target.innerText || '').substring(0, 80), tag: target.tagName };
+                    }
+                    return { found: false };
+                }''', {"searchText": text, "elementType": element_type})
+                
+                if clicked.get('found'):
+                    await page.wait_for_timeout(1000)
+                    screenshot_path = await self._capture_screenshot()
+                    return {
+                        "status": "success",
+                        "message": f"Clicked element with text: \"{clicked['text']}\" ({clicked['tag']})",
+                        "screenshot_path": screenshot_path
+                    }
+                else:
+                    return {"status": "error", "error": f"No clickable element found with text: \"{text}\""}
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
+        
+        result = self._run_async(_click_text())
+        return self._process_view_result(result)
+
+    def click_coordinates(self, x: int, y: int) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Click at specific pixel coordinates on the page (last resort).
+        
+        Args:
+            x: X coordinate (pixels from left)
+            y: Y coordinate (pixels from top)
+        """
+        async def _click_coords():
+            try:
+                page = await self._get_or_create_page()
+                await page.mouse.click(x, y)
+                await page.wait_for_timeout(1000)
+                screenshot_path = await self._capture_screenshot()
+                return {
+                    "status": "success",
+                    "message": f"Clicked at ({x}, {y})",
+                    "screenshot_path": screenshot_path
+                }
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
+        
+        result = self._run_async(_click_coords())
+        return self._process_view_result(result)
     
     @classmethod
     async def cleanup_all(cls):
