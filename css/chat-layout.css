@@ -74,6 +74,41 @@
     -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
 }
 
+/* --- Conversation Title Bar --- */
+.conversation-title-bar {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    pointer-events: auto;
+    text-align: center;
+    padding: 6px 18px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-width: 60%;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.conversation-title-bar.fade-in {
+    opacity: 1;
+}
+
+.conversation-title-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
 /* --- Centered Conversation Area --- */
 .chat-messages {
     flex-grow: 1;
