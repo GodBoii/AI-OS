@@ -1,123 +1,178 @@
 # python-backend/task_executor.py
 """
 Autonomous Task Execution Service
-Handles background execution of tasks without streaming to chat
+Uses the main LLM-OS agent with user-selected tools + server-side browser
+for background execution of scheduled tasks.
 """
 
 import logging
 import traceback
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from extensions import socketio
 from supabase_client import supabase_client
-from task_agent import get_task_agent
 
 logger = logging.getLogger(__name__)
 
 
 def run_autonomous_task(task_id: str, user_id: str, sid: str = None):
     """
-    Executes a task autonomously in the background without user interaction.
+    Executes a task autonomously using the main LLM-OS agent (Aetheria AI Team).
     
-    This function:
-    1. Fetches task details from database
-    2. Initializes autonomous executor agent
-    3. Runs agent to generate deliverable
-    4. Agent saves work and marks complete
-    5. Emits status updates to frontend (if sid provided)
+    Reads the task metadata to determine which tools to enable,
+    applies custom instructions, and runs the agent to completion.
     
     Args:
         task_id: UUID of the task to execute
         user_id: User ID who owns the task
-        sid: Socket ID for status notifications (optional, for real-time updates)
+        sid: Socket ID for status notifications (optional)
     """
     try:
         logger.info(f"🎯 Starting autonomous execution for task {task_id}")
-        logger.info(f"   User: {user_id}")
-        
-        # Emit processing status to frontend (if connected)
+
+        # Emit processing status
         if sid:
             socketio.emit("task_execution_status", {
                 "task_id": task_id,
                 "status": "processing",
                 "message": "AI is working on your task..."
             }, room=sid)
-        
-        # Fetch task details from database
-        logger.debug(f"📥 Fetching task details from database...")
+
+        # Fetch task details
         response = supabase_client.table("tasks").select("*").eq("id", task_id).eq("user_id", user_id).single().execute()
-        
         if not response.data:
             logger.error(f"❌ Task not found: {task_id}")
             if sid:
                 socketio.emit("task_execution_status", {
-                    "task_id": task_id,
-                    "status": "error",
-                    "message": "Task not found"
+                    "task_id": task_id, "status": "error", "message": "Task not found"
                 }, room=sid)
             return
-        
+
         task_data = response.data
         task_description = task_data.get('text', '')
+        task_detail_description = task_data.get('description', '')
         task_priority = task_data.get('priority', 'medium')
-        
+        metadata = task_data.get('metadata', {}) or {}
+
         logger.info(f"📝 Task: {task_description}")
         logger.info(f"⚡ Priority: {task_priority}")
-        
-        # Initialize task agent in execution mode
-        logger.debug(f"🤖 Initializing task agent in execution mode...")
-        from task_agent import get_task_agent
-        
-        executor = get_task_agent(
+        logger.info(f"🔧 Metadata: {metadata}")
+
+        # Extract tool configuration from metadata
+        selected_tools = metadata.get('tools', ['internet_search'])
+        custom_instructions = metadata.get('custom_instructions', '')
+        use_main_agent = metadata.get('use_main_agent', True)
+
+        # Map tool selections to assistant.py parameters
+        enable_internet = 'internet_search' in selected_tools
+        enable_browser = 'browser' in selected_tools
+        enable_email = 'email' in selected_tools
+        enable_drive = 'google_drive' in selected_tools
+        enable_sheets = 'google_sheets' in selected_tools
+        enable_github = 'github' in selected_tools
+
+        logger.info(f"🛠️  Tools: search={enable_internet}, browser={enable_browser}, email={enable_email}, drive={enable_drive}, sheets={enable_sheets}, github={enable_github}")
+
+        # Build the LLM-OS agent with selected tools
+        from assistant import get_llm_os
+        from browser_tools_server import ServerBrowserTools
+
+        # Prepare browser config if browser tool is selected
+        browser_tools_config = None
+        if enable_browser:
+            # For background tasks, use server-side browser without socket streaming
+            browser_tools_config = {
+                'socketio': socketio,
+                'sid': sid,
+                'redis_client': None,  # No redis needed for background tasks
+            }
+
+        # Create the main LLM-OS team with task-specific configuration
+        team = get_llm_os(
             user_id=user_id,
+            internet_search=enable_internet,
+            enable_google_email=enable_email,
+            enable_google_drive=enable_drive,
+            enable_google_sheets=enable_sheets,
+            enable_github=enable_github,
+            enable_browser=enable_browser,
+            browser_tools_config=browser_tools_config,
+            enable_supabase=False,
+            use_memory=True,
             debug_mode=False,
-            execution_mode=True,
-            task_id=task_id
+            session_id=f"task-{task_id}",
+            message_id=f"task-exec-{task_id}",
         )
-        
-        # Execute the task autonomously (no streaming)
-        # The agent will internally call save_task_work() and mark_task_complete()
-        kickoff_prompt = f"Execute the assigned task: {task_description}"
-        
-        logger.info(f"▶️  Running autonomous executor for task {task_id}...")
-        logger.info(f"   Agent will generate deliverable and save work")
-        
-        # Run without streaming - agent works silently in background
-        run_response = executor.run(
+
+        # Build the execution prompt
+        prompt_parts = [
+            f"AUTONOMOUS TASK EXECUTION - Complete this task fully and save the result.",
+            f"",
+            f"TASK: {task_description}",
+        ]
+        if task_detail_description:
+            prompt_parts.append(f"DETAILS: {task_detail_description}")
+        if custom_instructions:
+            prompt_parts.append(f"")
+            prompt_parts.append(f"CUSTOM INSTRUCTIONS: {custom_instructions}")
+        prompt_parts.extend([
+            f"",
+            f"PRIORITY: {task_priority}",
+            f"",
+            f"REQUIREMENTS:",
+            f"- Complete this task fully and autonomously",
+            f"- Use all available tools as needed",
+            f"- Generate comprehensive, actionable output",
+            f"- Provide results in well-structured format",
+            f"- Do NOT ask questions or wait for input",
+        ])
+
+        kickoff_prompt = "\n".join(prompt_parts)
+
+        logger.info(f"▶️  Running LLM-OS agent for task {task_id}...")
+
+        # Run the team (non-streaming for background execution)
+        run_response = team.run(
             input=kickoff_prompt,
-            stream=False  # No streaming for background execution
+            stream=False
         )
-        
-        # Log the execution result
-        if run_response and hasattr(run_response, 'content'):
-            content_length = len(run_response.content)
-            logger.info(f"📊 Agent response received: {content_length} characters")
-            logger.debug(f"   Preview: {run_response.content[:100]}...")
-        
-        # Emit success status (if connected)
+
+        # Extract the response content
+        work_output = ""
+        if run_response and hasattr(run_response, 'content') and run_response.content:
+            work_output = run_response.content
+            logger.info(f"📊 Agent response: {len(work_output)} characters")
+        else:
+            work_output = "Task execution completed but no output was generated."
+            logger.warning(f"⚠️ No content in agent response for task {task_id}")
+
+        # Save work output to task
+        supabase_client.table("tasks").update({
+            "task_work": work_output,
+            "status": "completed"
+        }).eq("id", task_id).execute()
+
+        logger.info(f"✅ Task {task_id} completed and work saved")
+
+        # Emit success
         if sid:
             socketio.emit("task_execution_status", {
                 "task_id": task_id,
                 "status": "completed",
                 "message": "Task completed successfully!"
             }, room=sid)
-        
-        logger.info(f"✅ Autonomous execution completed for task {task_id}")
-        logger.info(f"   Task should now be marked as 'completed' with deliverable saved")
-        
+
     except Exception as e:
-        logger.error(f"❌ Error in autonomous task execution for {task_id}: {e}")
+        logger.error(f"❌ Error executing task {task_id}: {e}")
         logger.error(f"   Traceback: {traceback.format_exc()}")
-        
-        # Try to revert task status to pending on failure
+
+        # Revert status
         try:
             supabase_client.table("tasks").update({
                 "status": "pending"
             }).eq("id", task_id).execute()
-            logger.warning(f"⏪ Reverted task {task_id} status to pending after failure")
         except Exception as revert_error:
             logger.error(f"❌ Failed to revert task status: {revert_error}")
-        
-        # Emit error status (if connected)
+
         if sid:
             socketio.emit("task_execution_status", {
                 "task_id": task_id,

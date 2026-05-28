@@ -25,15 +25,17 @@ def get_task_agent(
     task_id: Optional[str] = None
 ) -> Agent:
     """
-    Creates and returns a unified task management agent.
-    Handles both conversational task management and autonomous execution.
+    Creates and returns the task management agent for CONVERSATIONAL mode.
+    
+    NOTE: Autonomous task execution now uses the main LLM-OS agent (see task_executor.py).
+    This agent is only used when the user interacts with tasks via chat.
     
     Args:
         user_id: User ID for task operations
         session_info: Optional session information
         debug_mode: Enable debug logging
-        execution_mode: If True, agent runs in autonomous execution mode
-        task_id: Task ID for execution mode
+        execution_mode: DEPRECATED - execution now uses main LLM-OS agent
+        task_id: DEPRECATED - execution now uses main LLM-OS agent
     
     Returns:
         Configured task management Agent
