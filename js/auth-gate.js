@@ -44,171 +44,112 @@
         el.setAttribute('aria-label', 'Authentication required');
         el.innerHTML = `
             <!-- ── Loading state: shown while auth check runs ──────── -->
-            <div class="ag-checking-state" id="ag-checking">
-                <div class="ag-spinner"></div>
-                <div class="ag-checking-text">Checking session…</div>
+            <div class="auth-checking-state" id="auth-checking">
+                <div class="auth-spinner"></div>
+                <div class="auth-checking-text">Checking session…</div>
             </div>
 
-            <!-- ── Split Layout Wrapper ──────────── -->
-            <div class="ag-split-wrapper" id="ag-form-panel" style="opacity:0;transition:opacity 400ms ease;display:none;">
+            <!-- 1. Global Full-Screen Background -->
+            <div class="auth-global-bg">
+                <div class="auth-nebula-bg"></div>
+                <div class="auth-stars"></div>
+                <div class="auth-glow-orb orb-1"></div>
+                <div class="auth-glow-orb orb-2"></div>
+                <div class="auth-glow-orb orb-3"></div>
+                <div class="auth-noise-overlay"></div>
+            </div>
+
+            <!-- 2. Transparent Split Layout overlaying the background -->
+            <div class="auth-split-layout" id="auth-split-layout" style="opacity:0;transition:opacity 400ms ease;display:none;">
                 
-                <!-- Left Pane: Space Illustration -->
-                <div class="ag-illustration-pane">
-                    <!-- CSS art elements -->
-                    <div class="ag-planet ag-planet-cyan"></div>
-                    <div class="ag-planet ag-planet-purple"></div>
-                    <div class="ag-stars"></div>
-                    
-                    <div class="ag-illustration-content">
-                        <!-- Top left logo -->
-                        <div class="ag-top-logo">
-                            <img src="assets/icon.png" alt="Aetheria AI" class="ag-small-logo">
+                <!-- Left Pane: Branding -->
+                <section class="auth-illustration-pane" aria-label="Aetheria AI">
+                    <div class="auth-branding">
+                        <div class="auth-top-logo">
+                            <img src="assets/icon.png" alt="Aetheria AI" class="auth-small-logo">
                             <span>Aetheria AI</span>
                         </div>
+                        <h1 class="auth-hero-title">ELEVATE YOURSELF WITH<br><span class="auth-highlight">AETHERIA AI</span></h1>
+                    </div>
+                </section>
+
+                <!-- Right Pane: Glassmorphism Form -->
+                <section class="auth-form-pane" aria-label="Authentication">
+                    <div class="auth-glass-card" data-mode="login">
+                        <div class="auth-header">
+                            <h2 id="auth-dynamic-title">Welcome back</h2>
+                            <p id="auth-dynamic-subtitle">Access your workspace.</p>
+                        </div>
                         
-                        <h1 class="ag-hero-title">
-                            ELEVATE YOURSELF WITH<br>
-                            <span class="ag-highlight">AETHERIA AI</span>
-                        </h1>
-                    </div>
-                </div>
-
-                <!-- Right Pane: Forms -->
-                <div class="ag-form-pane">
-                    
-                    <!-- Dynamic Header -->
-                    <div class="ag-form-header">
-                        <h2 id="ag-dynamic-title">SIGN IN</h2>
-                        <p id="ag-dynamic-subtitle">Sign in with email address</p>
-                    </div>
-
-                    <!-- Tab switcher (Hidden but functional, or integrated into text) -->
-                    <!-- In the reference, there are no tabs, just a clean form. We can keep tabs small or use text toggles. Let's keep a subtle tab switcher to keep functionality intact. -->
-                    <div class="ag-tabs" role="tablist">
-                        <button class="ag-tab-btn active" role="tab" aria-selected="true"
-                                id="ag-tab-login" aria-controls="ag-panel-login">Sign in</button>
-                        <button class="ag-tab-btn" role="tab" aria-selected="false"
-                                id="ag-tab-signup" aria-controls="ag-panel-signup">Sign up</button>
-                    </div>
-
-                    <!-- ── Login form ──────────────────────────────────── -->
-                    <form class="ag-form-panel active" id="ag-panel-login" role="tabpanel"
-                          aria-labelledby="ag-tab-login" novalidate>
-
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="email" id="ag-login-email"
-                                       placeholder="Yourname@gmail.com" autocomplete="email" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                                    <polyline points="22,6 12,13 2,6"/>
-                                </svg>
-                            </div>
+                        <!-- Tab switcher (Hidden but functional) -->
+                        <div class="auth-tabs" role="tablist" style="display:none;">
+                            <button class="auth-tab-btn active" role="tab" aria-selected="true"
+                                    id="auth-tab-login" aria-controls="auth-panel-login">Sign in</button>
+                            <button class="auth-tab-btn" role="tab" aria-selected="false"
+                                    id="auth-tab-signup" aria-controls="auth-panel-signup">Sign up</button>
                         </div>
 
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="password" id="ag-login-password"
-                                       placeholder="Enter your password" autocomplete="current-password" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                </svg>
+                        <!-- ── Login form ──────────────────────────────────── -->
+                        <form class="auth-form-panel active" id="auth-panel-login" role="tabpanel" aria-labelledby="auth-tab-login" novalidate>
+                            <div class="auth-input-group">
+                                <label for="auth-login-email">Email</label>
+                                <input type="email" id="auth-login-email" placeholder="you@example.com" autocomplete="email" required>
                             </div>
-                        </div>
 
-                        <div class="ag-error" id="ag-login-error" role="alert"></div>
+                            <div class="auth-input-group">
+                                <label for="auth-login-password">Password</label>
+                                <input type="password" id="auth-login-password" placeholder="Enter your password" autocomplete="current-password" required>
+                            </div>
 
-                        <button type="submit" class="ag-submit-btn" id="ag-login-submit">
-                            Sign in
-                        </button>
+                            <div class="auth-error" id="auth-login-error" role="alert"></div>
 
-                        <div class="ag-divider"><span class="ag-divider-text">Or continue with</span></div>
-
-                        <div class="ag-social-row">
-                            <button type="button" class="ag-social-btn ag-google" id="ag-google-signin">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <button type="submit" class="auth-btn auth-btn-primary" id="auth-login-submit">Sign in</button>
+                            
+                            <div class="auth-divider">or continue with</div>
+                            <button type="button" class="auth-btn auth-btn-google" id="auth-google-signin">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
                                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                                 </svg>
-                                <span>Continue with Google</span>
+                                <span>Google</span>
                             </button>
-                        </div>
-                    </form>
+                        </form>
 
-                    <!-- ── Sign Up form ────────────────────────────────── -->
-                    <form class="ag-form-panel" id="ag-panel-signup" role="tabpanel"
-                          aria-labelledby="ag-tab-signup" novalidate>
-
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="text" id="ag-signup-name"
-                                       placeholder="Your full name" autocomplete="name" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                                    <circle cx="12" cy="7" r="4"/>
-                                </svg>
+                        <!-- ── Sign Up form ────────────────────────────────── -->
+                        <form class="auth-form-panel" id="auth-panel-signup" role="tabpanel" aria-labelledby="auth-tab-signup" novalidate>
+                            <div class="auth-input-group">
+                                <label for="auth-signup-name">Full Name</label>
+                                <input type="text" id="auth-signup-name" placeholder="Your full name" autocomplete="name" required>
                             </div>
-                        </div>
 
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="email" id="ag-signup-email"
-                                       placeholder="Yourname@gmail.com" autocomplete="email" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                                    <polyline points="22,6 12,13 2,6"/>
-                                </svg>
+                            <div class="auth-input-group">
+                                <label for="auth-signup-email">Email</label>
+                                <input type="email" id="auth-signup-email" placeholder="you@example.com" autocomplete="email" required>
                             </div>
-                        </div>
 
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="tel" id="ag-signup-phone"
-                                       placeholder="+91 98765 43210" autocomplete="tel" inputmode="tel" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.91.33 1.8.62 2.65a2 2 0 0 1-.45 2.11L8.09 9.67a16 16 0 0 0 6.24 6.24l1.19-1.19a2 2 0 0 1 2.11-.45c.85.29 1.74.5 2.65.62A2 2 0 0 1 22 16.92z"/>
-                                </svg>
+                            <div class="auth-input-group">
+                                <label for="auth-signup-phone">Mobile Number</label>
+                                <input type="tel" id="auth-signup-phone" placeholder="+91 98765 43210" autocomplete="tel" inputmode="tel" required>
                             </div>
-                        </div>
 
-                        <div class="ag-field">
-                            <div class="ag-input-wrap">
-                                <input class="ag-input" type="password" id="ag-signup-password"
-                                       placeholder="Min. 6 characters" autocomplete="new-password" required>
-                                <svg class="ag-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                </svg>
+                            <div class="auth-input-group">
+                                <label for="auth-signup-password">Password</label>
+                                <input type="password" id="auth-signup-password" placeholder="Min. 6 characters" autocomplete="new-password" required>
                             </div>
+
+                            <div class="auth-error" id="auth-signup-error" role="alert"></div>
+
+                            <button type="submit" class="auth-btn auth-btn-primary" id="auth-signup-submit">Sign up</button>
+                        </form>
+
+                        <div class="auth-footer" id="auth-login-footer">
+                            <span>Don't have an account?</span>
+                            <button type="button" onclick="document.getElementById('auth-tab-signup').click()">Sign up</button>
                         </div>
-
-                        <div class="ag-error" id="ag-signup-error" role="alert"></div>
-
-                        <button type="submit" class="ag-submit-btn" id="ag-signup-submit">
-                            Sign up
-                        </button>
-                    </form>
-
-                    <!-- Footer note -->
-                    <div class="ag-footer-note" id="ag-login-footer">
-                        Don't have an account? <span onclick="document.getElementById('ag-tab-signup').click()">Sign Up</span>
                     </div>
-                </div>
+                </section>
             </div>
         `;
         return el;
@@ -223,8 +164,8 @@
     }
 
     function _clearErrors() {
-        _setError('ag-login-error', '');
-        _setError('ag-signup-error', '');
+        _setError('auth-login-error', '');
+        _setError('auth-signup-error', '');
     }
 
     function _getFocusableGateElements() {
@@ -232,8 +173,8 @@
         return Array.from(
             _gateEl.querySelectorAll('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')
         ).filter((el) => {
-            if (el.closest('.ag-checking-state:not(.hidden)')) return false;
-            if (el.closest('.ag-form-panel:not(.active)')) return false;
+            if (el.closest('.auth-checking-state:not(.hidden)')) return false;
+            if (el.closest('.auth-form-panel:not(.active)')) return false;
             return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
         });
     }
@@ -243,13 +184,13 @@
         _activeTab = tab;
         _clearErrors();
 
-        const loginPanel  = document.getElementById('ag-panel-login');
-        const signupPanel = document.getElementById('ag-panel-signup');
-        const loginTab    = document.getElementById('ag-tab-login');
-        const signupTab   = document.getElementById('ag-tab-signup');
+        const loginPanel  = document.getElementById('auth-panel-login');
+        const signupPanel = document.getElementById('auth-panel-signup');
+        const loginTab    = document.getElementById('auth-tab-login');
+        const signupTab   = document.getElementById('auth-tab-signup');
         
-        const titleEl     = document.getElementById('ag-dynamic-title');
-        const footerEl    = document.getElementById('ag-login-footer');
+        const titleEl     = document.getElementById('auth-dynamic-title');
+        const footerEl    = document.getElementById('auth-login-footer');
 
         const isLogin = (tab === 'login');
 
@@ -261,19 +202,19 @@
         signupTab?.setAttribute('aria-selected', String(!isLogin));
         
         if (titleEl && footerEl) {
-            titleEl.textContent = isLogin ? 'SIGN IN' : 'SIGN UP';
+            titleEl.textContent = isLogin ? 'Welcome back' : 'Create Account';
             if (isLogin) {
-                footerEl.innerHTML = `Don't have an account? <span onclick="document.getElementById('ag-tab-signup').click()">Sign Up</span>`;
+                footerEl.innerHTML = `<span>Don't have an account?</span> <button type="button" onclick="document.getElementById('auth-tab-signup').click()">Sign up</button>`;
             } else {
-                footerEl.innerHTML = `Already have an account? <span onclick="document.getElementById('ag-tab-login').click()">Sign In</span>`;
+                footerEl.innerHTML = `<span>Already have an account?</span> <button type="button" onclick="document.getElementById('auth-tab-login').click()">Sign in</button>`;
             }
         }
 
         // Focus first input of the active form
         setTimeout(() => {
             const firstInput = document.querySelector(
-                isLogin ? '#ag-panel-login input:first-of-type'
-                        : '#ag-panel-signup input:first-of-type'
+                isLogin ? '#auth-panel-login input:first-of-type'
+                        : '#auth-panel-signup input:first-of-type'
             );
             firstInput?.focus();
         }, 80);
@@ -328,8 +269,8 @@
         }
 
         // Not authenticated — reveal the glass card
-        const checkingEl = document.getElementById('ag-checking');
-        const formPanel  = document.getElementById('ag-form-panel');
+        const checkingEl = document.getElementById('auth-checking');
+        const formPanel  = document.getElementById('auth-split-layout');
 
         if (checkingEl) {
             checkingEl.style.opacity = '0';
@@ -356,30 +297,30 @@
         if (_isSubmitting) return;
         _clearErrors();
 
-        const email    = document.getElementById('ag-login-email')?.value?.trim();
-        const password = document.getElementById('ag-login-password')?.value;
+        const email    = document.getElementById('auth-login-email')?.value?.trim();
+        const password = document.getElementById('auth-login-password')?.value;
 
         if (!email || !password) {
-            _setError('ag-login-error', 'Please enter both email and password.');
+            _setError('auth-login-error', 'Please enter both email and password.');
             return;
         }
 
         _isSubmitting = true;
-        _setLoading('ag-login-submit', true, 'Signing in…');
+        _setLoading('auth-login-submit', true, 'Signing in…');
 
         try {
             const result = await _authService.signIn(email, password);
             if (result.success) {
                 _dismiss();
             } else {
-                _setError('ag-login-error', result.error || 'Login failed. Please try again.');
+                _setError('auth-login-error', result.error || 'Login failed. Please try again.');
             }
         } catch (err) {
-            _setError('ag-login-error', 'An unexpected error occurred. Please try again.');
+            _setError('auth-login-error', 'An unexpected error occurred. Please try again.');
             console.error('[AuthGate] Login error:', err);
         } finally {
             _isSubmitting = false;
-            _setLoading('ag-login-submit', false);
+            _setLoading('auth-login-submit', false);
         }
     }
 
@@ -389,50 +330,50 @@
         if (_isSubmitting) return;
         _clearErrors();
 
-        const name     = document.getElementById('ag-signup-name')?.value?.trim();
-        const email    = document.getElementById('ag-signup-email')?.value?.trim();
-        const phone    = document.getElementById('ag-signup-phone')?.value?.trim();
-        const password = document.getElementById('ag-signup-password')?.value;
+        const name     = document.getElementById('auth-signup-name')?.value?.trim();
+        const email    = document.getElementById('auth-signup-email')?.value?.trim();
+        const phone    = document.getElementById('auth-signup-phone')?.value?.trim();
+        const password = document.getElementById('auth-signup-password')?.value;
 
         if (!name || !email || !phone || !password) {
-            _setError('ag-signup-error', 'All fields are required.');
+            _setError('auth-signup-error', 'All fields are required.');
             return;
         }
         if (!/^\+[1-9]\d{7,14}$/.test(phone.replace(/[\s().-]/g, ''))) {
-            _setError('ag-signup-error', 'Enter a valid mobile number with country code, for example +919876543210.');
+            _setError('auth-signup-error', 'Enter a valid mobile number with country code, for example +919876543210.');
             return;
         }
         if (password.length < 6) {
-            _setError('ag-signup-error', 'Password must be at least 6 characters.');
+            _setError('auth-signup-error', 'Password must be at least 6 characters.');
             return;
         }
 
         _isSubmitting = true;
-        _setLoading('ag-signup-submit', true, 'Creating account…');
+        _setLoading('auth-signup-submit', true, 'Creating account…');
 
         try {
             const result = await _authService.signUp(email, password, name, phone);
             if (result.success) {
-                _setError('ag-signup-error', '');
+                _setError('auth-signup-error', '');
                 // Show a soft success message and switch to login
-                _setError('ag-login-error', '');
+                _setError('auth-login-error', '');
                 _switchTab('login');
                 // Display success as info in login panel
-                const loginErrEl = document.getElementById('ag-login-error');
+                const loginErrEl = document.getElementById('auth-login-error');
                 if (loginErrEl) {
                     loginErrEl.textContent = '✓ Account created! Check your email to verify, then log in.';
                     loginErrEl.style.color = '#34d399';
                     loginErrEl.classList.add('visible');
                 }
             } else {
-                _setError('ag-signup-error', result.error || 'Sign up failed. Please try again.');
+                _setError('auth-signup-error', result.error || 'Sign up failed. Please try again.');
             }
         } catch (err) {
-            _setError('ag-signup-error', 'An unexpected error occurred. Please try again.');
+            _setError('auth-signup-error', 'An unexpected error occurred. Please try again.');
             console.error('[AuthGate] Signup error:', err);
         } finally {
             _isSubmitting = false;
-            _setLoading('ag-signup-submit', false);
+            _setLoading('auth-signup-submit', false);
         }
     }
 
@@ -449,10 +390,10 @@
                 // The auth-state-changed IPC event will fire from main.js
                 // when the user completes the OAuth flow. We listen for it here too.
             } else {
-                _setError('ag-login-error', result.error || 'Could not start Google Sign-In.');
+                _setError('auth-login-error', result.error || 'Could not start Google Sign-In.');
             }
         } catch (err) {
-            _setError('ag-login-error', 'Google Sign-In failed. Please try again.');
+            _setError('auth-login-error', 'Google Sign-In failed. Please try again.');
             console.error('[AuthGate] Google sign-in error:', err);
         } finally {
             _isSubmitting = false;
@@ -481,17 +422,17 @@
     // ─── Bind all events ─────────────────────────────────────────────────
     function _bindEvents() {
         // Tab buttons
-        document.getElementById('ag-tab-login')?.addEventListener('click', () => _switchTab('login'));
-        document.getElementById('ag-tab-signup')?.addEventListener('click', () => _switchTab('signup'));
+        document.getElementById('auth-tab-login')?.addEventListener('click', () => _switchTab('login'));
+        document.getElementById('auth-tab-signup')?.addEventListener('click', () => _switchTab('signup'));
 
         // Login form
-        document.getElementById('ag-panel-login')?.addEventListener('submit', _handleLogin);
+        document.getElementById('auth-panel-login')?.addEventListener('submit', _handleLogin);
 
         // Signup form
-        document.getElementById('ag-panel-signup')?.addEventListener('submit', _handleSignup);
+        document.getElementById('auth-panel-signup')?.addEventListener('submit', _handleSignup);
 
         // Google btn
-        document.getElementById('ag-google-signin')?.addEventListener('click', _handleGoogleSignIn);
+        document.getElementById('auth-google-signin')?.addEventListener('click', _handleGoogleSignIn);
 
         // Listen for auth change to auto-dismiss (e.g. via OAuth flow)
         _authService.onAuthChange((user) => {
@@ -574,8 +515,8 @@
         _bindEvents();
 
         // Show form panel directly (we know the user is logged out)
-        const checkingEl = document.getElementById('ag-checking');
-        const formPanel  = document.getElementById('ag-form-panel');
+        const checkingEl = document.getElementById('auth-checking');
+        const formPanel  = document.getElementById('auth-split-layout');
         if (checkingEl) {
             checkingEl.style.opacity = '0';
             checkingEl.style.pointerEvents = 'none';
