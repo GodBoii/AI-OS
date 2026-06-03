@@ -79,6 +79,10 @@ class PythonBridge {
             this.sendMessage(data);
         });
 
+        ipcMain.on('plan-request', (event, data) => {
+            this.sendPlanRequest(data);
+        });
+
         ipcMain.on('terminate-session', (event, data) => {
             this.sendMessage({
                 type: 'terminate_session',
@@ -302,6 +306,10 @@ class PythonBridge {
             // Also forward to renderer for optional in-app handling
             this._sendToRenderer('run-completed', data);
         });
+
+        this.socket.on('plan_response', (data) => {
+            this._sendToRenderer('plan-response', data);
+        });
     }
 
     /**
@@ -395,6 +403,31 @@ class PythonBridge {
             console.error('Error sending message:', error);
             this._sendToRenderer('socket-error', {
                 message: 'Error sending message: ' + error.message
+            });
+        }
+    }
+
+    sendPlanRequest(payload) {
+        if (!this.socket || !this.socket.connected) {
+            console.error('Socket not connected');
+            this._sendToRenderer('plan-response', {
+                success: false,
+                requestId: payload?.requestId,
+                error: 'Cannot generate plan, socket is not connected'
+            });
+            return;
+        }
+        try {
+            if (typeof payload === 'object' && payload !== null) {
+                payload.deviceType = 'desktop';
+            }
+            this.socket.emit('plan_request', JSON.stringify(payload || {}));
+        } catch (error) {
+            console.error('Error sending plan request:', error);
+            this._sendToRenderer('plan-response', {
+                success: false,
+                requestId: payload?.requestId,
+                error: 'Error sending plan request: ' + error.message
             });
         }
     }

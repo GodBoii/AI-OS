@@ -26,6 +26,7 @@ from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
+from plan_agent import stream_plan
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
@@ -111,6 +112,33 @@ def _sanitize_tool_config_for_user(config_data: Dict[str, Any], user_id: str) ->
             sanitized["enable_composio_whatsapp"] = False
 
     return sanitized
+
+
+def _sanitize_plan_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Plan Mode is read-only and must not touch integration/database state.
+
+    Keep only client-provided boolean capability hints so the plan agent can
+    reason about likely routing without querying user_integrations or loading
+    any database-backed toolkits.
+    """
+    allowed_flags = {
+        "internet_search",
+        "coding_assistant",
+        "enable_github",
+        "enable_vercel",
+        "enable_supabase",
+        "enable_google_email",
+        "enable_google_drive",
+        "enable_google_sheets",
+        "enable_composio_whatsapp",
+        "enable_computer_control",
+    }
+    return {
+        key: bool(value)
+        for key, value in (config_data or {}).items()
+        if key in allowed_flags and isinstance(value, bool)
+    }
 
 
 # FUNCTION DESCRIPTION:
@@ -425,6 +453,114 @@ def handle_mobile_command_result(data: Dict[str, Any]):
             logger.error(f"Failed to publish mobile result to Redis for {request_id}: {e}")
     else:
         logger.warning("Received mobile command result with no request_id.")
+
+
+@socketio.on("plan_request")
+def on_plan_request(data: str):
+    """Generate an editable plan-mode prompt without starting the main llm_os run."""
+    sid = request.sid
+    request_id = None
+    try:
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict):
+            data = {}
+
+        access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
+        request_id = data.get("requestId") or str(uuid.uuid4())
+        message_id = data.get("messageId")
+        conversation_id = data.get("conversationId")
+        raw_message = str(data.get("message") or "").strip()
+
+        if not access_token:
+            return socketio.emit(
+                "plan_response",
+                {"success": False, "requestId": request_id, "messageId": message_id, "error": "Authentication token is missing."},
+                room=sid,
+            )
+        if not raw_message and not data.get("files") and not data.get("selected_sessions"):
+            return socketio.emit(
+                "plan_response",
+                {"success": False, "requestId": request_id, "messageId": message_id, "error": "Plan mode needs a request, file, or selected context."},
+                room=sid,
+            )
+
+        user = supabase_client.auth.get_user(jwt=access_token).user
+        if not user:
+            raise AuthApiError("User not found for token.", 401)
+
+        if conversation_id:
+            join_room(f"conv:{conversation_id}")
+
+        incoming_config = _sanitize_plan_config(dict(data.get("config", {}) or {}))
+
+        common_payload = {
+            "success": True,
+            "requestId": request_id,
+            "messageId": message_id,
+            "conversationId": conversation_id,
+            "model": "mimo-v2.5-pro",
+        }
+        for event in stream_plan(
+            message=raw_message,
+            config=incoming_config,
+            files=data.get("files", []),
+            selected_sessions=data.get("selected_sessions", []),
+            workspace_context=data.get("workspace_context", {}),
+            debug_mode=True,
+        ):
+            event_type = event.get("type")
+            if event_type == "content":
+                socketio.emit(
+                    "plan_response",
+                    {
+                        **common_payload,
+                        "streaming": True,
+                        "content": event.get("content", ""),
+                        "agent_name": event.get("agent_name", "plan_agent"),
+                    },
+                    room=sid,
+                )
+            elif event_type == "reasoning":
+                socketio.emit(
+                    "plan_response",
+                    {
+                        **common_payload,
+                        "streaming": True,
+                        "reasoning_content": event.get("content", ""),
+                        "agent_name": event.get("agent_name", "plan_agent"),
+                    },
+                    room=sid,
+                )
+            elif event_type in ("tool_start", "tool_end"):
+                socketio.emit(
+                    "plan_response",
+                    {
+                        **common_payload,
+                        "streaming": True,
+                        "step_type": event_type,
+                        "name": event.get("name"),
+                        "agent_name": event.get("agent_name", "plan_agent"),
+                        "tool": event.get("tool"),
+                    },
+                    room=sid,
+                )
+            elif event_type == "done":
+                socketio.emit(
+                    "plan_response",
+                    {
+                        **common_payload,
+                        "done": True,
+                        "plan": event.get("plan", ""),
+                    },
+                    room=sid,
+                )
+    except AuthApiError as e:
+        logger.error("Invalid token for plan request SID %s: %s", sid, e.message)
+        socketio.emit("plan_response", {"success": False, "requestId": request_id, "messageId": locals().get("message_id"), "error": "Your session has expired. Please log in again."}, room=sid)
+    except Exception as e:
+        logger.error("Error generating plan: %s\n%s", e, traceback.format_exc())
+        socketio.emit("plan_response", {"success": False, "requestId": request_id, "messageId": locals().get("message_id"), "error": "Plan generation failed. Please try again."}, room=sid)
 
 
 # FUNCTION DESCRIPTION:
