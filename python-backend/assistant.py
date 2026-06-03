@@ -135,7 +135,7 @@ def get_llm_os(
         members.append(
             Agent(
                 name="assistant",
-                model=get_mimo_model("mimo-v2.5"),
+                model=get_mimo_model("mimo-v2.5-pro"),
                 role=(
                     "Platform operations assistant for GitHub, Vercel, and Supabase. "
                     "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
