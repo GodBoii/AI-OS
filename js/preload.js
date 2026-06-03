@@ -11,6 +11,7 @@ const validSendChannels = [
     'close-window',
     'open-webview',
     'send-message',
+    'plan-request',
     'webview-navigate',
     'close-webview',
     'resize-webview',
@@ -39,6 +40,7 @@ const validSendChannels = [
 
 const validReceiveChannels = [
     'chat-response',
+    'plan-response',
     'socket-error',
     'socket-status',
     'socket-connection-status',
