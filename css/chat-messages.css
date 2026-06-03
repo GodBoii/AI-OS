@@ -1811,3 +1811,100 @@
     margin-top: 4px;
 }
 
+.plan-output-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(var(--accent-color-rgb), 0.22);
+    border-radius: 14px;
+    background:
+        linear-gradient(135deg, rgba(var(--accent-color-rgb), 0.08), transparent 34%),
+        var(--window-bg);
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.10);
+}
+
+.plan-output-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-120%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    animation: planCardShimmer 2.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.plan-output-card.streaming .plan-output-actions {
+    display: none;
+}
+
+.plan-output-header,
+.plan-output-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+}
+
+.plan-output-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.plan-output-body {
+    position: relative;
+    padding: 0 14px 14px;
+}
+
+.plan-output-content {
+    color: var(--text-color);
+}
+
+.plan-output-editor {
+    width: 100%;
+    min-height: 260px;
+    resize: vertical;
+    border: 1px solid var(--border-secondary);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--window-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.plan-output-editor.hidden,
+.plan-output-content.hidden {
+    display: none;
+}
+
+.plan-output-edit,
+.plan-output-submit {
+    border: none;
+    border-radius: 10px;
+    min-height: 36px;
+    padding: 0 14px;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.plan-output-edit {
+    background: var(--hover-bg);
+    color: var(--text-color);
+}
+
+.plan-output-submit {
+    background: var(--accent-color);
+    color: #ffffff;
+}
+
+@keyframes planCardShimmer {
+    0% { transform: translateX(-120%); }
+    48%, 100% { transform: translateX(120%); }
+}
+

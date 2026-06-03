@@ -23,6 +23,7 @@
 .attach-btn,
 .tool-btn,
 .shuffle-btn,
+.plan-mode-btn,
 .mic-btn {
     background-color: transparent;
     border: none;
@@ -45,6 +46,7 @@
 .attach-btn:hover,
 .tool-btn:hover,
 .shuffle-btn:hover,
+.plan-mode-btn:hover,
 .mic-btn:hover {
     color: var(--accent-color);
     background-color: var(--accent-muted);
@@ -55,10 +57,24 @@
 }
 
 .tool-btn.active,
-.shuffle-btn.active {
+.shuffle-btn.active,
+.plan-mode-btn.active {
     background: var(--accent-color);
     border-color: var(--accent-color);
     color: #ffffff;
+}
+
+.plan-mode-btn {
+    width: auto;
+    min-width: 72px;
+    padding: 0 12px;
+    gap: 7px;
+}
+
+.plan-mode-label {
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1;
 }
 
 /* Shuffle button: When menu is open, icon turns black on white background */
