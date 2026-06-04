@@ -13,9 +13,13 @@ class DesignModeController {
         this.mode = 'edit';
         this.comments = [];
         this.commentCounter = 0;
+        this.pendingCommentTarget = null;
+        this.commentSessions = new Map();
         this.helperStyleId = 'aetheria-design-helper-style';
         this.helperBaseId = 'aetheria-design-helper-base';
+        this.commentLayerId = 'aetheria-design-comment-layer';
         this.boundFrameLoad = () => this.handleFrameLoad();
+        this.boundUpdateCommentPins = () => this.renderCommentPins();
         this.allowedTextTags = new Set(['P', 'SPAN', 'A', 'BUTTON', 'LABEL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
         this.isBound = false;
         this.domObserver = null;
@@ -63,6 +67,13 @@ class DesignModeController {
             commentTab: document.getElementById('design-mode-comment-tab'),
             editControls: document.getElementById('design-mode-edit-controls'),
             commentPanel: document.getElementById('design-mode-comment-panel'),
+            commentComposer: document.getElementById('design-mode-comment-composer'),
+            commentTargetLabel: document.getElementById('design-mode-comment-target-label'),
+            commentInput: document.getElementById('design-mode-comment-input'),
+            commentAddBtn: document.getElementById('design-mode-comment-add-btn'),
+            commentCancelBtn: document.getElementById('design-mode-comment-cancel-btn'),
+            commentsSendBtn: document.getElementById('design-mode-comments-send-btn'),
+            commentsClearBtn: document.getElementById('design-mode-comments-clear-btn'),
             commentsEmpty: document.getElementById('design-mode-comments-empty'),
             commentsList: document.getElementById('design-mode-comments-list'),
             textInput: document.getElementById('design-mode-text-input'),
@@ -104,6 +115,10 @@ class DesignModeController {
         this.el.doneBtn?.addEventListener('click', () => this.saveChanges());
         this.el.editTab?.addEventListener('click', () => this.setMode('edit'));
         this.el.commentTab?.addEventListener('click', () => this.setMode('comment'));
+        this.el.commentAddBtn?.addEventListener('click', () => this.addPendingComment());
+        this.el.commentCancelBtn?.addEventListener('click', () => this.clearPendingComment());
+        this.el.commentsSendBtn?.addEventListener('click', () => this.sendCommentsToAI());
+        this.el.commentsClearBtn?.addEventListener('click', () => this.clearComments());
 
         this.el.textInput?.addEventListener('input', () => {
             if (!this.selectedElement || !this.canEditText(this.selectedElement)) return;
@@ -357,6 +372,7 @@ class DesignModeController {
         }
         this.selectedElement = null;
         this.hoveredElement = null;
+        this.clearPendingComment();
 
         this.el.editTab?.classList.toggle('active', isEdit);
         this.el.commentTab?.classList.toggle('active', !isEdit);
@@ -373,6 +389,7 @@ class DesignModeController {
 
         this.resetInspector();
         this.renderComments();
+        this.renderCommentPins();
     }
 
     watchForDesignUi() {
@@ -470,8 +487,7 @@ class DesignModeController {
             this.unsavedChanges = false;
             this.selectedElement = null;
             this.hoveredElement = null;
-            this.comments = [];
-            this.commentCounter = 0;
+            this.restoreCommentSession();
             this.el.overlay.classList.remove('hidden');
             this.el.overlay.setAttribute('aria-hidden', 'false');
             document.body.classList.add('design-mode-active');
@@ -498,9 +514,8 @@ class DesignModeController {
         this.previewWindow = null;
         this.selectedElement = null;
         this.hoveredElement = null;
+        this.clearPendingComment();
         this.unsavedChanges = false;
-        this.comments = [];
-        this.commentCounter = 0;
         this.el.overlay.classList.add('hidden');
         this.el.overlay.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('design-mode-active');
@@ -516,6 +531,7 @@ class DesignModeController {
             this.unsavedChanges = false;
             this.selectedElement = null;
             this.hoveredElement = null;
+            this.restoreCommentSession();
             await this.loadPreviewDocument(this.currentHtml);
             this.updateStatus('Reloaded latest local files into Design Mode.');
         } catch (error) {
@@ -575,6 +591,22 @@ class DesignModeController {
         style.textContent = `
             .aetheria-design-hover { outline: 2px solid rgba(59, 130, 246, 0.75) !important; cursor: pointer !important; }
             .aetheria-design-selected { outline: 2px solid rgba(236, 72, 153, 0.95) !important; box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.2) !important; }
+            .aetheria-design-comment-pin {
+                position: absolute !important;
+                z-index: 2147483647 !important;
+                width: 24px !important;
+                height: 24px !important;
+                border: 2px solid #fff !important;
+                border-radius: 999px !important;
+                background: #ec4899 !important;
+                color: #fff !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                font: 700 11px/1 Arial, sans-serif !important;
+                box-shadow: 0 8px 20px rgba(15, 23, 42, 0.32) !important;
+                cursor: pointer !important;
+            }
             html, body { min-height: 100%; }
         `;
         doc.head.appendChild(style);
@@ -597,6 +629,8 @@ class DesignModeController {
         if (this.handlePreviewSubmit) {
             this.previewDocument.removeEventListener('submit', this.handlePreviewSubmit, true);
         }
+        this.previewWindow?.removeEventListener?.('scroll', this.boundUpdateCommentPins, true);
+        this.previewWindow?.removeEventListener?.('resize', this.boundUpdateCommentPins);
 
         this.handlePreviewMouseOver = (event) => {
             const target = this.findEditableTarget(event.target);
@@ -627,6 +661,9 @@ class DesignModeController {
         this.previewDocument.addEventListener('mouseout', this.handlePreviewMouseOut, true);
         this.previewDocument.addEventListener('click', this.handlePreviewClick, true);
         this.previewDocument.addEventListener('submit', this.handlePreviewSubmit, true);
+        this.previewWindow?.addEventListener?.('scroll', this.boundUpdateCommentPins, true);
+        this.previewWindow?.addEventListener?.('resize', this.boundUpdateCommentPins);
+        this.renderCommentPins();
     }
 
     teardownPreviewHelpers() {
@@ -643,6 +680,8 @@ class DesignModeController {
         if (this.handlePreviewSubmit) {
             this.previewDocument.removeEventListener('submit', this.handlePreviewSubmit, true);
         }
+        this.previewWindow?.removeEventListener?.('scroll', this.boundUpdateCommentPins, true);
+        this.previewWindow?.removeEventListener?.('resize', this.boundUpdateCommentPins);
         if (this.hoveredElement) this.hoveredElement.classList.remove('aetheria-design-hover');
         if (this.selectedElement) this.selectedElement.classList.remove('aetheria-design-selected');
         this.hoveredElement = null;
@@ -652,10 +691,12 @@ class DesignModeController {
         helperStyle?.remove();
         const helperBase = this.previewDocument.getElementById(this.helperBaseId);
         helperBase?.remove();
+        this.removeCommentPins();
     }
 
     findEditableTarget(node) {
         if (!node || !node.tagName) return null;
+        if (node.closest?.('.aetheria-design-comment-pin')) return null;
         let current = node;
         while (current && current !== this.previewDocument.body) {
             const tag = String(current.tagName || '').toUpperCase();
@@ -706,27 +747,76 @@ class DesignModeController {
     }
 
     addCommentForTarget(element) {
+        this.beginCommentForTarget(element);
+    }
+
+    beginCommentForTarget(element) {
+        if (!element) return;
         const targetLabel = this.describeElement(element);
-        const response = window.prompt('Add a comment for this element (for AI follow-up):', `Note for ${targetLabel}: `);
-        if (response === null) return;
-        const note = String(response || '').trim();
+        this.pendingCommentTarget = {
+            element,
+            target: targetLabel,
+            selector: this.buildSelectorForElement(element),
+            textSnippet: this.getElementTextSnippet(element),
+        };
+        if (this.el.commentTargetLabel) {
+            this.el.commentTargetLabel.textContent = targetLabel;
+            this.el.commentTargetLabel.title = this.pendingCommentTarget.selector || targetLabel;
+        }
+        this.el.commentComposer?.classList.remove('hidden');
+        if (this.el.commentInput) {
+            this.el.commentInput.value = '';
+            this.el.commentInput.focus();
+        }
+        this.updateStatus(`Add feedback for ${targetLabel}.`);
+    }
+
+    addPendingComment() {
+        if (!this.pendingCommentTarget) {
+            this.updateStatus('Click an element in the preview before adding a comment.');
+            return;
+        }
+
+        const note = String(this.el.commentInput?.value || '').trim();
         if (!note) return;
 
         this.commentCounter += 1;
         this.comments.push({
             id: this.commentCounter,
-            target: targetLabel,
+            target: this.pendingCommentTarget.target,
+            selector: this.pendingCommentTarget.selector,
+            textSnippet: this.pendingCommentTarget.textSnippet,
             note,
+            createdAt: new Date().toISOString(),
+            sent: false,
         });
+        this.persistCommentSession();
+        this.clearPendingComment();
         this.renderComments();
-        this.updateStatus(`Comment saved for ${targetLabel}.`);
+        this.renderCommentPins();
+        this.updateStatus(`Comment saved for ${this.comments[this.comments.length - 1].target}.`);
+    }
+
+    clearPendingComment() {
+        this.pendingCommentTarget = null;
+        this.el?.commentComposer?.classList.add('hidden');
+        if (this.el?.commentTargetLabel) {
+            this.el.commentTargetLabel.textContent = 'No element selected';
+            this.el.commentTargetLabel.removeAttribute('title');
+        }
+        if (this.el?.commentInput) {
+            this.el.commentInput.value = '';
+        }
     }
 
     renderComments() {
         if (!this.el.commentsList || !this.el.commentsEmpty) return;
         this.el.commentsList.innerHTML = '';
+        const hasComments = this.comments.length > 0;
+        if (this.el.commentsSendBtn) this.el.commentsSendBtn.disabled = !hasComments;
+        if (this.el.commentsClearBtn) this.el.commentsClearBtn.disabled = !hasComments;
 
-        if (!this.comments.length) {
+        if (!hasComments) {
             this.el.commentsEmpty.style.display = 'block';
             return;
         }
@@ -735,14 +825,24 @@ class DesignModeController {
         this.comments.forEach((entry) => {
             const item = document.createElement('div');
             item.className = 'design-mode-comment-item';
+            item.dataset.commentId = String(entry.id);
 
             const target = document.createElement('div');
             target.className = 'design-mode-comment-target';
-            target.textContent = entry.target;
+            target.textContent = `#${entry.id} ${entry.target}`;
+            target.title = entry.selector || entry.target;
 
             const text = document.createElement('div');
             text.className = 'design-mode-comment-text';
             text.textContent = entry.note;
+
+            item.appendChild(target);
+            if (entry.textSnippet) {
+                const snippet = document.createElement('div');
+                snippet.className = 'design-mode-comment-snippet';
+                snippet.textContent = entry.textSnippet;
+                item.appendChild(snippet);
+            }
 
             const removeBtn = document.createElement('button');
             removeBtn.className = 'design-mode-comment-remove';
@@ -750,14 +850,140 @@ class DesignModeController {
             removeBtn.textContent = 'Remove';
             removeBtn.addEventListener('click', () => {
                 this.comments = this.comments.filter((itemEntry) => itemEntry.id !== entry.id);
+                this.persistCommentSession();
                 this.renderComments();
+                this.renderCommentPins();
             });
 
-            item.appendChild(target);
             item.appendChild(text);
             item.appendChild(removeBtn);
             this.el.commentsList.appendChild(item);
         });
+    }
+
+    clearComments() {
+        if (!this.comments.length) return;
+        const proceed = window.confirm('Clear all Design Mode comments for this preview?');
+        if (!proceed) return;
+        this.comments = [];
+        this.commentCounter = 0;
+        this.persistCommentSession();
+        this.clearPendingComment();
+        this.renderComments();
+        this.renderCommentPins();
+        this.updateStatus('Cleared Design Mode comments.');
+    }
+
+    async sendCommentsToAI() {
+        if (!this.comments.length) {
+            this.updateStatus('Add at least one comment before sending feedback to AI.');
+            return;
+        }
+        if (typeof window.projectWorkspace?.sendMessageToChat !== 'function') {
+            this.updateStatus('Project chat is not ready for AI follow-up.');
+            return;
+        }
+
+        const prompt = this.buildCommentPrompt();
+        if (this.el.commentsSendBtn) this.el.commentsSendBtn.disabled = true;
+        try {
+            await window.projectWorkspace.sendMessageToChat(prompt, false);
+            this.comments = this.comments.map((entry) => ({ ...entry, sent: true }));
+            this.persistCommentSession();
+            this.renderComments();
+            this.updateStatus('Sent Design Mode comments to AI.');
+            window.projectWorkspace?.setStatus?.('Design Mode comments sent to AI for implementation.');
+        } catch (error) {
+            this.updateStatus(`Could not send comments: ${error.message}`);
+        } finally {
+            if (this.el.commentsSendBtn) this.el.commentsSendBtn.disabled = !this.comments.length;
+        }
+    }
+
+    buildCommentPrompt() {
+        const project = this.snapshot?.activeProject || {};
+        const lines = [
+            'Design Mode feedback for the local project workspace.',
+            'Please inspect the relevant files, implement these design changes, and verify the result.',
+            '',
+            `Project: ${project.project_name || project.slug || 'Current project'}`,
+            `Local root: ${this.rootPath || 'unknown'}`,
+            `Primary file previewed: ${this.indexPath || 'index.html'}`,
+            '',
+            'Comments:',
+        ];
+
+        this.comments.forEach((entry) => {
+            lines.push(
+                `${entry.id}. Target: ${entry.target}`,
+                `   Selector: ${entry.selector || 'unavailable'}`,
+                `   Visible text: ${entry.textSnippet || '(none)'}`,
+                `   Request: ${entry.note}`
+            );
+        });
+
+        return lines.join('\n');
+    }
+
+    renderCommentPins() {
+        if (!this.previewDocument || !this.previewWindow) return;
+        this.removeCommentPins();
+        if (!this.comments.length) return;
+
+        const layer = this.previewDocument.createElement('div');
+        layer.id = this.commentLayerId;
+        layer.setAttribute('aria-hidden', 'true');
+        this.previewDocument.body?.appendChild(layer);
+
+        this.comments.forEach((entry) => {
+            const element = this.resolveCommentElement(entry);
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            if (!rect.width && !rect.height) return;
+
+            const pin = this.previewDocument.createElement('button');
+            pin.type = 'button';
+            pin.className = 'aetheria-design-comment-pin';
+            pin.textContent = String(entry.id);
+            pin.title = entry.note;
+            pin.style.left = `${Math.max(0, rect.left + this.previewWindow.scrollX - 12)}px`;
+            pin.style.top = `${Math.max(0, rect.top + this.previewWindow.scrollY - 12)}px`;
+            pin.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.highlightComment(entry.id);
+            });
+            layer.appendChild(pin);
+        });
+    }
+
+    removeCommentPins() {
+        this.previewDocument?.getElementById(this.commentLayerId)?.remove();
+    }
+
+    resolveCommentElement(entry) {
+        if (!this.previewDocument || !entry?.selector) return null;
+        try {
+            return this.previewDocument.querySelector(entry.selector);
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    highlightComment(commentId) {
+        const id = Number(commentId);
+        this.el.commentsList?.querySelectorAll('.design-mode-comment-item.is-focused').forEach((item) => {
+            item.classList.remove('is-focused');
+        });
+        const item = this.el.commentsList?.querySelector(`[data-comment-id="${id}"]`);
+        if (item) {
+            item.classList.add('is-focused');
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        const entry = this.comments.find((comment) => comment.id === id);
+        if (entry) {
+            this.updateStatus(`Comment #${id}: ${entry.target}`);
+        }
     }
 
     populateInspectorFromSelection() {
@@ -835,9 +1061,82 @@ class DesignModeController {
         if (!element) return 'unknown';
         const tag = String(element.tagName || '').toLowerCase();
         const idPart = element.id ? `#${element.id}` : '';
-        const classTokens = String(element.className || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+        const classTokens = String(element.className || '')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .filter((name) => !name.startsWith('aetheria-design-'))
+            .slice(0, 2);
         const classPart = classTokens.length ? `.${classTokens.join('.')}` : '';
         return `${tag}${idPart}${classPart}`;
+    }
+
+    getCommentSessionKey() {
+        return String(this.indexPath || this.rootPath || '__default__');
+    }
+
+    restoreCommentSession() {
+        const cached = this.commentSessions.get(this.getCommentSessionKey());
+        this.comments = Array.isArray(cached?.comments) ? cached.comments.map((entry) => ({ ...entry })) : [];
+        this.commentCounter = Number.isFinite(cached?.commentCounter)
+            ? cached.commentCounter
+            : this.comments.reduce((max, entry) => Math.max(max, Number(entry.id) || 0), 0);
+        this.clearPendingComment();
+        this.renderComments();
+    }
+
+    persistCommentSession() {
+        this.commentSessions.set(this.getCommentSessionKey(), {
+            comments: this.comments.map((entry) => ({ ...entry })),
+            commentCounter: this.commentCounter,
+        });
+    }
+
+    buildSelectorForElement(element) {
+        if (!element || !this.previewDocument) return '';
+        if (element.id) {
+            return `#${this.escapeSelectorToken(element.id)}`;
+        }
+
+        const parts = [];
+        let current = element;
+        while (current && current.nodeType === 1 && current !== this.previewDocument.body) {
+            const tag = String(current.tagName || '').toLowerCase();
+            if (!tag || tag === 'html') break;
+
+            const classNames = String(current.className || '')
+                .split(/\s+/)
+                .filter(Boolean)
+                .filter((name) => !name.startsWith('aetheria-design-'))
+                .slice(0, 2)
+                .map((name) => `.${this.escapeSelectorToken(name)}`)
+                .join('');
+            let part = `${tag}${classNames}`;
+
+            const parent = current.parentElement;
+            if (parent) {
+                const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+                if (siblings.length > 1) {
+                    part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
+                }
+            }
+
+            parts.unshift(part);
+            current = parent;
+        }
+
+        return parts.length ? parts.join(' > ') : this.describeElement(element);
+    }
+
+    escapeSelectorToken(token) {
+        const value = String(token || '');
+        if (window.CSS?.escape) return window.CSS.escape(value);
+        return value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
+    }
+
+    getElementTextSnippet(element) {
+        const text = String(element?.textContent || '').replace(/\s+/g, ' ').trim();
+        return text.length > 120 ? `${text.slice(0, 117)}...` : text;
     }
 
     canEditText(element) {
@@ -891,6 +1190,9 @@ class DesignModeController {
     markDirty(message) {
         this.unsavedChanges = true;
         this.updateStatus(message);
+        if (this.comments.length && this.previewWindow?.requestAnimationFrame) {
+            this.previewWindow.requestAnimationFrame(this.boundUpdateCommentPins);
+        }
     }
 
     updateStatus(message) {
@@ -911,6 +1213,7 @@ class DesignModeController {
 
         this.previewDocument.getElementById(this.helperStyleId)?.remove();
         this.previewDocument.getElementById(this.helperBaseId)?.remove();
+        this.removeCommentPins();
 
         return `<!DOCTYPE html>\n${this.previewDocument.documentElement.outerHTML}`;
     }

@@ -783,6 +783,104 @@ body.project-panel-open .design-mode-overlay {
     border: 1px solid var(--dm-border);
 }
 
+.design-mode-comment-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--dm-radius-md);
+    background: rgba(244, 114, 182, 0.08);
+    border: 1px solid rgba(244, 114, 182, 0.18);
+}
+
+.design-mode-comment-composer.hidden {
+    display: none;
+}
+
+.design-mode-comment-composer-target {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.design-mode-comment-composer-target span {
+    font-size: 0.66rem;
+    color: var(--dm-text-muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.design-mode-comment-composer-target strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--dm-accent);
+    font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
+    font-size: 0.74rem;
+}
+
+.design-mode-comment-input {
+    min-height: 82px;
+}
+
+.design-mode-comment-actions,
+.design-mode-comment-composer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.design-mode-comment-actions {
+    justify-content: space-between;
+}
+
+.design-mode-comment-primary-btn,
+.design-mode-comment-secondary-btn {
+    height: 30px;
+    border-radius: var(--dm-radius-sm);
+    padding: 0 11px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: var(--font-sans, 'Outfit', sans-serif);
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+}
+
+.design-mode-comment-primary-btn {
+    flex: 1;
+    background: rgba(244, 114, 182, 0.18);
+    border-color: rgba(244, 114, 182, 0.28);
+    color: #f9a8d4;
+}
+
+.design-mode-comment-primary-btn:hover:not(:disabled) {
+    background: rgba(244, 114, 182, 0.26);
+    border-color: rgba(244, 114, 182, 0.42);
+    color: #fce7f3;
+}
+
+.design-mode-comment-secondary-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: var(--dm-text-secondary);
+}
+
+.design-mode-comment-secondary-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--dm-text);
+}
+
+.design-mode-comment-primary-btn:disabled,
+.design-mode-comment-secondary-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .design-mode-comments-empty {
     font-size: 0.72rem;
     color: var(--dm-text-muted);
@@ -804,11 +902,16 @@ body.project-panel-open .design-mode-overlay {
     border: 1px solid var(--dm-border-strong);
     background: var(--dm-surface-2);
     padding: 10px 12px;
-    transition: border-color 0.18s ease;
+    transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .design-mode-comment-item:hover {
     border-color: rgba(255, 255, 255, 0.18);
+}
+
+.design-mode-comment-item.is-focused {
+    border-color: rgba(244, 114, 182, 0.55);
+    background: rgba(244, 114, 182, 0.10);
 }
 
 .design-mode-comment-target {
@@ -818,6 +921,16 @@ body.project-panel-open .design-mode-overlay {
     color: var(--dm-accent);
     margin-bottom: 5px;
     font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
+}
+
+.design-mode-comment-snippet {
+    margin-bottom: 7px;
+    color: var(--dm-text-muted);
+    font-size: 0.68rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .design-mode-comment-text {
@@ -1095,6 +1208,65 @@ body:not(.dark-mode) .design-mode-range-value {
 body:not(.dark-mode) .design-mode-color-input {
     background: rgba(15,23,42,0.04);
     border: none; /* Removed border */
+}
+
+body:not(.dark-mode) .design-mode-comment-hint,
+body:not(.dark-mode) .design-mode-comments-empty {
+    background: rgba(15, 23, 42, 0.035);
+    border-color: rgba(15, 23, 42, 0.08);
+    color: rgba(15, 23, 42, 0.58);
+}
+
+body:not(.dark-mode) .design-mode-comment-composer {
+    background: rgba(190, 24, 93, 0.07);
+    border-color: rgba(190, 24, 93, 0.16);
+}
+
+body:not(.dark-mode) .design-mode-comment-composer-target span,
+body:not(.dark-mode) .design-mode-comment-snippet {
+    color: rgba(15, 23, 42, 0.46);
+}
+
+body:not(.dark-mode) .design-mode-comment-composer-target strong,
+body:not(.dark-mode) .design-mode-comment-target {
+    color: #be185d;
+}
+
+body:not(.dark-mode) .design-mode-comment-primary-btn {
+    background: rgba(190, 24, 93, 0.12);
+    border-color: rgba(190, 24, 93, 0.22);
+    color: #be185d;
+}
+
+body:not(.dark-mode) .design-mode-comment-primary-btn:hover:not(:disabled) {
+    background: rgba(190, 24, 93, 0.18);
+    border-color: rgba(190, 24, 93, 0.34);
+    color: #9d174d;
+}
+
+body:not(.dark-mode) .design-mode-comment-secondary-btn {
+    background: rgba(15, 23, 42, 0.04);
+    border-color: rgba(15, 23, 42, 0.08);
+    color: rgba(15, 23, 42, 0.62);
+}
+
+body:not(.dark-mode) .design-mode-comment-secondary-btn:hover:not(:disabled) {
+    background: rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+}
+
+body:not(.dark-mode) .design-mode-comment-item {
+    background: rgba(15, 23, 42, 0.035);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+body:not(.dark-mode) .design-mode-comment-item.is-focused {
+    background: rgba(190, 24, 93, 0.08);
+    border-color: rgba(190, 24, 93, 0.32);
+}
+
+body:not(.dark-mode) .design-mode-comment-text {
+    color: rgba(15, 23, 42, 0.68);
 }
 
 /* Light mode scrollbar for inspector */
