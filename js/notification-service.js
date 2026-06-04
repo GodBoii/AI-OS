@@ -6,6 +6,8 @@ class NotificationService {
         this.maxVisible = 5;
         this.defaultDuration = 5000;
         this.container = null;
+        this.enabled = true;
+        this.soundEnabled = false;
         this.init();
     }
 
@@ -25,8 +27,15 @@ class NotificationService {
     }
 
     show(message, type = 'info', duration = this.defaultDuration) {
+        if (!this.enabled && type !== 'connection') {
+            console.log('[NotificationService] In-app notifications disabled, skipping:', message);
+            return null;
+        }
         const notification = this.createNotification(message, type, duration);
         this.addNotification(notification);
+        if (this.soundEnabled) {
+            this.playNotificationSound();
+        }
         return notification.id;
     }
 
@@ -210,6 +219,35 @@ class NotificationService {
 
     clear() {
         [...this.notifications].forEach(n => this.remove(n.id));
+    }
+
+    setEnabled(enabled) {
+        this.enabled = enabled;
+        console.log(`[NotificationService] In-app notifications ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    setSoundEnabled(enabled) {
+        this.soundEnabled = enabled;
+        console.log(`[NotificationService] Notification sounds ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    playNotificationSound() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            oscillator.frequency.setValueAtTime(1046, audioCtx.currentTime + 0.08);
+            gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.25);
+        } catch (e) {
+            // Silently fail — sound is a nice-to-have
+        }
     }
 }
 

@@ -12,6 +12,7 @@ class UpdateChecker {
         this.lastCheckTime = null;
         this.latestUpdateData = null; // Store latest update info
         this.updateAvailable = false;
+        this.autoCheckEnabled = true; // Controlled by settings
     }
 
     /**
@@ -19,10 +20,14 @@ class UpdateChecker {
      */
     init() {
         // Check on startup (after 10 seconds delay)
-        setTimeout(() => this.checkForUpdates(), 10000);
+        setTimeout(() => {
+            if (this.autoCheckEnabled) this.checkForUpdates();
+        }, 10000);
 
         // Check periodically
-        setInterval(() => this.checkForUpdates(), this.checkInterval);
+        setInterval(() => {
+            if (this.autoCheckEnabled) this.checkForUpdates();
+        }, this.checkInterval);
 
         // Setup UI event listeners
         this.setupUIListeners();
