@@ -274,6 +274,368 @@ class UIManager {
                 ipcRenderer.send('open-webview', event.target.href);
             }
         });
+
+        // --- Global Keyboard Shortcuts ---
+        this.setupKeyboardShortcuts();
+    }
+
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            const ctrl = e.ctrlKey || e.metaKey;
+            const shift = e.shiftKey;
+            const key = e.key.toLowerCase();
+
+            // Don't intercept when typing in input fields (unless it's a global shortcut)
+            const isInputFocused = document.activeElement &&
+                (document.activeElement.tagName === 'INPUT' ||
+                 document.activeElement.tagName === 'TEXTAREA' ||
+                 document.activeElement.isContentEditable);
+
+            // --- Ctrl+N: New Conversation ---
+            if (ctrl && !shift && key === 'n') {
+                e.preventDefault();
+                this.triggerNewConversation();
+                return;
+            }
+
+            // --- Ctrl+,: Toggle Settings ---
+            if (ctrl && !shift && key === ',') {
+                e.preventDefault();
+                this.triggerToggleSettings();
+                return;
+            }
+
+            // --- Ctrl+Shift+T: Toggle Theme ---
+            if (ctrl && shift && key === 't') {
+                e.preventDefault();
+                this.state.setState({ isDarkMode: !this.state.getState().isDarkMode });
+                return;
+            }
+
+            // --- Ctrl+L: Focus Chat Input ---
+            if (ctrl && !shift && key === 'l') {
+                e.preventDefault();
+                this.triggerFocusChatInput();
+                return;
+            }
+
+            // --- Ctrl+Shift+N: New Task ---
+            if (ctrl && shift && key === 'n') {
+                e.preventDefault();
+                this.triggerNewTask();
+                return;
+            }
+
+            // --- Ctrl+H: Toggle History Sidebar ---
+            if (ctrl && !shift && key === 'h') {
+                e.preventDefault();
+                this.triggerToggleHistory();
+                return;
+            }
+
+            // --- Ctrl+/: Show Shortcuts Overlay ---
+            if (ctrl && !shift && key === '/') {
+                e.preventDefault();
+                this.showShortcutsOverlay();
+                return;
+            }
+
+            // --- Ctrl+Shift+D: Toggle DevTools ---
+            if (ctrl && shift && key === 'd') {
+                e.preventDefault();
+                window.electron?.ipcRenderer?.send('toggle-devtools');
+                return;
+            }
+
+            // --- Ctrl+E: Export Conversation ---
+            if (ctrl && !shift && key === 'e') {
+                e.preventDefault();
+                this.triggerExportConversation();
+                return;
+            }
+
+            // --- Ctrl+M: Minimize Window ---
+            if (ctrl && !shift && key === 'm') {
+                e.preventDefault();
+                window.electron?.ipcRenderer?.send('minimize-window');
+                return;
+            }
+
+            // --- Escape: Close Active Panel ---
+            if (key === 'escape' && !ctrl && !shift) {
+                // Don't intercept if typing in an input
+                if (isInputFocused) return;
+                this.triggerCloseActivePanel();
+                return;
+            }
+        });
+    }
+
+    triggerNewConversation() {
+        // Generate a new conversation ID and switch to it
+        const newId = crypto.randomUUID ? crypto.randomUUID() : 
+            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        if (window.chatModule?.switchConversation) {
+            window.chatModule.switchConversation(newId);
+        }
+        // Also focus the input
+        this.triggerFocusChatInput();
+        if (window.notificationService) {
+            window.notificationService.show('New conversation started', 'info', 2000);
+        }
+    }
+
+    triggerToggleSettings() {
+        const s = this.state.getState();
+        if (s.isAIOSOpen) {
+            // If already open, check if on settings tab — if so, close; if not, switch to settings
+            const settingsTab = document.getElementById('settings-tab');
+            if (settingsTab && settingsTab.classList.contains('active')) {
+                this.state.setState({ isAIOSOpen: false });
+            } else if (window.AIOS?.switchTab) {
+                window.AIOS.switchTab('settings');
+            }
+        } else {
+            this.state.setState({ isAIOSOpen: true });
+            // Wait for panel to open, then switch to settings tab
+            setTimeout(() => {
+                if (window.AIOS?.switchTab) {
+                    window.AIOS.switchTab('settings');
+                }
+            }, 100);
+        }
+    }
+
+    triggerFocusChatInput() {
+        const input = document.getElementById('message-input') ||
+                      document.querySelector('.chat-input textarea') ||
+                      document.querySelector('textarea[placeholder]');
+        if (input) {
+            input.focus();
+            // Place cursor at end
+            if (typeof input.setSelectionRange === 'function') {
+                const len = input.value?.length || 0;
+                input.setSelectionRange(len, len);
+            }
+        }
+    }
+
+    triggerNewTask() {
+        const s = this.state.getState();
+        if (!s.isToDoListOpen) {
+            this.state.setState({ isToDoListOpen: true });
+        }
+        // Focus the task input after panel opens
+        setTimeout(() => {
+            const taskInput = document.getElementById('task-input') ||
+                              document.querySelector('.task-input-field') ||
+                              document.querySelector('.todo-input input');
+            if (taskInput) taskInput.focus();
+        }, 200);
+    }
+
+    triggerToggleHistory() {
+        // Try using the history sidebar toggle if available
+        if (window.historyContentSidebar?.toggle) {
+            window.historyContentSidebar.toggle();
+        } else {
+            // Fallback: click the history button if it exists
+            const historyBtn = document.querySelector('[data-action="toggle-history"]') ||
+                               document.getElementById('history-toggle-btn') ||
+                               document.querySelector('.history-toggle');
+            if (historyBtn) historyBtn.click();
+        }
+    }
+
+    triggerExportConversation() {
+        // Try using the export button if available
+        const exportBtn = document.querySelector('[data-action="export-conversation"]') ||
+                          document.getElementById('export-conversation-btn') ||
+                          document.querySelector('.export-btn');
+        if (exportBtn) {
+            exportBtn.click();
+        } else if (window.chatModule?.exportConversation) {
+            window.chatModule.exportConversation();
+        }
+    }
+
+    triggerCloseActivePanel() {
+        const s = this.state.getState();
+        // Close in priority order: shortcuts overlay > pricing modal > AIOS > ToDoList > workspaces
+        const shortcutsOverlay = document.getElementById('shortcuts-overlay');
+        if (shortcutsOverlay) {
+            shortcutsOverlay.classList.remove('visible');
+            setTimeout(() => shortcutsOverlay.remove(), 300);
+            return;
+        }
+        const pricingModal = document.querySelector('.pricing-modal:not(.hidden)');
+        if (pricingModal && window.AIOS?.closePricingModal) {
+            window.AIOS.closePricingModal();
+            return;
+        }
+        if (s.isAIOSOpen) {
+            this.state.setState({ isAIOSOpen: false });
+            return;
+        }
+        if (s.isToDoListOpen) {
+            this.state.setState({ isToDoListOpen: false });
+            return;
+        }
+        if (s.isProjectWorkspaceOpen) {
+            this.state.setState({ isProjectWorkspaceOpen: false });
+            return;
+        }
+        if (s.isComputerWorkspaceOpen) {
+            this.state.setState({ isComputerWorkspaceOpen: false });
+            return;
+        }
+    }
+
+    showShortcutsOverlay() {
+        // Remove existing
+        document.getElementById('shortcuts-overlay')?.remove();
+
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const mod = isMac ? '⌘' : 'Ctrl';
+
+        const shortcuts = [
+            { keys: `${mod} + N`, label: 'New Conversation' },
+            { keys: `${mod} + ,`, label: 'Toggle Settings' },
+            { keys: `${mod} + Shift + T`, label: 'Toggle Theme' },
+            { keys: `${mod} + L`, label: 'Focus Chat Input' },
+            { keys: 'Esc', label: 'Close Active Panel' },
+            { keys: `${mod} + Shift + N`, label: 'New Task' },
+            { keys: `${mod} + H`, label: 'Toggle History' },
+            { keys: `${mod} + /`, label: 'Show This Overlay' },
+            { keys: `${mod} + Shift + D`, label: 'Toggle DevTools' },
+            { keys: `${mod} + E`, label: 'Export Conversation' },
+            { keys: `${mod} + M`, label: 'Minimize Window' },
+        ];
+
+        const overlay = document.createElement('div');
+        overlay.id = 'shortcuts-overlay';
+        overlay.className = 'shortcuts-overlay';
+        overlay.innerHTML = `
+            <div class="shortcuts-overlay-backdrop"></div>
+            <div class="shortcuts-overlay-card">
+                <div class="shortcuts-overlay-header">
+                    <div class="shortcuts-overlay-icon"><i class="fa-solid fa-keyboard"></i></div>
+                    <h2>Keyboard Shortcuts</h2>
+                    <button class="shortcuts-overlay-close" aria-label="Close"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="shortcuts-overlay-body">
+                    ${shortcuts.map(s => `
+                        <div class="shortcuts-overlay-row">
+                            <span class="shortcuts-overlay-label">${s.label}</span>
+                            <div class="shortcuts-overlay-keys">
+                                ${s.keys.split(' + ').map(k => `<kbd>${k.trim()}</kbd>`).join('<span>+</span>')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        // Inject styles if not already present
+        if (!document.getElementById('shortcuts-overlay-styles')) {
+            const style = document.createElement('style');
+            style.id = 'shortcuts-overlay-styles';
+            style.textContent = `
+                .shortcuts-overlay {
+                    position: fixed; inset: 0; z-index: 100000;
+                    display: flex; align-items: center; justify-content: center;
+                    opacity: 0; transition: opacity 0.25s ease;
+                    pointer-events: none;
+                }
+                .shortcuts-overlay.visible {
+                    opacity: 1; pointer-events: all;
+                }
+                .shortcuts-overlay-backdrop {
+                    position: absolute; inset: 0;
+                    background: rgba(0,0,0,0.6);
+                    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+                }
+                .shortcuts-overlay-card {
+                    position: relative; width: 480px; max-width: 92vw; max-height: 80vh;
+                    background: var(--window-bg, rgba(12,12,12,0.92));
+                    border: 1px solid var(--border-color, rgba(255,255,255,0.09));
+                    border-radius: 20px; overflow: hidden;
+                    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+                    transform: scale(0.92); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+                }
+                .shortcuts-overlay.visible .shortcuts-overlay-card {
+                    transform: scale(1);
+                }
+                .shortcuts-overlay-header {
+                    display: flex; align-items: center; gap: 14px;
+                    padding: 24px 24px 16px; border-bottom: 1px solid var(--border-color);
+                }
+                .shortcuts-overlay-icon {
+                    width: 40px; height: 40px; border-radius: 12px;
+                    background: var(--accent-muted); color: var(--accent-color);
+                    display: flex; align-items: center; justify-content: center; font-size: 16px;
+                }
+                .shortcuts-overlay-header h2 {
+                    flex: 1; font-size: 17px; font-weight: 600;
+                    color: var(--text-color); margin: 0; font-family: 'Outfit', sans-serif;
+                }
+                .shortcuts-overlay-close {
+                    width: 32px; height: 32px; border: none; border-radius: 8px;
+                    background: transparent; color: var(--text-secondary);
+                    cursor: pointer; display: flex; align-items: center; justify-content: center;
+                    transition: all 0.2s ease;
+                }
+                .shortcuts-overlay-close:hover {
+                    background: var(--accent-muted); color: var(--text-color);
+                }
+                .shortcuts-overlay-body {
+                    padding: 8px 0; max-height: 60vh; overflow-y: auto;
+                }
+                .shortcuts-overlay-row {
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 11px 24px; transition: background 0.15s ease;
+                }
+                .shortcuts-overlay-row:hover {
+                    background: rgba(255,255,255,0.03);
+                }
+                .shortcuts-overlay-label {
+                    font-size: 13.5px; font-weight: 500; color: var(--text-color);
+                }
+                .shortcuts-overlay-keys {
+                    display: flex; align-items: center; gap: 5px;
+                }
+                .shortcuts-overlay-keys kbd {
+                    display: inline-flex; align-items: center; justify-content: center;
+                    min-width: 28px; height: 26px; padding: 0 8px;
+                    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;
+                    color: var(--text-secondary); background: rgba(255,255,255,0.06);
+                    border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                }
+                .shortcuts-overlay-keys span {
+                    font-size: 11px; color: var(--text-secondary); padding: 0 1px;
+                }
+                body:not(.dark-mode) .shortcuts-overlay-backdrop { background: rgba(0,0,0,0.3); }
+                body:not(.dark-mode) .shortcuts-overlay-keys kbd {
+                    background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.12); color: #475569;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('visible')));
+
+        // Close handlers
+        const close = () => {
+            overlay.classList.remove('visible');
+            setTimeout(() => overlay.remove(), 300);
+        };
+        overlay.querySelector('.shortcuts-overlay-backdrop').addEventListener('click', close);
+        overlay.querySelector('.shortcuts-overlay-close').addEventListener('click', close);
     }
 
     // ── Workspace Switch Warning Modal ──────────────────────────────────

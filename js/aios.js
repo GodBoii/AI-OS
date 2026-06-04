@@ -2907,30 +2907,21 @@ class AIOS {
                         <div class="settings-card-icon"><i class="fa-solid fa-keyboard"></i></div>
                         <div>
                             <h4 id="settings-kb-title" class="settings-card-title">Keyboard Shortcuts</h4>
-                            <p class="settings-card-desc">Quick actions accessible via keyboard.</p>
+                            <p class="settings-card-desc">Quick actions via keyboard. Press <kbd style="background:var(--accent-muted);padding:2px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;">Ctrl + /</kbd> anytime.</p>
                         </div>
                     </div>
                     <div class="settings-items">
-                        <div class="settings-shortcut-row">
-                            <span class="settings-shortcut-label">New Conversation</span>
-                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>N</kbd></div>
-                        </div>
-                        <div class="settings-shortcut-row">
-                            <span class="settings-shortcut-label">Toggle Settings</span>
-                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>,</kbd></div>
-                        </div>
-                        <div class="settings-shortcut-row">
-                            <span class="settings-shortcut-label">Toggle Theme</span>
-                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>T</kbd></div>
-                        </div>
-                        <div class="settings-shortcut-row">
-                            <span class="settings-shortcut-label">Focus Chat Input</span>
-                            <div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>L</kbd></div>
-                        </div>
-                        <div class="settings-shortcut-row">
-                            <span class="settings-shortcut-label">Close Window / Panel</span>
-                            <div class="settings-shortcut-keys"><kbd>Esc</kbd></div>
-                        </div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">New Conversation</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>N</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Toggle Settings</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>,</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Toggle Theme</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>T</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Focus Chat Input</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>L</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Close Window / Panel</span><div class="settings-shortcut-keys"><kbd>Esc</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">New Task</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>N</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Toggle History</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>H</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Show Shortcuts</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>/</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Toggle DevTools</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>D</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Export Conversation</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>E</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Minimize Window</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>M</kbd></div></div>
                     </div>
                 </section>
 
@@ -2944,26 +2935,10 @@ class AIOS {
                         </div>
                     </div>
                     <div class="settings-items">
-                        <div class="settings-toggle-row">
-                            <div class="settings-toggle-info">
-                                <span class="settings-toggle-label">Minimize to System Tray</span>
-                                <span class="settings-toggle-hint">Keep Aetheria AI running in the background when you close the window.</span>
-                            </div>
-                            <label class="aios-toggle">
-                                <input type="checkbox" id="settings-general-tray">
-                                <span class="aios-toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div class="settings-toggle-row">
-                            <div class="settings-toggle-info">
-                                <span class="settings-toggle-label">Auto-check for Updates</span>
-                                <span class="settings-toggle-hint">Automatically check for new versions when the app starts.</span>
-                            </div>
-                            <label class="aios-toggle">
-                                <input type="checkbox" id="settings-general-auto-update" checked>
-                                <span class="aios-toggle-slider"></span>
-                            </label>
-                        </div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Minimize to System Tray</span><span class="settings-toggle-hint">Keep Aetheria AI running in the background when you close the window.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-tray"><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Launch at Startup</span><span class="settings-toggle-hint">Automatically start Aetheria AI when you log in to your computer.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-startup"><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Always on Top</span><span class="settings-toggle-hint">Keep the application window above all other windows.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-always-on-top"><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Auto-check for Updates</span><span class="settings-toggle-hint">Automatically check for new versions when the app starts.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-auto-update" checked><span class="aios-toggle-slider"></span></label></div>
                     </div>
                 </section>
             `;
@@ -2982,49 +2957,64 @@ class AIOS {
     }
 
     initSettingsListeners() {
-        const STORAGE_KEY = 'aetheria-notification-settings';
+        const NK = 'aetheria-notification-settings';
+        const GK = 'aetheria-general-settings';
 
-        // Load saved settings
-        let saved = {};
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) saved = JSON.parse(raw);
-        } catch (_e) { /* ignore */ }
-
-        const defaults = {
-            nativeNotifications: true,
-            inAppNotifications: true,
-            soundEnabled: false,
-            computerToolNotifications: true,
-            runCompleteNotifications: true,
-        };
-        const settings = { ...defaults, ...saved };
-
-        // Map setting keys to checkbox IDs
-        const mapping = {
+        // â”€â”€ Notification Settings â”€â”€
+        let ns = {};
+        try { const r = localStorage.getItem(NK); if (r) ns = JSON.parse(r); } catch(_e){}
+        const nS = { nativeNotifications: true, inAppNotifications: true, soundEnabled: false, computerToolNotifications: true, runCompleteNotifications: true, ...ns };
+        const nM = {
             'settings-notif-run-complete': 'runCompleteNotifications',
             'settings-notif-native': 'nativeNotifications',
             'settings-notif-inapp': 'inAppNotifications',
             'settings-notif-computer-tool': 'computerToolNotifications',
             'settings-notif-sounds': 'soundEnabled',
         };
-
-        // Apply saved state to checkboxes and bind change listeners
-        for (const [elId, key] of Object.entries(mapping)) {
-            const checkbox = document.getElementById(elId);
-            if (!checkbox) continue;
-            checkbox.checked = !!settings[key];
-            checkbox.addEventListener('change', () => {
-                settings[key] = checkbox.checked;
-                try {
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-                } catch (_e) { /* ignore */ }
-
-                // Push native notification toggle to main process
-                if (key === 'nativeNotifications' && window.electron?.ipcRenderer) {
-                    window.electron.ipcRenderer.send('toggle-native-notifications', checkbox.checked);
-                }
+        for (const [id, key] of Object.entries(nM)) {
+            const c = document.getElementById(id);
+            if (!c) continue;
+            c.checked = !!nS[key];
+            c.addEventListener('change', () => {
+                nS[key] = c.checked;
+                try { localStorage.setItem(NK, JSON.stringify(nS)); } catch(_e){}
+                if (key === 'nativeNotifications') window.electron?.ipcRenderer?.send('toggle-native-notifications', c.checked);
+                if (key === 'computerToolNotifications') window.electron?.ipcRenderer?.send('toggle-computer-tool-notifications', c.checked);
+                if (key === 'runCompleteNotifications') window.electron?.ipcRenderer?.send('toggle-run-complete-notifications', c.checked);
+                if (key === 'inAppNotifications' && window.notificationService) window.notificationService.setEnabled(c.checked);
+                if (key === 'soundEnabled' && window.notificationService) window.notificationService.setSoundEnabled(c.checked);
             });
+            // Apply initial state on load
+            if (key === 'nativeNotifications') window.electron?.ipcRenderer?.send('toggle-native-notifications', nS[key]);
+            if (key === 'computerToolNotifications') window.electron?.ipcRenderer?.send('toggle-computer-tool-notifications', nS[key]);
+            if (key === 'runCompleteNotifications') window.electron?.ipcRenderer?.send('toggle-run-complete-notifications', nS[key]);
+            if (key === 'inAppNotifications' && window.notificationService) window.notificationService.setEnabled(nS[key]);
+            if (key === 'soundEnabled' && window.notificationService) window.notificationService.setSoundEnabled(nS[key]);
+        }
+
+        // â”€â”€ General Settings â”€â”€
+        let gs = {};
+        try { const r = localStorage.getItem(GK); if (r) gs = JSON.parse(r); } catch(_e){}
+        const gS = { minimizeToTray: false, launchAtStartup: false, alwaysOnTop: false, autoCheckUpdates: true, ...gs };
+        const gM = {
+            'settings-general-tray': { key: 'minimizeToTray', ipc: 'set-minimize-to-tray' },
+            'settings-general-startup': { key: 'launchAtStartup', ipc: 'set-launch-at-startup' },
+            'settings-general-always-on-top': { key: 'alwaysOnTop', ipc: 'set-always-on-top' },
+            'settings-general-auto-update': { key: 'autoCheckUpdates', ipc: null },
+        };
+        for (const [id, cfg] of Object.entries(gM)) {
+            const c = document.getElementById(id);
+            if (!c) continue;
+            c.checked = !!gS[cfg.key];
+            c.addEventListener('change', () => {
+                gS[cfg.key] = c.checked;
+                try { localStorage.setItem(GK, JSON.stringify(gS)); } catch(_e){}
+                if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, c.checked);
+                if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = c.checked;
+            });
+            // Apply initial state on load
+            if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, gS[cfg.key]);
+            if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = gS[cfg.key];
         }
     }
 

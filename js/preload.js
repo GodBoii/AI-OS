@@ -35,7 +35,14 @@ const validSendChannels = [
     'save-user-context',
     'get-user-context',
     // Notification settings
-    'toggle-native-notifications'
+    'toggle-native-notifications',
+    'toggle-computer-tool-notifications',
+    'toggle-run-complete-notifications',
+    // General settings
+    'set-minimize-to-tray',
+    'set-always-on-top',
+    'set-launch-at-startup',
+    'toggle-devtools'
 ];
 
 const validReceiveChannels = [
@@ -87,7 +94,9 @@ const validReceiveChannels = [
     // Agent run lifecycle
     'run-completed',
     // Conversation title from backend
-    'conversation_title'
+    'conversation_title',
+    // Settings responses
+    'setting-changed'
 ];
 
 const validInvokeChannels = [
