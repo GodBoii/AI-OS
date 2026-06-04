@@ -294,6 +294,21 @@
                 </div>
                 <div id="design-mode-comment-panel" class="design-mode-comment-panel hidden">
                     <div class="design-mode-comment-hint">Click any element in the preview to add a comment for AI follow-up.</div>
+                    <div id="design-mode-comment-composer" class="design-mode-comment-composer hidden">
+                        <div class="design-mode-comment-composer-target">
+                            <span>Target</span>
+                            <strong id="design-mode-comment-target-label">No element selected</strong>
+                        </div>
+                        <textarea id="design-mode-comment-input" class="design-mode-textarea design-mode-comment-input" rows="3" placeholder="Describe the design change you want..."></textarea>
+                        <div class="design-mode-comment-composer-actions">
+                            <button id="design-mode-comment-cancel-btn" class="design-mode-comment-secondary-btn" type="button">Cancel</button>
+                            <button id="design-mode-comment-add-btn" class="design-mode-comment-primary-btn" type="button">Add Comment</button>
+                        </div>
+                    </div>
+                    <div class="design-mode-comment-actions">
+                        <button id="design-mode-comments-send-btn" class="design-mode-comment-primary-btn" type="button" disabled>Send to AI</button>
+                        <button id="design-mode-comments-clear-btn" class="design-mode-comment-secondary-btn" type="button" disabled>Clear</button>
+                    </div>
                     <div id="design-mode-comments-empty" class="design-mode-comments-empty">No comments yet.</div>
                     <div id="design-mode-comments-list" class="design-mode-comments-list"></div>
                 </div>

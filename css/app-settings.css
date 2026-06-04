@@ -32,8 +32,8 @@
     width: 40px;
     height: 40px;
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15));
-    color: #a78bfa;
+    background: var(--accent-muted, rgba(255,255,255,0.08));
+    color: var(--accent-color, #e6e6eb);
     font-size: 16px;
     flex-shrink: 0;
 }
@@ -135,8 +135,8 @@
 }
 
 .aios-toggle input:checked + .aios-toggle-slider {
-    background: linear-gradient(135deg, #8b5cf6, #6366f1);
-    box-shadow: 0 0 12px rgba(139,92,246,0.25);
+    background: var(--accent-color, rgba(230,230,235,0.95));
+    box-shadow: 0 0 12px rgba(var(--accent-color-rgb, 230,230,235),0.2);
 }
 
 .aios-toggle input:checked + .aios-toggle-slider::before {
@@ -145,7 +145,7 @@
 }
 
 .aios-toggle input:focus-visible + .aios-toggle-slider {
-    outline: 2px solid #8b5cf6;
+    outline: 2px solid var(--accent-color, rgba(230,230,235,0.95));
     outline-offset: 2px;
 }
 
@@ -218,7 +218,7 @@ body:not(.dark-mode) .settings-card-header {
 }
 
 body:not(.dark-mode) .settings-card-icon {
-    background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(59,130,246,0.1));
+    background: var(--accent-muted, rgba(45,55,72,0.08));
 }
 
 body:not(.dark-mode) .settings-toggle-row:hover,

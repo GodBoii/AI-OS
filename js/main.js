@@ -1,7 +1,7 @@
 // main.js (Definitive Version with Correct Deep Link Handling and Logging)
 
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog, nativeImage } = electron;
+const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog, nativeImage, Tray, Menu } = electron;
 const path = require('path');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
@@ -12,6 +12,10 @@ const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
 
 let mainWindow;
+let appTray = null;
+let minimizeToTray = false;
+let computerToolNotificationsEnabled = true;
+let runCompleteNotificationsEnabled = true;
 
 // --- App Name Setup ---
 app.setName('Aetheria AI');
@@ -158,6 +162,57 @@ if (!gotTheLock) {
 }
 
 
+function createSystemTray() {
+    if (appTray) return;
+    try {
+        const fs = require('fs');
+        let trayIconPath;
+        if (app.isPackaged) {
+            trayIconPath = path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+        } else {
+            trayIconPath = path.join(__dirname, '..', 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+        }
+        if (!fs.existsSync(trayIconPath)) {
+            console.error('[Tray] Icon not found:', trayIconPath);
+            return;
+        }
+        const trayIcon = nativeImage.createFromPath(trayIconPath);
+        appTray = new Tray(trayIcon.resize({ width: 16, height: 16 }));
+        appTray.setToolTip('Aetheria AI');
+        const contextMenu = Menu.buildFromTemplate([
+            {
+                label: 'Show Aetheria AI',
+                click: () => {
+                    if (mainWindow) {
+                        mainWindow.show();
+                        if (mainWindow.isMinimized()) mainWindow.restore();
+                        mainWindow.focus();
+                    }
+                }
+            },
+            { type: 'separator' },
+            {
+                label: 'Quit',
+                click: () => {
+                    isAppQuitting = true;
+                    app.quit();
+                }
+            }
+        ]);
+        appTray.setContextMenu(contextMenu);
+        appTray.on('double-click', () => {
+            if (mainWindow) {
+                mainWindow.show();
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            }
+        });
+        console.log('[Tray] System tray created successfully');
+    } catch (error) {
+        console.error('[Tray] Error creating system tray:', error);
+    }
+}
+
 function createWindow() {
     const mainProcessEmitter = new EventEmitter();
     const fs = require('fs');
@@ -261,6 +316,9 @@ function createWindow() {
         if (!nativeNotificationService) {
             return;
         }
+        if (!computerToolNotificationsEnabled) {
+            return;
+        }
         nativeNotificationService.queueNotification(
             data?.action || 'computer_tool',
             data?.message || 'Computer tool used',
@@ -276,9 +334,10 @@ function createWindow() {
             conversationId: data?.conversationId || null,
             title: data?.title || null,
             isBackgrounded,
+            notificationsEnabled: runCompleteNotificationsEnabled,
         });
 
-        if (isBackgrounded && nativeNotificationService) {
+        if (isBackgrounded && nativeNotificationService && runCompleteNotificationsEnabled) {
             const taskTitle = (data?.title || '').trim() || 'AI task';
             const preview = (data?.preview || '').trim();
             // Build notification body: title + first few lines of preview
@@ -307,6 +366,59 @@ function createWindow() {
         console.log('[main.js] Native notifications toggled:', enabled);
         if (nativeNotificationService) {
             nativeNotificationService.setEnabled(enabled);
+        }
+    });
+
+    // --- Granular Notification Controls ---
+    ipcMain.on('toggle-computer-tool-notifications', (event, enabled) => {
+        console.log('[main.js] Computer tool notifications toggled:', enabled);
+        computerToolNotificationsEnabled = enabled;
+    });
+
+    ipcMain.on('toggle-run-complete-notifications', (event, enabled) => {
+        console.log('[main.js] Run complete notifications toggled:', enabled);
+        runCompleteNotificationsEnabled = enabled;
+    });
+
+    // --- General Settings IPC Handlers ---
+    ipcMain.on('set-always-on-top', (event, enabled) => {
+        console.log('[main.js] Always on top toggled:', enabled);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.setAlwaysOnTop(enabled);
+        }
+    });
+
+    ipcMain.on('set-launch-at-startup', (event, enabled) => {
+        console.log('[main.js] Launch at startup toggled:', enabled);
+        app.setLoginItemSettings({
+            openAtLogin: enabled,
+            name: 'Aetheria AI'
+        });
+    });
+
+    ipcMain.on('toggle-devtools', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.toggleDevTools();
+        }
+    });
+
+    ipcMain.on('set-minimize-to-tray', (event, enabled) => {
+        console.log('[main.js] Minimize to tray toggled:', enabled);
+        minimizeToTray = enabled;
+        if (enabled && !appTray) {
+            createSystemTray();
+        } else if (!enabled && appTray) {
+            appTray.destroy();
+            appTray = null;
+        }
+    });
+
+    // --- Close window: minimize to tray if setting is on ---
+    mainWindow.on('close', (event) => {
+        if (minimizeToTray && !isAppQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
+            if (!appTray) createSystemTray();
         }
     });
 
@@ -860,6 +972,15 @@ app.on('before-quit', async () => {
             linkWebView = null;
         } catch (error) {
             console.error('Error cleaning up linkWebView:', error.message);
+        }
+    }
+
+    if (appTray) {
+        try {
+            appTray.destroy();
+            appTray = null;
+        } catch (error) {
+            console.error('Error cleaning up tray:', error.message);
         }
     }
 
