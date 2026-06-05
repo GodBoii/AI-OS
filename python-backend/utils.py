@@ -197,4 +197,34 @@ def get_user_from_token(request_object):
 
     except AuthApiError as e:
         logger.error("API authentication error: %s", e.message)
-        return None, ("Invalid or expired token", 401)
+        return None, ("Invalid or expired token", 401)
+
+
+def get_user_from_jwt(jwt: str):
+    """
+    Validates a raw JWT and returns the authenticated user.
+
+    Socket.IO messages carry the token in the event payload instead of an HTTP
+    Authorization header, so they cannot call get_user_from_token(request)
+    directly. Keep the same Redis-backed cache behavior as REST endpoints.
+    """
+    if not jwt:
+        return None, ("Authentication token is missing", 401)
+
+    cached_user = _user_from_cache(jwt)
+    if cached_user is not None:
+        return cached_user, None
+
+    logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
+    try:
+        user_response = supabase_client.auth.get_user(jwt=jwt)
+        if not user_response.user:
+            raise AuthApiError("User not found for token.", 401)
+
+        user = user_response.user
+        _user_to_cache(jwt, user)
+        return user, None
+
+    except AuthApiError as e:
+        logger.error("API authentication error: %s", e.message)
+        return None, ("Invalid or expired token", 401)

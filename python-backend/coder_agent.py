@@ -104,7 +104,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=get_mimo_model("mimo-v2.5-pro"),
+        model=get_mimo_model("mimo-v2.5"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."

@@ -31,6 +31,7 @@ from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
 from cache_manager import CacheManager
+from utils import get_user_from_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -299,10 +300,10 @@ def handle_save_user_context(data: Dict[str, Any]):
             logger.error("Authentication token missing")
             return socketio.emit("user-context-saved", {"success": False, "error": "Authentication token missing"}, room=sid)
 
-        user = supabase_client.auth.get_user(jwt=access_token).user
-        if not user:
-            logger.error("User not authenticated")
-            return socketio.emit("user-context-saved", {"success": False, "error": "User not authenticated"}, room=sid)
+        user, auth_error = get_user_from_jwt(access_token)
+        if auth_error:
+            logger.error("User not authenticated: %s", auth_error[0])
+            return socketio.emit("user-context-saved", {"success": False, "error": auth_error[0]}, room=sid)
 
         context_data = data.get('context')
         if not context_data:
@@ -333,9 +334,9 @@ def handle_get_user_context(data: Dict[str, Any]):
         if not access_token:
             return socketio.emit("user-context-retrieved", {"success": False, "error": "Authentication token missing"}, room=sid)
 
-        user = supabase_client.auth.get_user(jwt=access_token).user
-        if not user:
-            return socketio.emit("user-context-retrieved", {"success": False, "error": "User not authenticated"}, room=sid)
+        user, auth_error = get_user_from_jwt(access_token)
+        if auth_error:
+            return socketio.emit("user-context-retrieved", {"success": False, "error": auth_error[0]}, room=sid)
 
         from user_context_tools import UserContextTools
         context_tools = UserContextTools(user_id=str(user.id))
@@ -485,9 +486,13 @@ def on_plan_request(data: str):
                 room=sid,
             )
 
-        user = supabase_client.auth.get_user(jwt=access_token).user
-        if not user:
-            raise AuthApiError("User not found for token.", 401)
+        user, auth_error = get_user_from_jwt(access_token)
+        if auth_error:
+            return socketio.emit(
+                "plan_response",
+                {"success": False, "requestId": request_id, "messageId": message_id, "error": auth_error[0]},
+                room=sid,
+            )
 
         if conversation_id:
             join_room(f"conv:{conversation_id}")
@@ -596,9 +601,9 @@ def on_send_message(data: str):
         if not access_token:
             return socketio.emit("error", {"message": "Authentication token is missing.", "reset": True}, room=sid)
 
-        user = supabase_client.auth.get_user(jwt=access_token).user
-        if not user:
-            raise AuthApiError("User not found for token.", 401)
+        user, auth_error = get_user_from_jwt(access_token)
+        if auth_error:
+            return socketio.emit("error", {"message": auth_error[0], "reset": True}, room=sid)
 
         # --- ROOM JOIN: Subscribe current SID to this conversation's room ---
         room_name = f"conv:{conversation_id}"
@@ -765,9 +770,9 @@ def on_assistant_message(data: str):
         if not access_token:
             return socketio.emit("assistant_error", {"message": "Authentication token is missing."}, room=sid)
 
-        user = supabase_client.auth.get_user(jwt=access_token).user
-        if not user:
-            raise AuthApiError("User not found for token.", 401)
+        user, auth_error = get_user_from_jwt(access_token)
+        if auth_error:
+            return socketio.emit("assistant_error", {"message": auth_error[0]}, room=sid)
 
         user_message = data.get("message", "")
         conversation_id = data.get("conversationId")
