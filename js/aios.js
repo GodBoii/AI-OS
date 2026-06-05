@@ -2826,7 +2826,7 @@ class AIOS {
             const settingsBtn = document.createElement('button');
             settingsBtn.className = 'tab-btn';
             settingsBtn.dataset.tab = 'settings';
-            settingsBtn.innerHTML = '<i class="fa-solid fa-sliders"></i><span>Settings</span>';
+            settingsBtn.innerHTML = '<i class="fi fi-tr-gears"></i><span>Settings</span>';
             sidebar.insertBefore(settingsBtn, aboutBtn);
         }
 
@@ -2841,7 +2841,7 @@ class AIOS {
                 <!-- Notifications Section -->
                 <section class="settings-card" aria-labelledby="settings-notif-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fa-solid fa-bell"></i></div>
+                        <div class="settings-card-icon"><i class="fi fi-tr-bell-ring"></i></div>
                         <div>
                             <h4 id="settings-notif-title" class="settings-card-title">Notifications</h4>
                             <p class="settings-card-desc">Control how Aetheria AI notifies you about agent activity.</p>
@@ -2904,7 +2904,7 @@ class AIOS {
                 <!-- Keyboard Shortcuts Section -->
                 <section class="settings-card" aria-labelledby="settings-kb-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fa-solid fa-keyboard"></i></div>
+                        <div class="settings-card-icon"><i class="fi fi-tr-keyboard"></i></div>
                         <div>
                             <h4 id="settings-kb-title" class="settings-card-title">Keyboard Shortcuts</h4>
                             <p class="settings-card-desc">Quick actions via keyboard. Press <kbd style="background:var(--accent-muted);padding:2px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;">Ctrl + /</kbd> anytime.</p>
@@ -2928,7 +2928,7 @@ class AIOS {
                 <!-- General Section -->
                 <section class="settings-card" aria-labelledby="settings-general-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fa-solid fa-gear"></i></div>
+                        <div class="settings-card-icon"><i class="fi fi-tr-customization-cogwheel"></i></div>
                         <div>
                             <h4 id="settings-general-title" class="settings-card-title">General</h4>
                             <p class="settings-card-desc">App behavior and preferences.</p>

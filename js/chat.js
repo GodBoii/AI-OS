@@ -3104,7 +3104,7 @@ function updatePlanOutputCard(messageId, planText, done = false) {
         <div class="plan-output-card streaming" data-plan-message-id="${messageId}">
             <div class="plan-output-header">
                 <div class="plan-output-title">
-                    <i class="fas fa-list-check" aria-hidden="true"></i>
+                    <i class="fi fi-tr-roadmap" aria-hidden="true"></i>
                     <span>Plan Mode Output</span>
                 </div>
             </div>
@@ -3241,7 +3241,7 @@ function appendPlanModeToolLog(messageId, status = 'in-progress', toolLabel = 'P
         logEntry.className = 'tool-log-entry';
         logEntry.innerHTML = `
             <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px;">
-                <i class="fi fi-tr-wisdom tool-log-icon"></i>
+                <i class="fi fi-tr-roadmap tool-log-icon"></i>
                 <div class="tool-log-details" style="flex-grow: 1;">
                     <span class="tool-log-action">Used tool: <strong>${escapeReasoningHtml(toolLabel || 'Plan Mode')}</strong></span>
                 </div>
