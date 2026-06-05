@@ -10,11 +10,11 @@ import {
    PILL CONFIGURATION
    ═══════════════════════════════════════════════════════════════════ */
 const PILL_CONFIG = [
-    { key: 'templates', icon: 'fa-solid fa-wand-magic-sparkles', label: 'Create slides' },
-    { key: 'website', icon: 'fa-solid fa-window-maximize', label: 'Build website' },
-    { key: 'sessions', icon: 'fa-solid fa-clock-rotate-left', label: 'Past Chats' },
-    { key: 'tasks', icon: 'fa-solid fa-list-check', label: 'Tasks' },
-    { key: 'design', icon: 'fa-solid fa-swatchbook', label: 'Design' }
+    { key: 'templates', icon: 'fi fi-tr-presentation', label: 'Create slides' },
+    { key: 'website', icon: 'fi fi-tr-browser', label: 'Build website' },
+    { key: 'sessions', icon: 'fi fi-tr-time-past', label: 'Past Chats' },
+    { key: 'tasks', icon: 'fi fi-tr-list-check', label: 'Tasks' },
+    { key: 'design', icon: 'fi fi-tr-swatchbook', label: 'Design' }
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -47,17 +47,17 @@ const CAROUSEL_SLIDES = [
    PROMPT STARTERS — Website & Design
    ═══════════════════════════════════════════════════════════════════ */
 const WEBSITE_PROMPTS = [
-    { icon: 'fa-solid fa-window-maximize', title: 'Landing Page', desc: 'Modern responsive landing page', prompt: 'Create a modern, responsive landing page with a hero section, feature highlights, testimonials, and a call-to-action footer.' },
-    { icon: 'fa-solid fa-briefcase', title: 'Portfolio', desc: 'Personal portfolio website', prompt: 'Build a personal portfolio website with a project showcase grid, about section, skills display, and contact form.' },
-    { icon: 'fa-solid fa-chart-line', title: 'Dashboard', desc: 'Admin analytics dashboard', prompt: 'Design an admin dashboard with interactive charts, data tables, sidebar navigation, and notification center.' },
-    { icon: 'fa-solid fa-store', title: 'E-commerce', desc: 'Product catalog with cart', prompt: 'Build a product catalog page with category filters, search functionality, product cards with ratings, and a shopping cart drawer.' }
+    { icon: 'fi fi-tr-browser', title: 'Landing Page', desc: 'Modern responsive landing page', prompt: 'Create a modern, responsive landing page with a hero section, feature highlights, testimonials, and a call-to-action footer.' },
+    { icon: 'fi fi-tr-briefcase-blank', title: 'Portfolio', desc: 'Personal portfolio website', prompt: 'Build a personal portfolio website with a project showcase grid, about section, skills display, and contact form.' },
+    { icon: 'fi fi-tr-chart-line-up', title: 'Dashboard', desc: 'Admin analytics dashboard', prompt: 'Design an admin dashboard with interactive charts, data tables, sidebar navigation, and notification center.' },
+    { icon: 'fi fi-tr-store-alt', title: 'E-commerce', desc: 'Product catalog with cart', prompt: 'Build a product catalog page with category filters, search functionality, product cards with ratings, and a shopping cart drawer.' }
 ];
 
 const DESIGN_PROMPTS = [
-    { icon: 'fa-solid fa-mobile-screen', title: 'Mobile App UI', desc: 'App interface with navigation', prompt: 'Design a mobile app interface with bottom tab navigation, card-based content layout, and smooth transitions.' },
-    { icon: 'fa-solid fa-right-to-bracket', title: 'Auth Flow', desc: 'Login and signup screens', prompt: 'Create a modern authentication flow with login, signup, and forgot password screens using glassmorphism design.' },
-    { icon: 'fa-solid fa-sliders', title: 'Settings Page', desc: 'Clean settings with controls', prompt: 'Design a clean settings page with toggle switches, dropdown selectors, and organized preference sections.' },
-    { icon: 'fa-solid fa-chart-pie', title: 'Data Visualization', desc: 'Analytics with charts', prompt: 'Create an analytics dashboard with interactive pie charts, line graphs, metric cards, and data filtering controls.' }
+    { icon: 'fi fi-tr-mobile-button', title: 'Mobile App UI', desc: 'App interface with navigation', prompt: 'Design a mobile app interface with bottom tab navigation, card-based content layout, and smooth transitions.' },
+    { icon: 'fi fi-tr-sign-in-alt', title: 'Auth Flow', desc: 'Login and signup screens', prompt: 'Create a modern authentication flow with login, signup, and forgot password screens using glassmorphism design.' },
+    { icon: 'fi fi-tr-sliders-v', title: 'Settings Page', desc: 'Clean settings with controls', prompt: 'Design a clean settings page with toggle switches, dropdown selectors, and organized preference sections.' },
+    { icon: 'fi fi-tr-chart-pie', title: 'Data Visualization', desc: 'Analytics with charts', prompt: 'Create an analytics dashboard with interactive pie charts, line graphs, metric cards, and data filtering controls.' }
 ];
 
 const CAROUSEL_INTERVAL_MS = 5000;
