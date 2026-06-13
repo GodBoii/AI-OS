@@ -1,6 +1,7 @@
 // session-content-viewer.js - Displays all content (files, artifacts, terminal logs) for a session
 import { artifactHandler } from './artifact-handler.js';
 import historyContentPreview from './history-content-preview.js';
+import { getSessionExecutions, getSessionFileItems } from './session-content-utils.js';
 
 class SessionContentViewer {
     constructor() {
@@ -258,13 +259,8 @@ class SessionContentViewer {
             filesPanel.querySelector('.content-loading').classList.add('hidden');
             terminalPanel.querySelector('.content-loading').classList.add('hidden');
 
-            // Separate content by type
-            const artifacts = this.content.filter(c => c.content_type === 'artifact');
-            const uploads = this.content.filter(c => c.content_type === 'upload');
-            const executions = this.content.filter(c => c.content_type === 'execution');
-
-            // Combine artifacts and uploads for Files tab
-            const files = [...artifacts, ...uploads];
+            const files = getSessionFileItems(this.content);
+            const executions = getSessionExecutions(this.content);
 
             // Render content immediately from cache (renderFiles/renderTerminal will clear lists)
             this.renderFiles(files, filesPanel);
@@ -308,13 +304,8 @@ class SessionContentViewer {
 
             console.log('[SessionContentViewer] Loaded and cached content:', this.content.length, 'items');
 
-            // Separate content by type
-            const artifacts = this.content.filter(c => c.content_type === 'artifact');
-            const uploads = this.content.filter(c => c.content_type === 'upload');
-            const executions = this.content.filter(c => c.content_type === 'execution');
-
-            // Combine artifacts and uploads for Files tab
-            const files = [...artifacts, ...uploads];
+            const files = getSessionFileItems(this.content);
+            const executions = getSessionExecutions(this.content);
 
             // Render content
             this.renderFiles(files, filesPanel);

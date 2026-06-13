@@ -1,3 +1,5 @@
+import { getSessionExecutions, getSessionFileItems } from './session-content-utils.js';
+
 // history-content-sidebar.js - Left sidebar for viewing history session content
 // Separate from the live chat floating window
 
@@ -183,11 +185,8 @@ class HistoryContentSidebar {
             filesPanel.querySelector('.history-content-loading').classList.add('hidden');
             terminalPanel.querySelector('.history-content-loading').classList.add('hidden');
 
-            const artifacts = this.content.filter(c => c.content_type === 'artifact');
-            const uploads = this.content.filter(c => c.content_type === 'upload');
-            const executions = this.content.filter(c => c.content_type === 'execution');
-
-            const files = [...artifacts, ...uploads];
+            const files = getSessionFileItems(this.content);
+            const executions = getSessionExecutions(this.content);
 
             this.renderFiles(files, filesPanel);
             this.renderTerminal(executions, terminalPanel);
@@ -230,12 +229,8 @@ class HistoryContentSidebar {
 
             console.log('[HistoryContentSidebar] Loaded and cached content:', this.content.length, 'items');
 
-            // Separate content by type
-            const artifacts = this.content.filter(c => c.content_type === 'artifact');
-            const uploads = this.content.filter(c => c.content_type === 'upload');
-            const executions = this.content.filter(c => c.content_type === 'execution');
-
-            const files = [...artifacts, ...uploads];
+            const files = getSessionFileItems(this.content);
+            const executions = getSessionExecutions(this.content);
 
             // Render content
             this.renderFiles(files, filesPanel);
