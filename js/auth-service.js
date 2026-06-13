@@ -244,6 +244,24 @@ class AuthService {
 
         // Get session IDs that have titles
         const sessionIdsWithTitles = new Set((titlesData || []).map(t => t.session_id));
+        const titledSessionIds = Array.from(sessionIdsWithTitles).filter(Boolean);
+        const sessionMetadataById = new Map();
+
+        if (titledSessionIds.length > 0) {
+            const { data: sessionMetadata, error: metadataError } = await this.supabase
+                .from('agno_sessions')
+                .select('session_id, session_type, agent_id, team_id, created_at')
+                .eq('user_id', userId)
+                .in('session_id', titledSessionIds);
+
+            if (metadataError) {
+                console.error('Error fetching session workspace metadata:', metadataError);
+            } else {
+                (sessionMetadata || []).forEach(row => {
+                    sessionMetadataById.set(row.session_id, row);
+                });
+            }
+        }
 
         // Calculate remaining slots for sessions without titles
         const remainingSlots = limit - (titlesData?.length || 0);
@@ -252,12 +270,17 @@ class AuthService {
         if (remainingSlots > 0) {
             // Fetch sessions from agno_sessions that don't have titles yet
             // Fetch runs field to extract first user message as title
-            const { data, error: sessionsError } = await this.supabase
+            let query = this.supabase
                 .from('agno_sessions')
-                .select('session_id, user_id, created_at, session_type, runs')
+                .select('session_id, user_id, created_at, session_type, agent_id, team_id, runs')
                 .eq('user_id', userId)
-                .not('session_id', 'in', `(${Array.from(sessionIdsWithTitles).join(',')})`)
-                .order('created_at', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            if (titledSessionIds.length > 0) {
+                query = query.not('session_id', 'in', `(${titledSessionIds.join(',')})`);
+            }
+
+            const { data, error: sessionsError } = await query
                 .range(0, remainingSlots - 1);
 
             if (sessionsError) {
@@ -269,16 +292,26 @@ class AuthService {
 
         // Combine both sources
         const allSessions = [
-            ...(titlesData || []).map(t => ({
-                session_id: t.session_id,
-                session_title: t.tittle,
-                created_at: t.session_created_at || t.created_at,
-                has_title: true
-            })),
+            ...(titlesData || []).map(t => {
+                const metadata = sessionMetadataById.get(t.session_id) || {};
+                return {
+                    session_id: t.session_id,
+                    session_title: t.tittle,
+                    created_at: t.session_created_at || metadata.created_at || t.created_at,
+                    session_type: metadata.session_type || null,
+                    agent_id: metadata.agent_id || null,
+                    team_id: metadata.team_id || null,
+                    has_title: true,
+                    has_session_row: Boolean(metadata.session_id)
+                };
+            }),
             ...(sessionsWithoutTitles || []).map(s => ({
                 session_id: s.session_id,
                 session_title: this.extractTitleFromRuns(s.runs),
                 created_at: s.created_at,
+                session_type: s.session_type || null,
+                agent_id: s.agent_id || null,
+                team_id: s.team_id || null,
                 has_title: false
             }))
         ];

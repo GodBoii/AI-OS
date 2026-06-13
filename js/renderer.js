@@ -235,7 +235,7 @@ class UIManager {
             }
             // Opening project workspace — check if computer workspace is active
             if (s.isComputerWorkspaceOpen) {
-                this.showWorkspaceSwitchWarning('Computer Workspace', 'Project Workspace', () => {
+                this.showWorkspaceSwitchWarning('Computer Workspace', 'Coder Workspace', () => {
                     this.state.setState({ isComputerWorkspaceOpen: false });
                     // Small delay so the closing animation finishes before the new one opens
                     setTimeout(() => this.state.setState({ isProjectWorkspaceOpen: true }), 180);
@@ -254,7 +254,7 @@ class UIManager {
             }
             // Opening computer workspace — check if project workspace is active
             if (s.isProjectWorkspaceOpen) {
-                this.showWorkspaceSwitchWarning('Project Workspace', 'Computer Workspace', () => {
+                this.showWorkspaceSwitchWarning('Coder Workspace', 'Computer Workspace', () => {
                     this.state.setState({ isProjectWorkspaceOpen: false });
                     setTimeout(() => this.state.setState({ isComputerWorkspaceOpen: true }), 180);
                 });
