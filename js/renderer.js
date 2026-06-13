@@ -61,6 +61,7 @@ class UIManager {
             toDoListIcon: document.getElementById('to-do-list-icon'),
             projectWorkspaceIcon: document.getElementById('project-workspace-icon'),
             computerWorkspaceIcon: document.getElementById('computer-workspace-icon'),
+            activeWorkspacePill: document.getElementById('active-workspace-pill'),
             themeToggle: document.getElementById('theme-toggle'),
             minimizeBtn: document.getElementById('minimize-window'),
             resizeBtn: document.getElementById('resize-window'),
@@ -261,6 +262,17 @@ class UIManager {
                 return;
             }
             this.state.setState({ isComputerWorkspaceOpen: true });
+        });
+
+        document.addEventListener('click', (event) => {
+            const pill = event.target?.closest?.('#active-workspace-pill');
+            if (!pill) return;
+            const type = pill.dataset?.workspaceType;
+            if (type === 'project') {
+                this.state.setState({ isProjectWorkspaceOpen: true });
+            } else if (type === 'computer') {
+                this.state.setState({ isComputerWorkspaceOpen: true });
+            }
         });
 
         addClickHandler(this.elements.minimizeBtn, () => ipcRenderer.send('minimize-window'));
@@ -727,6 +739,41 @@ class UIManager {
         });
     }
 
+    updateActiveWorkspacePill() {
+        const pill = document.getElementById('active-workspace-pill');
+        const label = document.getElementById('active-workspace-pill-label');
+        const icon = pill?.querySelector('.active-workspace-pill-icon');
+        if (!pill || !label || !icon) return;
+
+        const state = this.state.getState();
+        const projectActive = this.isProjectModeActive();
+        const computerActive = this.isComputerModeActive();
+        const showProject = projectActive && !state.isProjectWorkspaceOpen;
+        const showComputer = !showProject && computerActive && !state.isComputerWorkspaceOpen;
+
+        pill.classList.toggle('hidden', !showProject && !showComputer);
+        pill.classList.toggle('workspace-pill-coder', showProject);
+        pill.classList.toggle('workspace-pill-computer', showComputer);
+
+        if (showProject) {
+            label.textContent = 'Coder Workspace';
+            icon.className = 'fas fa-code active-workspace-pill-icon';
+            pill.title = 'Coder workspace is still active. Click to reopen it.';
+            pill.setAttribute('aria-label', 'Coder workspace is still active. Reopen workspace.');
+            pill.dataset.workspaceType = 'project';
+        } else if (showComputer) {
+            label.textContent = 'Computer Workspace';
+            icon.className = 'fas fa-desktop active-workspace-pill-icon';
+            pill.title = 'Computer workspace is still active. Click to reopen it.';
+            pill.setAttribute('aria-label', 'Computer workspace is still active. Reopen workspace.');
+            pill.dataset.workspaceType = 'computer';
+        } else {
+            pill.removeAttribute('title');
+            pill.removeAttribute('aria-label');
+            delete pill.dataset.workspaceType;
+        }
+    }
+
     updateTheme(isDarkMode) {
         document.body.classList.toggle('dark-mode', isDarkMode);
         if (this.elements.themeToggle) {
@@ -824,6 +871,8 @@ class UIManager {
             this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-active', computerModeActive);
             this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-hidden', computerModeActive && !computerOpen);
         }
+
+        this.updateActiveWorkspacePill();
     }
 
     updateProjectWorkspaceVisibility(isOpen) {
@@ -841,6 +890,8 @@ class UIManager {
             if (isOpen) window.floatingWindowManager.onWindowOpen('project-workspace');
             else window.floatingWindowManager.onWindowClose('project-workspace');
         }
+
+        this.updateActiveWorkspacePill();
     }
 
     updateComputerWorkspaceVisibility(isOpen) {
@@ -860,6 +911,8 @@ class UIManager {
             if (isOpen) window.floatingWindowManager.onWindowOpen('computer-workspace');
             else window.floatingWindowManager.onWindowClose('computer-workspace');
         }
+
+        this.updateActiveWorkspacePill();
     }
 }
 
@@ -867,6 +920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const stateManager = new StateManager();
     window.stateManager = stateManager;
     const uiManager = new UIManager(stateManager);
+    window.uiManager = uiManager;
 
     const loadModule = async (name, containerId, initFunc) => {
         try {
@@ -911,6 +965,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadModule('to-do-list', 'to-do-list-root', () => window.todo?.init())
     ]);
 
+    uiManager.cacheElements();
     const initialState = stateManager.getState();
     uiManager.updateTheme(initialState.isDarkMode);
     uiManager.updateChatVisibility(initialState.isChatOpen);
