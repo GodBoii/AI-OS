@@ -7,6 +7,7 @@ for background execution of scheduled tasks.
 
 import logging
 import traceback
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from extensions import socketio
 from supabase_client import supabase_client
@@ -148,7 +149,8 @@ def run_autonomous_task(task_id: str, user_id: str, sid: str = None):
         # Save work output to task
         supabase_client.table("tasks").update({
             "task_work": work_output,
-            "status": "completed"
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", task_id).execute()
 
         logger.info(f"✅ Task {task_id} completed and work saved")
