@@ -21,7 +21,6 @@ from google_drive_tools import GoogleDriveTools
 from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from media_tools import MediaTools
-from mimo_model import get_mimo_model
 from ppt_tools import build_presentation_agent
 from supabase_tools import SupabaseTools
 from user_file_vault_tools import UserFileVaultTools
@@ -77,6 +76,8 @@ def get_llm_os(
     """
     _ = Planner_Agent
     _ = computer_tools_config
+
+    from agno.models.openrouter import OpenRouter
 
     direct_tools: List[Union[Toolkit, callable]] = []
     members: List[Union[Agent, Team]] = []
@@ -135,7 +136,7 @@ def get_llm_os(
         members.append(
             Agent(
                 name="assistant",
-                model=get_mimo_model("mimo-v2.5-pro"),
+                model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
                 role=(
                     "Platform operations assistant for GitHub, Vercel, and Supabase. "
                     "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
@@ -266,7 +267,7 @@ def get_llm_os(
 
     return Team(
         name="Aetheria_AI",
-        model=get_mimo_model("mimo-v2.5"),
+        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
         members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,

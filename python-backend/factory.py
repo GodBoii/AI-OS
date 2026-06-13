@@ -59,7 +59,7 @@ def create_app():
     # assign to request context session. We don't rely on Flask session in
     # socket handlers (token auth is used), so disable SocketIO session
     # management explicitly.
-    socketio.init_app(app, message_queue=config.REDIS_URL, manage_session=False)
+    socketio.init_app(app, manage_session=False)
     oauth.init_app(app)
 
     from extensions import limiter
