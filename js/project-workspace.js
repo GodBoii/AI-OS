@@ -614,6 +614,7 @@ class ProjectWorkspace {
 
         this.updateModeUI();
         this.emitWorkspaceStateChange();
+        window.uiManager?.updateActiveWorkspacePill?.();
 
         return this.activeProject;
     }
@@ -2465,6 +2466,7 @@ class ProjectWorkspace {
         this.setStatus('Coder mode off. Starting a new normal chat session.');
         this.closePanel();
         this.updateModeUI();
+        window.uiManager?.updateActiveWorkspacePill?.();
 
         // Force a brand-new chat session so subsequent messages use default llm_os flow.
         const newChatBtn = document.querySelector('.add-btn');

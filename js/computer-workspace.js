@@ -155,6 +155,7 @@ class ComputerWorkspace {
         this.setStatus('Computer mode active. Messages will route to dedicated computer agent.');
         this.openPanel();
         this.refreshScopeLabel();
+        window.uiManager?.updateActiveWorkspacePill?.();
     }
 
     isModeActive() {
@@ -255,6 +256,7 @@ class ComputerWorkspace {
         this.setStatus('Computer mode off. Starting a new normal chat session.');
         this.closePanel();
         this.updateScopeLabel(null);
+        window.uiManager?.updateActiveWorkspacePill?.();
 
         const newChatBtn = document.querySelector('.add-btn');
         if (newChatBtn) {
