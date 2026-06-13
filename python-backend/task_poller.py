@@ -9,8 +9,9 @@ import logging
 import time
 import threading
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import redis
 import config
@@ -191,8 +192,6 @@ class TaskPoller:
         if not repeat or repeat == 'none':
             return  # One-time task, stays completed
 
-        from datetime import timedelta
-
         next_run = self._compute_next_run(metadata, repeat)
         if not next_run:
             return
@@ -206,65 +205,119 @@ class TaskPoller:
                 "status": "pending",
                 "metadata": updated_metadata,
                 "deadline": next_run.isoformat(),
-                "task_work": None
+                "task_work": None,
+                "completed_at": None
             }).eq("id", task_id).execute()
             logger.info(f"Recurring task {task_id} rescheduled -> {next_run.isoformat()}")
         except Exception as e:
             logger.error(f"Failed to reschedule task {task_id}: {e}")
 
     def _compute_next_run(self, metadata: Dict[str, Any], repeat: str) -> Optional[datetime]:
-        """Compute next execution time based on repeat pattern."""
-        from datetime import timedelta
+        """Compute the next UTC execution time while preserving the user's local wall-clock time."""
+        now_utc = datetime.now(timezone.utc)
+        base = self._parse_datetime(metadata.get('next_run_at')) or now_utc
+        base = base.astimezone(timezone.utc)
 
-        base_str = metadata.get('next_run_at')
-        base = self._parse_datetime(base_str) if base_str else datetime.now(timezone.utc)
-        if not base:
-            base = datetime.now(timezone.utc)
+        hour, minute = self._schedule_hour_minute(metadata.get('schedule_time'))
+        user_tz = self._user_timezone(metadata)
 
-        schedule_time = metadata.get('schedule_time', '09:00')
-        try:
-            hour, minute = map(int, schedule_time.split(':'))
-        except (ValueError, TypeError):
-            hour, minute = 9, 0
-
-        # Get user timezone offset from metadata
-        tz_offset_minutes = metadata.get('tz_offset_minutes', 0)
-
-        if repeat == 'daily':
-            next_day = base + timedelta(days=1)
-            return next_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-        elif repeat == 'weekdays':
-            next_day = base + timedelta(days=1)
-            while next_day.weekday() >= 5:
-                next_day += timedelta(days=1)
-            return next_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-        elif repeat == 'weekly':
-            return (base + timedelta(weeks=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-        elif repeat == 'monthly':
-            month = base.month + 1
-            year = base.year
-            if month > 12:
-                month = 1
-                year += 1
-            day = min(base.day, 28)
-            return datetime(year, month, day, hour, minute, 0, tzinfo=timezone.utc)
-
-        elif repeat == 'custom':
-            custom_interval = metadata.get('custom_interval', {})
-            value = int(custom_interval.get('value', 1))
+        if repeat == 'custom':
+            custom_interval = metadata.get('custom_interval') or {}
+            try:
+                value = max(1, int(custom_interval.get('value', 1)))
+            except (TypeError, ValueError):
+                value = 1
             unit = custom_interval.get('unit', 'days')
 
             if unit == 'hours':
-                return base + timedelta(hours=value)
-            elif unit == 'days':
-                return (base + timedelta(days=value)).replace(hour=hour, minute=minute, second=0, microsecond=0)
-            elif unit == 'weeks':
-                return (base + timedelta(weeks=value)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+                candidate = base + timedelta(hours=value)
+                while candidate <= now_utc:
+                    candidate += timedelta(hours=value)
+                return candidate.astimezone(timezone.utc)
+            if unit not in {'days', 'weeks'}:
+                unit = 'days'
+
+            step = timedelta(days=value if unit == 'days' else value * 7)
+            local_candidate = base.astimezone(user_tz) + step
+            local_candidate = local_candidate.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            while local_candidate.astimezone(timezone.utc) <= now_utc:
+                local_candidate += step
+            return local_candidate.astimezone(timezone.utc)
+
+        local_candidate = base.astimezone(user_tz)
+
+        if repeat == 'daily':
+            local_candidate = self._with_local_time(local_candidate + timedelta(days=1), hour, minute)
+            while local_candidate.astimezone(timezone.utc) <= now_utc:
+                local_candidate = self._with_local_time(local_candidate + timedelta(days=1), hour, minute)
+            return local_candidate.astimezone(timezone.utc)
+
+        if repeat == 'weekdays':
+            local_candidate = self._with_local_time(local_candidate + timedelta(days=1), hour, minute)
+            while local_candidate.weekday() >= 5 or local_candidate.astimezone(timezone.utc) <= now_utc:
+                local_candidate = self._with_local_time(local_candidate + timedelta(days=1), hour, minute)
+            return local_candidate.astimezone(timezone.utc)
+
+        if repeat == 'weekly':
+            local_candidate = self._with_local_time(local_candidate + timedelta(weeks=1), hour, minute)
+            while local_candidate.astimezone(timezone.utc) <= now_utc:
+                local_candidate = self._with_local_time(local_candidate + timedelta(weeks=1), hour, minute)
+            return local_candidate.astimezone(timezone.utc)
+
+        if repeat == 'monthly':
+            anchor_day = self._schedule_day(metadata, local_candidate.day)
+            local_candidate = self._add_month(local_candidate, anchor_day, hour, minute)
+            while local_candidate.astimezone(timezone.utc) <= now_utc:
+                local_candidate = self._add_month(local_candidate, anchor_day, hour, minute)
+            return local_candidate.astimezone(timezone.utc)
 
         return None
+
+    def _schedule_hour_minute(self, schedule_time: Optional[str]) -> tuple[int, int]:
+        try:
+            hour, minute = map(int, (schedule_time or '09:00').split(':')[:2])
+            if 0 <= hour <= 23 and 0 <= minute <= 59:
+                return hour, minute
+        except (ValueError, TypeError):
+            pass
+        return 9, 0
+
+    def _user_timezone(self, metadata: Dict[str, Any]):
+        tz_name = metadata.get('user_timezone')
+        if tz_name:
+            try:
+                return ZoneInfo(tz_name)
+            except ZoneInfoNotFoundError:
+                logger.warning("Unknown task timezone '%s'; falling back to stored offset", tz_name)
+
+        try:
+            offset_minutes = int(metadata.get('tz_offset_minutes', 0))
+        except (TypeError, ValueError):
+            offset_minutes = 0
+        return timezone(timedelta(minutes=-offset_minutes))
+
+    def _with_local_time(self, dt: datetime, hour: int, minute: int) -> datetime:
+        return dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    def _schedule_day(self, metadata: Dict[str, Any], fallback_day: int) -> int:
+        schedule_date = metadata.get('schedule_date')
+        if schedule_date:
+            try:
+                return datetime.fromisoformat(schedule_date).day
+            except (TypeError, ValueError):
+                pass
+        return fallback_day
+
+    def _add_month(self, dt: datetime, anchor_day: int, hour: int, minute: int) -> datetime:
+        import calendar
+
+        month = dt.month + 1
+        year = dt.year
+        if month > 12:
+            month = 1
+            year += 1
+        day = min(anchor_day, calendar.monthrange(year, month)[1])
+        return datetime(year, month, day, hour, minute, 0, tzinfo=dt.tzinfo)
 
 
 # ---------------------------------------------------------------------------
