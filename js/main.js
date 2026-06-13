@@ -232,7 +232,7 @@ function createWindow() {
     // Verify icon exists
     const iconExists = fs.existsSync(iconPath);
     console.log('[Icon] Path exists:', iconExists);
-    
+
     if (!iconExists) {
         console.error('[Icon] CRITICAL: Icon file not found at:', iconPath);
     }
@@ -257,7 +257,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: false,
+        frame: true,
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });

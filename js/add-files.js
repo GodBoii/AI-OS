@@ -584,41 +584,75 @@ class FileAttachmentHandler {
         return iconMap[extension] || 'fas fa-file';
     }
 
-    createFileChip(file, index) {
-        const chip = document.createElement('div');
-        chip.className = `file-chip ${file.status}`;
+    createAttachmentCard(file, index, options = {}) {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = `attachment-card ${file.status || 'completed'}`;
+        card.title = file.name || 'Attached file';
+        card.dataset.fileIndex = String(index);
 
-        const icon = document.createElement('i');
-        icon.className = `${this.getFileIcon(file.name)} file-chip-icon`;
+        const isImage = (file.type || '').startsWith('image/') && file.previewUrl;
+        const statusLabel = this.getFileStatusLabel(file);
 
-        const name = document.createElement('span');
-        name.className = 'file-chip-name';
-        
-        // For uploading/reading files, show status in the name
-        if (file.status === 'reading' || file.status === 'uploading') {
-            name.innerHTML = `<span class="upload-status-text">${file.status === 'uploading' ? 'Uploading' : 'Reading'} ${file.name}</span>`;
+        if (isImage) {
+            const image = document.createElement('img');
+            image.className = 'attachment-card-thumb';
+            image.src = file.previewUrl;
+            image.alt = file.name || 'Image attachment';
+            card.appendChild(image);
         } else {
-            name.textContent = file.name;
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'attachment-card-icon';
+            iconWrap.innerHTML = `<i class="${this.getFileIcon(file.name || '')}"></i>`;
+            card.appendChild(iconWrap);
         }
 
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'file-chip-remove';
-        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
-        removeBtn.title = 'Remove file';
-        removeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.removeFile(index);
-        });
+        const label = document.createElement('span');
+        label.className = 'attachment-card-name';
+        label.textContent = file.name || 'Untitled file';
+        card.appendChild(label);
 
-        chip.appendChild(icon);
-        chip.appendChild(name);
-        chip.appendChild(removeBtn);
+        if (statusLabel) {
+            const status = document.createElement('span');
+            status.className = 'attachment-card-status';
+            status.textContent = statusLabel;
+            card.appendChild(status);
+        }
 
-        chip.addEventListener('click', () => {
+        if (options.removable !== false) {
+            const removeBtn = document.createElement('span');
+            removeBtn.className = 'attachment-card-remove';
+            removeBtn.setAttribute('role', 'button');
+            removeBtn.setAttribute('aria-label', `Remove ${file.name || 'file'}`);
+            removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+            removeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.removeFile(index);
+            });
+            card.appendChild(removeBtn);
+        }
+
+        card.addEventListener('click', () => {
             this.showFilePreview(file, index);
         });
 
-        this.contextFilesContent.appendChild(chip);
+        return card;
+    }
+
+    createFileChip(file, index) {
+        this.contextFilesContent.appendChild(this.createAttachmentCard(file, index));
+    }
+
+    getFileStatusLabel(file) {
+        if (!file || file.status === 'completed') return '';
+        const statusMap = {
+            archiving: 'Saving',
+            uploading: 'Uploading',
+            reading: 'Reading',
+            failed: 'Failed'
+        };
+        return statusMap[file.status] || file.status || '';
     }
 
     updateContextFilesBar() {
@@ -636,7 +670,7 @@ class FileAttachmentHandler {
             this.sidebar.classList.add('hidden');
         }
 
-        const fileChips = this.contextFilesContent.querySelectorAll('.file-chip');
+        const fileChips = this.contextFilesContent.querySelectorAll('.file-chip, .attachment-card');
         fileChips.forEach(chip => chip.remove());
     }
 
@@ -755,10 +789,13 @@ class FileAttachmentHandler {
         return this.attachedFiles.filter(file => file.status === 'completed');
     }
 
-    clearAttachedFiles() {
-        this.attachedFiles.forEach(file => {
-            if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
-        });
+    clearAttachedFiles(options = {}) {
+        const revokePreviewUrls = options.revokePreviewUrls !== false;
+        if (revokePreviewUrls) {
+            this.attachedFiles.forEach(file => {
+                if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
+            });
+        }
         
         this.attachedFiles = [];
         this.renderFilePreview();

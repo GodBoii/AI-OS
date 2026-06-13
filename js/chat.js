@@ -11,6 +11,7 @@ import { showConnectionError, addMessageActionButtons } from './ui-utilities.js'
 // Directly import the artifactHandler singleton to make the dependency explicit.
 import { artifactHandler } from './artifact-handler.js';
 import sessionContentViewer from './session-content-viewer.js';
+import './history-content-sidebar.js';
 import {
     PRESENTATION_TEMPLATES,
     buildPresentationTemplateInstruction,
@@ -2492,25 +2493,32 @@ function addUserMessage(message, turnContextData = null) {
     const userMessageContainer = document.createElement('div');
     userMessageContainer.className = 'user-message-container';
 
+    if (turnContextData) {
+        const sessionCount = turnContextData.sessions?.length || 0;
+        const fileCount = turnContextData.files?.length || 0;
+
+        if (fileCount > 0) {
+            userMessageContainer.appendChild(createMessageAttachmentRail(turnContextData.files));
+        }
+
+        if (sessionCount > 0) {
+            const parts = [];
+            if (sessionCount > 0) parts.push(`${sessionCount} referenced chat${sessionCount > 1 ? 's' : ''}`);
+            const buttonText = parts.join(' & ');
+            const contextBtn = document.createElement('button');
+            contextBtn.className = 'view-turn-context-btn';
+            contextBtn.innerHTML = `<i class="fas fa-layer-group"></i> ${buttonText}`;
+            userMessageContainer.appendChild(contextBtn);
+        }
+
+        messageDiv.dataset.context = JSON.stringify(turnContextData);
+    }
+
     if (message) {
         const textDiv = document.createElement('div');
         textDiv.className = 'user-message-text';
         textDiv.textContent = message;
         userMessageContainer.appendChild(textDiv);
-    }
-
-    if (turnContextData) {
-        const sessionCount = turnContextData.sessions?.length || 0;
-        const fileCount = turnContextData.files?.length || 0;
-        const parts = [];
-        if (sessionCount > 0) parts.push(`${sessionCount} session${sessionCount > 1 ? 's' : ''}`);
-        if (fileCount > 0) parts.push(`${fileCount} file${fileCount > 1 ? 's' : ''}`);
-        const buttonText = `Context: ${parts.join(' & ')}`;
-        const contextBtn = document.createElement('button');
-        contextBtn.className = 'view-turn-context-btn';
-        contextBtn.innerHTML = `<i class="fas fa-paperclip"></i> ${buttonText}`;
-        messageDiv.dataset.context = JSON.stringify(turnContextData);
-        userMessageContainer.appendChild(contextBtn);
     }
 
     messageDiv.appendChild(userMessageContainer);
@@ -3043,6 +3051,20 @@ function getPresentationMessageForBackend(message) {
     return `${message}${buildPresentationTemplateInstruction(selectedTemplate)}`;
 }
 
+function createMessageAttachmentRail(files = []) {
+    const rail = document.createElement('div');
+    rail.className = 'message-attachment-rail';
+    rail.setAttribute('aria-label', 'Attached files');
+
+    files.forEach((file, index) => {
+        const card = fileAttachmentHandler.createAttachmentCard(file, index, { removable: false });
+        card.classList.add('message-attachment-card');
+        rail.appendChild(card);
+    });
+
+    return rail;
+}
+
 function setPlanModeEnabled(enabled) {
     planModeEnabled = Boolean(enabled);
     const button = document.getElementById('plan-mode-btn');
@@ -3461,7 +3483,7 @@ async function handleSendMessage() {
 
         floatingInput.value = '';
         floatingInput.style.height = 'auto';
-        fileAttachmentHandler.clearAttachedFiles();
+        fileAttachmentHandler.clearAttachedFiles({ revokePreviewUrls: false });
         contextHandler.clearSelectedContext();
         pendingPlanSubmitDisplayMessage = null;
         return;
@@ -3533,7 +3555,7 @@ async function handleSendMessage() {
 
     floatingInput.value = '';
     floatingInput.style.height = 'auto';
-    fileAttachmentHandler.clearAttachedFiles();
+    fileAttachmentHandler.clearAttachedFiles({ revokePreviewUrls: false });
     contextHandler.clearSelectedContext();
     pendingPlanSubmitDisplayMessage = null;
 }
@@ -3736,31 +3758,16 @@ class UnifiedPreviewHandler {
             return;
         }
 
-        let html = '';
-        if (files.length > 0) {
-            html += '<div class="section-header"><i class="fas fa-paperclip"></i> Files</div>';
-            html += files.map((file, index) => `
-                <div class="file-preview-item">
-                    <div class="file-preview-header-item">
-                        <div class="file-info">
-                            <i class="${this.fileAttachmentHandler.getFileIcon(file.name)} file-icon"></i>
-                            <span class="file-name" title="${file.name}">${file.name}</span>
-                        </div>
-                        <div class="file-actions">
-                            <button class="preview-toggle" title="Toggle Preview" aria-label="Toggle file preview">
-                                <i class="fas fa-chevron-down"></i>
-                            </button>
-                            <button class="remove-file" title="Remove File" aria-label="Remove file">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="file-preview-content-item">
-                        ${file.isMedia ? this.renderMediaPreview(file) : (file.content || "No preview available")}
-                    </div>
-                </div>`).join('');
-        }
-        filesContent.innerHTML = html;
+        filesContent.innerHTML = '<div class="section-header"><i class="fas fa-paperclip"></i> Files</div>';
+        const rail = document.createElement('div');
+        rail.className = 'message-attachment-rail context-attachment-rail';
+        rail.setAttribute('aria-label', 'Context files');
+
+        files.forEach((file, index) => {
+            rail.appendChild(this.fileAttachmentHandler.createAttachmentCard(file, index, { removable: false }));
+        });
+
+        filesContent.appendChild(rail);
     }
 
     escapeHtml(text) {
