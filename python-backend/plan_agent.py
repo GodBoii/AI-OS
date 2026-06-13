@@ -6,7 +6,6 @@ from agno.run.agent import RunEvent
 from agno.run.team import TeamRunEvent
 from agno.tools.duckduckgo import DuckDuckGoTools
 
-from mimo_model import get_mimo_model
 from tool_event_payload import serialize_tool_event
 
 logger = logging.getLogger(__name__)
@@ -81,9 +80,10 @@ PLAN_OUTPUT_SECTIONS = [
 
 
 def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = True) -> Agent:
+    from agno.models.openrouter import OpenRouter
     return Agent(
         name="plan_agent",
-        model=get_mimo_model("mimo-v2.5-pro"),
+        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
         tools=[DuckDuckGoTools()] if enable_read_only_tools else [],
         instructions=[
             "<system_instructions>",

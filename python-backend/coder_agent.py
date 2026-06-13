@@ -15,7 +15,6 @@ from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
 from database_config import get_sqlalchemy_database_url
-from mimo_model import get_mimo_model
 
 
 def _db_url_sqlalchemy() -> str:
@@ -104,7 +103,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=get_mimo_model("mimo-v2.5"),
+        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."

@@ -172,7 +172,7 @@ def get_task_agent(
     task_agent = Agent(
         name="Task_Manager",
         role="Unified task management and execution specialist with Aetheria AI delegation",
-        model=OpenRouter(id="qwen/qwen3.6-plus:free"),
+        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
         tools=[task_tools, user_context_tools, aetheria_bridge],
         instructions=instructions,
         markdown=True,
