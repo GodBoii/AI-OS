@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 from agno.agent import Agent
 from agno.tools import Toolkit
 
-from mimo_model import get_mimo_model
 from sandbox_persistence import get_persistence_service
 
 logger = logging.getLogger(__name__)
@@ -549,9 +548,10 @@ def build_presentation_agent(
             sid=sid,
         )
     ]
+    from agno.models.openrouter import OpenRouter
     return Agent(
         name="presentation_agent",
-        model=get_mimo_model("mimo-v2.5"),
+        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
         role=(
             "Native PowerPoint specialist. Plans concise decks and creates editable "
             ".pptx files using presentation_tools."
