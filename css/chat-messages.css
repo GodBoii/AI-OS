@@ -217,6 +217,7 @@
 
 .message-user {
     margin-left: auto;
+    margin-right: 0;
     max-width: 75%;
     
     /* Glassmorphism Surface */
@@ -240,6 +241,7 @@
     border-bottom-right-radius: 4px;
     display: flex;
     justify-content: flex-end;
+    align-self: flex-end;
     
     /* Silky Smooth Interaction */
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
@@ -319,6 +321,45 @@
 
 .view-turn-context-btn i {
     font-size: 0.8rem;
+}
+
+.message-attachment-rail {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    max-width: min(496px, 100%);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    padding: 2px 2px 8px 2px;
+    margin-bottom: 10px;
+    margin-left: auto;
+    justify-content: flex-start;
+}
+
+.message-attachment-rail::-webkit-scrollbar {
+    height: 6px;
+}
+
+.message-attachment-rail::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.message-attachment-rail::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+.message-attachment-card {
+    width: 112px;
+    height: 112px;
+    flex-basis: 112px;
+}
+
+.message-user .view-turn-context-btn {
+    margin-bottom: 10px;
 }
 
 .dark-mode .message-user .view-turn-context-btn {
