@@ -44,4 +44,4 @@ ENV PYTHONUNBUFFERED=1
 # This bypasses the shell and prevents any misinterpretation of quotes.
 # CMD now points directly to the instantiated app in `app.py`.
 # Added logging flags for better visibility
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "4", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--timeout", "300", "--keep-alive", "65", "--bind", "0.0.0.0:8765", "--log-level", "info", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
