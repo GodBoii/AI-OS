@@ -378,6 +378,7 @@ class ContextHandler {
         sessionItem.dataset.sessionId = session.session_id;
         sessionItem.dataset.sessionTitle = session.session_title || '';
         sessionItem.dataset.sessionCreatedAt = session.created_at || '';
+        sessionItem.dataset.workspaceType = this.getSessionWorkspaceInfo(session).type;
         
         // Use title from session_titles table if available
         let sessionName = session.session_title?.trim();
@@ -446,17 +447,72 @@ class ContextHandler {
         return sessionItem;
     }
     
+    escapeHtml(text = '') {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    getSessionWorkspaceInfo(session = {}) {
+        const agentId = String(session.agent_id || '').toLowerCase();
+        const teamId = String(session.team_id || '').toLowerCase();
+
+        if (agentId === 'aetheria-coder') {
+            return {
+                type: 'coder',
+                label: 'Coder',
+                title: 'Coder Workspace chat',
+                icon: 'fa-code'
+            };
+        }
+
+        if (agentId === 'aetheria-computer') {
+            return {
+                type: 'computer',
+                label: 'Computer',
+                title: 'Computer Workspace chat',
+                icon: 'fa-desktop'
+            };
+        }
+
+        if (session.has_session_row === false) {
+            return {
+                type: 'missing',
+                label: 'Unavailable',
+                title: 'Session data is missing',
+                icon: 'fa-triangle-exclamation'
+            };
+        }
+
+        return {
+            type: teamId === 'aetheria-ai' ? 'normal' : 'unknown',
+            label: '',
+            title: 'Normal chat',
+            icon: ''
+        };
+    }
+
     getSessionItemHTML(session, sessionName, formattedDate) {
         // PHASE 3: Add attachment indicator if session has attachments
         const attachmentIcon = session.has_attachments 
             ? '<i class="fas fa-paperclip session-attachment-icon" title="Has attachments"></i>' 
             : '';
+        const workspace = this.getSessionWorkspaceInfo(session);
+        const workspaceBadge = workspace.type === 'coder' || workspace.type === 'computer' ? `
+            <span class="session-workspace-badge session-workspace-${workspace.type}" title="${this.escapeHtml(workspace.title)}">
+                <i class="fas ${workspace.icon}" aria-hidden="true"></i>
+                <span>${this.escapeHtml(workspace.label)}</span>
+            </span>` : '';
         
         return `
             <div class="session-content">
-                <h3>${sessionName} ${attachmentIcon}</h3>
+                <h3>${this.escapeHtml(sessionName)} ${attachmentIcon}</h3>
                 <div class="session-meta">
                     <span class="session-date">${formattedDate}</span>
+                    ${workspaceBadge}
                 </div>
             </div>
             <div class="session-actions">

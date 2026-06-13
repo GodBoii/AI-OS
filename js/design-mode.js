@@ -903,7 +903,7 @@ class DesignModeController {
     buildCommentPrompt() {
         const project = this.snapshot?.activeProject || {};
         const lines = [
-            'Design Mode feedback for the local project workspace.',
+            'Design Mode feedback for the local coder workspace.',
             'Please inspect the relevant files, implement these design changes, and verify the result.',
             '',
             `Project: ${project.project_name || project.slug || 'Current project'}`,

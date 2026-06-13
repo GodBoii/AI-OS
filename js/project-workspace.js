@@ -582,7 +582,7 @@ class ProjectWorkspace {
                 || this.activeProject?.slug 
                 || this.activeProject?.repo_name
                 || (this.activeProject?.local_root_path ? this.deriveRepoNameFromPath(this.activeProject.local_root_path) : null)
-                || 'Project Workspace';
+                || 'Coder Workspace';
             
             const sub = this.activeProject?.hostname
                 || this.activeProject?.repo_url
@@ -639,7 +639,7 @@ class ProjectWorkspace {
         const hostname = String(project.hostname || '').trim();
         const lines = [
             'PROJECT WORKSPACE CONTEXT',
-            'The user is working inside a dedicated project workspace.',
+            'The user is working inside a dedicated coder workspace.',
             `Project Name: ${project.project_name || 'Untitled Project'}`,
             `Hostname: ${hostname || 'Unavailable'}`,
             `Slug: ${project.slug || 'Unavailable'}`,
@@ -704,7 +704,7 @@ class ProjectWorkspace {
         state.bootstrap_context_key = this.getProjectContextKey();
         this.updateModeUI();
 
-        this.setStatus('Project mode active. Cloud mode enabled by default.');
+        this.setStatus('Coder mode active. Cloud mode enabled by default.');
         this.setPreviewPlaceholder('Click a file to view its content.');
         this.hideMainFilePreview();
         this.updateRedeployUI({ visible: false, dirty: false });
@@ -1557,7 +1557,7 @@ class ProjectWorkspace {
             .map((item) => String(item || '').replace(/\\/g, '/').trim())
             .filter(Boolean)));
         if (!paths.some((item) => /\.html?$/i.test(item))) {
-            throw new Error('No HTML files found in the project workspace.');
+            throw new Error('No HTML files found in the coder workspace.');
         }
 
         const files = [];
@@ -1683,7 +1683,7 @@ class ProjectWorkspace {
             const projectName = this.activeProject?.project_name
                 || this.activeProject?.repo_name
                 || this.activeProject?.slug
-                || 'Project Workspace Site';
+                || 'Coder Workspace Site';
             const generatedSlug = existingTarget?.slug || handler.slugify(projectName);
             const rawFiles = await this.collectWorkspaceFilesForDeploy();
             const htmlFile = rawFiles.find((file) => String(file.path || '').toLowerCase() === 'index.html')
@@ -1905,9 +1905,9 @@ class ProjectWorkspace {
         const mode = this.getExecutionTarget();
         const localRoot = this.getState()?.local_context?.root_path;
         const intro = mode === 'local'
-            ? `You are in dedicated project mode using LOCAL workspace at ${localRoot}. Inspect files, summarize tree, and wait for my next coding instruction.`
+            ? `You are in dedicated coder mode using LOCAL workspace at ${localRoot}. Inspect files, summarize tree, and wait for my next coding instruction.`
             : (this.activeProject?.site_id
-                ? `You are in dedicated project mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to cloud workspace, show file tree, and wait for my next coding instruction.`
+                ? `You are in dedicated coder mode. Inspect deployed project ${this.activeProject.slug || this.activeProject.site_id}, copy it to cloud workspace, show file tree, and wait for my next coding instruction.`
                 : 'You are in dedicated coding mode. Inspect cloud workspace, summarize file tree, and wait for my coding instruction.');
 
         await this.sendMessageToChat(intro, true);
@@ -2450,7 +2450,7 @@ class ProjectWorkspace {
         if (state) {
             state.workspace_mode = 'cloud';
         }
-        this.el.title.textContent = 'Project Workspace';
+        this.el.title.textContent = 'Coder Workspace';
         this.el.subtitle.textContent = 'No active project';
         this.el.tree.innerHTML = '';
         if (this.el.terminalOutput) {
@@ -2462,7 +2462,7 @@ class ProjectWorkspace {
         this.hideMainFilePreview();
         this.updateRedeployUI({ visible: false, dirty: false });
         this.setPreviewPlaceholder('Click a file to view its content.');
-        this.setStatus('Project mode off. Starting a new normal chat session.');
+        this.setStatus('Coder mode off. Starting a new normal chat session.');
         this.closePanel();
         this.updateModeUI();
 
