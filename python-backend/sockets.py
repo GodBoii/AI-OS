@@ -173,20 +173,28 @@ def listen_for_browser_screenshots():
         pubsub.psubscribe('browser-screenshot:*')
         logger.info("[Browser Screenshot] Listener started, subscribed to browser-screenshot:*")
 
-        for message in pubsub.listen():
-            if message['type'] == 'pmessage':
-                try:
-                    data = json.loads(message['data'])
-                    session_id = message['channel'].decode('utf-8').split(':')[1]
-                    logger.info(f"[Browser Screenshot] Received event for session {session_id}: {data.get('action')}")
-                    # Emit to conversation room so any reconnected client picks it up
-                    socketio.emit('browser_screenshot', data, room=f"conv:{session_id}")
-                    logger.info(f"[Browser Screenshot] Emitted to room conv:{session_id}: {data.get('action')}")
-                except Exception as e:
-                    logger.error(f"[Browser Screenshot] Error processing message: {e}")
+        while True:
+            try:
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message.get('type') == 'pmessage':
+                    try:
+                        data = json.loads(message['data'])
+                        channel = message['channel']
+                        if isinstance(channel, bytes):
+                            channel = channel.decode('utf-8')
+                        session_id = channel.split(':')[1]
+                        logger.info(f"[Browser Screenshot] Received event for session {session_id}: {data.get('action')}")
+                        socketio.emit('browser_screenshot', data, room=f"conv:{session_id}")
+                    except Exception as e:
+                        logger.error(f"[Browser Screenshot] Error processing message payload: {e}")
+            except Exception as loop_e:
+                if "Timeout" not in str(type(loop_e)) and "Timeout" not in str(loop_e):
+                    logger.error(f"[Browser Screenshot] Error in listener loop: {loop_e}")
+
+            eventlet.sleep(0.01)
 
     except Exception as e:
-        logger.error(f"[Browser Screenshot] Listener error: {e}\n{traceback.format_exc()}")
+        logger.error(f"[Browser Screenshot] Listener fatal error: {e}\n{traceback.format_exc()}")
 
 
 # ==============================================================================
@@ -701,7 +709,7 @@ def on_send_message(data: str):
                 persistence_service = get_persistence_service()
 
                 for file_data in files:
-                    if file_data.get('path'):
+                    if file_data.get('path') or file_data.get('relativePath'):
                         persistence_service.register_content(
                             session_id=conversation_id,
                             user_id=str(user.id),
@@ -711,8 +719,13 @@ def on_send_message(data: str):
                             metadata={
                                 'filename': file_data.get('name', 'unknown'),
                                 'mime_type': file_data.get('type', 'application/octet-stream'),
+                                'type': file_data.get('type', 'application/octet-stream'),
+                                'size': file_data.get('size', 0),
                                 'path': file_data.get('path'),
-                                'is_text': file_data.get('isText', False)
+                                'relativePath': file_data.get('relativePath'),
+                                'file_id': file_data.get('file_id'),
+                                'is_text': file_data.get('isText', False),
+                                'isMedia': file_data.get('isMedia', False)
                             }
                         )
                 logger.info(f"Registered {len(files)} user uploads for session {conversation_id}")

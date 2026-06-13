@@ -1,4 +1,10 @@
 # python-backend/app.py
+
+# CRITICAL: Monkey-patch must happen BEFORE any other imports so that redis-py,
+# python-socketio, and all other libraries use eventlet's cooperative sockets.
+import eventlet
+eventlet.monkey_patch()
+
 import os
 import sys
 import logging
