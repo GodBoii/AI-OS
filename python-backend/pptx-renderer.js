@@ -7,8 +7,23 @@ const PptxGenJS = require('pptxgenjs');
 const EMU_PER_INCH = 914400;
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 let currentPptx = null;
+const SLIDE_W = 10;
+const SLIDE_H = 5.625;
 
 const BUILT_IN_TEMPLATES = {
+  venture_blueprint: {
+    name: 'Venture Blueprint',
+    description: 'Premium pitch and business deck with bold left-rail titles, editorial image zones, and investor-grade evidence layouts.',
+    background: 'F7F4EE',
+    surface: 'FFFCF7',
+    ink: '173042',
+    muted: '6B7280',
+    accent: '143C5A',
+    accent2: 'E4572E',
+    accent3: '2FBF71',
+    fontFace: 'Aptos',
+    headingFace: 'Aptos Display',
+  },
   aetheria_modern: {
     name: 'Aetheria Modern',
     description: 'Clean editorial deck for AI strategy and product narratives.',
@@ -177,6 +192,120 @@ function mixColor(color, target, amount = 0.5) {
     r: a.r + (b.r - a.r) * amount,
     g: a.g + (b.g - a.g) * amount,
     b: a.b + (b.b - a.b) * amount,
+  });
+}
+
+function boxesOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function textLength(value) {
+  return normalizeText(value).replace(/\s+/g, ' ').trim().length;
+}
+
+function estimateTextCapacity(box, fontSize = 10, opts = {}) {
+  const lineHeight = (fontSize / 72) * (opts.lineHeight || 1.18);
+  const charWidth = (fontSize / 72) * (opts.bold ? 0.58 : 0.52);
+  const lines = Math.max(1, Math.floor(box.h / Math.max(lineHeight, 0.08)));
+  const charsPerLine = Math.max(4, Math.floor(box.w / Math.max(charWidth, 0.04)));
+  return Math.floor(lines * charsPerLine * (opts.fit === 'shrink' ? 1.18 : 1));
+}
+
+function createLayoutAudit(slideIndex, slideData) {
+  return {
+    slide_index: slideIndex,
+    title: normalizeText(slideData.title || `Slide ${slideIndex}`),
+    regions: [],
+    warnings: [],
+  };
+}
+
+function auditRegion(audit, region) {
+  if (!audit || !region) return;
+  const normalized = {
+    role: region.role || 'region',
+    kind: region.kind || 'shape',
+    x: Number(region.x || 0),
+    y: Number(region.y || 0),
+    w: Number(region.w || 0),
+    h: Number(region.h || 0),
+    protected: region.protected !== false,
+  };
+  if (normalized.x < -0.01 || normalized.y < -0.01 || normalized.x + normalized.w > SLIDE_W + 0.01 || normalized.y + normalized.h > SLIDE_H + 0.01) {
+    audit.warnings.push({
+      type: 'out_of_bounds',
+      severity: 'error',
+      role: normalized.role,
+      message: `${normalized.role} extends outside the slide canvas.`,
+    });
+  }
+  if (region.kind === 'text') {
+    const chars = textLength(region.text);
+    const capacity = estimateTextCapacity(normalized, region.fontSize || 10, region);
+    if (chars > capacity) {
+      audit.warnings.push({
+        type: 'text_overflow',
+        severity: chars > capacity * 1.35 ? 'error' : 'warning',
+        role: normalized.role,
+        message: `${normalized.role} may overflow: ${chars} chars for roughly ${capacity} chars of space.`,
+      });
+    }
+  }
+  for (const existing of audit.regions) {
+    const collisionRelevant = normalized.protected && existing.protected && normalized.kind !== 'shape' && existing.kind !== 'shape';
+    if (collisionRelevant && boxesOverlap(normalized, existing)) {
+      audit.warnings.push({
+        type: 'region_overlap',
+        severity: 'error',
+        role: normalized.role,
+        with: existing.role,
+        message: `${normalized.role} overlaps ${existing.role}.`,
+      });
+    }
+  }
+  audit.regions.push(normalized);
+}
+
+function safeAddText(slide, audit, text, opts) {
+  slide.addText(text, opts);
+  auditRegion(audit, {
+    kind: 'text',
+    role: opts.role,
+    text,
+    fontSize: opts.fontSize,
+    bold: opts.bold,
+    fit: opts.fit,
+    x: opts.x,
+    y: opts.y,
+    w: opts.w,
+    h: opts.h,
+    protected: opts.protected,
+  });
+}
+
+function safeAddImage(slide, audit, imageOpts) {
+  slide.addImage(imageOpts);
+  auditRegion(audit, {
+    kind: 'image',
+    role: imageOpts.role || 'image',
+    x: imageOpts.x,
+    y: imageOpts.y,
+    w: imageOpts.w,
+    h: imageOpts.h,
+    protected: imageOpts.protected,
+  });
+}
+
+function safeAddShape(slide, audit, shapeType, opts) {
+  slide.addShape(shapeType, opts);
+  auditRegion(audit, {
+    kind: 'shape',
+    role: opts.role,
+    x: opts.x,
+    y: opts.y,
+    w: opts.w,
+    h: opts.h,
+    protected: false,
   });
 }
 
@@ -775,6 +904,326 @@ function buildImageSlide(pptx, slideData, ctx) {
   return slide;
 }
 
+function addVentureBackdrop(slide, template, audit, variant = 'content') {
+  safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+    role: 'background',
+    x: 0, y: 0, w: SLIDE_W, h: SLIDE_H,
+    fill: { color: template.background },
+    line: { color: template.background },
+  });
+  safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+    role: 'left brand rail',
+    x: 0, y: 0, w: variant === 'title' ? 0.24 : 0.16, h: SLIDE_H,
+    fill: { color: template.accent },
+    line: null,
+  });
+  safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+    role: 'top editorial rule',
+    x: 0.54, y: 0.42, w: 1.25, h: 0.035,
+    fill: { color: template.accent2 },
+    line: null,
+  });
+  safeAddText(slide, audit, 'AETHERIA / VENTURE BLUEPRINT', {
+    role: 'brand label',
+    x: 0.56, y: 0.22, w: 2.8, h: 0.14,
+    fontFace: template.fontFace, fontSize: 5.9, bold: true,
+    color: template.muted, charSpace: 1.1, margin: 0,
+    protected: false,
+  });
+}
+
+function addVentureMetricChips(slide, metrics, template, audit, opts = {}) {
+  const items = Array.isArray(metrics) && metrics.length
+    ? metrics.slice(0, opts.maxItems || 3)
+    : [];
+  if (!items.length) return;
+  const x0 = opts.x ?? 0.58;
+  const y = opts.y ?? 4.36;
+  const gap = opts.gap ?? 0.14;
+  const totalW = opts.w ?? 4.92;
+  const w = (totalW - gap * (items.length - 1)) / items.length;
+  items.forEach((metric, i) => {
+    const x = x0 + i * (w + gap);
+    const accent = i === 1 ? template.accent2 : (i === 2 ? template.accent3 : template.accent);
+    safeAddShape(slide, audit, currentPptx.ShapeType.roundRect, {
+      role: `metric ${i + 1} chip`,
+      x, y, w, h: 0.62,
+      rectRadius: 0.045,
+      fill: { color: template.surface },
+      line: { color: accent, transparency: 28, width: 0.8 },
+    });
+    safeAddText(slide, audit, normalizeText(metric.value || metric.metric || `0${i + 1}`), {
+      role: `metric ${i + 1} value`,
+      x: x + 0.14, y: y + 0.12, w: w - 0.28, h: 0.21,
+      fontFace: template.headingFace, fontSize: 13.2, bold: true,
+      color: accent, margin: 0, fit: 'shrink',
+    });
+    safeAddText(slide, audit, normalizeText(metric.label || metric.name || ''), {
+      role: `metric ${i + 1} label`,
+      x: x + 0.14, y: y + 0.38, w: w - 0.28, h: 0.14,
+      fontFace: template.fontFace, fontSize: 5.9, bold: true,
+      color: template.muted, margin: 0, fit: 'shrink',
+    });
+  });
+}
+
+function addVentureVisualPanel(slide, slideData, template, audit, opts = {}) {
+  const x = opts.x ?? 6.05;
+  const y = opts.y ?? 0.66;
+  const w = opts.w ?? 3.34;
+  const h = opts.h ?? 4.26;
+  const imagePath = slideData.image_path || slideData.imagePath;
+  safeAddShape(slide, audit, currentPptx.ShapeType.roundRect, {
+    role: 'visual panel frame',
+    x, y, w, h,
+    rectRadius: 0.08,
+    fill: { color: template.surface },
+    line: { color: template.accent, transparency: 24, width: 1 },
+  });
+  if (imagePath && fs.existsSync(imagePath)) {
+    safeAddImage(slide, audit, {
+      role: 'main visual image',
+      path: imagePath,
+      x: x + 0.12, y: y + 0.12, w: w - 0.24, h: h - 0.86,
+      sizingCrop: true,
+    });
+  } else {
+    safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+      role: 'abstract market block',
+      x: x + 0.24, y: y + 0.28, w: w - 0.48, h: 1.05,
+      fill: { color: mixColor(template.accent, template.surface, 0.12), transparency: 8 },
+      line: null,
+    });
+    safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+      role: 'abstract product block',
+      x: x + 0.24, y: y + 1.52, w: w - 0.92, h: 0.82,
+      fill: { color: template.accent2, transparency: 12 },
+      line: null,
+    });
+    safeAddShape(slide, audit, currentPptx.ShapeType.rect, {
+      role: 'abstract growth block',
+      x: x + 0.84, y: y + 2.54, w: w - 1.08, h: 0.72,
+      fill: { color: template.accent3, transparency: 18 },
+      line: null,
+    });
+  }
+  safeAddText(slide, audit, normalizeText(slideData.visual_summary || slideData.summary || 'Designed for sharp business storytelling'), {
+    role: 'visual panel caption',
+    x: x + 0.26, y: y + h - 0.54, w: w - 0.52, h: 0.24,
+    fontFace: template.fontFace, fontSize: 7.8, bold: true,
+    color: template.accent, align: 'center', margin: 0.01, fit: 'shrink',
+  });
+}
+
+function addVentureFooter(slide, template, audit, ctx) {
+  safeAddShape(slide, audit, currentPptx.ShapeType.line, {
+    role: 'footer rule',
+    x: 0.54, y: 5.18, w: 8.9, h: 0,
+    line: { color: template.ink, transparency: 84, width: 0.5 },
+  });
+  safeAddText(slide, audit, normalizeText(ctx.topic).slice(0, 72), {
+    role: 'footer topic',
+    x: 0.58, y: 5.25, w: 6.9, h: 0.12,
+    fontFace: template.fontFace, fontSize: 5.6, color: template.muted, margin: 0,
+    protected: false,
+  });
+  safeAddText(slide, audit, `${ctx.index}/${ctx.totalSlides}`, {
+    role: 'footer page number',
+    x: 8.94, y: 5.25, w: 0.46, h: 0.12,
+    fontFace: template.fontFace, fontSize: 5.6, color: template.muted, align: 'right', margin: 0,
+    protected: false,
+  });
+}
+
+function buildVentureTitleSlide(pptx, slideData, ctx) {
+  const slide = pptx.addSlide();
+  const { template, audit } = ctx;
+  addVentureBackdrop(slide, template, audit, 'title');
+  addVentureVisualPanel(slide, slideData, template, audit, { x: 6.05, y: 0.7, w: 3.32, h: 4.16 });
+  safeAddText(slide, audit, normalizeText(slideData.kicker || 'Pitch narrative'), {
+    role: 'cover kicker',
+    x: 0.58, y: 0.78, w: 2.25, h: 0.18,
+    fontFace: template.fontFace, fontSize: 7.2, bold: true,
+    color: template.accent2, charSpace: 0.8, margin: 0, fit: 'shrink',
+  });
+  safeAddText(slide, audit, normalizeText(slideData.title || ctx.topic), {
+    role: 'cover headline',
+    x: 0.56, y: 1.14, w: 4.92, h: 1.7,
+    fontFace: template.headingFace, fontSize: 31, bold: true,
+    color: template.ink, margin: 0.02, fit: 'shrink',
+  });
+  safeAddText(slide, audit, normalizeText(slideData.subtitle || slideData.content || 'A concise, investor-ready business story built around traction, evidence, and execution.'), {
+    role: 'cover subtitle',
+    x: 0.6, y: 3.12, w: 4.54, h: 0.46,
+    fontFace: template.fontFace, fontSize: 10.4,
+    color: template.muted, margin: 0.02, fit: 'shrink',
+  });
+  const fallbackMetrics = cleanBullets(slideData.bullets || slideData.points).slice(0, 3).map((item, i) => ({ value: `0${i + 1}`, label: item }));
+  addVentureMetricChips(slide, slideData.metrics || fallbackMetrics, template, audit, { x: 0.58, y: 4.16, w: 4.9 });
+  return slide;
+}
+
+function buildVentureContentSlide(pptx, slideData, ctx) {
+  const slide = pptx.addSlide();
+  const { template, audit } = ctx;
+  addVentureBackdrop(slide, template, audit, 'content');
+  safeAddText(slide, audit, normalizeText(slideData.kicker || slideData.section || 'Strategic insight'), {
+    role: 'section kicker',
+    x: 0.58, y: 0.7, w: 2.2, h: 0.16,
+    fontFace: template.fontFace, fontSize: 6.8, bold: true,
+    color: template.accent2, charSpace: 0.6, margin: 0, fit: 'shrink',
+  });
+  safeAddText(slide, audit, normalizeText(slideData.title), {
+    role: 'left thesis headline',
+    x: 0.56, y: 0.98, w: 3.24, h: 1.45,
+    fontFace: template.headingFace, fontSize: 23,
+    bold: true, color: template.ink, margin: 0.02, fit: 'shrink',
+  });
+  safeAddText(slide, audit, normalizeText(slideData.callout || slideData.summary || 'The key idea should be visible at a glance.'), {
+    role: 'left callout',
+    x: 0.62, y: 2.68, w: 2.84, h: 0.58,
+    fontFace: template.fontFace, fontSize: 10, bold: true,
+    color: template.accent, margin: 0.02, fit: 'shrink',
+  });
+
+  const hasChart = addNativeChart(slide, slideData.chart, template, { x: 4.1, y: 1.04, w: 4.92, h: 2.75 });
+  if (hasChart) {
+    auditRegion(audit, { kind: 'image', role: 'chart canvas', x: 4.1, y: 1.04, w: 4.92, h: 2.75 });
+  } else if (addTable(slide, slideData.table, template, { x: 4.06, y: 1.06, w: 5.08, rowH: 0.34 })) {
+    auditRegion(audit, { kind: 'image', role: 'table canvas', x: 4.06, y: 1.06, w: 5.08, h: 2.72 });
+  } else if (addDiagram(slide, slideData.nodes || slideData.steps, template, { x: 4.04, y: 1.52, w: 5.16 })) {
+    auditRegion(audit, { kind: 'image', role: 'roadmap diagram', x: 4.04, y: 1.52, w: 5.16, h: 1.18 });
+  } else {
+    const items = cleanBullets(slideData.bullets || slideData.content || slideData.points).slice(0, 4);
+    items.forEach((item, i) => {
+      const y = 1.04 + i * 0.82;
+      const accent = i === 1 ? template.accent2 : (i === 2 ? template.accent3 : template.accent);
+      safeAddShape(slide, audit, currentPptx.ShapeType.roundRect, {
+        role: `proof card ${i + 1}`,
+        x: 4.08, y, w: 4.92, h: 0.62,
+        rectRadius: 0.045,
+        fill: { color: template.surface },
+        line: { color: accent, transparency: 44, width: 0.7 },
+      });
+      safeAddText(slide, audit, String(i + 1).padStart(2, '0'), {
+        role: `proof card ${i + 1} number`,
+        x: 4.3, y: y + 0.18, w: 0.34, h: 0.16,
+        fontFace: template.headingFace, fontSize: 8.2, bold: true,
+        color: accent, margin: 0,
+      });
+      safeAddText(slide, audit, item, {
+        role: `proof card ${i + 1} text`,
+        x: 4.72, y: y + 0.13, w: 4.02, h: 0.34,
+        fontFace: template.fontFace, fontSize: 8.2,
+        color: template.ink, margin: 0.01, fit: 'shrink',
+      });
+    });
+  }
+  if (Array.isArray(slideData.metrics) && slideData.metrics.length) {
+    addVentureMetricChips(slide, slideData.metrics, template, audit, { x: 4.08, y: 4.08, w: 4.96, maxItems: 3 });
+  }
+  addVentureFooter(slide, template, audit, ctx);
+  return slide;
+}
+
+function buildVentureTwoColumnSlide(pptx, slideData, ctx) {
+  const slide = pptx.addSlide();
+  const { template, audit } = ctx;
+  addVentureBackdrop(slide, template, audit, 'content');
+  safeAddText(slide, audit, normalizeText(slideData.title), {
+    role: 'comparison headline',
+    x: 0.56, y: 0.82, w: 8.34, h: 0.62,
+    fontFace: template.headingFace, fontSize: 24, bold: true,
+    color: template.ink, margin: 0.02, fit: 'shrink',
+  });
+  const fallbackItems = cleanBullets(slideData.bullets || slideData.content || slideData.points);
+  const midpoint = Math.ceil(fallbackItems.length / 2);
+  const columns = [
+    {
+      x: 0.72,
+      w: 3.92,
+      color: template.accent2,
+      title: slideData.left_title || slideData.left?.title || 'Problem',
+      content: slideData.left_content || slideData.left_bullets || slideData.left?.content || slideData.left?.bullets || fallbackItems.slice(0, midpoint),
+    },
+    {
+      x: 5.08,
+      w: 3.92,
+      color: template.accent3,
+      title: slideData.right_title || slideData.right?.title || 'Solution',
+      content: slideData.right_content || slideData.right_bullets || slideData.right?.content || slideData.right?.bullets || fallbackItems.slice(midpoint),
+    },
+  ];
+  columns.forEach((col, colIndex) => {
+    safeAddShape(slide, audit, currentPptx.ShapeType.roundRect, {
+      role: `${col.title} panel`,
+      x: col.x, y: 1.74, w: col.w, h: 2.84,
+      rectRadius: 0.06,
+      fill: { color: template.surface },
+      line: { color: col.color, transparency: 25, width: 1 },
+    });
+    safeAddText(slide, audit, normalizeText(col.title), {
+      role: `${col.title} panel title`,
+      x: col.x + 0.26, y: 2.02, w: col.w - 0.52, h: 0.25,
+      fontFace: template.headingFace, fontSize: 14,
+      bold: true, color: col.color, margin: 0, fit: 'shrink',
+    });
+    cleanBullets(col.content).slice(0, 4).forEach((item, i) => {
+      const y = 2.52 + i * 0.42;
+      safeAddShape(slide, audit, currentPptx.ShapeType.ellipse, {
+        role: `${col.title} bullet ${i + 1} marker`,
+        x: col.x + 0.3, y: y + 0.07, w: 0.08, h: 0.08,
+        fill: { color: col.color },
+        line: null,
+      });
+      safeAddText(slide, audit, item, {
+        role: `${col.title} bullet ${i + 1}`,
+        x: col.x + 0.5, y, w: col.w - 0.86, h: 0.22,
+        fontFace: template.fontFace, fontSize: 8.6,
+        color: template.ink, margin: 0.01, fit: 'shrink',
+      });
+    });
+    safeAddText(slide, audit, colIndex === 0 ? '01' : '02', {
+      role: `${col.title} panel index`,
+      x: col.x + col.w - 0.72, y: 4.18, w: 0.42, h: 0.16,
+      fontFace: template.headingFace, fontSize: 7.8,
+      bold: true, color: col.color, margin: 0, protected: false,
+    });
+  });
+  addVentureFooter(slide, template, audit, ctx);
+  return slide;
+}
+
+function buildVentureImageSlide(pptx, slideData, ctx) {
+  const slide = pptx.addSlide();
+  const { template, audit } = ctx;
+  addVentureBackdrop(slide, template, audit, 'content');
+  safeAddText(slide, audit, normalizeText(slideData.kicker || 'Product / vision'), {
+    role: 'visual kicker',
+    x: 0.58, y: 0.72, w: 2.2, h: 0.16,
+    fontFace: template.fontFace, fontSize: 6.8, bold: true,
+    color: template.accent2, charSpace: 0.6, margin: 0, fit: 'shrink',
+  });
+  safeAddText(slide, audit, normalizeText(slideData.title), {
+    role: 'visual headline',
+    x: 0.56, y: 1.02, w: 3.12, h: 1.18,
+    fontFace: template.headingFace, fontSize: 22,
+    bold: true, color: template.ink, margin: 0.02, fit: 'shrink',
+  });
+  const bullets = cleanBullets(slideData.bullets || slideData.points || slideData.content).slice(0, 3);
+  bullets.forEach((item, i) => {
+    safeAddText(slide, audit, item, {
+      role: `visual support point ${i + 1}`,
+      x: 0.66, y: 2.58 + i * 0.44, w: 2.84, h: 0.2,
+      fontFace: template.fontFace, fontSize: 8.2,
+      color: template.muted, margin: 0.01, fit: 'shrink',
+    });
+  });
+  addVentureVisualPanel(slide, slideData, template, audit, { x: 4.08, y: 0.86, w: 5.12, h: 3.82 });
+  addVentureFooter(slide, template, audit, ctx);
+  return slide;
+}
+
 function normalizeSlide(slide, index, topic) {
   if (!slide || typeof slide !== 'object') {
     return { type: 'content', title: `Slide ${index + 1}`, bullets: [normalizeText(slide)] };
@@ -812,12 +1261,22 @@ function buildPresentation(payload) {
     ? payload.slides
     : [{ type: 'title', title: topic }, { type: 'content', title: 'Key points', bullets: cleanBullets(payload.content || '') }];
   const slides = rawSlides.map((slide, index) => normalizeSlide(slide, index, topic));
+  const layoutAudits = [];
 
   slides.forEach((slideData, idx) => {
-    const ctx = { template, topic, index: idx + 1, totalSlides: slides.length };
+    const audit = createLayoutAudit(idx + 1, slideData);
+    const ctx = { template, topic, index: idx + 1, totalSlides: slides.length, audit };
     let slide;
     const kind = slideType(slideData);
-    if (kind === 'title') {
+    if (payload.template === 'venture_blueprint' && kind === 'title') {
+      slide = buildVentureTitleSlide(pptx, slideData, ctx);
+    } else if (payload.template === 'venture_blueprint' && kind === 'two_column') {
+      slide = buildVentureTwoColumnSlide(pptx, slideData, ctx);
+    } else if (payload.template === 'venture_blueprint' && kind === 'image') {
+      slide = buildVentureImageSlide(pptx, slideData, ctx);
+    } else if (payload.template === 'venture_blueprint') {
+      slide = buildVentureContentSlide(pptx, slideData, ctx);
+    } else if (kind === 'title') {
       slide = buildTitleSlide(pptx, slideData, ctx);
     } else if (kind === 'two_column') {
       slide = buildTwoColumnSlide(pptx, slideData, ctx);
@@ -829,9 +1288,17 @@ function buildPresentation(payload) {
     if (slideData.notes) {
       slide.addNotes(normalizeText(slideData.notes));
     }
+    if (payload.template === 'venture_blueprint') {
+      layoutAudits.push({
+        slide_index: audit.slide_index,
+        title: audit.title,
+        region_count: audit.regions.length,
+        warnings: audit.warnings,
+      });
+    }
   });
 
-  return { pptx, slides, template };
+  return { pptx, slides, template, layoutAudits };
 }
 
 async function main() {
@@ -845,7 +1312,7 @@ async function main() {
   }
   fs.mkdirSync(path.dirname(payload.output_path), { recursive: true });
 
-  const { pptx, slides, template } = buildPresentation(payload);
+  const { pptx, slides, template, layoutAudits } = buildPresentation(payload);
   await pptx.writeFile({ fileName: payload.output_path });
   const stat = fs.statSync(payload.output_path);
   writeJson({
@@ -866,6 +1333,11 @@ async function main() {
         accent2: template.accent2,
         accent3: template.accent3,
       },
+    },
+    layout_validation: {
+      ok: !layoutAudits.some((audit) => audit.warnings.some((warning) => warning.severity === 'error')),
+      warning_count: layoutAudits.reduce((count, audit) => count + audit.warnings.length, 0),
+      audits: layoutAudits,
     },
     slides: slides.map((slide, index) => ({
       index: index + 1,

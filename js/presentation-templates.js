@@ -1,5 +1,22 @@
 export const PRESENTATION_TEMPLATES = [
     {
+        id: 'venture_blueprint',
+        name: 'Venture Blueprint',
+        shortName: 'Venture',
+        description: 'Premium pitch and business deck with bold left-rail titles, editorial image zones, and investor-grade evidence layouts.',
+        bestFor: 'Pitch decks, business plans, strategy narratives, product launches',
+        colors: ['#F7F4EE', '#143C5A', '#E4572E', '#2FBF71'],
+        slides: [
+            { type: 'title', label: 'Thesis Cover', description: 'Large left title with right visual panel and metric chips', previewLayout: 'title' },
+            { type: 'content', label: 'Insight Brief', description: 'Editorial left headline with stacked proof cards', previewLayout: 'bullets' },
+            { type: 'two_column', label: 'Problem / Solution', description: 'Asymmetric split panels with strong section headers', previewLayout: 'two-col' },
+            { type: 'chart', label: 'Market Evidence', description: 'Wide evidence chart with narrative sidebar', previewLayout: 'chart' },
+            { type: 'table', label: 'Business Model', description: 'Investor-ready structured table with strong hierarchy', previewLayout: 'table' },
+            { type: 'diagram', label: 'Roadmap', description: 'Horizontal milestone system with numbered steps', previewLayout: 'flow' },
+            { type: 'image', label: 'Product / Vision', description: 'Large image-first slide with content rail', previewLayout: 'visual' }
+        ]
+    },
+    {
         id: 'aetheria_modern',
         name: 'Aetheria Modern',
         shortName: 'Modern',

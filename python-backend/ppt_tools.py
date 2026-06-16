@@ -59,6 +59,18 @@ TEMPLATE_LAYOUTS = [
 ]
 
 TEMPLATES: Dict[str, Dict[str, Any]] = {
+    "venture_blueprint": {
+        "name": "Venture Blueprint",
+        "description": "Premium pitch and business deck with bold left-rail titles, editorial image zones, and investor-grade evidence layouts.",
+        "best_for": "pitch decks, business plans, strategy narratives, product launches",
+        "design_brief": (
+            "Use this as a true pitch/business storytelling system, not a recolored standard deck. "
+            "Prefer strong claim-style titles, large left-side thesis blocks, right-side product or market visuals, "
+            "metric chips, problem/solution contrast, market evidence charts, business model tables, and roadmap steps. "
+            "Keep text concise so it fits: short titles, 3-4 bullets, and compact labels. Include image_path on visual/product slides when available."
+        ),
+        "layouts": TEMPLATE_LAYOUTS,
+    },
     "aetheria_modern": {
         "name": "Aetheria Modern",
         "description": "Clean editorial deck for AI strategy and product narratives.",
@@ -118,6 +130,32 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _template_summary(template_id: str, template: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        "id": template_id,
+        "name": str(template.get("name", template_id)),
+        "best_for": str(template.get("best_for", "")),
+        "description": str(template.get("description", "")),
+    }
+
+
+def _resolve_template_id(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    if normalized in TEMPLATES:
+        return normalized
+    for template_id, template in TEMPLATES.items():
+        candidates = {
+            template_id,
+            re.sub(r"[^a-z0-9]+", "_", str(template.get("name", "")).lower()).strip("_"),
+        }
+        if normalized in candidates:
+            return template_id
+    return None
+
+
 def _safe_slug(value: str, fallback: str = "presentation") -> str:
     text = re.sub(r"[^a-zA-Z0-9._-]+", "-", str(value or "").strip().lower())
     text = re.sub(r"-+", "-", text).strip("-._")
@@ -173,6 +211,7 @@ class PresentationTools(Toolkit):
             tools=[
                 self.create_presentation,
                 self.list_presentation_templates,
+                self.get_presentation_template_details,
                 self.edit_presentation_text,
             ],
         )
@@ -199,21 +238,56 @@ class PresentationTools(Toolkit):
         return self.backend_dir / "pptx-renderer.js"
 
     def list_presentation_templates(self) -> Dict[str, Any]:
-        """List native PowerPoint templates available to the presentation agent."""
+        """List available native PowerPoint templates using compact summaries."""
+        templates = [
+            _template_summary(key, value)
+            for key, value in TEMPLATES.items()
+        ]
         return {
             "ok": True,
-            "message": "Available native PowerPoint templates.",
-            "data": {"templates": TEMPLATES},
+            "message": (
+                "Available native PowerPoint templates. This is a compact list; "
+                "call get_presentation_template_details(template_id) for layout and design details."
+            ),
+            "data": {"templates": templates},
             "metadata": {
                 "kind": "presentation_tool_output",
                 "action": "list_templates",
                 "preview_type": "presentation_templates",
                 "title": "Presentation templates",
                 "inline": {
-                    "templates": [
-                        {"id": key, **value}
-                        for key, value in TEMPLATES.items()
-                    ]
+                    "templates": templates
+                },
+            },
+        }
+
+    def get_presentation_template_details(self, template_id: str) -> Dict[str, Any]:
+        """Return detailed layout and design guidance for one presentation template."""
+        resolved_id = _resolve_template_id(template_id)
+        if not resolved_id:
+            return self._error(
+                f"Unknown presentation template '{template_id}'. "
+                f"Available template ids: {', '.join(TEMPLATES.keys())}"
+            )
+
+        template = TEMPLATES[resolved_id]
+        return {
+            "ok": True,
+            "message": f"Template details for {template.get('name', resolved_id)}.",
+            "data": {
+                "id": resolved_id,
+                **template,
+            },
+            "metadata": {
+                "kind": "presentation_tool_output",
+                "action": "template_details",
+                "preview_type": "text",
+                "title": f"Template details: {template.get('name', resolved_id)}",
+                "inline": {
+                    "id": resolved_id,
+                    "name": template.get("name", resolved_id),
+                    "best_for": template.get("best_for", ""),
+                    "description": template.get("description", ""),
                 },
             },
         }
@@ -236,7 +310,7 @@ class PresentationTools(Toolkit):
                 structured fields whenever possible: bullets/content, left/right
                 comparison content, metrics, chart.data, table rows, nodes/steps,
                 callout, notes, captions, visual_summary, or image_path.
-            template: One of aetheria_modern, executive, startup_pitch, academic, creative_portfolio, minimal_zen, tech_dark, corporate_gradient.
+            template: One of venture_blueprint, aetheria_modern, executive, startup_pitch, academic, creative_portfolio, minimal_zen, tech_dark, corporate_gradient.
             filename: Optional output filename ending in .pptx.
         """
         try:
@@ -252,7 +326,12 @@ class PresentationTools(Toolkit):
                     {"type": "content", "title": "Key points", "bullets": ["Main idea", "Supporting proof", "Next step"]},
                 ]
 
-            template_id = template if template in TEMPLATES else "aetheria_modern"
+            template_id = _resolve_template_id(template)
+            if not template_id:
+                return self._error(
+                    f"Unknown presentation template '{template}'. "
+                    f"Available template ids: {', '.join(TEMPLATES.keys())}"
+                )
             safe_name = _safe_slug(filename or topic)
             if not safe_name.endswith(".pptx"):
                 safe_name = f"{safe_name}.pptx"
@@ -329,6 +408,7 @@ class PresentationTools(Toolkit):
                 "mime_type": PPTX_MIME_TYPE,
                 "download_url": download_url,
                 "template": renderer_result.get("template"),
+                "layout_validation": renderer_result.get("layout_validation"),
                 "inline": {
                     "topic": str(topic).strip(),
                     "slide_count": len(normalized_slides),
@@ -551,7 +631,7 @@ def build_presentation_agent(
     from agno.models.openrouter import OpenRouter
     return Agent(
         name="presentation_agent",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         role=(
             "Native PowerPoint specialist. Plans concise decks and creates editable "
             ".pptx files using presentation_tools."
@@ -561,12 +641,15 @@ def build_presentation_agent(
             "<system_instructions>",
             "You create native editable PowerPoint presentations, not HTML pages or image-only slide decks.",
             "If the user or Aetheria provides a hidden presentation template instruction, call create_presentation with that exact template id.",
-            "Use list_presentation_templates when template fit is unclear.",
+            "Use list_presentation_templates only when template fit is unclear; it returns compact summaries to save context.",
+            "Use get_presentation_template_details only for the one template you plan to use when you need its detailed design/layout guidance.",
             "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, visual summaries, and speaker notes where useful.",
             "Do not make a deck that is only title plus plain bullet slides. Use the backend template layouts: cover, insight cards, comparison, evidence chart, table, process/diagram, and visual explanation.",
+            "For venture_blueprint, write like a premium business or pitch deck: title, problem/solution, market evidence, product/vision, business model, roadmap, and ask. Use short text blocks that fit the designed regions.",
             "When making comparison slides, always provide left/right titles and left/right bullet content. When making chart slides, provide chart.data. When making process slides, provide nodes or steps.",
             "Prefer concise claim-style titles and 3-6 strong slides unless the user asks for a different length.",
             "Use chart.data for simple bar evidence, table for comparison rows, nodes/steps for workflow diagrams, and metrics for rails.",
+            "After create_presentation returns, inspect metadata.layout_validation when present. If it reports overflow, out-of-bounds, or overlap errors, regenerate with shorter titles/bullets or a better slide type before presenting the final answer.",
             "Return the artifact result naturally and mention that the file is downloadable and editable in PowerPoint.",
             "</system_instructions>",
         ],
