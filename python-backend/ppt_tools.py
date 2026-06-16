@@ -628,10 +628,10 @@ def build_presentation_agent(
             sid=sid,
         )
     ]
-    from agno.models.openrouter import OpenRouter
+    from openrouter_reasoning_model import get_openrouter_model
     return Agent(
         name="presentation_agent",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         role=(
             "Native PowerPoint specialist. Plans concise decks and creates editable "
             ".pptx files using presentation_tools."
