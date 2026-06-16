@@ -136,7 +136,7 @@ def get_llm_os(
         members.append(
             Agent(
                 name="assistant",
-                model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+                model=OpenRouter(id="xiaomi/mimo-v2.5"),
                 role=(
                     "Platform operations assistant for GitHub, Vercel, and Supabase. "
                     "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
@@ -267,7 +267,7 @@ def get_llm_os(
 
     return Team(
         name="Aetheria_AI",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,

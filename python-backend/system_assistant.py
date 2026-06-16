@@ -77,7 +77,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
