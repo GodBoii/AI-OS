@@ -103,7 +103,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."

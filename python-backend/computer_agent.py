@@ -85,7 +85,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."

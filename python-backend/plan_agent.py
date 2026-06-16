@@ -83,7 +83,7 @@ def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = Tr
     from agno.models.openrouter import OpenRouter
     return Agent(
         name="plan_agent",
-        model=OpenRouter(id="nex-agi/nex-n2-pro:free"),
+        model=OpenRouter(id="xiaomi/mimo-v2.5"),
         tools=[DuckDuckGoTools()] if enable_read_only_tools else [],
         instructions=[
             "<system_instructions>",
