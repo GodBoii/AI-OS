@@ -105,6 +105,7 @@ class FileAttachmentHandler {
 
         // Initialize drag and drop
         this.setupDragAndDrop();
+        this.setupPasteAttachment();
     }
 
     // =========================================================================
@@ -369,6 +370,52 @@ class FileAttachmentHandler {
         };
 
         await this.handleFileSelection(fakeEvent);
+    }
+
+    // =========================================================================
+    // PASTE ATTACHMENTS
+    // =========================================================================
+
+    setupPasteAttachment() {
+        const pasteTarget = this.inputContainer || document.getElementById('floating-input');
+        if (!pasteTarget) return;
+
+        pasteTarget.addEventListener('paste', async (e) => {
+            const files = this.getFilesFromClipboard(e.clipboardData);
+            if (files.length === 0) return;
+
+            e.preventDefault();
+            console.log(`[FileAttachment] Pasted ${files.length} file(s)`);
+
+            await this.handleFileSelection({
+                target: { files }
+            });
+        });
+
+        console.log('[FileAttachment] Paste attachment initialized');
+    }
+
+    getFilesFromClipboard(clipboardData) {
+        if (!clipboardData) return [];
+
+        const files = [];
+        const seen = new Set();
+        const addFile = (file) => {
+            if (!file) return;
+            const key = `${file.name || 'clipboard-file'}:${file.size}:${file.type}:${file.lastModified || 0}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            files.push(file);
+        };
+
+        Array.from(clipboardData.files || []).forEach(addFile);
+
+        Array.from(clipboardData.items || []).forEach((item) => {
+            if (item.kind !== 'file') return;
+            addFile(item.getAsFile());
+        });
+
+        return files;
     }
 
     async uploadFileToSupabase(file) {

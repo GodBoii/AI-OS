@@ -1,12 +1,13 @@
-// js/audio-input-handler.js - Offline Whisper-based Voice Input
+// js/audio-input-handler.js - Offline Vosk-first voice input with Whisper fallback
 import { flattenAudioChunks, normalizeAudio, nativeResample, trimSilence } from './audio-utils.js';
 import AudioEngine from './audio-engine.js';
 
 /**
- * AudioInputHandler - Offline voice-to-text using Whisper
+ * AudioInputHandler - Offline voice-to-text using Vosk with Whisper fallback
  * 
  * Features:
- * - Local Whisper model (base.en)
+ * - Local Vosk model (small en-us) through Electron main process
+ * - Whisper worker fallback for older/dev setups
  * - AudioWorklet for efficient audio capture
  * - 3x Gain Amplification for better sensitivity
  * - DC Offset removal and Native Resampling
@@ -26,6 +27,8 @@ class AudioInputHandler {
         this.analyser = null;
         this.worker = null;
         this.modelReady = false;
+        this.activeBackend = null;
+        this.voskDownloadListenerAttached = false;
         
         this.micButton = null;
         this.targetTextarea = null;
@@ -48,6 +51,9 @@ class AudioInputHandler {
                     case 'ready':
                         console.log('[AudioInput] Whisper model ready');
                         this.modelReady = true;
+                        if (!this.activeBackend) {
+                            this.activeBackend = 'whisper';
+                        }
                         this.showNotification('Voice input ready', 'success');
                         break;
                         
@@ -91,6 +97,11 @@ class AudioInputHandler {
     }
 
     async checkModelAvailability() {
+        const voskStatus = await this.checkVoskAvailability();
+        if (voskStatus) {
+            return true;
+        }
+
         return new Promise((resolve) => {
             if (!this.worker) {
                 resolve(false);
@@ -102,6 +113,10 @@ class AudioInputHandler {
                 if (e.data.type === 'status') {
                     clearTimeout(timeout);
                     this.worker.removeEventListener('message', handler);
+                    if (e.data.data.loaded) {
+                        this.activeBackend = 'whisper';
+                        this.modelReady = true;
+                    }
                     resolve(e.data.data.loaded);
                 }
             };
@@ -110,10 +125,79 @@ class AudioInputHandler {
     }
 
     async downloadModel() {
+        const voskDownloaded = await this.downloadVoskModel();
+        if (voskDownloaded) {
+            return;
+        }
+
         if (!this.worker) return;
-        console.log('[AudioInput] Starting model download...');
-        this.showNotification('Downloading voice model (~140MB)...', 'info', 0);
+        console.log('[AudioInput] Starting fallback Whisper model download...');
+        this.showNotification('Downloading fallback voice model (~140MB)...', 'info', 0);
         this.worker.postMessage({ type: 'load' });
+    }
+
+    async checkVoskAvailability() {
+        if (!window.electron?.ipcRenderer?.invoke) {
+            return false;
+        }
+
+        try {
+            const status = await window.electron.ipcRenderer.invoke('vosk-stt-status');
+            if (status?.ready) {
+                this.activeBackend = 'vosk';
+                this.modelReady = true;
+                console.log('[AudioInput] Vosk model ready:', status.modelPath);
+                return true;
+            }
+            console.log('[AudioInput] Vosk model not ready:', status);
+        } catch (error) {
+            console.warn('[AudioInput] Vosk status check failed:', error);
+        }
+
+        return false;
+    }
+
+    async downloadVoskModel() {
+        if (!window.electron?.ipcRenderer?.invoke) {
+            return false;
+        }
+
+        try {
+            this.attachVoskDownloadListener();
+            this.showNotification('Downloading voice model (~40MB)...', 'info', 0);
+            const result = await window.electron.ipcRenderer.invoke('vosk-stt-download-model');
+            if (result?.ok) {
+                this.activeBackend = 'vosk';
+                this.modelReady = true;
+                this.showNotification('Voice input ready', 'success');
+                return true;
+            }
+
+            console.warn('[AudioInput] Vosk model download failed:', result?.error);
+            this.showNotification('Vosk setup failed. Trying fallback voice model...', 'warning');
+        } catch (error) {
+            console.warn('[AudioInput] Vosk model download failed:', error);
+            this.showNotification('Vosk setup failed. Trying fallback voice model...', 'warning');
+        }
+
+        return false;
+    }
+
+    attachVoskDownloadListener() {
+        if (this.voskDownloadListenerAttached || !window.electron?.ipcRenderer?.on) {
+            return;
+        }
+
+        window.electron.ipcRenderer.on('vosk-stt-download-progress', (message) => {
+            if (!message || message.type !== 'progress') {
+                return;
+            }
+            const progress = Math.round(message.progress || 0);
+            if (window.NotificationService) {
+                window.NotificationService.show(`Downloading voice model: ${progress}%`, 'info', 0);
+            }
+        });
+        this.voskDownloadListenerAttached = true;
     }
 
     updateDownloadProgress(data) {
@@ -240,11 +324,16 @@ class AudioInputHandler {
                 return;
             }
             
-            // 6. Send to Worker
-            this.worker.postMessage({
-                type: 'transcribe',
-                audio: finalData
-            });
+            if (this.activeBackend === 'vosk') {
+                await this.transcribeWithVosk(finalData);
+            } else if (this.worker) {
+                this.worker.postMessage({
+                    type: 'transcribe',
+                    audio: finalData
+                });
+            } else {
+                throw new Error('No speech recognizer is available.');
+            }
             
         } catch (error) {
             console.error('[AudioInput] Error processing audio:', error);
@@ -254,6 +343,26 @@ class AudioInputHandler {
         }
         
         this.audioChunks = [];
+    }
+
+    async transcribeWithVosk(audio) {
+        const result = await window.electron.ipcRenderer.invoke('vosk-stt-transcribe', {
+            audio,
+            sampleRate: 16000
+        });
+
+        if (!result?.ok) {
+            throw new Error(result?.error || 'Vosk transcription failed.');
+        }
+
+        console.log('[AudioInput] Vosk transcription complete:', result);
+        if (!result.text) {
+            this.showNotification("Could not hear you clearly. Try speaking closer.", "warning");
+        } else {
+            this.appendToTextarea(result.text);
+        }
+        this.isProcessing = false;
+        this.updateMicButtonUI(false);
     }
 
     startWaveformAnimation() {
