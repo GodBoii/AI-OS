@@ -9,10 +9,10 @@ import logging
 from typing import Optional, Dict, Any
 from agno.agent import Agent
 from agno.models.groq import Groq
-from agno.models.openrouter import OpenRouter
 from task_tools import TaskTools
 from user_context_tools import UserContextTools
 from aetheria_tool_bridge import AetheriaToolBridge
+from openrouter_reasoning_model import get_openrouter_model
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def get_task_agent(
     task_agent = Agent(
         name="Task_Manager",
         role="Unified task management and execution specialist with Aetheria AI delegation",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         tools=[task_tools, user_context_tools, aetheria_bridge],
         instructions=instructions,
         markdown=True,
@@ -182,5 +182,4 @@ def get_task_agent(
     mode = "execution" if execution_mode else "conversational"
     logger.info(f"Task agent initialized for user {user_id} in {mode} mode")
     return task_agent
-
 

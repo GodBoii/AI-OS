@@ -80,10 +80,10 @@ PLAN_OUTPUT_SECTIONS = [
 
 
 def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = True) -> Agent:
-    from agno.models.openrouter import OpenRouter
+    from openrouter_reasoning_model import get_openrouter_model
     return Agent(
         name="plan_agent",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         tools=[DuckDuckGoTools()] if enable_read_only_tools else [],
         instructions=[
             "<system_instructions>",
