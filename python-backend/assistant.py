@@ -77,7 +77,7 @@ def get_llm_os(
     _ = Planner_Agent
     _ = computer_tools_config
 
-    from agno.models.openrouter import OpenRouter
+    from openrouter_reasoning_model import get_openrouter_model
 
     direct_tools: List[Union[Toolkit, callable]] = []
     members: List[Union[Agent, Team]] = []
@@ -136,7 +136,7 @@ def get_llm_os(
         members.append(
             Agent(
                 name="assistant",
-                model=OpenRouter(id="xiaomi/mimo-v2.5"),
+                model=get_openrouter_model("xiaomi/mimo-v2.5"),
                 role=(
                     "Platform operations assistant for GitHub, Vercel, and Supabase. "
                     "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
@@ -267,7 +267,7 @@ def get_llm_os(
 
     return Team(
         name="Aetheria_AI",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,

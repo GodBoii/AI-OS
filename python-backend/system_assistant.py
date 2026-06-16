@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from agno.agent import Agent
-from agno.models.openrouter import OpenRouter
+from openrouter_reasoning_model import get_openrouter_model
 from agno.models.groq import Groq
 
 from mobile_tools import MobileTools
@@ -77,7 +77,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         instructions=system_instructions,
         tools=tools,
         markdown=True,
