@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
-from agno.models.openrouter import OpenRouter
+from openrouter_reasoning_model import get_openrouter_model
 from agno.models.groq import Groq
 from agno.tools import Toolkit
 
@@ -103,7 +103,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=OpenRouter(id="xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.5"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
