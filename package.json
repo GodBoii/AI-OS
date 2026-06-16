@@ -35,6 +35,10 @@
       {
         "from": "assets/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "python-backend/vosk_stt.py",
+        "to": "python-backend/vosk_stt.py"
       }
     ],
     "asar": true,
