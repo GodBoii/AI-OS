@@ -1,229 +1,68 @@
-// js/audio-input-handler.js - Offline Vosk-first voice input with Whisper fallback
+// js/audio-input-handler.js - Cloud-only intelligent mic input
 import { flattenAudioChunks, normalizeAudio, nativeResample, trimSilence } from './audio-utils.js';
 import AudioEngine from './audio-engine.js';
 
-/**
- * AudioInputHandler - Offline voice-to-text using Vosk with Whisper fallback
- * 
- * Features:
- * - Local Vosk model (small en-us) through Electron main process
- * - Whisper worker fallback for older/dev setups
- * - AudioWorklet for efficient audio capture
- * - 3x Gain Amplification for better sensitivity
- * - DC Offset removal and Native Resampling
- * - Silence Trimming (VAD)
- */
+const CLOUD_MIC_ENDPOINT = 'https://api.aetheriaai.website/api/mic/transcribe';
+const TARGET_SAMPLE_RATE = 16000;
+const MIN_SPEECH_SAMPLES = 2000;
+const MAX_AUDIO_SECONDS = 120;
+
 class AudioInputHandler {
     constructor() {
         this.isRecording = false;
         this.isProcessing = false;
+        this.modelReady = true;
+        this.activeBackend = 'openrouter_mic_agent';
+
         this.audioEngine = new AudioEngine();
+        this.audioEngine.setAutoStopConfig({
+            enabled: true,
+            minRecordingDurationMs: 1500,
+            silenceDurationMs: 2600
+        });
         this.audioEngine.setAutoStopCallback(() => {
             if (this.isRecording && !this.isProcessing) {
                 this.stopRecording();
             }
         });
 
-        this.analyser = null;
-        this.worker = null;
-        this.modelReady = false;
-        this.activeBackend = null;
-        this.voskDownloadListenerAttached = false;
-        
         this.micButton = null;
         this.targetTextarea = null;
         this.audioChunks = [];
         this.waveformBars = [];
         this.animationFrame = null;
-        
-        // Initialize worker
-        this.initWorker();
-    }
-
-    initWorker() {
-        try {
-            this.worker = new Worker('js/whisper-worker.js', { type: 'module' });
-            
-            this.worker.onmessage = (e) => {
-                const { type, data } = e.data;
-                
-                switch (type) {
-                    case 'ready':
-                        console.log('[AudioInput] Whisper model ready');
-                        this.modelReady = true;
-                        if (!this.activeBackend) {
-                            this.activeBackend = 'whisper';
-                        }
-                        this.showNotification('Voice input ready', 'success');
-                        break;
-                        
-                    case 'download':
-                        this.updateDownloadProgress(data);
-                        break;
-                        
-                    case 'result':
-                        console.log('[AudioInput] Transcription complete:', data);
-                        if (!data || data.length === 0) {
-                            this.showNotification("Could not hear you clearly. Try speaking closer.", "warning");
-                        } else {
-                            this.appendToTextarea(data);
-                        }
-                        this.isProcessing = false;
-                        this.updateMicButtonUI(false);
-                        break;
-                        
-                    case 'error':
-                        console.error('[AudioInput] Worker error:', data);
-                        this.showNotification(data, 'error');
-                        this.isProcessing = false;
-                        this.updateMicButtonUI(false);
-                        break;
-                        
-                    case 'status':
-                        this.modelReady = data.loaded;
-                        break;
-                }
-            };
-            
-            this.worker.onerror = (error) => {
-                console.error('[AudioInput] Worker error:', error);
-                this.showNotification('Voice input initialization failed', 'error');
-            };
-            
-            console.log('[AudioInput] Worker initialized');
-        } catch (error) {
-            console.error('[AudioInput] Failed to create worker:', error);
-        }
-    }
-
-    async checkModelAvailability() {
-        const voskStatus = await this.checkVoskAvailability();
-        if (voskStatus) {
-            return true;
-        }
-
-        return new Promise((resolve) => {
-            if (!this.worker) {
-                resolve(false);
-                return;
-            }
-            this.worker.postMessage({ type: 'check' });
-            const timeout = setTimeout(() => { resolve(false); }, 1000);
-            const handler = (e) => {
-                if (e.data.type === 'status') {
-                    clearTimeout(timeout);
-                    this.worker.removeEventListener('message', handler);
-                    if (e.data.data.loaded) {
-                        this.activeBackend = 'whisper';
-                        this.modelReady = true;
-                    }
-                    resolve(e.data.data.loaded);
-                }
-            };
-            this.worker.addEventListener('message', handler);
-        });
-    }
-
-    async downloadModel() {
-        const voskDownloaded = await this.downloadVoskModel();
-        if (voskDownloaded) {
-            return;
-        }
-
-        if (!this.worker) return;
-        console.log('[AudioInput] Starting fallback Whisper model download...');
-        this.showNotification('Downloading fallback voice model (~140MB)...', 'info', 0);
-        this.worker.postMessage({ type: 'load' });
-    }
-
-    async checkVoskAvailability() {
-        if (!window.electron?.ipcRenderer?.invoke) {
-            return false;
-        }
-
-        try {
-            const status = await window.electron.ipcRenderer.invoke('vosk-stt-status');
-            if (status?.ready) {
-                this.activeBackend = 'vosk';
-                this.modelReady = true;
-                console.log('[AudioInput] Vosk model ready:', status.modelPath);
-                return true;
-            }
-            console.log('[AudioInput] Vosk model not ready:', status);
-        } catch (error) {
-            console.warn('[AudioInput] Vosk status check failed:', error);
-        }
-
-        return false;
-    }
-
-    async downloadVoskModel() {
-        if (!window.electron?.ipcRenderer?.invoke) {
-            return false;
-        }
-
-        try {
-            this.attachVoskDownloadListener();
-            this.showNotification('Downloading voice model (~40MB)...', 'info', 0);
-            const result = await window.electron.ipcRenderer.invoke('vosk-stt-download-model');
-            if (result?.ok) {
-                this.activeBackend = 'vosk';
-                this.modelReady = true;
-                this.showNotification('Voice input ready', 'success');
-                return true;
-            }
-
-            console.warn('[AudioInput] Vosk model download failed:', result?.error);
-            this.showNotification('Vosk setup failed. Trying fallback voice model...', 'warning');
-        } catch (error) {
-            console.warn('[AudioInput] Vosk model download failed:', error);
-            this.showNotification('Vosk setup failed. Trying fallback voice model...', 'warning');
-        }
-
-        return false;
-    }
-
-    attachVoskDownloadListener() {
-        if (this.voskDownloadListenerAttached || !window.electron?.ipcRenderer?.on) {
-            return;
-        }
-
-        window.electron.ipcRenderer.on('vosk-stt-download-progress', (message) => {
-            if (!message || message.type !== 'progress') {
-                return;
-            }
-            const progress = Math.round(message.progress || 0);
-            if (window.NotificationService) {
-                window.NotificationService.show(`Downloading voice model: ${progress}%`, 'info', 0);
-            }
-        });
-        this.voskDownloadListenerAttached = true;
-    }
-
-    updateDownloadProgress(data) {
-        const progress = Math.round(data.progress || 0);
-        if (window.NotificationService) {
-            window.NotificationService.show(`Downloading model: ${progress}%`, 'info', 0);
-        }
+        this.analyser = null;
+        this.capturedSampleRate = TARGET_SAMPLE_RATE;
+        this.boundToggleRecording = () => this.toggleRecording();
     }
 
     initialize(micButtonElement, textareaElement) {
         this.micButton = micButtonElement;
         this.targetTextarea = textareaElement;
-        
+
         if (!this.micButton || !this.targetTextarea) {
             console.error('[AudioInput] Required elements not found');
             return false;
         }
-        
-        this.micButton.addEventListener('click', () => this.toggleRecording());
-        console.log('[AudioInput] Initialized successfully');
+
+        this.micButton.addEventListener('click', this.boundToggleRecording);
+        console.log('[AudioInput] Cloud mic initialized');
+        return true;
+    }
+
+    async checkModelAvailability() {
+        const session = await this.getAuthSession();
+        return Boolean(session?.access_token);
+    }
+
+    async downloadModel() {
+        this.showNotification('Cloud voice input is ready after sign-in', 'info');
         return true;
     }
 
     async toggleRecording() {
         if (this.isProcessing) return;
-        
+
         if (this.isRecording) {
             await this.stopRecording();
         } else {
@@ -232,26 +71,23 @@ class AudioInputHandler {
     }
 
     async startRecording() {
-        if (!this.modelReady) {
-            this.showNotification('Voice model is still loading. Please wait...', 'warning');
+        const session = await this.getAuthSession();
+        if (!session?.access_token) {
+            this.showNotification('Please sign in to use voice input', 'warning');
             return;
         }
-        
+
         try {
             console.log('[AudioInput] Starting recording...');
             this.audioChunks = [];
-            
-            await this.audioEngine.startRecording(() => {
-                if (this.isRecording && !this.isProcessing) {
-                    this.stopRecording();
-                }
-            });
+
+            await this.audioEngine.startRecording();
             this.analyser = this.audioEngine.getAnalyserNode();
             this.isRecording = true;
             this.updateMicButtonUI(true);
             this.startWaveformAnimation();
-            
-            console.log('[AudioInput] Recording started via AudioEngine');
+
+            console.log('[AudioInput] Recording started');
         } catch (error) {
             console.error('[AudioInput] Error starting recording:', error);
             this.showNotification('Microphone access denied or failed.', 'error');
@@ -267,14 +103,15 @@ class AudioInputHandler {
         if (!this.isRecording) {
             return;
         }
+
         this.isRecording = false;
         this.updateMicButtonUI(false);
-        
+
         const { chunks, sampleRate } = await this.audioEngine.stopRecording();
         this.audioChunks = chunks;
         this.capturedSampleRate = sampleRate;
-        
-        await new Promise(r => setTimeout(r, 50));
+
+        await new Promise(resolve => setTimeout(resolve, 50));
         await this.processAudio();
     }
 
@@ -284,92 +121,153 @@ class AudioInputHandler {
             this.updateMicButtonUI(false);
             return;
         }
-        
+
         console.log(`[AudioInput] Processing ${this.audioChunks.length} audio chunks...`);
-        
         this.isProcessing = true;
         this.updateMicButtonUI(false);
         this.micButton.classList.add('processing');
-        
+
         try {
-            // 1. Flatten into one Float32Array
             const rawBuffer = flattenAudioChunks(this.audioChunks);
-            
-            // 2. Convert to AudioBuffer for native processing
             const originalSampleRate = this.capturedSampleRate || this.audioEngine.getSampleRate();
-            
             const audioBuffer = new AudioBuffer({
                 length: rawBuffer.length,
                 numberOfChannels: 1,
                 sampleRate: originalSampleRate
             });
             audioBuffer.copyToChannel(rawBuffer, 0);
-            
-            // 3. Native Resample to 16kHz (High quality interpolation)
-            const resampledData = await nativeResample(audioBuffer, 16000);
-            
-            // 4. Normalize (Remove DC Offset) & Trim Silence
+
+            const resampledData = await nativeResample(audioBuffer, TARGET_SAMPLE_RATE);
             let finalData = normalizeAudio(resampledData);
             finalData = trimSilence(finalData);
-            
-            console.log(`[AudioInput] Final audio samples: ${finalData.length}`);
-            
-            // 5. Validation: If audio is too short after trimming silence, don't send
-            // 2000 samples @ 16kHz = 0.125 seconds
-            if (finalData.length < 2000) {
-                console.log('Audio too short after trimming silence');
+
+            if (finalData.length < MIN_SPEECH_SAMPLES) {
+                console.log('[AudioInput] Audio too short after trimming silence');
                 this.showNotification('No speech detected', 'warning');
-                this.isProcessing = false;
-                this.updateMicButtonUI(false);
                 return;
             }
-            
-            if (this.activeBackend === 'vosk') {
-                await this.transcribeWithVosk(finalData);
-            } else if (this.worker) {
-                this.worker.postMessage({
-                    type: 'transcribe',
-                    audio: finalData
-                });
-            } else {
-                throw new Error('No speech recognizer is available.');
+
+            const durationSeconds = finalData.length / TARGET_SAMPLE_RATE;
+            if (durationSeconds > MAX_AUDIO_SECONDS) {
+                this.showNotification('Voice input is too long. Please keep it under 2 minutes.', 'warning');
+                return;
             }
-            
+
+            const wavBuffer = this.encodeWavPcm16(finalData, TARGET_SAMPLE_RATE);
+            const audioBase64 = this.arrayBufferToBase64(wavBuffer);
+            const result = await this.transcribeWithCloud(audioBase64);
+
+            if (!result?.text) {
+                this.showNotification("Could not hear you clearly. Try speaking closer.", "warning");
+            } else {
+                this.appendToTextarea(result.text);
+            }
         } catch (error) {
             console.error('[AudioInput] Error processing audio:', error);
-            this.showNotification('Failed to process audio', 'error');
+            this.showNotification(error.message || 'Failed to process audio', 'error');
+        } finally {
             this.isProcessing = false;
             this.updateMicButtonUI(false);
+            this.audioChunks = [];
         }
-        
-        this.audioChunks = [];
     }
 
-    async transcribeWithVosk(audio) {
-        const result = await window.electron.ipcRenderer.invoke('vosk-stt-transcribe', {
-            audio,
-            sampleRate: 16000
+    async transcribeWithCloud(audioBase64) {
+        const session = await this.getAuthSession();
+        if (!session?.access_token) {
+            throw new Error('Please sign in to use voice input.');
+        }
+
+        const response = await fetch(CLOUD_MIC_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                audio: audioBase64,
+                format: 'wav',
+                language: 'en'
+            })
         });
 
-        if (!result?.ok) {
-            throw new Error(result?.error || 'Vosk transcription failed.');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || 'Cloud voice transcription failed.');
         }
 
-        console.log('[AudioInput] Vosk transcription complete:', result);
-        if (!result.text) {
-            this.showNotification("Could not hear you clearly. Try speaking closer.", "warning");
-        } else {
-            this.appendToTextarea(result.text);
+        console.log('[AudioInput] Cloud transcription complete:', payload);
+        return payload;
+    }
+
+    async getAuthSession() {
+        if (!window.electron?.auth?.getSession) {
+            return null;
         }
-        this.isProcessing = false;
-        this.updateMicButtonUI(false);
+        try {
+            return await window.electron.auth.getSession();
+        } catch (error) {
+            console.warn('[AudioInput] Failed to read auth session:', error);
+            return null;
+        }
+    }
+
+    encodeWavPcm16(float32, sampleRate) {
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = float32.length * 2;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        this.writeAscii(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        this.writeAscii(view, 8, 'WAVE');
+        this.writeAscii(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitsPerSample, true);
+        this.writeAscii(view, 36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+        for (let i = 0; i < float32.length; i++) {
+            const clamped = Math.max(-1, Math.min(1, float32[i]));
+            const sample = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+            view.setInt16(offset, Math.round(sample), true);
+            offset += 2;
+        }
+
+        return buffer;
+    }
+
+    writeAscii(view, offset, text) {
+        for (let i = 0; i < text.length; i++) {
+            view.setUint8(offset + i, text.charCodeAt(i));
+        }
+    }
+
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        const chunkSize = 0x8000;
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, chunk);
+        }
+        return btoa(binary);
     }
 
     startWaveformAnimation() {
         if (!this.analyser) return;
         const bufferLength = this.analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        
+
         const animate = () => {
             if (!this.isRecording) return;
             this.animationFrame = requestAnimationFrame(animate);
@@ -383,16 +281,15 @@ class AudioInputHandler {
         if (!this.waveformBars.length) return;
         const barCount = this.waveformBars.length;
         const segmentSize = Math.floor(dataArray.length / barCount);
-        
+
         this.waveformBars.forEach((bar, index) => {
             let sum = 0;
             const start = index * segmentSize;
             const end = start + segmentSize;
             for (let i = start; i < end; i++) sum += dataArray[i];
-            
+
             const average = sum / segmentSize;
-            // Boost visual height slightly for better feedback
-            const heightPercent = 20 + (average / 255) * 100; 
+            const heightPercent = 20 + (average / 255) * 100;
             bar.style.height = `${Math.min(heightPercent, 100)}%`;
         });
     }
@@ -400,7 +297,7 @@ class AudioInputHandler {
     updateMicButtonUI(isRecording) {
         if (!this.micButton) return;
         this.micButton.classList.remove('processing');
-        
+
         if (isRecording) {
             this.micButton.classList.add('recording');
             this.createWaveformBars();
@@ -439,7 +336,7 @@ class AudioInputHandler {
         const currentValue = this.targetTextarea.value;
         const newValue = currentValue ? `${currentValue} ${text}`.trim() : text.trim();
         this.targetTextarea.value = newValue;
-        
+
         const event = new Event('input', { bubbles: true });
         this.targetTextarea.dispatchEvent(event);
         this.targetTextarea.focus();
@@ -456,21 +353,17 @@ class AudioInputHandler {
     cleanup() {
         this.isRecording = false;
         this.isProcessing = false;
-        
+
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
         this.audioEngine.setIdleState(true);
-        
+
         this.updateMicButtonUI(false);
     }
 
     destroy() {
         this.cleanup();
-        if (this.worker) {
-            this.worker.terminate();
-            this.worker = null;
-        }
         if (this.micButton) {
-            this.micButton.removeEventListener('click', this.toggleRecording);
+            this.micButton.removeEventListener('click', this.boundToggleRecording);
         }
         this.micButton = null;
         this.targetTextarea = null;

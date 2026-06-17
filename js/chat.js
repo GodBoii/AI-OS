@@ -4016,24 +4016,12 @@ function init() {
     setupViewContentButton();
     console.log('[Chat] Session content viewer initialized');
 
-    // Initialize audio input handler with model check
+    // Initialize cloud mic input handler
     const micButton = document.getElementById('mic-button');
     if (micButton && window.AudioInputHandler) {
         audioInputHandler = new AudioInputHandler();
         const initialized = audioInputHandler.initialize(micButton, elements.input);
-
-        if (initialized) {
-            // Check if model is already available
-            audioInputHandler.checkModelAvailability().then(isAvailable => {
-                if (!isAvailable) {
-                    console.log('[Chat] Voice model not available, starting download...');
-                    // Download model in background
-                    audioInputHandler.downloadModel();
-                } else {
-                    console.log('[Chat] Voice model already available');
-                }
-            });
-        } else {
+        if (!initialized) {
             console.warn('Audio input handler could not be initialized');
         }
     }
