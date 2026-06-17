@@ -10,7 +10,6 @@ const BrowserHandler = require('./browser-handler.js');
 const ComputerControlHandler = require('./computer-control-handler.js');
 const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
-const VoskSttService = require('./vosk-stt-service.js');
 
 let mainWindow;
 let appTray = null;
@@ -43,7 +42,6 @@ let browserHandler;
 let computerControlHandler;
 let localCoderHandler;
 let nativeNotificationService;
-let voskSttService;
 let linkWebView = null;
 let isAppQuitting = false;
 
@@ -309,7 +307,6 @@ function createWindow() {
 
     nativeNotificationService = new NativeNotificationService();
     nativeNotificationService.setMainWindow(mainWindow);
-    voskSttService = new VoskSttService();
 
     mainProcessEmitter.on('computer-tool-notification', (data) => {
         console.log('[main.js] Routing computer tool notification to native pipeline:', {
@@ -413,43 +410,6 @@ function createWindow() {
         } else if (!enabled && appTray) {
             appTray.destroy();
             appTray = null;
-        }
-    });
-
-    ipcMain.handle('vosk-stt-status', async () => {
-        if (!voskSttService) {
-            return { ready: false, error: 'Vosk STT service not initialized' };
-        }
-        return voskSttService.getStatus();
-    });
-
-    ipcMain.handle('vosk-stt-download-model', async (event) => {
-        if (!voskSttService) {
-            return { ok: false, error: 'Vosk STT service not initialized' };
-        }
-
-        try {
-            const result = await voskSttService.downloadDefaultModel((message) => {
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('vosk-stt-download-progress', message);
-                }
-            });
-            return result;
-        } catch (error) {
-            return { ok: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('vosk-stt-transcribe', async (event, payload) => {
-        if (!voskSttService) {
-            return { ok: false, error: 'Vosk STT service not initialized' };
-        }
-
-        try {
-            return await voskSttService.transcribe(payload);
-        } catch (error) {
-            console.error('[VoskSTT] Transcription failed:', error);
-            return { ok: false, error: error.message };
         }
     });
 
