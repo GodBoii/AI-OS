@@ -278,8 +278,8 @@ def get_llm_os(
         enable_session_summaries=use_session_summaries,
         stream_intermediate_steps=True,
         search_knowledge=use_memory,
-        send_media_to_model=False,
-        store_media=False,
+        send_media_to_model=True,
+        store_media=True,
         events_to_skip=[
             TeamRunEvent.run_started,
             TeamRunEvent.run_completed,

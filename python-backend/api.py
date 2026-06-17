@@ -1527,6 +1527,65 @@ def assistant_chat():
         }), 500
 
 
+@api_bp.route('/mic/transcribe', methods=['POST'])
+@limiter.limit('30 per minute')
+def mic_transcribe():
+    """
+    Authenticated cloud-only mic transcription endpoint.
+    Converts a short mic recording into text using the configured OpenRouter
+    multimodal mic model.
+    """
+    from mic_agent import MicAgentError, mic_agent
+
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"ok": False, "error": error[0]}), error[1]
+
+    try:
+        enforce_usage_limit(str(user.id))
+    except UsageLimitExceeded as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "code": "subscription_limit_exceeded",
+            "limit_info": exc.summary,
+        }), 429
+    except Exception as exc:
+        logger.error("Usage limit check failed for mic_transcribe user=%s: %s", user.id, exc, exc_info=True)
+
+    data = request.json or {}
+    audio_base64 = data.get("audio") or data.get("audio_base64") or ""
+    audio_format = data.get("format") or "wav"
+    language = data.get("language") or "en"
+
+    try:
+        result = mic_agent.transcribe(
+            audio_base64=audio_base64,
+            audio_format=audio_format,
+            language=language,
+        )
+        logger.info(
+            "Mic transcription complete user=%s model=%s text_len=%s",
+            user.id,
+            result.model,
+            len(result.text),
+        )
+        return jsonify({
+            "ok": True,
+            "text": result.text,
+            "raw_text": result.raw_text,
+            "backend": "openrouter_mic_agent",
+            "model": result.model,
+            "usage": result.usage,
+        }), 200
+    except MicAgentError as exc:
+        logger.warning("Mic transcription rejected user=%s: %s", user.id, exc)
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        logger.error("Mic transcription failed user=%s: %s", user.id, exc, exc_info=True)
+        return jsonify({"ok": False, "error": "mic transcription failed"}), 502
+
+
 def generate_fallback_response(query: str) -> str:
     """Generate smart fallback responses when AI is unavailable."""
     return "This is taking longer than expected. I'm still working on your request, so please wait a moment and try again if the answer doesn't appear."
