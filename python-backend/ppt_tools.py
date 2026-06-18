@@ -129,6 +129,69 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
     },
 }
 
+DECK_ARCHETYPES: Dict[str, Dict[str, Any]] = {
+    "series_a_pitch": {
+        "name": "Series A / Investor Pitch",
+        "signals": ["pitch", "fundraise", "investor", "series a", "seed", "demo day", "startup"],
+        "purpose": "persuade investors",
+        "audience": "investors and startup stakeholders",
+        "recommended_templates": ["venture_blueprint", "startup_pitch"],
+        "voice": "crisp, ambitious, evidence-led, founder-ready",
+        "slide_plan": ["title", "content", "two_column", "chart", "image", "diagram", "table"],
+        "structure": "Cover, problem, solution, market evidence, product/vision, roadmap, business model or ask.",
+    },
+    "strategy_memo": {
+        "name": "Strategy Memo",
+        "signals": ["strategy", "memo", "plan", "recommendation", "market entry", "initiative"],
+        "purpose": "align leadership around a decision",
+        "audience": "executives and operators",
+        "recommended_templates": ["executive", "aetheria_modern", "corporate_gradient"],
+        "voice": "consulting-style, decisive, implication-first",
+        "slide_plan": ["title", "content", "chart", "two_column", "diagram", "table"],
+        "structure": "Executive thesis, context, options, evidence, recommendation, execution plan.",
+    },
+    "board_deck": {
+        "name": "Board / Leadership Update",
+        "signals": ["board", "qbr", "quarterly", "leadership", "investor update", "update"],
+        "purpose": "inform and focus discussion",
+        "audience": "board members and senior leaders",
+        "recommended_templates": ["executive", "corporate_gradient", "venture_blueprint"],
+        "voice": "measured, transparent, metric-led",
+        "slide_plan": ["title", "chart", "table", "content", "diagram"],
+        "structure": "Status, key metrics, wins, risks, decisions needed, next-quarter plan.",
+    },
+    "sales_enablement": {
+        "name": "Sales Enablement",
+        "signals": ["sales", "enablement", "proposal", "client", "customer", "gtm", "go to market"],
+        "purpose": "persuade a buyer or equip a sales team",
+        "audience": "customers, prospects, or revenue teams",
+        "recommended_templates": ["corporate_gradient", "venture_blueprint", "aetheria_modern"],
+        "voice": "benefit-led, concrete, buyer-aware",
+        "slide_plan": ["title", "content", "two_column", "chart", "table", "diagram"],
+        "structure": "Buyer problem, business impact, solution, proof, implementation path, next step.",
+    },
+    "lesson_training": {
+        "name": "Lesson / Training",
+        "signals": ["lesson", "training", "teach", "course", "workshop", "introduction", "explain"],
+        "purpose": "teach clearly",
+        "audience": "learners",
+        "recommended_templates": ["academic", "aetheria_modern", "minimal_zen"],
+        "voice": "clear, scaffolded, example-driven",
+        "slide_plan": ["title", "content", "diagram", "two_column", "chart", "content"],
+        "structure": "Learning goal, concept map, core ideas, examples, comparison, recap.",
+    },
+    "technical_demo": {
+        "name": "Technical Demo",
+        "signals": ["technical", "developer", "architecture", "demo", "api", "system", "engineering"],
+        "purpose": "explain how a system works",
+        "audience": "technical evaluators and builders",
+        "recommended_templates": ["tech_dark", "aetheria_modern"],
+        "voice": "precise, system-oriented, implementation-aware",
+        "slide_plan": ["title", "diagram", "content", "chart", "table", "diagram"],
+        "structure": "Problem, architecture, workflow, benchmarks, tradeoffs, rollout.",
+    },
+}
+
 
 def _template_summary(template_id: str, template: Dict[str, Any]) -> Dict[str, str]:
     return {
@@ -154,6 +217,62 @@ def _resolve_template_id(value: Any) -> Optional[str]:
         if normalized in candidates:
             return template_id
     return None
+
+
+def _match_deck_archetypes(brief: str, limit: int = 3) -> List[Dict[str, Any]]:
+    text = str(brief or "").lower()
+    scored: List[tuple[int, str, Dict[str, Any]]] = []
+    for archetype_id, archetype in DECK_ARCHETYPES.items():
+        score = sum(1 for signal in archetype.get("signals", []) if signal in text)
+        if score:
+            scored.append((score, archetype_id, archetype))
+    if not scored:
+        fallback = DECK_ARCHETYPES["strategy_memo"]
+        scored = [(0, "strategy_memo", fallback), (0, "lesson_training", DECK_ARCHETYPES["lesson_training"])]
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [
+        {
+            "id": archetype_id,
+            "name": archetype["name"],
+            "purpose": archetype["purpose"],
+            "audience": archetype["audience"],
+            "recommended_templates": archetype["recommended_templates"],
+            "voice": archetype["voice"],
+            "slide_plan": archetype["slide_plan"],
+            "structure": archetype["structure"],
+            "match_score": score,
+        }
+        for score, archetype_id, archetype in scored[:limit]
+    ]
+
+
+def _brief_dimensions(brief: str, selected_template: Optional[str], source_count: int, has_brand_reference: bool) -> Dict[str, Any]:
+    text = str(brief or "").lower()
+    has_length = bool(re.search(r"\b(\d+)\s*(slides?|pages?)\b", text))
+    has_audience = bool(re.search(r"\b(for|to)\s+(investors?|board|executives?|students?|learners?|customers?|clients?|developers?|team|leadership)\b", text))
+    has_purpose = any(word in text for word in ["pitch", "teach", "explain", "update", "proposal", "strategy", "sell", "persuade", "inform", "training", "demo"])
+    has_source = source_count > 0 or any(word in text for word in ["from these notes", "attached", "uploaded", "using this document", "use the pdf", "use this ppt"])
+    has_visual_reference = bool(selected_template) or has_brand_reference or any(word in text for word in ["template", "brand", "logo", "designer", "style", "reference"])
+    missing = []
+    if not has_audience:
+        missing.append("audience")
+    if not has_purpose:
+        missing.append("purpose")
+    if not has_length:
+        missing.append("length")
+    if not has_source:
+        missing.append("content source")
+    if not has_visual_reference:
+        missing.append("visual reference")
+    return {
+        "has_audience": has_audience,
+        "has_purpose": has_purpose,
+        "has_length": has_length,
+        "has_source": has_source,
+        "has_visual_reference": has_visual_reference,
+        "missing": missing,
+        "should_ask_once": bool(missing),
+    }
 
 
 def _safe_slug(value: str, fallback: str = "presentation") -> str:
@@ -193,8 +312,8 @@ def _normalize_slide(slide: Any, index: int, topic: str) -> Dict[str, Any]:
 class PresentationTools(Toolkit):
     """
     Native PowerPoint generator for Aetheria's presentation sub-agent.
-    Uses pptxgenjs to create editable .pptx files; no HTML/CSS is used for the
-    actual PowerPoint output.
+    Uses an HTML/object-spec harness for deterministic previews and validation,
+    then exports editable native .pptx files with pptxgenjs.
     """
 
     def __init__(
@@ -210,6 +329,7 @@ class PresentationTools(Toolkit):
             name="presentation_tools",
             tools=[
                 self.create_presentation,
+                self.analyze_presentation_brief,
                 self.list_presentation_templates,
                 self.get_presentation_template_details,
                 self.edit_presentation_text,
@@ -228,6 +348,7 @@ class PresentationTools(Toolkit):
         configured = os.getenv("PPTX_RENDERER_PATH")
         candidates = [
             Path(configured) if configured else None,
+            self.backend_dir / "ppt_harness_renderer.js",
             self.backend_dir / "pptx-renderer.js",
             self.backend_dir / "js" / "pptx-renderer.js",
             self.repo_root / "js" / "pptx-renderer.js",
@@ -257,6 +378,80 @@ class PresentationTools(Toolkit):
                 "title": "Presentation templates",
                 "inline": {
                     "templates": templates
+                },
+            },
+        }
+
+    def analyze_presentation_brief(
+        self,
+        brief: str,
+        source_count: int = 0,
+        has_brand_reference: bool = False,
+        selected_template: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Analyze a presentation request before generation.
+
+        Args:
+            brief: User request or working brief.
+            source_count: Count of uploaded/available source files already known to the agent.
+            has_brand_reference: True when a logo, brand kit, reference deck, or visual sample is available.
+            selected_template: Template id if the user already picked one.
+        """
+        template_id = _resolve_template_id(selected_template) if selected_template else None
+        dimensions = _brief_dimensions(
+            brief=brief,
+            selected_template=template_id,
+            source_count=int(source_count or 0),
+            has_brand_reference=bool(has_brand_reference),
+        )
+        archetypes = _match_deck_archetypes(brief)
+        recommended_templates: List[Dict[str, str]] = []
+        seen = set()
+        for archetype in archetypes:
+            for candidate_id in archetype["recommended_templates"]:
+                if candidate_id in seen or candidate_id not in TEMPLATES:
+                    continue
+                seen.add(candidate_id)
+                recommended_templates.append(_template_summary(candidate_id, TEMPLATES[candidate_id]))
+        if template_id and template_id not in seen:
+            recommended_templates.insert(0, _template_summary(template_id, TEMPLATES[template_id]))
+
+        question_prompts = {
+            "audience": "Who is this deck for?",
+            "purpose": "What should the deck do?",
+            "length": "How many slides should it be?",
+            "content source": "Should I use your materials, web research, or both?",
+            "visual reference": "Should I use a selected template, your brand/reference deck, or designer's pick?",
+        }
+        return {
+            "ok": True,
+            "message": "Presentation brief analyzed.",
+            "data": {
+                "dimensions": dimensions,
+                "matched_archetypes": archetypes,
+                "recommended_templates": recommended_templates[:5],
+                "single_clarification_form": [
+                    question_prompts[item]
+                    for item in dimensions["missing"]
+                    if item in question_prompts
+                ][:5],
+                "generation_guidance": {
+                    "ask_at_most_once": True,
+                    "skip_questions_when_dimensions_are_covered": True,
+                    "default_template": template_id or (recommended_templates[0]["id"] if recommended_templates else "aetheria_modern"),
+                    "default_archetype": archetypes[0]["id"] if archetypes else "strategy_memo",
+                },
+            },
+            "metadata": {
+                "kind": "presentation_tool_output",
+                "action": "analyze_brief",
+                "preview_type": "text",
+                "title": "Presentation brief analysis",
+                "inline": {
+                    "missing": dimensions["missing"],
+                    "recommended_templates": recommended_templates[:3],
+                    "matched_archetypes": archetypes[:3],
                 },
             },
         }
@@ -403,12 +598,13 @@ class PresentationTools(Toolkit):
                 "output_id": artifact_id or str(uuid.uuid4()),
                 "artifact_id": artifact_id,
                 "title": str(topic).strip(),
-                "summary": f"Created {len(normalized_slides)}-slide native PowerPoint deck.",
+                "summary": f"Created {len(normalized_slides)}-slide editable PowerPoint deck with the HTML verification harness.",
                 "filename": safe_name,
                 "mime_type": PPTX_MIME_TYPE,
                 "download_url": download_url,
                 "template": renderer_result.get("template"),
                 "layout_validation": renderer_result.get("layout_validation"),
+                "harness": renderer_result.get("harness"),
                 "inline": {
                     "topic": str(topic).strip(),
                     "slide_count": len(normalized_slides),
@@ -639,17 +835,23 @@ def build_presentation_agent(
         tools=tools,
         instructions=[
             "<system_instructions>",
-            "You create native editable PowerPoint presentations, not HTML pages or image-only slide decks.",
+            "You create editable PowerPoint presentations through Aetheria's HTML/object-spec verification harness. The harness renders slide HTML for validation and exports native editable .pptx shapes.",
+            "Before generating from an ambiguous request, call analyze_presentation_brief once. Use its missing dimensions to ask one concise clarification form covering audience, purpose, length, content source, and visual reference. Do not run multiple clarification rounds.",
+            "Skip clarification when the prompt or attachments already cover the brief dimensions; then generate directly.",
+            "Treat deck archetypes like lightweight skills: use the matched archetype's structure, voice, slide plan, and recommended templates instead of making generic title-plus-bullet decks.",
+            "If visual reference is unclear, offer 3-5 template choices or explicitly choose designer's pick and state the aesthetic before generation.",
             "If the user or Aetheria provides a hidden presentation template instruction, call create_presentation with that exact template id.",
             "Use list_presentation_templates only when template fit is unclear; it returns compact summaries to save context.",
             "Use get_presentation_template_details only for the one template you plan to use when you need its detailed design/layout guidance.",
             "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, visual summaries, and speaker notes where useful.",
+            "Speaker notes are opt-in: include notes only when the user asks for talk track, narration, presenter notes, or scripts. Notes should be conversational scripts, not repeated slide bullets.",
+            "Use restraint: fewer words per slide, strong claim titles, generous whitespace, consistent visual chrome, and charts only when the data earns them.",
             "Do not make a deck that is only title plus plain bullet slides. Use the backend template layouts: cover, insight cards, comparison, evidence chart, table, process/diagram, and visual explanation.",
             "For venture_blueprint, write like a premium business or pitch deck: title, problem/solution, market evidence, product/vision, business model, roadmap, and ask. Use short text blocks that fit the designed regions.",
             "When making comparison slides, always provide left/right titles and left/right bullet content. When making chart slides, provide chart.data. When making process slides, provide nodes or steps.",
             "Prefer concise claim-style titles and 3-6 strong slides unless the user asks for a different length.",
             "Use chart.data for simple bar evidence, table for comparison rows, nodes/steps for workflow diagrams, and metrics for rails.",
-            "After create_presentation returns, inspect metadata.layout_validation when present. If it reports overflow, out-of-bounds, or overlap errors, regenerate with shorter titles/bullets or a better slide type before presenting the final answer.",
+            "After create_presentation returns, inspect metadata.layout_validation and metadata.harness.screenshot_validation when present. If either reports overflow, out-of-bounds, or overlap errors, regenerate with shorter titles/bullets or a better slide type before presenting the final answer.",
             "Return the artifact result naturally and mention that the file is downloadable and editable in PowerPoint.",
             "</system_instructions>",
         ],
