@@ -66,10 +66,12 @@ class MicAgent:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        debug_mode: bool = True,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.model = model or os.getenv("MIC_AGENT_MODEL") or DEFAULT_MIC_MODEL
         self.timeout_seconds = timeout_seconds
+        self.debug_mode = debug_mode
 
     def transcribe(
         self,
@@ -91,12 +93,24 @@ class MicAgent:
         if len(audio_bytes) > MAX_AUDIO_BYTES:
             raise MicAgentError("audio is too large")
 
+        if self.debug_mode:
+            logger.info(
+                "MicAgent transcribe request model=%s format=%s audio_bytes=%s language=%s",
+                self.model,
+                normalized_format,
+                len(audio_bytes),
+                language,
+            )
+
         encoded_audio = base64.b64encode(audio_bytes).decode("ascii")
         prompt = self._build_prompt(language=language)
         payload = self._build_payload(prompt, encoded_audio, normalized_format, use_camel_audio=False)
 
         response_json = self._post_openrouter(payload)
         text = self._extract_text(response_json)
+
+        if self.debug_mode:
+            logger.info("MicAgent transcribe response text_len=%s usage=%s", len(text), response_json.get("usage"))
 
         return MicTranscriptionResult(
             text=text,
