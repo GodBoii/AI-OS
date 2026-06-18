@@ -777,6 +777,13 @@ function buildPresentationMarkup(metadata, inline = {}) {
     const sizeLabel = size > 0 ? `${(size / 1024 / 1024).toFixed(size > 1024 * 1024 ? 2 : 3)} MB` : '';
     const downloadUrl = getSafeToolPreviewUrl(metadata?.download_url || '');
     const buildThumb = (slide = {}) => {
+        if (slide.preview_data_uri) {
+            return `
+                <div class="tool-preview-ppt-thumb tool-preview-ppt-thumb-rendered">
+                    <img src="${escapeToolPreviewHtml(String(slide.preview_data_uri))}" alt="" loading="lazy">
+                </div>
+            `;
+        }
         const style = [
             `--ppt-bg:#${escapeToolPreviewHtml(templateColors.background || 'F5F6F0')}`,
             `--ppt-surface:#${escapeToolPreviewHtml(templateColors.surface || 'FFFFFF')}`,

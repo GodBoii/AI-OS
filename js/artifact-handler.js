@@ -499,6 +499,13 @@ class ArtifactHandler {
     }
 
     renderPresentationSlideThumbnail(slide = {}, template = {}) {
+        if (slide.preview_data_uri) {
+            return `
+                <div class="presentation-slide-thumb presentation-slide-thumb-rendered">
+                    <img src="${this.escapeHtml(String(slide.preview_data_uri))}" alt="" loading="lazy">
+                </div>
+            `;
+        }
         const colors = template?.colors || {};
         const style = [
             `--ppt-bg:#${this.escapeHtml(colors.background || 'F5F6F0')}`,
