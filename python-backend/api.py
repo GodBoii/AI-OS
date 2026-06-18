@@ -1326,6 +1326,28 @@ def _extract_media_upload_path(url: str) -> Optional[str]:
     return unquote(relative_path)
 
 
+def _decode_data_url_image(data_url: str) -> bytes | None:
+    if not data_url or not isinstance(data_url, str):
+        return None
+    if not data_url.startswith("data:image/") or ";base64," not in data_url:
+        return None
+    try:
+        encoded = data_url.split(";base64,", 1)[1]
+        return base64.b64decode(encoded, validate=True)
+    except Exception:
+        return None
+
+
+def _extract_run_response_text(run_response: Any) -> str:
+    if hasattr(run_response, 'content') and run_response.content:
+        return str(run_response.content)
+    if hasattr(run_response, 'messages') and run_response.messages:
+        for msg in reversed(run_response.messages):
+            if hasattr(msg, 'role') and msg.role == 'assistant' and hasattr(msg, 'content') and msg.content:
+                return str(msg.content)
+    return ""
+
+
 @api_bp.route('/assistant/upload-link', methods=['POST'])
 def assistant_upload_link():
     """
@@ -1358,6 +1380,141 @@ def assistant_upload_link():
     except Exception as e:
         logger.error("Error generating assistant upload link: %s", e, exc_info=True)
         return jsonify({"error": "Failed to generate upload link"}), 500
+
+
+@api_bp.route('/mindspace/ask', methods=['POST'])
+@limiter.limit('30 per minute')
+def mindspace_ask():
+    """
+    Ask a follow-up question about a saved Mindspace analysis.
+    Runs Aetheria in a constrained mode: internet search only, no third-party
+    platform, browser, Google, Supabase, Vercel, GitHub, media, mobile, or file tools.
+    """
+    import traceback
+    from agno.media import Image
+    from assistant import get_llm_os
+
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0], "response": "Please sign in to continue."}), error[1]
+
+    try:
+        enforce_usage_limit(str(user.id))
+    except UsageLimitExceeded as exc:
+        return jsonify({
+            "error": str(exc),
+            "code": "subscription_limit_exceeded",
+            "limit_info": exc.summary,
+            "response": str(exc),
+        }), 429
+    except Exception as exc:
+        logger.error("Usage limit check failed for mindspace_ask user=%s: %s", user.id, exc, exc_info=True)
+
+    try:
+        data = request.json or {}
+        question = str(data.get("question") or "").strip()
+        analysis_text = str(data.get("analysisText") or "").strip()
+        analysis_title = str(data.get("title") or "Mindspace Analysis").strip()[:160]
+        analysis_id = str(data.get("analysisId") or "").strip() or str(uuid.uuid4())
+        image_data = str(data.get("imageData") or "")
+        previous_questions = data.get("previousQuestions") or []
+
+        if not question:
+            return jsonify({"error": "Question is required", "response": "Ask a question first."}), 400
+        if not analysis_text and not image_data:
+            return jsonify({"error": "Mindspace context is required", "response": "This Mindspace run has no saved context."}), 400
+
+        history_lines = []
+        if isinstance(previous_questions, list):
+            for entry in previous_questions[-6:]:
+                if not isinstance(entry, dict):
+                    continue
+                prev_q = str(entry.get("question") or "").strip()
+                prev_a = str(entry.get("answer") or "").strip()
+                if prev_q and prev_a:
+                    history_lines.append(f"Q: {prev_q}\nA: {prev_a}")
+
+        prompt = "\n".join([
+            "You are Aetheria AI answering a follow-up question about one saved Mindspace screen analysis.",
+            "Use only the saved analysis, the attached screenshot if present, and internet search when current facts are needed.",
+            "Do not attempt to use or reference browser, GitHub, Vercel, Supabase, Google, mobile, file, deployment, email, drive, sheet, or media-generation tools.",
+            "Answer directly and concisely. If the question cannot be answered from the saved context, say what is missing.",
+            "",
+            f"Mindspace title: {analysis_title}",
+            f"Mindspace analysis id: {analysis_id}",
+            "",
+            "Saved analysis:",
+            analysis_text or "(No text analysis was saved.)",
+            "",
+            "Previous follow-up Q&A:",
+            "\n\n".join(history_lines) if history_lines else "(None)",
+            "",
+            "User question:",
+            question,
+        ])
+
+        images = []
+        image_bytes = _decode_data_url_image(image_data)
+        if image_bytes:
+            images.append(Image(content=image_bytes))
+
+        message_id = str(uuid.uuid4())
+        team = get_llm_os(
+            user_id=str(user.id),
+            session_info={"device_type": "mobile", "source": "mindspace"},
+            internet_search=True,
+            coding_assistant=False,
+            Planner_Agent=False,
+            enable_supabase=False,
+            use_memory=False,
+            use_session_summaries=False,
+            debug_mode=False,
+            enable_github=False,
+            enable_vercel=False,
+            enable_google_email=False,
+            enable_google_drive=False,
+            enable_google_sheets=False,
+            enable_composio_whatsapp=False,
+            enable_browser=False,
+            enable_computer_control=False,
+            browser_tools_config=None,
+            computer_tools_config=None,
+            custom_tool_config=None,
+            session_id=f"mindspace-{analysis_id}",
+            message_id=message_id,
+            enable_user_file_vault=False,
+        )
+
+        result = team.run(
+            input=prompt,
+            images=images or None,
+            session_id=f"mindspace-{analysis_id}",
+            stream=False,
+            stream_intermediate_steps=False,
+            add_history_to_context=False,
+        )
+
+        response_text = _extract_run_response_text(result)
+        if not response_text:
+            response_text = "I couldn't generate a response for this Mindspace question. Please try again."
+
+        metrics = _extract_assistant_metrics(result)
+        _log_assistant_token_usage(
+            user_id=str(user.id),
+            conversation_id=f"mindspace-{analysis_id}",
+            message_id=message_id,
+            metrics=metrics,
+            source="mindspace_ask",
+        )
+
+        return jsonify({"response": response_text}), 200
+    except Exception as e:
+        logger.error("Critical mindspace_ask error for user=%s: %s", user.id, e, exc_info=True)
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e),
+            "response": "I'm having trouble answering that Mindspace question. Please try again in a moment."
+        }), 500
 
 
 @api_bp.route('/assistant/chat', methods=['POST'])

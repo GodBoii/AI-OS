@@ -65,6 +65,7 @@ def get_llm_os(
     custom_tool_config: Optional[Dict[str, Any]] = None,
     session_id: Optional[str] = None,
     message_id: Optional[str] = None,
+    enable_user_file_vault: bool = True,
 ) -> Team:
     """
     Build the main Aetheria AI team.
@@ -183,7 +184,7 @@ def get_llm_os(
             logger.info("Composio WhatsApp not active for user %s. Toolkit not injected.", user_id)
     if custom_tool_config:
         direct_tools.append(MediaTools(custom_tool_config=custom_tool_config))
-    if user_id:
+    if enable_user_file_vault and user_id:
         direct_tools.append(UserFileVaultTools(user_id=user_id))
 
     socketio_instance = browser_tools_config.get("socketio") if browser_tools_config else None
