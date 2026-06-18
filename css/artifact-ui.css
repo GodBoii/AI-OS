@@ -1183,6 +1183,13 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
 }
 
+.presentation-slide-thumb-rendered img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .presentation-slide-thumb::before {
     content: "";
     position: absolute;

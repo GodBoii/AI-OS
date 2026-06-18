@@ -1627,6 +1627,13 @@
     border: 1px solid color-mix(in srgb, var(--ppt-ink) 14%, transparent);
 }
 
+.tool-preview-ppt-thumb-rendered img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .tool-preview-ppt-thumb::before {
     content: "";
     position: absolute;
