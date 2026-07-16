@@ -297,6 +297,126 @@ def _parse_jsonish(value: Any, fallback: Any) -> Any:
     return fallback
 
 
+def _parse_slides_input(value: Any) -> tuple[Optional[List[Any]], Optional[str]]:
+    if isinstance(value, list):
+        return value, None
+    if value is None:
+        return [], None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return [], None
+        try:
+            parsed = json.loads(text)
+        except Exception as exc:
+            return None, (
+                "slides must be a JSON array when passed as a string. "
+                f"JSON parse error: {exc}. Use create_presentation_from_brief for normal decks, "
+                "or pass slides as a real list of objects instead of a long JSON string."
+            )
+        if not isinstance(parsed, list):
+            return None, "slides JSON must decode to a list of slide objects."
+        return parsed, None
+    return None, "slides must be a list of slide dictionaries or a JSON array string."
+
+
+def _bounded_slide_count(value: Any, default: int = 5) -> int:
+    try:
+        count = int(value or default)
+    except Exception:
+        count = default
+    return max(1, min(15, count))
+
+
+def _build_slides_from_brief(topic: str, brief: str, slide_count: int, archetype_id: str) -> List[Dict[str, Any]]:
+    topic_text = str(topic or "Presentation").strip() or "Presentation"
+    brief_text = str(brief or topic_text).strip()
+    archetype = DECK_ARCHETYPES.get(archetype_id) or DECK_ARCHETYPES.get("strategy_memo")
+    plan = list(archetype.get("slide_plan") or ["title", "content", "two_column", "chart", "diagram"])
+    while len(plan) < slide_count:
+        plan.append("content")
+    plan = plan[:slide_count]
+
+    slides: List[Dict[str, Any]] = []
+    for index, slide_type in enumerate(plan):
+        if index == 0:
+            slides.append({
+                "type": "title",
+                "title": topic_text,
+                "subtitle": brief_text[:180] or archetype.get("purpose", "A focused presentation."),
+                "kicker": archetype.get("name", "Presentation"),
+            })
+        elif slide_type == "two_column":
+            slides.append({
+                "type": "two_column",
+                "title": "What changes and why it matters",
+                "left_title": "Current state",
+                "right_title": "Better path",
+                "left_content": ["Manual work", "Fragmented information", "Slow feedback loops"],
+                "right_content": ["Focused automation", "Clear operating model", "Measurable next steps"],
+            })
+        elif slide_type == "chart":
+            slides.append({
+                "type": "chart",
+                "title": "Where the strongest signal appears",
+                "subtitle": "Use these values as editable placeholders when exact data is not supplied.",
+                "chart": {
+                    "type": "bar",
+                    "title": "Relative priority",
+                    "data": [
+                        {"label": "Impact", "value": 82},
+                        {"label": "Urgency", "value": 68},
+                        {"label": "Feasibility", "value": 57},
+                        {"label": "Risk", "value": 34},
+                    ],
+                },
+                "bullets": ["Replace placeholder values with source-backed evidence when available."],
+            })
+        elif slide_type in {"diagram", "process"}:
+            slides.append({
+                "type": "diagram",
+                "title": "Recommended path forward",
+                "subtitle": "A simple sequence for turning the idea into action.",
+                "steps": ["Clarify goal", "Map inputs", "Prototype", "Validate", "Scale"],
+            })
+        elif slide_type == "table":
+            slides.append({
+                "type": "table",
+                "title": "Decision frame",
+                "table": [
+                    ["Area", "Why it matters", "Next step"],
+                    ["Audience", "Shapes depth and tone", "Confirm primary reader"],
+                    ["Evidence", "Builds trust", "Attach source data"],
+                    ["Execution", "Makes it real", "Assign owner and date"],
+                ],
+            })
+        else:
+            slides.append({
+                "type": "content",
+                "title": "Key idea",
+                "subtitle": brief_text[:140],
+                "bullets": [
+                    "State one clear claim per slide.",
+                    "Support it with concrete proof or an example.",
+                    "End with the implication for the audience.",
+                ],
+            })
+    return slides
+def _validate_slide_payloads(slides: List[Any], *, allow_html: bool = True) -> Optional[str]:
+    if len(slides) > 30:
+        return "Too many slides in one call. Maximum is 30; use a shorter deck or staged generation."
+    for index, slide in enumerate(slides):
+        if not isinstance(slide, (dict, str)):
+            return f"Slide {index + 1} must be an object or string, got {type(slide).__name__}."
+        if isinstance(slide, dict):
+            html = slide.get("html") or slide.get("contract_html")
+            if html and not allow_html:
+                return f"Slide {index + 1} contains HTML, but this tool call does not allow custom HTML."
+            if html and len(str(html)) > 60000:
+                return f"Slide {index + 1} HTML is too large. Keep contract HTML under 60,000 characters per slide."
+            if slide.get("type") == "html" and not html:
+                return f"Slide {index + 1} has type='html' but no html or contract_html field."
+    return None
 def _normalize_slide(slide: Any, index: int, topic: str) -> Dict[str, Any]:
     if isinstance(slide, str):
         return {"type": "content", "title": f"Slide {index + 1}", "content": slide}
@@ -329,7 +449,12 @@ class PresentationTools(Toolkit):
             name="presentation_tools",
             tools=[
                 self.create_presentation,
+                self.create_presentation_from_brief,
+                self.start_presentation_draft,
+                self.add_presentation_slide,
+                self.finalize_presentation_draft,
                 self.analyze_presentation_brief,
+                self.lint_presentation_html_contract,
                 self.list_presentation_templates,
                 self.get_presentation_template_details,
                 self.edit_presentation_text,
@@ -340,6 +465,7 @@ class PresentationTools(Toolkit):
         self.message_id = message_id
         self.socketio = socketio
         self.sid = sid
+        self._presentation_drafts: Dict[str, Dict[str, Any]] = {}
         self.backend_dir = Path(__file__).resolve().parent
         self.repo_root = self.backend_dir.parent
         self.renderer_path = self._resolve_renderer_path()
@@ -456,6 +582,98 @@ class PresentationTools(Toolkit):
             },
         }
 
+    def lint_presentation_html_contract(
+        self,
+        topic: str,
+        slides: Any,
+        template: str = "aetheria_modern",
+    ) -> Dict[str, Any]:
+        """
+        Validate AI-authored contract HTML before PPTX generation.
+
+        Each slide may include html or contract_html. The HTML must use one
+        .slide-container at 1920x1080 and flat direct children with
+        data-object='true', data-object-type, and absolute inline left/top/width/height.
+        """
+        try:
+            slide_list, slide_error = _parse_slides_input(slides)
+            if slide_error:
+                return self._error(slide_error)
+            if not slide_list:
+                return self._error("slides must be a non-empty list of slide dictionaries. Use create_presentation_from_brief for normal decks.")
+            slide_payload_error = _validate_slide_payloads(slide_list, allow_html=True)
+            if slide_payload_error:
+                return self._error(slide_payload_error)
+
+            template_id = _resolve_template_id(template)
+            if not template_id:
+                return self._error(
+                    f"Unknown presentation template '{template}'. "
+                    f"Available template ids: {', '.join(TEMPLATES.keys())}"
+                )
+
+            work_dir = Path(tempfile.mkdtemp(prefix="aetheria-ppt-lint-"))
+            payload_path = work_dir / "payload.json"
+            normalized_slides = [
+                _normalize_slide(slide, index, str(topic or "Presentation"))
+                for index, slide in enumerate(slide_list)
+            ]
+            payload = {
+                "topic": str(topic or "Presentation").strip(),
+                "slides": normalized_slides,
+                "template": template_id,
+            }
+            payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            node = shutil.which("node") or shutil.which("node.exe")
+            if not node:
+                return self._error("Node.js was not found; HTML contract linting requires Node.js.")
+            if not self.renderer_path.exists():
+                return self._error(f"PowerPoint renderer not found at {self.renderer_path}")
+
+            completed = subprocess.run(
+                [node, str(self.renderer_path), "--lint", str(payload_path)],
+                cwd=str(self.backend_dir),
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            renderer_stdout = (completed.stdout or "").strip()
+            renderer_result = _parse_jsonish(renderer_stdout, {})
+            if completed.returncode != 0 or not renderer_result:
+                logger.error(
+                    "PPT HTML lint failed rc=%s stdout=%s stderr=%s",
+                    completed.returncode,
+                    renderer_stdout[:2000],
+                    (completed.stderr or "")[:2000],
+                )
+                return self._error((completed.stderr or "HTML contract lint failed").strip())
+
+            validation = renderer_result.get("layout_validation") or {}
+            warning_count = int(validation.get("warning_count") or 0)
+            return {
+                "ok": bool(renderer_result.get("ok")),
+                "message": (
+                    "Contract HTML is valid."
+                    if renderer_result.get("ok")
+                    else f"Contract HTML has {warning_count} issue(s) to fix before export."
+                ),
+                "data": renderer_result,
+                "metadata": {
+                    "kind": "presentation_tool_output",
+                    "action": "lint_html_contract",
+                    "preview_type": "text",
+                    "title": "Presentation HTML contract lint",
+                    "inline": {
+                        "ok": bool(renderer_result.get("ok")),
+                        "warning_count": warning_count,
+                        "slides": renderer_result.get("slides") or [],
+                    },
+                },
+            }
+        except Exception as exc:
+            logger.error("lint_presentation_html_contract failed: %s", exc, exc_info=True)
+            return self._error(str(exc))
     def get_presentation_template_details(self, template_id: str) -> Dict[str, Any]:
         """Return detailed layout and design guidance for one presentation template."""
         resolved_id = _resolve_template_id(template_id)
@@ -487,6 +705,181 @@ class PresentationTools(Toolkit):
             },
         }
 
+    def start_presentation_draft(
+        self,
+        topic: str,
+        template: str = "aetheria_modern",
+        filename: Optional[str] = None,
+        expected_slide_count: int = 5,
+        brief: str = "",
+        archetype: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Start a staged presentation draft. Add exactly one slide per add_presentation_slide call."""
+        try:
+            if not topic or not str(topic).strip():
+                return self._error("topic is required")
+            template_id = _resolve_template_id(template)
+            if not template_id:
+                return self._error(
+                    f"Unknown presentation template '{template}'. "
+                    f"Available template ids: {', '.join(TEMPLATES.keys())}"
+                )
+            count = _bounded_slide_count(expected_slide_count, default=5)
+            draft_id = str(uuid.uuid4())
+            self._presentation_drafts[draft_id] = {
+                "topic": str(topic).strip(),
+                "template": template_id,
+                "filename": filename,
+                "expected_slide_count": count,
+                "brief": str(brief or ""),
+                "archetype": archetype,
+                "slides": [],
+            }
+            return {
+                "ok": True,
+                "message": f"Started presentation draft {draft_id}. Add {count} slide(s), one at a time, then finalize.",
+                "data": {
+                    "draft_id": draft_id,
+                    "topic": str(topic).strip(),
+                    "template": template_id,
+                    "expected_slide_count": count,
+                    "next_step": "Call add_presentation_slide with exactly one slide object.",
+                },
+                "metadata": {
+                    "kind": "presentation_tool_output",
+                    "action": "start_draft",
+                    "preview_type": "text",
+                    "title": "Presentation draft started",
+                    "inline": {"draft_id": draft_id, "expected_slide_count": count, "slide_count": 0},
+                },
+            }
+        except Exception as exc:
+            logger.error("start_presentation_draft failed: %s", exc, exc_info=True)
+            return self._error(str(exc))
+
+    def add_presentation_slide(
+        self,
+        draft_id: str,
+        slide: Any,
+    ) -> Dict[str, Any]:
+        """Add exactly one slide object to a staged presentation draft."""
+        try:
+            draft = self._presentation_drafts.get(str(draft_id or ""))
+            if not draft:
+                return self._error("Unknown draft_id. Start a new draft with start_presentation_draft.")
+            parsed = _parse_jsonish(slide, None)
+            if parsed is None:
+                return self._error("slide must be one slide object. Do not pass the whole deck or an invalid JSON string.")
+            if isinstance(parsed, list):
+                return self._error("add_presentation_slide accepts exactly one slide object, not a list. Call it once per slide.")
+            slide_error = _validate_slide_payloads([parsed], allow_html=True)
+            if slide_error:
+                return self._error(slide_error)
+            if len(draft["slides"]) >= int(draft["expected_slide_count"]):
+                return self._error("Draft already has the expected number of slides. Call finalize_presentation_draft or start a new draft.")
+            normalized = _normalize_slide(parsed, len(draft["slides"]), draft["topic"])
+            draft["slides"].append(normalized)
+            remaining = int(draft["expected_slide_count"]) - len(draft["slides"])
+            return {
+                "ok": True,
+                "message": f"Added slide {len(draft['slides'])}/{draft['expected_slide_count']}." + (" Add the next slide." if remaining else " Ready to finalize."),
+                "data": {
+                    "draft_id": draft_id,
+                    "slide_count": len(draft["slides"]),
+                    "expected_slide_count": draft["expected_slide_count"],
+                    "remaining": remaining,
+                    "next_step": "Call finalize_presentation_draft." if remaining == 0 else "Call add_presentation_slide with the next single slide.",
+                },
+                "metadata": {
+                    "kind": "presentation_tool_output",
+                    "action": "add_slide",
+                    "preview_type": "text",
+                    "title": "Presentation slide added",
+                    "inline": {"draft_id": draft_id, "slide_count": len(draft["slides"]), "remaining": remaining},
+                },
+            }
+        except Exception as exc:
+            logger.error("add_presentation_slide failed: %s", exc, exc_info=True)
+            return self._error(str(exc))
+
+    def finalize_presentation_draft(
+        self,
+        draft_id: str,
+    ) -> Dict[str, Any]:
+        """Finalize a staged presentation draft into an editable PPTX."""
+        try:
+            draft = self._presentation_drafts.get(str(draft_id or ""))
+            if not draft:
+                return self._error("Unknown draft_id. Start a new draft with start_presentation_draft.")
+            if not draft["slides"]:
+                return self._error("Draft has no slides. Add slides one at a time before finalizing.")
+            if len(draft["slides"]) < int(draft["expected_slide_count"]):
+                return self._error(
+                    f"Draft has {len(draft['slides'])}/{draft['expected_slide_count']} slides. "
+                    "Continue adding one slide at a time, or start a new draft with a lower expected_slide_count."
+                )
+            result = self.create_presentation(
+                topic=draft["topic"],
+                slides=draft["slides"],
+                template=draft["template"],
+                filename=draft.get("filename"),
+            )
+            if result.get("ok"):
+                self._presentation_drafts.pop(str(draft_id), None)
+                result.setdefault("data", {})["draft_id"] = draft_id
+                result.setdefault("metadata", {}).setdefault("inline", {})["draft_id"] = draft_id
+            return result
+        except Exception as exc:
+            logger.error("finalize_presentation_draft failed: %s", exc, exc_info=True)
+            return self._error(str(exc))
+    def create_presentation_from_brief(
+        self,
+        topic: str,
+        brief: str,
+        slide_count: int = 5,
+        template: str = "aetheria_modern",
+        filename: Optional[str] = None,
+        archetype: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a presentation from a compact brief without requiring the model to emit
+        a large nested slides JSON payload. This is the safest path for normal decks.
+        """
+        try:
+            if not topic or not str(topic).strip():
+                return self._error("topic is required")
+            template_id = _resolve_template_id(template)
+            if not template_id:
+                return self._error(
+                    f"Unknown presentation template '{template}'. "
+                    f"Available template ids: {', '.join(TEMPLATES.keys())}"
+                )
+            count = _bounded_slide_count(slide_count, default=5)
+            matches = _match_deck_archetypes(f"{topic}\n{brief}")
+            archetype_id = str(archetype or (matches[0]["id"] if matches else "strategy_memo"))
+            if archetype_id not in DECK_ARCHETYPES:
+                archetype_id = matches[0]["id"] if matches else "strategy_memo"
+            slides = _build_slides_from_brief(
+                topic=str(topic).strip(),
+                brief=str(brief or topic).strip(),
+                slide_count=count,
+                archetype_id=archetype_id,
+            )
+            result = self.create_presentation(
+                topic=topic,
+                slides=slides,
+                template=template_id,
+                filename=filename,
+            )
+            if result.get("ok"):
+                result.setdefault("data", {})["created_from_brief"] = True
+                result["data"]["archetype"] = archetype_id
+                result.setdefault("metadata", {}).setdefault("inline", {})["created_from_brief"] = True
+                result["metadata"]["inline"]["archetype"] = archetype_id
+            return result
+        except Exception as exc:
+            logger.error("create_presentation_from_brief failed: %s", exc, exc_info=True)
+            return self._error(str(exc))
     def create_presentation(
         self,
         topic: str,
@@ -512,14 +905,14 @@ class PresentationTools(Toolkit):
             if not topic or not str(topic).strip():
                 return self._error("topic is required")
 
-            slide_list = _parse_jsonish(slides, [])
-            if not isinstance(slide_list, list):
-                return self._error("slides must be a list of slide dictionaries or a JSON list")
+            slide_list, slide_error = _parse_slides_input(slides)
+            if slide_error:
+                return self._error(slide_error)
             if not slide_list:
-                slide_list = [
-                    {"type": "title", "title": topic, "subtitle": "Generated by Aetheria AI"},
-                    {"type": "content", "title": "Key points", "bullets": ["Main idea", "Supporting proof", "Next step"]},
-                ]
+                return self._error("slides is empty. Use create_presentation_from_brief for normal decks, or pass a non-empty list of slide dictionaries.")
+            slide_payload_error = _validate_slide_payloads(slide_list, allow_html=True)
+            if slide_payload_error:
+                return self._error(slide_payload_error)
 
             template_id = _resolve_template_id(template)
             if not template_id:
@@ -843,7 +1236,9 @@ def build_presentation_agent(
             "If the user or Aetheria provides a hidden presentation template instruction, call create_presentation with that exact template id.",
             "Use list_presentation_templates only when template fit is unclear; it returns compact summaries to save context.",
             "Use get_presentation_template_details only for the one template you plan to use when you need its detailed design/layout guidance.",
-            "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, visual summaries, and speaker notes where useful.",
+            "For any deck with more than one slide, use the staged draft tools by default: start_presentation_draft, then add_presentation_slide once per slide, then finalize_presentation_draft. If the user asks for 5 slides, make 5 separate add_presentation_slide tool calls. Do not send a whole multi-slide deck in one create_presentation call unless explicitly repairing/finalizing an internal draft.",
+            "Use create_presentation_from_brief only for quick fallback decks when staged generation is not needed. Use create_presentation only for finalization or compact single-slide/repair payloads.",
+            "For create_presentation, provide structured slides with types, titles, bullets, metrics, charts, tables, diagrams, visual summaries, and speaker notes where useful. For highly custom slide design, you may provide slide.html or slide.contract_html using the strict contract: one .slide-container at 1920x1080; every direct child must have data-object='true', data-object-type, position:absolute, and inline left/top/width/height.",
             "Speaker notes are opt-in: include notes only when the user asks for talk track, narration, presenter notes, or scripts. Notes should be conversational scripts, not repeated slide bullets.",
             "Use restraint: fewer words per slide, strong claim titles, generous whitespace, consistent visual chrome, and charts only when the data earns them.",
             "Do not make a deck that is only title plus plain bullet slides. Use the backend template layouts: cover, insight cards, comparison, evidence chart, table, process/diagram, and visual explanation.",
@@ -851,9 +1246,13 @@ def build_presentation_agent(
             "When making comparison slides, always provide left/right titles and left/right bullet content. When making chart slides, provide chart.data. When making process slides, provide nodes or steps.",
             "Prefer concise claim-style titles and 3-6 strong slides unless the user asks for a different length.",
             "Use chart.data for simple bar evidence, table for comparison rows, nodes/steps for workflow diagrams, and metrics for rails.",
-            "After create_presentation returns, inspect metadata.layout_validation and metadata.harness.screenshot_validation when present. If either reports overflow, out-of-bounds, or overlap errors, regenerate with shorter titles/bullets or a better slide type before presenting the final answer.",
+            "When writing custom contract HTML, call lint_presentation_html_contract before create_presentation. Fix every contract, overflow, out-of-bounds, low-contrast, or overlap issue it reports. After create_presentation returns, inspect metadata.layout_validation and metadata.harness.screenshot_validation when present. If either reports overflow, out-of-bounds, or overlap errors, regenerate with shorter titles/bullets, corrected contract HTML, or a better slide type before presenting the final answer.",
             "Return the artifact result naturally and mention that the file is downloadable and editable in PowerPoint.",
             "</system_instructions>",
         ],
         debug_mode=debug_mode,
     )
+
+
+
+
