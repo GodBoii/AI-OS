@@ -13,9 +13,13 @@
                     <i class="fi fi-tr-circle-user"></i>
                     <span>Account</span>
                 </button>
+                <button class="tab-btn" data-tab="skills">
+                    <i class="fas fa-magic"></i>
+                    <span>Skills</span>
+                </button>
                 <button class="tab-btn" data-tab="integration">
-                    <i class="fi fi-tr-layer-plus"></i>
-                    <span>Integration</span>
+                    <i class="fas fa-plug"></i>
+                    <span>Plugins</span>
                 </button>
                 <button class="tab-btn" data-tab="deployments">
                     <i class="fi fi-tr-rocket-lunch"></i>
@@ -249,17 +253,89 @@
                     </div>
                 </div>
 
+                <div class="tab-content" id="skills-tab">
+                    <h3 class="tab-heading">Skills</h3>
+                    <div class="skills-content">
+                        <p class="integration-description">
+                            Native agent tools available inside Aetheria AI-OS. These skills let the agent create, browse, research, control, and execute work directly from chat.
+                        </p>
+
+                        <div class="skills-section" aria-label="Native skills">
+                            <div class="skill-item">
+                                <div class="skill-icon skill-icon-ppt">
+                                    <i class="fas fa-file-powerpoint"></i>
+                                </div>
+                                <div class="skill-info">
+                                    <span class="skill-title">PPT</span>
+                                    <span class="skill-description">Create, edit, and refine PowerPoint presentations from prompts, files, and structured outlines.</span>
+                                </div>
+                                <span class="skill-status">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <div class="skill-item">
+                                <div class="skill-icon skill-icon-browser">
+                                    <i class="fas fa-window-maximize"></i>
+                                </div>
+                                <div class="skill-info">
+                                    <span class="skill-title">Browser</span>
+                                    <span class="skill-description">Open and control web pages for app testing, previews, data capture, and visual verification.</span>
+                                </div>
+                                <span class="skill-status">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <div class="skill-item">
+                                <div class="skill-icon skill-icon-computer">
+                                    <i class="fas fa-laptop-code"></i>
+                                </div>
+                                <div class="skill-info">
+                                    <span class="skill-title">Computer</span>
+                                    <span class="skill-description">Use the desktop environment to interact with apps, files, windows, keyboard input, and mouse actions.</span>
+                                </div>
+                                <span class="skill-status">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <div class="skill-item">
+                                <div class="skill-icon skill-icon-internet">
+                                    <i class="fas fa-globe"></i>
+                                </div>
+                                <div class="skill-info">
+                                    <span class="skill-title">Internet</span>
+                                    <span class="skill-description">Search the web, gather current information, compare sources, and bring real-time context into tasks.</span>
+                                </div>
+                                <span class="skill-status">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                            <div class="skill-item">
+                                <div class="skill-icon skill-icon-sandbox">
+                                    <i class="fas fa-terminal"></i>
+                                </div>
+                                <div class="skill-info">
+                                    <span class="skill-title">Sandbox</span>
+                                    <span class="skill-description">Run commands, inspect projects, generate files, and test code in an isolated execution workspace.</span>
+                                </div>
+                                <span class="skill-status">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="tab-content" id="integration-tab">
-                    <h3 class="tab-heading">Integrations</h3>
+                    <h3 class="tab-heading">Plugins</h3>
                     <div class="integration-content">
                         <p class="integration-description">
-                            Connect your third-party services to enhance your AI-OS experience. 
-                            Manage all your integrations and their permissions from this central location.
+                            Connect third-party services to extend your AI-OS experience.
+                            Manage all your plugins and their permissions from this central location.
                         </p>
-                        
-                        <!-- Integrations Section -->
+
+                        <!-- Plugins Section -->
                         <div class="integrations-section">
-                            <!-- GitHub Integration Item -->
+                            <!-- GitHub Plugin Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <i class="fab fa-github"></i>
@@ -271,7 +347,7 @@
                                     <span class="btn-text">Connect</span>
                                 </button>
                             </div>
-                            <!-- Google Integration Item -->
+                            <!-- Google Plugin Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <i class="fab fa-google"></i>
@@ -315,7 +391,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- Vercel Integration Item -->
+                            <!-- Vercel Plugin Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <svg class="provider-icon vercel-icon" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -330,7 +406,7 @@
                                 </button>
                             </div>
                             
-                            <!-- Supabase Integration Item -->
+                            <!-- Supabase Plugin Item -->
                             <div class="integration-item">
                                 <div class="integration-info">
                                     <svg class="provider-icon" role="img" viewBox="0 0 109 113" xmlns="http://www.w3.org/2000/svg" style="width: 24px; height: 24px;">
