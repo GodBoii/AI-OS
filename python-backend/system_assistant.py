@@ -4,9 +4,11 @@ import logging
 from typing import Any, Dict, Optional
 
 from agno.agent import Agent
+from agno.db.postgres import PostgresDb
 from openrouter_reasoning_model import get_openrouter_model
 from agno.models.groq import Groq
 
+from database_config import get_sqlalchemy_database_url
 from mobile_tools import MobileTools
 
 logger = logging.getLogger(__name__)
@@ -14,12 +16,14 @@ logger = logging.getLogger(__name__)
 
 def get_system_assistant(
     mobile_tools_config: Optional[Dict[str, Any]] = None,
+    user_id: Optional[str] = None,
+    debug_mode: bool = False,
 ) -> Agent:
     """
-    Constructs a lightweight, stateless System Assistant Agent.
+    Constructs the lightweight System Assistant Agent.
 
-    Designed for fast, direct responses without session persistence.
-    Perfect for voice assistant and Circle to Search use cases.
+    Persists short conversation history so follow-up voice requests retain
+    context while keeping long-term user memory disabled.
     Supports multimodal inputs (text + images).
     """
     system_instructions = [
@@ -80,8 +84,16 @@ def get_system_assistant(
         model=get_openrouter_model("xiaomi/mimo-v2.5"),
         instructions=system_instructions,
         tools=tools,
+        user_id=user_id,
+        db=PostgresDb(
+            db_url=get_sqlalchemy_database_url(),
+            db_schema="public",
+        ),
+        add_history_to_context=True,
+        num_history_runs=12,
+        store_events=True,
         markdown=True,
-        debug_mode=True,
+        debug_mode=debug_mode,
     )
 
     return agent
