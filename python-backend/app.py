@@ -2,10 +2,12 @@
 
 # CRITICAL: Monkey-patch must happen BEFORE any other imports so that redis-py,
 # python-socketio, and all other libraries use eventlet's cooperative sockets.
+import os
+os.environ.setdefault("EVENTLET_NO_GREENDNS", "yes")
+
 import eventlet
 eventlet.monkey_patch()
 
-import os
 import sys
 import logging
 from factory import create_app
