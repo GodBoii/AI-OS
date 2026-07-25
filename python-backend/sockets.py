@@ -22,6 +22,7 @@ from flask import request
 from flask_socketio import join_room
 from gotrue.errors import AuthApiError
 
+import config
 from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
@@ -31,6 +32,7 @@ from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
 from cache_manager import CacheManager
+from socket_security import can_access_conversation, safe_socket_message_metadata
 from utils import get_user_from_jwt
 
 logger = logging.getLogger(__name__)
@@ -236,6 +238,36 @@ def on_join_conversation(data: Dict[str, Any]):
     if not conversation_id:
         return
 
+    access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
+    if not access_token:
+        logger.warning("[Join] Rejected unauthenticated room join for SID %s", sid)
+        return socketio.emit(
+            "error",
+            {"message": "Authentication is required to join a conversation."},
+            room=sid,
+        )
+
+    user, auth_error = get_user_from_jwt(access_token)
+    if auth_error:
+        logger.warning("[Join] Rejected invalid authentication for SID %s", sid)
+        return socketio.emit(
+            "error",
+            {"message": auth_error[0]},
+            room=sid,
+        )
+
+    if not can_access_conversation(
+        str(user.id),
+        conversation_id,
+        connection_manager_service,
+        run_state_manager_instance,
+    ):
+        logger.warning(
+            "[Join] Rejected unauthorized or unknown conversation for SID %s",
+            sid,
+        )
+        return
+
     room_name = f"conv:{conversation_id}"
     join_room(room_name)
     logger.info(f"[Join] SID {sid} joined room {room_name}")
@@ -318,13 +350,17 @@ def handle_save_user_context(data: Dict[str, Any]):
             logger.error("Context data missing")
             return socketio.emit("user-context-saved", {"success": False, "error": "Context data missing"}, room=sid)
 
-        logger.info(f"Saving context for user {user.id}: {json.dumps(context_data, indent=2)}")
+        logger.info(
+            "Saving user context for user %s with keys=%s",
+            user.id,
+            sorted(context_data.keys()) if isinstance(context_data, dict) else [],
+        )
 
         from user_context_tools import UserContextTools
         context_tools = UserContextTools(user_id=str(user.id))
         result = context_tools.save_user_context(context_data)
 
-        logger.info(f"Save result: {result}")
+        logger.info("User context save completed for user %s", user.id)
         socketio.emit("user-context-saved", {"success": True, "result": result}, room=sid)
         logger.info(f"User context saved successfully for user {user.id}")
 
@@ -502,9 +538,6 @@ def on_plan_request(data: str):
                 room=sid,
             )
 
-        if conversation_id:
-            join_room(f"conv:{conversation_id}")
-
         incoming_config = _sanitize_plan_config(dict(data.get("config", {}) or {}))
 
         common_payload = {
@@ -520,7 +553,7 @@ def on_plan_request(data: str):
             files=data.get("files", []),
             selected_sessions=data.get("selected_sessions", []),
             workspace_context=data.get("workspace_context", {}),
-            debug_mode=True,
+            debug_mode=config.AGNO_DEBUG_MODE,
         ):
             event_type = event.get("type")
             if event_type == "content":
@@ -613,7 +646,24 @@ def on_send_message(data: str):
         if auth_error:
             return socketio.emit("error", {"message": auth_error[0], "reset": True}, room=sid)
 
-        # --- ROOM JOIN: Subscribe current SID to this conversation's room ---
+        if not can_access_conversation(
+            str(user.id),
+            conversation_id,
+            connection_manager_service,
+            run_state_manager_instance,
+            allow_unowned=True,
+        ):
+            logger.warning(
+                "[send_message] Rejected conversation ownership mismatch for SID %s",
+                sid,
+            )
+            return socketio.emit(
+                "error",
+                {"message": "Conversation not found.", "reset": True},
+                room=sid,
+            )
+
+        # Subscribe only after authentication and ownership checks.
         room_name = f"conv:{conversation_id}"
         join_room(room_name)
         logger.info(f"[send_message] SID {sid} joined room {room_name}")
@@ -777,7 +827,10 @@ def on_assistant_message(data: str):
         if isinstance(data, str):
             data = json.loads(data)
 
-        logger.info(f"[Assistant Socket] Received message: {data}")
+        logger.info(
+            "[Assistant Socket] Received message metadata: %s",
+            safe_socket_message_metadata(data),
+        )
 
         access_token = data.get("accessToken") or _socket_auth_tokens.get(sid)
         if not access_token:
@@ -805,7 +858,24 @@ def on_assistant_message(data: str):
         if not user_message:
             return socketio.emit("assistant_error", {"message": "Message is required"}, room=sid)
 
-        # Join conversation room for assistant too
+        if not can_access_conversation(
+            str(user.id),
+            conversation_id,
+            connection_manager_service,
+            run_state_manager_instance,
+            allow_unowned=True,
+        ):
+            logger.warning(
+                "[Assistant Socket] Rejected conversation ownership mismatch for SID %s",
+                sid,
+            )
+            return socketio.emit(
+                "assistant_error",
+                {"message": "Conversation not found."},
+                room=sid,
+            )
+
+        # Join only after authentication and ownership checks.
         room_name = f"conv:{conversation_id}"
         join_room(room_name)
 
