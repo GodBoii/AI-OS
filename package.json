@@ -6,6 +6,7 @@
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",
+    "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
