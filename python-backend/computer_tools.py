@@ -510,12 +510,12 @@ class ComputerTools(Toolkit):
 
     def close_window(self, window_id: int) -> Union[Dict[str, Any], ToolResult]:
         """
-        Close a window by terminating its process.
+        Request that a specific window close normally.
         
         Args:
             window_id: The window ID from list_windows()
         
-        WARNING: This force-closes the application. Unsaved work may be lost.
+        Applications may display a prompt to save unsaved work.
         """
         return self._send_command_and_wait({
             'action': 'close_window',
@@ -638,12 +638,12 @@ class ComputerTools(Toolkit):
 
     def close_application(self, app_name: str) -> Union[Dict[str, Any], ToolResult]:
         """
-        Close an application by name (force quit).
+        Request that an application's open windows close normally.
         
         Args:
             app_name: Name of the application to close
         
-        WARNING: This force-closes the application. Unsaved work may be lost.
+        Applications may display a prompt to save unsaved work.
         """
         return self._send_command_and_wait({
             'action': 'close_application',

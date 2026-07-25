@@ -3,18 +3,19 @@
 
 const { screen, clipboard, desktopCapturer, powerMonitor } = require('electron');
 const { keyboard, Key, mouse, Button, straightTo, Point, Region, screen: nutScreen } = require('@nut-tree-fork/nut-js');
-const activeWin = require('active-win');
-const windowManager = require('node-window-manager');
+const { activeWindow } = require('active-win');
+const { windowManager } = require('node-window-manager');
 const loudness = require('loudness');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const chokidar = require('chokidar');
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 class ComputerControlHandler {
     constructor(eventEmitter, appDataPath, getAuthTokenFunc) {
@@ -702,7 +703,7 @@ class ComputerControlHandler {
 
     async _getActiveWindow() {
         try {
-            const window = await activeWin();
+            const window = await activeWindow();
             if (!window) {
                 return { status: 'error', error: 'No active window found' };
             }
@@ -1054,8 +1055,69 @@ class ComputerControlHandler {
 
     // ===== WINDOW MANAGEMENT METHODS =====
 
+    _getManagedWindows() {
+        return windowManager.getWindows();
+    }
+
+    async _runPowerShell(script, options = {}) {
+        const powershellExecutable = process.env.SystemRoot
+            ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+            : 'powershell.exe';
+        const encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+
+        return execFileAsync(
+            powershellExecutable,
+            ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand],
+            {
+                timeout: 15000,
+                windowsHide: true,
+                maxBuffer: 10 * 1024 * 1024,
+                ...options
+            }
+        );
+    }
+
+    async _requestWindowClose(windowId) {
+        const numericWindowId = Number(windowId);
+        if (!Number.isSafeInteger(numericWindowId) || numericWindowId <= 0) {
+            throw new Error('Invalid window ID');
+        }
+
+        const script = `
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class AetheriaWindowClose {
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessage(
+        IntPtr hWnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam
+    );
+}
+'@
+
+$windowHandle = [IntPtr]${numericWindowId}
+$closePosted = [AetheriaWindowClose]::PostMessage(
+    $windowHandle,
+    [uint32]0x0010,
+    [IntPtr]::Zero,
+    [IntPtr]::Zero
+)
+
+if (-not $closePosted) {
+    $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+    throw "Unable to request window close. Windows error code: $errorCode"
+}
+`;
+        await this._runPowerShell(script, { timeout: 10000 });
+    }
+
     async _listWindows() {
-        const windows = windowManager.getWindows();
+        const windows = this._getManagedWindows();
         
         const windowList = windows.map(win => ({
             id: win.id,
@@ -1076,9 +1138,9 @@ class ComputerControlHandler {
 
         let targetWindow;
         if (window_id) {
-            targetWindow = windowManager.getWindows().find(w => w.id === window_id);
+            targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
         } else if (title) {
-            targetWindow = windowManager.getWindows().find(w => 
+            targetWindow = this._getManagedWindows().find(w =>
                 w.getTitle().toLowerCase().includes(title.toLowerCase())
             );
         }
@@ -1097,7 +1159,7 @@ class ComputerControlHandler {
     async _resizeWindow(commandPayload) {
         const { window_id, width, height } = commandPayload;
 
-        const targetWindow = windowManager.getWindows().find(w => w.id === window_id);
+        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
@@ -1114,7 +1176,7 @@ class ComputerControlHandler {
     async _minimizeWindow(commandPayload) {
         const { window_id } = commandPayload;
 
-        const targetWindow = windowManager.getWindows().find(w => w.id === window_id);
+        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
@@ -1129,7 +1191,7 @@ class ComputerControlHandler {
     async _maximizeWindow(commandPayload) {
         const { window_id } = commandPayload;
 
-        const targetWindow = windowManager.getWindows().find(w => w.id === window_id);
+        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
@@ -1144,21 +1206,25 @@ class ComputerControlHandler {
     async _closeWindow(commandPayload) {
         const { window_id } = commandPayload;
 
-        const targetWindow = windowManager.getWindows().find(w => w.id === window_id);
+        const numericWindowId = Number(window_id);
+        if (!Number.isSafeInteger(numericWindowId) || numericWindowId <= 0) {
+            return { status: 'error', error: 'A valid window ID is required' };
+        }
+
+        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === numericWindowId);
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
 
-        // Platform-specific close
         if (this.platform === 'win32') {
-            await execAsync(`taskkill /PID ${targetWindow.processId} /F`);
+            await this._requestWindowClose(targetWindow.id);
         } else {
             await execAsync(`kill ${targetWindow.processId}`);
         }
 
         return {
             status: 'success',
-            message: 'Window closed'
+            message: `Close requested for window: ${targetWindow.getTitle()}`
         };
     }
 
@@ -1289,23 +1355,128 @@ class ComputerControlHandler {
         }
     }
 
-    async _openApplication(commandPayload) {
-        const { app_name } = commandPayload;
+    _normalizeApplicationName(value) {
+        return String(value || '')
+            .trim()
+            .replace(/^["']|["']$/g, '')
+            .replace(/\.exe$/i, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+    }
 
-        let command;
-        if (this.platform === 'win32') {
-            command = `start ${app_name}`;
-        } else if (this.platform === 'darwin') {
-            command = `open -a "${app_name}"`;
-        } else {
-            command = app_name;
+    _getWindowsApplicationAliases(app) {
+        const aliases = new Set();
+        const displayName = this._normalizeApplicationName(app && app.name);
+        if (displayName) aliases.add(displayName);
+
+        if (app && app.id) {
+            const executableName = path.win32.basename(app.id);
+            if (/\.exe$/i.test(executableName)) {
+                const executableAlias = this._normalizeApplicationName(executableName);
+                if (executableAlias) aliases.add(executableAlias);
+            }
+        }
+
+        return aliases;
+    }
+
+    _resolveWindowsApplication(appName, apps) {
+        const requestedName = this._normalizeApplicationName(appName);
+        if (!requestedName || !Array.isArray(apps)) return null;
+
+        const exactNameMatches = apps.filter(app =>
+            this._normalizeApplicationName(app && app.name) === requestedName
+        );
+        if (exactNameMatches.length > 0) {
+            return exactNameMatches.find(app => app.id) || exactNameMatches[0];
+        }
+
+        const aliasMatches = apps.filter(app =>
+            this._getWindowsApplicationAliases(app).has(requestedName)
+        );
+        if (aliasMatches.length === 1) return aliasMatches[0];
+
+        const partialMatches = apps.filter(app => {
+            const normalizedName = this._normalizeApplicationName(app && app.name);
+            return normalizedName && normalizedName.includes(requestedName);
+        });
+        if (partialMatches.length === 1) return partialMatches[0];
+
+        return null;
+    }
+
+    async _launchWindowsApplication(app) {
+        if (app && app.id) {
+            await execFileAsync(
+                'explorer.exe',
+                [`shell:AppsFolder\\${app.id}`],
+                { windowsHide: true, timeout: 15000 }
+            );
+            return;
+        }
+
+        const target = String(app && app.name || '').trim();
+        if (!target) throw new Error('Application name is required');
+
+        const encodedTarget = Buffer.from(target, 'utf8').toString('base64');
+        const script = `
+$target = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedTarget}'))
+$shell = New-Object -ComObject Shell.Application
+$shell.ShellExecute($target, '', '', 'open', 1)
+`;
+        await this._runPowerShell(script, { timeout: 15000 });
+    }
+
+    _windowMatchesApplication(window, appName, resolvedApp = null) {
+        const requestedName = this._normalizeApplicationName(appName);
+        const aliases = new Set([requestedName]);
+        if (resolvedApp) {
+            for (const alias of this._getWindowsApplicationAliases(resolvedApp)) {
+                aliases.add(alias);
+            }
+        }
+        aliases.delete('');
+
+        const executableAlias = this._normalizeApplicationName(
+            path.win32.basename(window.path || '')
+        );
+        if (executableAlias && aliases.has(executableAlias)) return true;
+
+        let title = '';
+        try {
+            title = this._normalizeApplicationName(window.getTitle());
+        } catch {
+            return false;
+        }
+
+        return [...aliases].some(alias =>
+            title === alias || title.endsWith(` ${alias}`)
+        );
+    }
+
+    async _openApplication(commandPayload) {
+        const appName = String(commandPayload.app_name || '').trim();
+        if (!appName) {
+            return { status: 'error', error: 'Application name is required' };
         }
 
         try {
-            await execAsync(command);
+            if (this.platform === 'win32') {
+                const discoveryResult = await this._listInstalledApplications();
+                const resolvedApp = discoveryResult.status === 'success'
+                    ? this._resolveWindowsApplication(appName, discoveryResult.apps)
+                    : null;
+                await this._launchWindowsApplication(resolvedApp || { name: appName });
+            } else if (this.platform === 'darwin') {
+                await execAsync(`open -a "${appName}"`);
+            } else {
+                await execAsync(appName);
+            }
+
             return {
                 status: 'success',
-                message: `Opened application: ${app_name}`
+                message: `Opened application: ${appName}`
             };
         } catch (error) {
             return { status: 'error', error: error.message };
@@ -1313,22 +1484,46 @@ class ComputerControlHandler {
     }
 
     async _closeApplication(commandPayload) {
-        const { app_name } = commandPayload;
-
-        let command;
-        if (this.platform === 'win32') {
-            command = `taskkill /IM ${app_name}.exe /F`;
-        } else if (this.platform === 'darwin') {
-            command = `pkill -f "${app_name}"`;
-        } else {
-            command = `pkill ${app_name}`;
+        const appName = String(commandPayload.app_name || '').trim();
+        if (!appName) {
+            return { status: 'error', error: 'Application name is required' };
         }
 
         try {
+            if (this.platform === 'win32') {
+                const discoveryResult = await this._listInstalledApplications();
+                const resolvedApp = discoveryResult.status === 'success'
+                    ? this._resolveWindowsApplication(appName, discoveryResult.apps)
+                    : null;
+                const matchingWindows = this._getManagedWindows().filter(window =>
+                    this._windowMatchesApplication(window, appName, resolvedApp)
+                );
+
+                if (matchingWindows.length === 0) {
+                    return {
+                        status: 'error',
+                        error: `No open windows found for application: ${appName}`
+                    };
+                }
+
+                for (const window of matchingWindows) {
+                    await this._requestWindowClose(window.id);
+                }
+
+                return {
+                    status: 'success',
+                    message: `Close requested for application: ${appName}`,
+                    closed_windows: matchingWindows.length
+                };
+            }
+
+            const command = this.platform === 'darwin'
+                ? `pkill -f "${appName}"`
+                : `pkill ${appName}`;
             await execAsync(command);
             return {
                 status: 'success',
-                message: `Closed application: ${app_name}`
+                message: `Closed application: ${appName}`
             };
         } catch (error) {
             return { status: 'error', error: error.message };
@@ -1461,10 +1656,7 @@ foreach ($el in $elements) {
 $results | ConvertTo-Json -Compress
 `.trim();
 
-            const { stdout } = await execAsync(
-                `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
-                { timeout: 15000 }
-            );
+            const { stdout } = await this._runPowerShell(psScript, { timeout: 15000 });
 
             let elements = [];
             if (stdout && stdout.trim()) {
@@ -1530,10 +1722,7 @@ foreach ($el in $elements) {
 $results | ConvertTo-Json -Compress
 `.trim();
 
-            const { stdout } = await execAsync(
-                `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`,
-                { timeout: 10000 }
-            );
+            const { stdout } = await this._runPowerShell(psScript, { timeout: 10000 });
 
             let elements = [];
             if (stdout && stdout.trim()) {
@@ -1569,8 +1758,8 @@ $results | ConvertTo-Json -Compress
             if (this.platform === 'win32') {
                 // Strategy 1: Get-StartApps (UWP + Start Menu shortcuts - fast)
                 try {
-                    const { stdout: startAppsJson } = await execAsync(
-                        'powershell -NoProfile -Command "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress"',
+                    const { stdout: startAppsJson } = await this._runPowerShell(
+                        'Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress',
                         { timeout: 15000 }
                     );
                     const startApps = JSON.parse(startAppsJson);
@@ -1598,8 +1787,8 @@ $results | ConvertTo-Json -Compress
 
                 for (const regPath of registryPaths) {
                     try {
-                        const psCmd = `powershell -NoProfile -Command "Get-ItemProperty '${regPath}' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -ne $null } | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation | ConvertTo-Json -Compress"`;
-                        const { stdout: regJson } = await execAsync(psCmd, { timeout: 15000 });
+                        const psScript = `Get-ItemProperty '${regPath}' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -ne $null } | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation | ConvertTo-Json -Compress`;
+                        const { stdout: regJson } = await this._runPowerShell(psScript, { timeout: 15000 });
                         if (regJson && regJson.trim()) {
                             const regApps = JSON.parse(regJson);
                             const regList = Array.isArray(regApps) ? regApps : [regApps];
