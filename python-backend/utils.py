@@ -24,8 +24,10 @@
 #   the real Supabase User object for all downstream code (user.id, user.email).
 
 import hashlib
+import httpx
 import json
 import logging
+import time
 import types
 import redis
 
@@ -49,6 +51,9 @@ _JWT_CACHE_TTL_SECONDS = 300
 # Redis key prefix — makes it easy to spot JWT cache entries in redis-cli
 # and to flush them selectively without touching other cache namespaces.
 _JWT_CACHE_PREFIX = "jwt_cache:"
+
+_AUTH_NETWORK_ATTEMPTS = 2
+_AUTH_NETWORK_RETRY_DELAY_SECONDS = 0.2
 
 
 def _get_jwt_redis() -> redis.Redis | None:
@@ -150,6 +155,42 @@ def _user_to_cache(jwt: str, user) -> None:
         logger.warning("[JWT Cache] Write error (non-fatal): %s", exc)
 
 
+def _validate_user_with_supabase(jwt: str):
+    """Validate a JWT and distinguish auth failures from transport outages."""
+    for attempt in range(1, _AUTH_NETWORK_ATTEMPTS + 1):
+        try:
+            user_response = supabase_client.auth.get_user(jwt=jwt)
+        except AuthApiError as exc:
+            logger.warning("API authentication rejected: %s", exc.message)
+            return None, ("Invalid or expired token", 401)
+        except httpx.TransportError as exc:
+            if attempt < _AUTH_NETWORK_ATTEMPTS:
+                logger.warning(
+                    "Authentication service connection failed; retrying "
+                    "attempt=%s/%s error=%s",
+                    attempt,
+                    _AUTH_NETWORK_ATTEMPTS,
+                    type(exc).__name__,
+                )
+                time.sleep(_AUTH_NETWORK_RETRY_DELAY_SECONDS)
+                continue
+
+            logger.error(
+                "Authentication service unavailable after %s attempts: %s",
+                _AUTH_NETWORK_ATTEMPTS,
+                type(exc).__name__,
+            )
+            return None, ("Authentication service temporarily unavailable", 503)
+
+        if not user_response.user:
+            logger.warning("API authentication rejected: user missing from response")
+            return None, ("Invalid or expired token", 401)
+
+        return user_response.user, None
+
+    return None, ("Authentication service temporarily unavailable", 503)
+
+
 def get_user_from_token(request_object):
     """
     Validates a JWT from an Authorization header and returns the authenticated user.
@@ -181,23 +222,13 @@ def get_user_from_token(request_object):
 
     # ── Step 2: Cache miss — validate against Supabase ──────────────────────
     logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
-    try:
-        user_response = supabase_client.auth.get_user(jwt=jwt)
-        if not user_response.user:
-            raise AuthApiError("User not found for token.", 401)
+    user, error = _validate_user_with_supabase(jwt)
+    if error:
+        return None, error
 
-        user = user_response.user
-
-        # ── Step 3: Write through to cache ──────────────────────────────────
-        # Only cache on a successful validation.  Failed/expired tokens must
-        # never be cached — otherwise an attacker could lock in a bad token.
-        _user_to_cache(jwt, user)
-
-        return user, None
-
-    except AuthApiError as e:
-        logger.error("API authentication error: %s", e.message)
-        return None, ("Invalid or expired token", 401)
+    # Only successful validations are cached.
+    _user_to_cache(jwt, user)
+    return user, None
 
 
 def get_user_from_jwt(jwt: str):
@@ -216,15 +247,9 @@ def get_user_from_jwt(jwt: str):
         return cached_user, None
 
     logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
-    try:
-        user_response = supabase_client.auth.get_user(jwt=jwt)
-        if not user_response.user:
-            raise AuthApiError("User not found for token.", 401)
+    user, error = _validate_user_with_supabase(jwt)
+    if error:
+        return None, error
 
-        user = user_response.user
-        _user_to_cache(jwt, user)
-        return user, None
-
-    except AuthApiError as e:
-        logger.error("API authentication error: %s", e.message)
-        return None, ("Invalid or expired token", 401)
+    _user_to_cache(jwt, user)
+    return user, None
