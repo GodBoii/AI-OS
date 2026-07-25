@@ -60,9 +60,11 @@ class RunStateManager:
         conversation_title: Optional[str] = None,
     ) -> None:
         """Mark a run as 'completed' and persist structured catch-up payload."""
+        previous_state = self.get_state(conversation_id) or {}
         state = {
             "status": "completed",
             "message_id": message_id,
+            "user_id": previous_state.get("user_id"),
             "updated_at": time.time(),
         }
         key = f"{RUN_STATE_PREFIX}{conversation_id}"
@@ -85,9 +87,11 @@ class RunStateManager:
 
     def fail_run(self, conversation_id: str, message_id: str, error: str) -> None:
         """Mark a run as 'failed' and store the error."""
+        previous_state = self.get_state(conversation_id) or {}
         state = {
             "status": "failed",
             "message_id": message_id,
+            "user_id": previous_state.get("user_id"),
             "error": error,
             "updated_at": time.time(),
         }

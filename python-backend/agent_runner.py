@@ -22,6 +22,7 @@ from supabase_client import supabase_client
 from session_service import ConnectionManager
 from run_state_manager import RunStateManager
 from cache_manager import CacheManager
+from assistant_stream_utils import build_system_assistant_terminal_message
 from tool_event_payload import serialize_tool_event
 from deploy_platform import (
     get_deployment_file_bytes,
@@ -33,7 +34,7 @@ import config
 
 # --- Agno Framework Imports ---
 from agno.media import Image, Audio, Video, File
-from agno.run.agent import RunEvent
+from agno.run.agent import RunEvent, RunOutput
 from agno.run.team import TeamRunEvent, TeamRunOutput
 
 logger = logging.getLogger(__name__)
@@ -431,7 +432,9 @@ def _to_int(value: Any) -> int:
         return 0
 
 
-def _extract_metrics_from_run_output(run_output: TeamRunOutput | None) -> Dict[str, int]:
+def _extract_metrics_from_run_output(
+    run_output: RunOutput | TeamRunOutput | None,
+) -> Dict[str, int]:
     if not run_output:
         logger.info("[TOKENS] Source run_output unavailable: run_output is None")
         return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
@@ -473,7 +476,7 @@ def _extract_metrics_from_agno_session(conversation_id: str) -> Dict[str, int]:
             .from_("agno_sessions")
             .select("session_data,runs")
             .eq("session_id", conversation_id)
-            .single()
+            .maybe_single()
             .execute()
         )
         row = response.data or {}
@@ -589,7 +592,7 @@ def _log_request_tokens(
     user_id: str,
     conversation_id: str,
     message_id: str,
-    run_output: TeamRunOutput | None,
+    run_output: RunOutput | TeamRunOutput | None,
 ) -> None:
     metrics = _extract_metrics_from_run_output(run_output)
     source = "run_output"
@@ -665,7 +668,7 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
             try:
                 logger.info(f"Downloading file from Supabase storage: {storage_path}")
                 file_bytes = supabase_client.storage.from_('media-uploads').download(storage_path)
-                
+
                 if file_type.startswith('image/'):
                     images.append(Image(content=file_bytes, name=file_name))
                 elif file_type.startswith('audio/'):
@@ -706,7 +709,7 @@ def run_agent_and_stream(
     """
     FUNCTION DESCRIPTION:
     Orchestrates the lifecycle of a single prompt-response turn for the agent. It retrieves user configuration,
-    bootstraps the local workspace files, loads historical chat context, constructs prompt prefixes, 
+    bootstraps the local workspace files, loads historical chat context, constructs prompt prefixes,
     initializes the proper Agno agent team (based on active layout mode), processes file attachments,
     streams live reasoning/output chunks, and updates database run summaries and token counts on completion.
 
@@ -825,7 +828,7 @@ def run_agent_and_stream(
                 message_id=message_id,
                 use_memory=session_config.get("use_memory", False),
                 use_session_summaries=session_config.get("use_session_summaries", False),
-                debug_mode=True,
+                debug_mode=config.AGNO_DEBUG_MODE,
                 enable_github=session_config.get("enable_github", True),
                 coder_execution_target=requested_coder_target,
             )
@@ -839,7 +842,7 @@ def run_agent_and_stream(
                 message_id=message_id,
                 use_memory=session_config.get("use_memory", False),
                 use_session_summaries=session_config.get("use_session_summaries", False),
-                debug_mode=True,
+                debug_mode=config.AGNO_DEBUG_MODE,
                 enable_google_email=bool(session_config.get("enable_google_email", True)),
                 enable_google_drive=bool(session_config.get("enable_google_drive", True)),
                 enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
@@ -852,13 +855,18 @@ def run_agent_and_stream(
                 "conversation_id": conversation_id,
                 "message_id": message_id,
             }
-            agent = get_system_assistant(mobile_tools_config=mobile_tools_config)
+            agent = get_system_assistant(
+                mobile_tools_config=mobile_tools_config,
+                user_id=user_id,
+                debug_mode=config.SYSTEM_ASSISTANT_DEBUG_MODE,
+            )
         else:
             llm_os_config = _filter_kwargs_for_callable(
                 get_llm_os,
                 session_config,
                 label="session_config keys",
             )
+            llm_os_config.setdefault("debug_mode", config.AGNO_DEBUG_MODE)
             agent = get_llm_os(
                 user_id=user_id,
                 session_info=session_data,
@@ -876,7 +884,7 @@ def run_agent_and_stream(
         inline_text_files_prompt = build_inline_text_files_prompt(incoming_files)
         current_session_state = {'turn_context': turn_data}
         user_message = turn_data.get("user_message", "")
-        
+
         # 4. Fetch and Prepend Historical Context
         historical_context_str = ""
         if context_session_ids:
@@ -894,18 +902,18 @@ def run_agent_and_stream(
                             assistant_output = run.get('content', '')
                             if user_input:
                                 historical_context_str += f"User: {user_input}\nAssistant: {assistant_output}\n---\n"
-                    
+
                     # Fetch file metadata from session_content
                     content_response = supabase_client.from_('session_content').select(
                         'content_type, reference_id, metadata'
                     ).eq('session_id', session_id).eq('user_id', user_id).execute()
-                    
+
                     if content_response.data and len(content_response.data) > 0:
                         files_context = []
                         for item in content_response.data:
                             content_type = item.get('content_type', '')
                             metadata = item.get('metadata', {}) or {}
-                            
+
                             if content_type == 'artifact':
                                 filename = metadata.get('filename', 'Unknown file')
                                 files_context.append(f"[Generated file: {filename}]")
@@ -913,14 +921,14 @@ def run_agent_and_stream(
                                 filename = metadata.get('filename', 'Unknown file')
                                 mime_type = metadata.get('mime_type', '')
                                 files_context.append(f"[Attached file: {filename} ({mime_type})]")
-                        
+
                         if files_context:
                             historical_context_str += f"Files in this conversation:\n{chr(10).join(files_context)}\n---\n"
-                            
+
                 except Exception as e:
                     logger.error(f"Failed to fetch or process context for session_id {session_id}: {e}")
             historical_context_str += "\n"
-        
+
         sandbox_workspace_context = ""
         if session_data.get("config", {}).get("coding_assistant", False):
             sandbox_workspace_context = build_sandbox_workspace_context(session_data)
@@ -954,13 +962,17 @@ def run_agent_and_stream(
         # --- DEBUG LOG ---
         print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
-        run_output: TeamRunOutput | None = None
+        run_output: RunOutput | TeamRunOutput | None = None
         accumulated_content: list[str] = []
         accumulated_events: list[dict] = []
         accumulated_log_content: Dict[str, List[str]] = {}
         log_owner_order: List[str] = []
+        completed_tool_history: List[Dict[str, Any]] = []
         final_owner_name = None
         emitted_reasoning_content: Dict[str, str] = {}
+        content_chunk_count = 0
+        reasoning_event_count = 0
+        tool_call_count = 0
         for chunk in agent.run(
             input=final_user_message,
             images=images or None,
@@ -973,11 +985,11 @@ def run_agent_and_stream(
             stream_intermediate_steps=True,
             add_history_to_context=True
         ):
-            if isinstance(chunk, TeamRunOutput):
+            if isinstance(chunk, (RunOutput, TeamRunOutput)):
                 run_output = chunk
                 metrics_preview = _extract_metrics_from_run_output(run_output)
                 logger.info(
-                    "[TOKENS] Captured TeamRunOutput for session %s: input=%s output=%s total=%s",
+                    "[TOKENS] Captured run output for session %s: input=%s output=%s total=%s",
                     conversation_id,
                     metrics_preview["input_tokens"],
                     metrics_preview["output_tokens"],
@@ -986,6 +998,17 @@ def run_agent_and_stream(
 
             if not chunk or not hasattr(chunk, 'event'):
                 continue
+
+            if (
+                chunk.event
+                in (RunEvent.run_completed.value, TeamRunEvent.run_completed.value)
+                and getattr(chunk, "metrics", None)
+            ):
+                run_output = chunk
+                logger.info(
+                    "[TOKENS] Captured completed Agno output/event for session %s",
+                    conversation_id,
+                )
 
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
             owner_reasoning_key = owner_name or "Aetheria_AI"
@@ -998,6 +1021,7 @@ def run_agent_and_stream(
                     reasoning_delta = reasoning_text[len(previous_reasoning):]
 
                 if reasoning_delta.strip():
+                    reasoning_event_count += 1
                     socketio.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
@@ -1012,6 +1036,8 @@ def run_agent_and_stream(
                 emitted_reasoning_content[owner_reasoning_key] = reasoning_text
 
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
+                if chunk.content:
+                    content_chunk_count += 1
                 is_final = (
                     owner_name in ("Aetheria_AI", "Aetheria_Coder", "Aetheria_Computer", "Aetheria_System_Assistant")
                     and not getattr(chunk, 'member_responses', [])
@@ -1036,8 +1062,14 @@ def run_agent_and_stream(
                     "reasoning_content": reasoning_content
                 }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
+                tool_call_count += 1
                 tool_name = getattr(chunk.tool, 'tool_name', None)
                 tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
+                accumulated_content.clear()
+                final_owner_name = None
+                socketio.emit("assistant_response_reset", {
+                    "id": message_id,
+                }, room=room_name)
                 socketio.emit("agent_step", {
                     "type": "tool_start",
                     "name": tool_name,
@@ -1085,11 +1117,16 @@ def run_agent_and_stream(
                     "agent_name": owner_name,
                     "tool": tool_payload,
                 })
+                completed_tool_history.append({
+                    "name": tool_name,
+                    "payload": tool_payload,
+                })
             # Handle reasoning events
             elif chunk.event in (RunEvent.reasoning_step.value, TeamRunEvent.reasoning_step.value):
                 reasoning_step = getattr(chunk, 'reasoning_step', None) or getattr(chunk, 'reasoning_content', None)
                 if reasoning_step and not chunk_reasoning_content:
                     reasoning_text = str(reasoning_step)
+                    reasoning_event_count += 1
                     socketio.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
@@ -1102,10 +1139,22 @@ def run_agent_and_stream(
                     })
 
         # 6. Finalize the Stream and Log Metrics
+        final_content = "".join(accumulated_content) if accumulated_content else None
+        if requested_mode == "system-assistant" and completed_tool_history and not final_content:
+            final_content = build_system_assistant_terminal_message(completed_tool_history)
+            if final_content:
+                final_owner_name = "Aetheria_System_Assistant"
+                socketio.emit("response", {
+                    "content": final_content,
+                    "streaming": True,
+                    "id": message_id,
+                    "agent_name": final_owner_name,
+                    "is_log": False,
+                }, room=room_name)
+
         socketio.emit("response", {"done": True, "id": message_id}, room=room_name)
 
         # --- Mark run as COMPLETED and store result for catch-up ---
-        final_content = "".join(accumulated_content) if accumulated_content else None
         for owner_name in log_owner_order:
             log_content = "".join(accumulated_log_content.get(owner_name, []))
             if log_content:
@@ -1151,6 +1200,19 @@ def run_agent_and_stream(
                 "title": conversation_title,
                 "preview": _preview,
             }, room=room_name)
+
+        logger.info(
+            "[AGENT_RUNNER] COMPLETED RUN mode=%s message_id=%s "
+            "content_chunks=%s reasoning_events=%s tool_calls=%s "
+            "final_response_length=%s metrics_captured=%s",
+            requested_mode,
+            message_id,
+            content_chunk_count,
+            reasoning_event_count,
+            tool_call_count,
+            len(final_content or ""),
+            run_output is not None,
+        )
 
         try:
             _log_request_tokens(
