@@ -58,11 +58,6 @@ ACTION_SPECS: Dict[str, MobileActionSpec] = {
 
 EXPOSED_ACTIONS: FrozenSet[str] = frozenset(ACTION_SPECS)
 
-# HOME closes the VoiceInteractionSession overlay on affected devices. It is
-# intentionally native-only and must never be added to EXPOSED_ACTIONS.
-INTENTIONALLY_UNEXPOSED_NATIVE_ACTIONS: FrozenSet[str] = frozenset({"go_home"})
-
 
 def get_action_spec(action: str) -> MobileActionSpec | None:
     return ACTION_SPECS.get(str(action or "").strip())
-

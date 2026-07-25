@@ -391,9 +391,3 @@ class MobileTools(Toolkit):
         Performs Android global BACK action.
         """
         return self._send_command_and_wait({"action": "press_back"})
-
-    def go_home(self) -> ToolResult:
-        """
-        Performs Android global HOME action.
-        """
-        return self._send_command_and_wait({"action": "go_home"})
