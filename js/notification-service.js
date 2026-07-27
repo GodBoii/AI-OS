@@ -199,7 +199,7 @@ class NotificationService {
                 notification.element.remove();
             }
             this.notifications.splice(index, 1);
-        }, 300);
+        }, 260);
     }
 
     removeConnectionNotifications() {
