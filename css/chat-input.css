@@ -543,9 +543,9 @@
     --text-primary: rgba(255, 255, 255, 0.95);
     --text-secondary: rgba(255, 255, 255, 0.6);
     --text-muted: rgba(255, 255, 255, 0.4);
-    --accent-yellow: #fbbf24;
-    --accent-yellow-hover: #fcd34d;
-    --accent-yellow-glow: rgba(251, 191, 36, 0.3);
+    --menu-action-bg: #2d3748;
+    --menu-action-hover: #1a202c;
+    --menu-action-fg: #ffffff;
     --menu-bg-open: #ffffff;
     --menu-text-open: #0f172a;
     --menu-icon-open: #64748b;
@@ -568,6 +568,9 @@
     --menu-text-open-dark: rgba(255, 255, 255, 0.95);
     --menu-icon-open-dark: rgba(255, 255, 255, 0.6);
     --menu-border-dark: rgba(255, 255, 255, 0.15);
+    --menu-action-bg: rgba(240, 240, 245, 0.95);
+    --menu-action-hover: #ffffff;
+    --menu-action-fg: #080808;
 }
 
 /* ── Shuffle Menu Container ── */
@@ -741,15 +744,15 @@
     background: rgba(0, 0, 0, 0.3);
 }
 
-/* Active State - YELLOW */
+/* Active state uses the same neutral action color as the rest of the app. */
 .toggle-switch[aria-checked="true"] {
-    background: var(--accent-yellow);
-    border-color: var(--accent-yellow);
+    background: var(--menu-action-bg);
+    border-color: var(--menu-action-bg);
 }
 
 .toggle-switch[aria-checked="true"] .toggle-slider {
     transform: translateX(18px);
-    background: white;
+    background: var(--menu-action-fg);
 }
 
 /* Hover Effects */
@@ -762,11 +765,23 @@
 }
 
 .shuffle-item:hover .toggle-switch[aria-checked="true"] {
-    background: var(--accent-yellow-hover);
+    background: var(--menu-action-hover);
 }
 
 .shuffle-menu.visible .shuffle-item:hover .toggle-switch[aria-checked="true"] {
-    background: var(--accent-yellow-hover);
+    background: var(--menu-action-hover);
+}
+
+/* Keep checked state stronger than the menu-open gray defaults. */
+.shuffle-menu.visible .toggle-switch[aria-checked="true"],
+.dark-mode .shuffle-menu.visible .toggle-switch[aria-checked="true"] {
+    background: var(--menu-action-bg);
+    border-color: var(--menu-action-bg);
+}
+
+.shuffle-menu.visible .toggle-switch[aria-checked="true"] .toggle-slider,
+.dark-mode .shuffle-menu.visible .toggle-switch[aria-checked="true"] .toggle-slider {
+    background: var(--menu-action-fg);
 }
 
 /* ── Navigation Item (Tools) ── */
@@ -983,7 +998,7 @@
     pointer-events: none;
 }
 
-/* Toggle Switch for Tools - YELLOW */
+/* Toggle switch for tools */
 .tool-item .toggle-switch {
     position: relative;
     width: var(--toggle-width);
@@ -1021,15 +1036,15 @@
     background: rgba(0, 0, 0, 0.3);
 }
 
-/* Checked State (via checkbox) - YELLOW */
+/* Checked state (via checkbox) */
 .tool-item input[type="checkbox"]:checked ~ .toggle-switch {
-    background: var(--accent-yellow);
-    border-color: var(--accent-yellow);
+    background: var(--menu-action-bg);
+    border-color: var(--menu-action-bg);
 }
 
 .tool-item input[type="checkbox"]:checked ~ .toggle-switch .toggle-slider {
     transform: translateX(18px);
-    background: white;
+    background: var(--menu-action-fg);
 }
 
 /* Hover Effects */
@@ -1042,11 +1057,22 @@
 }
 
 .tool-item:hover input[type="checkbox"]:checked ~ .toggle-switch {
-    background: var(--accent-yellow-hover);
+    background: var(--menu-action-hover);
 }
 
 .tools-menu.visible .tool-item:hover input[type="checkbox"]:checked ~ .toggle-switch {
-    background: var(--accent-yellow-hover);
+    background: var(--menu-action-hover);
+}
+
+.tools-menu.visible .tool-item input[type="checkbox"]:checked ~ .toggle-switch,
+.dark-mode .tools-menu.visible .tool-item input[type="checkbox"]:checked ~ .toggle-switch {
+    background: var(--menu-action-bg);
+    border-color: var(--menu-action-bg);
+}
+
+.tools-menu.visible .tool-item input[type="checkbox"]:checked ~ .toggle-switch .toggle-slider,
+.dark-mode .tools-menu.visible .tool-item input[type="checkbox"]:checked ~ .toggle-switch .toggle-slider {
+    background: var(--menu-action-fg);
 }
 
 /* ── Empty State ── */
@@ -1081,13 +1107,18 @@
     background: transparent;
 }
 
-/* ── Active State Indicator - YELLOW ── */
+/* ── Active state indicator ── */
 .shuffle-item.active .shuffle-item-content i {
-    color: var(--accent-yellow);
+    color: var(--menu-action-bg);
 }
 
 .shuffle-item-nav.active .submenu-indicator {
-    color: var(--accent-yellow);
+    color: var(--menu-action-bg);
+}
+
+.dark-mode .shuffle-menu.visible .shuffle-item.active .shuffle-item-content i,
+.dark-mode .shuffle-menu.visible .shuffle-item-nav.active .submenu-indicator {
+    color: var(--menu-action-bg);
 }
 
 /* ── Responsive Adjustments ── */

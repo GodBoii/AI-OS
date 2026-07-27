@@ -59,9 +59,9 @@
 .tool-btn.active,
 .shuffle-btn.active,
 .plan-mode-btn.active {
-    background: var(--accent-color);
-    border-color: var(--accent-color);
-    color: #ffffff;
+    background: var(--action-primary-bg);
+    border-color: var(--action-primary-border);
+    color: var(--action-primary-fg);
 }
 
 .plan-mode-btn {
@@ -69,6 +69,21 @@
     min-width: 72px;
     padding: 0 12px;
     gap: 7px;
+    background: var(--action-secondary-bg);
+    border: 1px solid var(--action-secondary-border);
+    color: var(--action-secondary-fg);
+}
+
+.plan-mode-btn:hover {
+    background: var(--action-secondary-hover);
+    border-color: var(--action-primary-border);
+    color: var(--action-secondary-fg);
+}
+
+.plan-mode-btn.active:hover {
+    background: var(--action-primary-hover);
+    border-color: var(--action-primary-hover);
+    color: var(--action-primary-fg);
 }
 
 .plan-mode-label {
@@ -188,33 +203,56 @@
 
 /* --- Send Button Styles --- */
 .send-btn {
-    background-color: #2d3748;
-    color: #ffffff;
+    background-color: var(--action-primary-bg);
+    color: var(--action-primary-fg);
     position: relative;
     overflow: hidden;
 }
 
 .send-btn:hover {
-    background-color: #1a202c;
-    color: #ffffff;
+    background-color: var(--action-primary-hover);
+    color: var(--action-primary-fg);
     box-shadow: 
         0 4px 16px rgba(45, 55, 72, 0.25),
         0 8px 32px rgba(45, 55, 72, 0.15);
 }
 
-.dark-mode .send-btn {
-    background-color: var(--accent-color);
-    color: #111827;
+.send-btn i,
+.plan-mode-btn i,
+.plan-mode-btn span {
+    color: inherit !important;
 }
 
-.dark-mode .send-btn:hover {
-    color: #000000;
+body:not(.dark-mode) .send-btn,
+body:not(.dark-mode) .send-btn:hover,
+body:not(.dark-mode) .plan-mode-btn.active,
+body:not(.dark-mode) .plan-mode-btn.active:hover {
+    background: var(--action-primary-bg);
+    border-color: var(--action-primary-border);
+    color: var(--action-primary-fg) !important;
+}
+
+.dark-mode .send-btn,
+.dark-mode .send-btn:hover,
+.dark-mode .plan-mode-btn.active,
+.dark-mode .plan-mode-btn.active:hover {
+    background: var(--action-primary-bg);
+    border-color: var(--action-primary-border);
+    color: var(--action-primary-fg) !important;
+}
+
+.send-btn:focus-visible,
+.plan-mode-btn:focus-visible {
+    outline: 2px solid var(--action-primary-border);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--action-focus-ring);
 }
 
 /* --- Send Button Loading State --- */
 .send-btn.sending {
     pointer-events: none;
-    background-color: var(--accent-color);
+    background-color: var(--action-primary-bg);
+    color: var(--action-primary-fg);
     position: relative;
     overflow: hidden;
 }
