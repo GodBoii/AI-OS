@@ -305,18 +305,20 @@ body:not(.dark-mode) .tab-content-area {
 }
 
 .primary {
-    background-color: var(--button-primary-bg);
-    color: var(--button-primary-text);
+    background-color: var(--action-primary-bg);
+    color: var(--action-primary-fg);
+    border-color: var(--action-primary-border);
 }
 
 .dark-mode .primary {
-    background-color: var(--button-primary-bg);
-    color: var(--button-primary-text);
+    background-color: var(--action-primary-bg);
+    color: var(--action-primary-fg);
 }
 
 .secondary {
-    background-color: var(--elevated-bg);
-    color: var(--text-color);
+    background-color: var(--action-secondary-bg);
+    color: var(--action-secondary-fg);
+    border-color: var(--action-secondary-border);
     border: 1px solid var(--border-color);
 }
 
@@ -612,15 +614,17 @@ body:not(.dark-mode) .tab-content-area {
 }
 
 button.primary:hover {
-    background-color: #EAE0C8;
+    background-color: var(--action-primary-hover);
+    color: var(--action-primary-fg);
 }
 
 .dark-mode button.primary:hover {
-    background-color: #EAE0C8;
+    background-color: var(--action-primary-hover);
+    color: var(--action-primary-fg);
 }
 
 button.secondary:hover {
-    background-color: var(--hover-bg);
+    background-color: var(--action-secondary-hover);
 }
 
 .save-btn,
@@ -628,7 +632,6 @@ button.secondary:hover {
 .action-btn,
 .auth-btn {
     padding: 10px 20px;
-    color: var(--text-color);
     border: none;
     border-radius: 8px;
     font-size: 14px;
@@ -732,10 +735,10 @@ button.secondary:hover {
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    border: 1.5px solid var(--border-primary);
+    border: 1.5px solid var(--action-secondary-border);
     border-radius: 8px;
-    background-color: var(--elevated-bg);
-    color: var(--text-color);
+    background-color: var(--action-secondary-bg);
+    color: var(--action-secondary-fg);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -744,8 +747,8 @@ button.secondary:hover {
 }
 
 .btn-secondary:hover {
-    background-color: var(--accent-muted);
-    border-color: var(--accent-color);
+    background-color: var(--action-secondary-hover);
+    border-color: var(--action-primary-border);
     transform: translateY(-2px);
     box-shadow: 
         0 2px 8px rgba(45, 55, 72, 0.12),

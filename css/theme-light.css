@@ -173,6 +173,13 @@ body:not(.dark-mode) .usage-graph-toggle:hover {
     color: #0f172a !important;
 }
 
+body:not(.dark-mode) .usage-graph-toggle.active,
+body:not(.dark-mode) .usage-graph-toggle.active:hover {
+    background: var(--action-primary-bg) !important;
+    border-color: var(--action-primary-border) !important;
+    color: var(--action-primary-fg) !important;
+}
+
 /* ===== SUBSCRIPTION SECTION ===== */
 body:not(.dark-mode) .subscription-section {
     background: #ffffff !important;
@@ -268,16 +275,16 @@ body:not(.dark-mode) .subscription-progress-copy {
 /* ===== BUTTONS ===== */
 body:not(.dark-mode) .btn-secondary,
 body:not(.dark-mode) .btn-icon {
-    background: #ffffff !important;
-    border-color: #cbd5e1 !important;
-    color: #475569 !important;
+    background: var(--action-secondary-bg) !important;
+    border-color: var(--action-secondary-border) !important;
+    color: var(--action-secondary-fg) !important;
 }
 
 body:not(.dark-mode) .btn-secondary:hover,
 body:not(.dark-mode) .btn-icon:hover {
-    color: #0f172a !important;
-    border-color: #94a3b8 !important;
-    background: #f8fafc !important;
+    color: var(--action-secondary-fg) !important;
+    border-color: var(--action-primary-border) !important;
+    background: var(--action-secondary-hover) !important;
 }
 
 body:not(.dark-mode) .btn-secondary i,
@@ -286,12 +293,35 @@ body:not(.dark-mode) .btn-icon i {
 }
 
 body:not(.dark-mode) .btn-primary {
-    background: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .btn-primary:hover {
-    background: #1e293b !important;
+    background: var(--action-primary-hover) !important;
+}
+
+/* Primary controls must also own their descendants' foreground. The global
+   light-theme text rule otherwise turns nested icons and labels dark. */
+body:not(.dark-mode) .send-btn,
+body:not(.dark-mode) .send-btn:hover,
+body:not(.dark-mode) .plan-mode-btn.active,
+body:not(.dark-mode) .plan-mode-btn.active:hover,
+body:not(.dark-mode) button.primary {
+    background: var(--action-primary-bg) !important;
+    border-color: var(--action-primary-border) !important;
+    color: var(--action-primary-fg) !important;
+}
+
+body:not(.dark-mode) .send-btn *,
+body:not(.dark-mode) .plan-mode-btn.active *,
+body:not(.dark-mode) .btn-primary *,
+body:not(.dark-mode) button.primary *,
+body:not(.dark-mode) .pricing-plan-btn:not(.is-current) *,
+body:not(.dark-mode) .use-selected-btn *,
+body:not(.dark-mode) #add-memory-btn *,
+body:not(.dark-mode) .memory-form button[type="submit"] * {
+    color: inherit !important;
 }
 
 /* ===== FORMS ===== */
@@ -555,12 +585,12 @@ body:not(.dark-mode) .pricing-plan-limit {
 }
 
 body:not(.dark-mode) .pricing-plan-btn {
-    background: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .pricing-plan-btn:hover:not(:disabled) {
-    background: #1e293b !important;
+    background: var(--action-primary-hover) !important;
 }
 
 body:not(.dark-mode) .pricing-plan-btn.is-current {
@@ -737,12 +767,12 @@ body:not(.dark-mode) .session-meta {
 
 /* ===== SELECTION CONTROLS ===== */
 body:not(.dark-mode) .use-selected-btn {
-    background: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .use-selected-btn:hover {
-    background: #1e293b !important;
+    background: var(--action-primary-hover) !important;
 }
 
 body:not(.dark-mode) .clear-selection-btn {
@@ -1656,16 +1686,16 @@ body:not(.dark-mode) .files-action-bar .search-wrapper i {
 }
 
 body:not(.dark-mode) .files-action-bar .btn-primary {
-    background: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .files-action-bar .btn-primary:hover {
-    background: #1e293b !important;
+    background: var(--action-primary-hover) !important;
 }
 
 body:not(.dark-mode) .files-action-bar .btn-primary i {
-    color: #ffffff !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .files-action-bar .btn-secondary {
@@ -1925,9 +1955,9 @@ body:not(.dark-mode) .view-mode-toggle button:hover {
 }
 
 body:not(.dark-mode) .view-mode-toggle button.active {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    border-color: var(--action-primary-border) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 /* Refresh button in Memory section */
@@ -1945,26 +1975,26 @@ body:not(.dark-mode) #refresh-memories-btn:hover {
 
 /* Add Memory button */
 body:not(.dark-mode) #add-memory-btn {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    border-color: var(--action-primary-border) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) #add-memory-btn:hover {
-    background: #1e293b !important;
-    border-color: #1e293b !important;
+    background: var(--action-primary-hover) !important;
+    border-color: var(--action-primary-hover) !important;
 }
 
 /* Memory form submit button */
 body:not(.dark-mode) .memory-form button[type="submit"] {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: var(--action-primary-bg) !important;
+    border-color: var(--action-primary-border) !important;
+    color: var(--action-primary-fg) !important;
 }
 
 body:not(.dark-mode) .memory-form button[type="submit"]:hover {
-    background: #1e293b !important;
-    border-color: #1e293b !important;
+    background: var(--action-primary-hover) !important;
+    border-color: var(--action-primary-hover) !important;
 }
 
 /* Memory form cancel button */

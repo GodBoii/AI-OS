@@ -151,6 +151,24 @@
   --accent-muted: rgba(45, 55, 72, 0.08);
   --accent-color-rgb: 45, 55, 72;
 
+  /* Canonical action colors. Components should consume these instead of
+     inventing local button colors. Semantic status/danger colors stay separate. */
+  --action-primary-bg: #2d3748;
+  --action-primary-fg: #ffffff;
+  --action-primary-hover: #1a202c;
+  --action-primary-pressed: #111827;
+  --action-primary-border: #2d3748;
+  --action-primary-subtle: rgba(45, 55, 72, 0.08);
+  --action-primary-subtle-hover: rgba(45, 55, 72, 0.12);
+  --action-focus-ring: rgba(45, 55, 72, 0.22);
+  --action-secondary-bg: #ffffff;
+  --action-secondary-fg: #2d3748;
+  --action-secondary-hover: #f1f5f9;
+  --action-secondary-border: #cbd5e1;
+  --primary-color: var(--action-primary-bg);
+  --primary-color-rgb: 45, 55, 72;
+  --primary-hover: var(--action-primary-hover);
+
   --icon-color: #64748b;
   --icon-hover: #2d3748;
 
@@ -164,10 +182,10 @@
   --message-bot-bg: #ffffff;
   --message-bot-text: #0f172a;
 
-  --button-primary-bg: #2d3748;
-  --button-primary-text: #ffffff;
-  --button-secondary-bg: #ffffff;
-  --button-secondary-text: #2d3748;
+  --button-primary-bg: var(--action-primary-bg);
+  --button-primary-text: var(--action-primary-fg);
+  --button-secondary-bg: var(--action-secondary-bg);
+  --button-secondary-text: var(--action-secondary-fg);
 
   --card-bg: #ffffff;
   --code-bg: #f1f5f9;
@@ -302,6 +320,22 @@
   --accent-muted:     rgba(255, 255, 255, 0.08);
   --accent-color-rgb: 230, 230, 235;
 
+  --action-primary-bg: rgba(240, 240, 245, 0.95);
+  --action-primary-fg: #080808;
+  --action-primary-hover: #ffffff;
+  --action-primary-pressed: #d8d8de;
+  --action-primary-border: rgba(240, 240, 245, 0.95);
+  --action-primary-subtle: rgba(255, 255, 255, 0.08);
+  --action-primary-subtle-hover: rgba(255, 255, 255, 0.13);
+  --action-focus-ring: rgba(255, 255, 255, 0.22);
+  --action-secondary-bg: rgba(255, 255, 255, 0.07);
+  --action-secondary-fg: rgba(240, 240, 245, 0.90);
+  --action-secondary-hover: rgba(255, 255, 255, 0.13);
+  --action-secondary-border: rgba(255, 255, 255, 0.12);
+  --primary-color: var(--action-primary-bg);
+  --primary-color-rgb: 240, 240, 245;
+  --primary-hover: var(--action-primary-hover);
+
   --icon-color: rgba(255, 255, 255, 0.45);
   --icon-hover: rgba(255, 255, 255, 0.90);
 
@@ -323,11 +357,11 @@
 
   /* === BUTTONS — Elevated Glass === */
   /* Primary: white-on-black solid pill */
-  --button-primary-bg:   rgba(240, 240, 245, 0.95);
-  --button-primary-text: #080808;
+  --button-primary-bg:   var(--action-primary-bg);
+  --button-primary-text: var(--action-primary-fg);
   /* Secondary: translucent glass */
-  --button-secondary-bg:    rgba(255, 255, 255, 0.07);
-  --button-secondary-text:  rgba(240, 240, 245, 0.90);
+  --button-secondary-bg:    var(--action-secondary-bg);
+  --button-secondary-text:  var(--action-secondary-fg);
   --secondary-btn-bg:     rgba(255, 255, 255, 0.07);
   --secondary-btn-hover:  rgba(255, 255, 255, 0.13);
 

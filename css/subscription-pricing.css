@@ -648,12 +648,12 @@
 }
 
 .dark-mode .pricing-plan-btn {
-    background: rgba(240, 240, 245, 0.95);
-    color: #0a0a0a;
+    background: var(--action-primary-bg);
+    color: var(--action-primary-fg);
 }
 
 .dark-mode .pricing-plan-btn:hover:not(:disabled) {
-    background: #ffffff;
+    background: var(--action-primary-hover);
     box-shadow: 
         0 8px 28px rgba(255, 255, 255, 0.20),
         0 4px 16px rgba(255, 255, 255, 0.12);
