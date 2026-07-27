@@ -67,4 +67,4 @@
 }
 
 /* Ensure animations work across all modules */
-/* Reduced motion preference removed to force animations */
+/* Reduced-motion behavior is centralized in design-system.css. */

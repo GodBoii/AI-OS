@@ -65,10 +65,10 @@
     --message-bot-bg: var(--message-bot-bg, #ffffff);
 
     /* Animation Variables */
-    --anim-fast: 0.2s;
-    --anim-normal: 0.3s;
-    --anim-slow: 0.4s;
-    --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --anim-fast: 150ms;
+    --anim-normal: 250ms;
+    --anim-slow: 400ms;
+    --easing-standard: cubic-bezier(0.22, 1, 0.36, 1);
 
     /* Chat-Specific Layout Variables */
     --chat-container-width: 55%;
@@ -143,7 +143,7 @@
     --message-bot-bg:   rgba(255, 255, 255, 0.055);
 
     /* Animation Variables (same for both themes) */
-    --anim-fast: 0.2s;
-    --anim-normal: 0.3s;
-    --anim-slow: 0.4s;
+    --anim-fast: 150ms;
+    --anim-normal: 250ms;
+    --anim-slow: 400ms;
 }
