@@ -161,6 +161,17 @@
         if (!el) return;
         el.textContent = msg || '';
         el.classList.toggle('visible', !!msg);
+        const panel = el.closest('.auth-form-panel');
+        if (!panel) return;
+        panel.classList.toggle('is-error', !!msg);
+        if (msg) {
+            panel.classList.remove('is-shaking');
+            void panel.offsetWidth;
+            panel.classList.add('is-shaking');
+            panel.addEventListener('animationend', () => panel.classList.remove('is-shaking'), { once: true });
+        } else {
+            panel.classList.remove('is-shaking');
+        }
     }
 
     function _clearErrors() {
