@@ -95,21 +95,22 @@
 }
 
 .btn-primary {
-    background: var(--primary-color, #007bff);
-    color: white;
+    background: var(--action-primary-bg);
+    color: var(--action-primary-fg);
 }
 
 .btn-primary:hover {
-    background: var(--primary-hover, #0056b3);
+    background: var(--action-primary-hover);
 }
 
 .btn-secondary {
-    background: var(--bg-secondary, #2a2a2a);
-    color: var(--text-primary, #fff);
+    background: var(--action-secondary-bg);
+    color: var(--action-secondary-fg);
+    border: 1px solid var(--action-secondary-border);
 }
 
 .btn-secondary:hover {
-    background: var(--bg-hover, #333);
+    background: var(--action-secondary-hover);
 }
 
 @keyframes fadeIn {

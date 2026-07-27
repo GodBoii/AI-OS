@@ -166,7 +166,7 @@
     font-size: 11px;
     padding: 2px 8px;
     background: var(--primary-color);
-    color: white;
+    color: var(--action-primary-fg);
     border-radius: 12px;
     font-weight: 600;
 }
@@ -196,13 +196,13 @@
 }
 
 .update-actions .btn-secondary {
-    background: var(--elevated-bg);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
+    background: var(--action-secondary-bg);
+    color: var(--action-secondary-fg);
+    border: 1px solid var(--action-secondary-border);
 }
 
 .update-actions .btn-secondary:hover:not(:disabled) {
-    background: var(--hover-bg);
+    background: var(--action-secondary-hover);
 }
 
 .update-actions .btn-primary {
@@ -216,13 +216,13 @@
 }
 
 .update-actions .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
+    background: var(--action-primary-hover);
     transform: none;
     box-shadow: none;
 }
 
 .dark-mode .update-actions .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
+    background: var(--action-primary-hover);
 }
 
 .update-actions .btn-primary.hidden {

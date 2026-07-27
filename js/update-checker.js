@@ -437,19 +437,19 @@ class UpdateChecker {
             downloadOptions = '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color, #333);"><p style="margin-bottom: 8px; font-weight: 500;">Download for other platforms:</p><div style="display: flex; flex-direction: column; gap: 8px;">';
 
             if (updateData.downloads.windows) {
-                downloadOptions += `<a href="${updateData.downloads.windows}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🪟 Windows (.exe)</a>`;
+                downloadOptions += `<a href="${updateData.downloads.windows}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🪟 Windows (.exe)</a>`;
             }
             if (updateData.downloads['linux-appimage']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-appimage']}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🐧 Linux AppImage</a>`;
+                downloadOptions += `<a href="${updateData.downloads['linux-appimage']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux AppImage</a>`;
             }
             if (updateData.downloads['linux-deb']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-deb']}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🐧 Linux (.deb)</a>`;
+                downloadOptions += `<a href="${updateData.downloads['linux-deb']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux (.deb)</a>`;
             }
             if (updateData.downloads['linux-rpm']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-rpm']}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🐧 Linux (.rpm)</a>`;
+                downloadOptions += `<a href="${updateData.downloads['linux-rpm']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux (.rpm)</a>`;
             }
             if (updateData.downloads.mac) {
-                downloadOptions += `<a href="${updateData.downloads.mac}" target="_blank" style="color: var(--primary-color, #007bff); text-decoration: none;">🍎 macOS (.dmg)</a>`;
+                downloadOptions += `<a href="${updateData.downloads.mac}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🍎 macOS (.dmg)</a>`;
             }
 
             downloadOptions += '</div></div>';
