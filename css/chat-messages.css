@@ -457,8 +457,35 @@
     transition: opacity 0.3s ease;
 }
 
+.reasoning-summary-main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 14px;
+}
+
+.thinking-orb-mount {
+    display: inline-grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+}
+
+.thinking-orb-canvas {
+    display: block;
+    width: 64px;
+    height: 64px;
+}
+
 .reasoning-summary:hover {
     background-color: transparent;
+}
+
+.reasoning-summary:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 4px;
+    border-radius: 6px;
 }
 
 /* Hidden class for toggling visibility */
@@ -473,7 +500,7 @@
 
 .summary-text {
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: calc(0.85rem + 2px);
     position: relative;
 }
 
@@ -536,6 +563,8 @@
 .summary-chevron {
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: var(--text-secondary);
+    flex-shrink: 0;
+    margin-left: 16px;
 }
 
 .message-bot.expanded .summary-chevron {
@@ -615,7 +644,7 @@
     gap: 8px;
     margin-bottom: 8px;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: calc(0.82rem + 2px);
     font-weight: 600;
 }
 
@@ -637,7 +666,7 @@
     padding: 0 !important;
     border-radius: 0 !important;
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: calc(0.9rem + 2px);
     line-height: 1.65;
     scrollbar-width: thin;
 }
@@ -930,7 +959,7 @@
 }
 
 .tool-log-action {
-    font-size: 0.9rem;
+    font-size: calc(0.9rem + 2px);
     color: var(--text-color);
 }
 

@@ -18,6 +18,11 @@ import {
     getSelectedPresentationTemplate,
     isPresentationRequest
 } from './presentation-templates.js';
+import {
+    destroyThinkingOrbs,
+    mountThinkingOrbs,
+    setThinkingOrbsPaused
+} from './thinking-orb.js';
 
 // Use the exposed electron APIs instead of direct requires
 const fs = window.electron?.fs?.promises;
@@ -1642,6 +1647,7 @@ function setupIpcListeners() {
                 if (thinkingIndicator) {
                     // OPTION B: Swap visibility - hide live steps, show summary
                     thinkingIndicator.classList.add('steps-done');
+                    setThinkingOrbsPaused(thinkingIndicator, true);
 
                     const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
                     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
@@ -2406,6 +2412,7 @@ function setupIpcListeners() {
                     const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                     if (thinkingIndicator) {
                         thinkingIndicator.classList.add('steps-done');
+                        setThinkingOrbsPaused(thinkingIndicator, true);
                         const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
                         if (liveStepsContainer) liveStepsContainer.classList.add('hidden');
                     }
@@ -2583,6 +2590,23 @@ function updateReasoningSummary(messageId) {
     }
 }
 
+function bindReasoningSummary(reasoningSummary, messageDiv) {
+    if (!reasoningSummary || !messageDiv || reasoningSummary.dataset.bound === 'true') return;
+    reasoningSummary.dataset.bound = 'true';
+
+    const toggle = () => {
+        const expanded = messageDiv.classList.toggle('expanded');
+        reasoningSummary.setAttribute('aria-expanded', String(expanded));
+    };
+
+    reasoningSummary.addEventListener('click', toggle);
+    reasoningSummary.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+    });
+}
+
 function escapeReasoningHtml(text = '') {
     return String(text)
         .replace(/&/g, '&amp;')
@@ -2676,12 +2700,20 @@ function createBotMessagePlaceholder(messageId) {
     thinkingIndicator.className = 'thinking-indicator';
     thinkingIndicator.innerHTML = `
         <div class="thinking-steps-container"></div>
-        <div class="reasoning-summary hidden">
-            <span class="summary-text">Reasoning: 0 agents, 0 tools</span>
+        <div class="reasoning-summary hidden" role="button" tabindex="0" aria-expanded="false">
+            <span class="reasoning-summary-main">
+                <span class="thinking-orb-mount" data-thinking-orb></span>
+                <span class="summary-text">Reasoning: 0 agents, 0 tools</span>
+            </span>
             <i class="fas fa-chevron-down summary-chevron"></i>
         </div>
     `;
     messageDiv.appendChild(thinkingIndicator);
+    mountThinkingOrbs(thinkingIndicator, {
+        state: 'solving',
+        size: 64,
+        speed: 0.25,
+    });
 
     const detailedLogsDiv = document.createElement('div');
     detailedLogsDiv.className = 'detailed-logs';
@@ -2701,9 +2733,7 @@ function createBotMessagePlaceholder(messageId) {
 
     // Add click handler to the summary (even though it's hidden initially)
     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
-    reasoningSummary.addEventListener('click', () => {
-        messageDiv.classList.toggle('expanded');
-    });
+    bindReasoningSummary(reasoningSummary, messageDiv);
 
     scrollActiveConversationToBottom();
 }
@@ -2968,9 +2998,14 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
 
     // Only show the reasoning header if there are logs to display.
     const reasoningHeaderHtml = hasReasoning ? `
-        <div class="thinking-indicator steps-done" onclick="this.parentElement.classList.toggle('expanded')">
-            <span class="summary-text">${summaryText}</span>
-            <i class="fas fa-chevron-down summary-chevron"></i>
+        <div class="thinking-indicator steps-done">
+            <div class="reasoning-summary" role="button" tabindex="0" aria-expanded="false">
+                <span class="reasoning-summary-main">
+                    <span class="thinking-orb-mount" data-thinking-orb></span>
+                    <span class="summary-text">${summaryText}</span>
+                </span>
+                <i class="fas fa-chevron-down summary-chevron"></i>
+            </div>
         </div>
     ` : '';
 
@@ -2987,7 +3022,22 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         </div>
     `;
 
+    destroyThinkingOrbs(targetContainer);
     targetContainer.innerHTML = finalHtml;
+
+    const historicalMessage = targetContainer.querySelector('.message-bot');
+    if (historicalMessage) {
+        bindReasoningSummary(
+            historicalMessage.querySelector('.reasoning-summary'),
+            historicalMessage,
+        );
+        mountThinkingOrbs(historicalMessage, {
+            state: 'solving',
+            size: 64,
+            speed: 0.25,
+            paused: true,
+        });
+    }
 
     if (inlineArtifacts && typeof messageFormatter.applyInlineEnhancements === 'function') {
         messageFormatter.applyInlineEnhancements(targetContainer);
@@ -3110,6 +3160,7 @@ function completePlanThinking(messageId) {
     const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
     if (thinkingIndicator) {
         thinkingIndicator.classList.add('steps-done');
+        setThinkingOrbsPaused(thinkingIndicator, true);
         const liveStepsContainer = thinkingIndicator.querySelector('.thinking-steps-container');
         if (liveStepsContainer) {
             liveStepsContainer.innerHTML = '';
