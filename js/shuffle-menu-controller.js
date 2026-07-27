@@ -242,7 +242,7 @@ class ShuffleMenuController {
             cancelAnimationFrame(this.animationFrame);
         }
 
-        this.shuffleMenu.classList.add('visible');
+        this.openSurface(this.shuffleMenu);
         this.shuffleBtn.classList.add('active');
         this.shuffleBtn.setAttribute('aria-expanded', 'true');
         this.isOpen = true;
@@ -256,14 +256,26 @@ class ShuffleMenuController {
     }
 
     closeMenu() {
-        this.shuffleMenu.classList.remove('visible');
+        this.closeSurface(this.shuffleMenu);
         this.shuffleBtn.classList.remove('active');
         this.shuffleBtn.setAttribute('aria-expanded', 'false');
         this.isOpen = false;
 
         this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
-            menu.classList.remove('visible');
+            this.closeSurface(menu);
         });
+    }
+
+    openSurface(surface) {
+        surface.classList.remove('is-closing');
+        surface.classList.add('visible');
+    }
+
+    closeSurface(surface) {
+        if (!surface.classList.contains('visible')) return;
+        surface.classList.add('is-closing');
+        surface.classList.remove('visible');
+        setTimeout(() => surface.classList.remove('is-closing'), 160);
     }
 
     handleMenuItemClick(action) {
@@ -304,11 +316,15 @@ class ShuffleMenuController {
         if (toolsSubmenu) {
             this.shuffleMenu.querySelectorAll('.tools-menu.visible').forEach(menu => {
                 if (menu !== toolsSubmenu) {
-                    menu.classList.remove('visible');
+                    this.closeSurface(menu);
                 }
             });
 
-            toolsSubmenu.classList.toggle('visible');
+            if (toolsSubmenu.classList.contains('visible')) {
+                this.closeSurface(toolsSubmenu);
+            } else {
+                this.openSurface(toolsSubmenu);
+            }
             this.setupToolsSubmenu(toolsSubmenu);
             this.refreshConnectedIntegrations();
         }

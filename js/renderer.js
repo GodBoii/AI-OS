@@ -688,11 +688,15 @@ class UIManager {
             requestAnimationFrame(() => modal.classList.add('visible'));
         });
 
+        let isClosing = false;
         const closeModal = () => {
+            if (isClosing) return;
+            isClosing = true;
             modal.classList.remove('visible');
+            document.removeEventListener('keydown', onEsc);
             modal.addEventListener('transitionend', () => modal.remove(), { once: true });
             // Fallback removal in case transitionend doesn't fire
-            setTimeout(() => modal.remove(), 500);
+            setTimeout(() => modal.remove(), 220);
         };
 
         modal.querySelector('#ws-warn-cancel').addEventListener('click', closeModal);
@@ -707,7 +711,7 @@ class UIManager {
         });
 
         // Escape key to cancel
-        const onEsc = (e) => { if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', onEsc); } };
+        const onEsc = (e) => { if (e.key === 'Escape') closeModal(); };
         document.addEventListener('keydown', onEsc);
     }
 

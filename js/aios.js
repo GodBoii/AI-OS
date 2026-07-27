@@ -483,7 +483,10 @@ class AIOS {
         if (memoryToggle) {
             memoryToggle.addEventListener('click', () => {
                 const card = document.getElementById('memory-entry-card');
-                if (card) card.classList.toggle('expanded');
+                if (card) {
+                    const isExpanded = card.classList.toggle('expanded');
+                    memoryToggle.setAttribute('aria-expanded', String(isExpanded));
+                }
             });
         }
         this.elements.databaseProjectFilter?.addEventListener('change', (e) => {
@@ -2545,7 +2548,7 @@ class AIOS {
         items.forEach((row, index) => {
             const card = document.createElement('div');
             card.className = 'memory-compact-card';
-            card.style.animationDelay = `${index * 0.04}s`;
+            card.style.animationDelay = `${Math.min(index, 6) * 0.04}s`;
             
             const memoryContent = this._formatMemoryContent(row.memory);
             const memoryPreview = this._escapeHtml(
@@ -2567,7 +2570,8 @@ class AIOS {
             const inputText = this._escapeHtml(this._safeText(row.input, '-'));
 
             card.innerHTML = `
-                <div class="memory-card-collapsed">
+                <div class="memory-card-collapsed" role="button" tabindex="0"
+                    aria-expanded="false" aria-controls="memory-details-${index}">
                     <div class="memory-expand-icon">
                         <i class="fas fa-chevron-right"></i>
                     </div>
@@ -2589,7 +2593,7 @@ class AIOS {
                         </div>
                     </div>
                 </div>
-                <div class="memory-card-expanded">
+                <div class="memory-card-expanded" id="memory-details-${index}">
                     <div class="memory-expanded-content">
                         <div class="memory-detail-section">
                             <div class="memory-detail-label">Memory ID</div>
@@ -2623,10 +2627,19 @@ class AIOS {
 
             // Toggle expand/collapse
             const collapsedSection = card.querySelector('.memory-card-collapsed');
+            const toggleMemoryCard = () => {
+                const isExpanded = card.classList.toggle('expanded');
+                collapsedSection.setAttribute('aria-expanded', String(isExpanded));
+            };
             collapsedSection.addEventListener('click', (e) => {
                 // Don't toggle if clicking on action buttons
                 if (e.target.closest('.memory-card-actions')) return;
-                card.classList.toggle('expanded');
+                toggleMemoryCard();
+            });
+            collapsedSection.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                toggleMemoryCard();
             });
 
             // Action buttons

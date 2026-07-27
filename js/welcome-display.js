@@ -83,6 +83,9 @@ class WelcomeDisplay {
         this.activePill = null;
         this.carouselIndex = 0;
         this.carouselTimer = null;
+        this.carouselPaused = false;
+        this.carouselHovered = false;
+        this.carouselFocusWithin = false;
         this.pillsRow = null;
         this.carouselContainer = null;
         this.pillContentContainer = null;
@@ -188,7 +191,8 @@ class WelcomeDisplay {
        ═══════════════════════════════════════════════════════════════ */
     buildCarousel() {
         const slidesHtml = CAROUSEL_SLIDES.map((slide, i) => `
-            <div class="carousel-slide ${i === 0 ? 'active' : ''}" data-slide="${i}">
+            <div class="carousel-slide ${i === 0 ? 'active' : ''}" data-slide="${i}"
+                aria-hidden="${i === 0 ? 'false' : 'true'}">
                 <div class="carousel-slide-copy">
                     <h4>${slide.title}</h4>
                     <p>${slide.desc}</p>
@@ -200,12 +204,21 @@ class WelcomeDisplay {
         `).join('');
 
         const dotsHtml = CAROUSEL_SLIDES.map((_, i) => `
-            <button class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot="${i}" type="button" aria-label="Go to slide ${i + 1}"></button>
+            <button class="carousel-dot ${i === 0 ? 'active' : ''}" data-dot="${i}" type="button"
+                aria-label="Go to slide ${i + 1}" ${i === 0 ? 'aria-current="true"' : ''}></button>
         `).join('');
 
         this.carouselContainer.innerHTML = `
             <div class="carousel-track">${slidesHtml}</div>
-            <div class="carousel-dots">${dotsHtml}</div>
+            <div class="carousel-controls" aria-label="Feature carousel controls">
+                <button class="carousel-arrow carousel-prev" type="button" aria-label="Previous feature">
+                    <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                </button>
+                <div class="carousel-dots">${dotsHtml}</div>
+                <button class="carousel-arrow carousel-next" type="button" aria-label="Next feature">
+                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                </button>
+            </div>
         `;
 
         this.carouselContainer.querySelectorAll('.carousel-dot').forEach((dot) => {
@@ -213,22 +226,74 @@ class WelcomeDisplay {
                 this.goToSlide(parseInt(dot.dataset.dot, 10));
             });
         });
+        this.carouselContainer.querySelector('.carousel-prev')?.addEventListener('click', () => {
+            this.goToSlide(this.carouselIndex - 1);
+        });
+        this.carouselContainer.querySelector('.carousel-next')?.addEventListener('click', () => {
+            this.goToSlide(this.carouselIndex + 1);
+        });
+
+        this.carouselContainer.addEventListener('pointerenter', () => {
+            this.carouselHovered = true;
+            this.carouselPaused = true;
+            this.stopCarousel();
+        });
+        this.carouselContainer.addEventListener('pointerleave', () => {
+            this.carouselHovered = false;
+            this.carouselPaused = this.carouselFocusWithin;
+            if (!this.carouselPaused) this.startCarousel();
+        });
+        this.carouselContainer.addEventListener('focusin', () => {
+            this.carouselFocusWithin = true;
+            this.carouselPaused = true;
+            this.stopCarousel();
+        });
+        this.carouselContainer.addEventListener('focusout', (event) => {
+            if (this.carouselContainer.contains(event.relatedTarget)) return;
+            this.carouselFocusWithin = false;
+            this.carouselPaused = this.carouselHovered;
+            if (!this.carouselPaused) this.startCarousel();
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.stopCarousel();
+            } else {
+                this.startCarousel();
+            }
+        });
     }
 
-    goToSlide(index) {
-        this.carouselIndex = index;
+    goToSlide(index, { restart = true } = {}) {
+        const slideCount = CAROUSEL_SLIDES.length;
+        this.carouselIndex = (index + slideCount) % slideCount;
         const slides = this.carouselContainer.querySelectorAll('.carousel-slide');
         const dots = this.carouselContainer.querySelectorAll('.carousel-dot');
-        slides.forEach((s, i) => s.classList.toggle('active', i === index));
-        dots.forEach((d, i) => d.classList.toggle('active', i === index));
-        this.resetCarouselTimer();
+        slides.forEach((slide, i) => {
+            const isActive = i === this.carouselIndex;
+            slide.classList.toggle('active', isActive);
+            slide.setAttribute('aria-hidden', String(!isActive));
+        });
+        dots.forEach((dot, i) => {
+            const isActive = i === this.carouselIndex;
+            dot.classList.toggle('active', isActive);
+            if (isActive) dot.setAttribute('aria-current', 'true');
+            else dot.removeAttribute('aria-current');
+        });
+        if (restart) this.resetCarouselTimer();
     }
 
     startCarousel() {
-        if (this.carouselTimer) return;
+        if (
+            this.carouselTimer ||
+            this.carouselPaused ||
+            document.hidden ||
+            !this.isVisible ||
+            this.activePill ||
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ) return;
         this.carouselTimer = setInterval(() => {
             const next = (this.carouselIndex + 1) % CAROUSEL_SLIDES.length;
-            this.goToSlide(next);
+            this.goToSlide(next, { restart: false });
         }, CAROUSEL_INTERVAL_MS);
     }
 
