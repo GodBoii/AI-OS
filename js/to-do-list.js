@@ -543,6 +543,7 @@ class ToDoList {
                 if (newStatus === 'completed') this.tasks[idx].completed_at = new Date().toISOString();
             }
             this.renderTasks();
+            this.showToast(newStatus === 'completed' ? 'Task completed' : 'Task marked pending', newStatus === 'completed' ? 'success' : 'info');
         } catch (err) {
             this.showToast('Error updating task', 'error');
         }

@@ -340,11 +340,16 @@
     display: flex; align-items: center; justify-content: center;
     z-index: 10000;
     opacity: 1;
-    transition: opacity 0.2s ease;
+    transition:
+        opacity var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease),
+        backdrop-filter var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease);
 }
 .task-modal-overlay.hidden {
     opacity: 0; visibility: hidden; pointer-events: none;
-    transition: opacity 0.2s ease, visibility 0s 0.2s;
+    transition:
+        opacity var(--motion-duration-fast, 150ms) ease,
+        backdrop-filter var(--motion-duration-fast, 150ms) ease,
+        visibility 0s var(--motion-duration-fast, 150ms);
 }
 
 /* ── Modal shell ── */
@@ -356,13 +361,19 @@
     display: flex; flex-direction: column;
     box-shadow: 0 28px 72px rgba(0,0,0,0.55),
                 0 0 0 1px rgba(255,255,255,0.025);
-    animation: taskModalIn 0.28s var(--ease-expo) both;
+    opacity: 1;
+    transform: scale(1);
+    transition:
+        opacity var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out),
+        transform var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
 }
 .task-detail-modal { width: 640px; }
 
-@keyframes taskModalIn {
-    from { opacity: 0; transform: translateY(16px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+.task-modal-overlay.hidden .task-modal {
+    opacity: 0;
+    transform: scale(0.96);
+    transition-duration: var(--motion-duration-fast, 150ms);
+    transition-timing-function: var(--motion-ease-in-out, ease);
 }
 
 .task-modal-header {
