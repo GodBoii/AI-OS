@@ -270,7 +270,7 @@ class AIOSUsageGraph {
                         label: 'Total',
                         data: totalTokens,
                         borderColor: colors.primary,
-                        backgroundColor: isDark ? 'rgba(255, 217, 61, 0.1)' : 'rgba(232, 185, 35, 0.1)',
+                        backgroundColor: isDark ? 'rgba(232, 232, 236, 0.10)' : 'rgba(45, 55, 72, 0.10)',
                         borderWidth: 3,
                         fill: true,
                         tension: 0.4,

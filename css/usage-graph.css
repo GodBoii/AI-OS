@@ -3,8 +3,11 @@
 :root {
     /* Light Mode Colors (Default - no .dark-mode class) */
     --graph-primary: #1A1A1A;
-    --graph-accent: #C28E0E;
-    --graph-secondary: #A67C00;
+    --graph-accent: #2d3748;
+    --graph-secondary: #4a5568;
+    --graph-action-bg: #2d3748;
+    --graph-action-hover: #1a202c;
+    --graph-action-fg: #ffffff;
     --graph-glass-bg: rgba(26, 26, 26, 0.04);
     --graph-glass-border: rgba(26, 26, 26, 0.15);
     --graph-glass-hover: rgba(26, 26, 26, 0.08);
@@ -25,6 +28,9 @@
     --graph-primary: #f0f0f0;
     --graph-accent: #e8e8ec;
     --graph-secondary: #b0b0b8;
+    --graph-action-bg: rgba(240, 240, 245, 0.95);
+    --graph-action-hover: #ffffff;
+    --graph-action-fg: #080808;
     --graph-glass-bg: rgba(255, 255, 255, 0.04);
     --graph-glass-border: rgba(255, 255, 255, 0.10);
     --graph-glass-hover: rgba(255, 255, 255, 0.08);
@@ -93,11 +99,17 @@
 }
 
 .btn-icon.active {
-    background: linear-gradient(135deg, var(--graph-accent), var(--graph-secondary));
-    border-color: transparent;
-    color: #1A1A1A;
-    box-shadow: 0 4px 20px var(--graph-shadow), 0 0 40px var(--graph-pulse-glow-1);
-    animation: pulse-glow 2s ease-in-out infinite;
+    background: var(--graph-action-bg);
+    border-color: var(--graph-action-bg);
+    color: var(--graph-action-fg);
+    box-shadow: 0 4px 16px var(--graph-shadow);
+    animation: none;
+}
+
+.btn-icon.active:hover {
+    background: var(--graph-action-hover);
+    border-color: var(--graph-action-hover);
+    color: var(--graph-action-fg);
 }
 
 @keyframes pulse-glow {
@@ -204,8 +216,8 @@
 }
 
 .period-btn.active {
-    background: linear-gradient(135deg, var(--graph-accent), var(--graph-secondary));
-    color: #1A1A1A;
+    background: var(--graph-action-bg);
+    color: var(--graph-action-fg);
     font-weight: 700;
     box-shadow: 0 4px 12px var(--graph-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transform: translateY(-2px);
