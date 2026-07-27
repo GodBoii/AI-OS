@@ -19,12 +19,11 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: opacity var(--anim-slow) var(--easing-fluid),
-        transform var(--anim-slow) var(--easing-fluid),
+    transition: opacity var(--motion-duration-normal) var(--motion-ease-smooth-out),
+        transform var(--motion-duration-normal) var(--motion-ease-smooth-out),
         visibility 0s 0s;
     opacity: 1;
     visibility: visible;
-    animation: modalSlideIn var(--anim-slow) var(--easing-fluid);
 }
 
 /* Light mode: Ensure window has solid opaque background */
@@ -37,22 +36,10 @@ body:not(.dark-mode) .floating-window {
 .floating-window.hidden {
     opacity: 0;
     visibility: hidden;
-    transform: translate(-50%, -50%) scale(0.92);
-    transition: opacity var(--anim-slow) var(--easing-fluid),
-        transform var(--anim-slow) var(--easing-fluid),
-        visibility 0s var(--anim-slow);
-}
-
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translate(-50%, -48%) scale(0.92);
-    }
-
-    to {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
+    transform: translate(-50%, -50%) scale(0.96);
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-in-out),
+        transform var(--motion-duration-fast) var(--motion-ease-in-out),
+        visibility 0s var(--motion-duration-fast);
 }
 
 .window-header {
@@ -80,7 +67,10 @@ body:not(.dark-mode) .floating-window {
     font-size: 18px;
     padding: 8px;
     border-radius: 8px;
-    transition: all var(--anim-ios-normal) var(--easing-ios-spring);
+    transition:
+        color var(--motion-duration-fast) var(--motion-ease-smooth-out),
+        background-color var(--motion-duration-fast) var(--motion-ease-smooth-out),
+        transform var(--motion-duration-fast) var(--motion-ease-smooth-out);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -182,7 +172,9 @@ body:not(.dark-mode) .tab-btn.active {
     transform: scaleX(0);
     transform-origin: left;
     opacity: 0;
-    transition: all var(--anim-ios-normal) var(--easing-ios-elastic);
+    transition:
+        opacity var(--motion-duration-fast) var(--motion-ease-smooth-out),
+        transform var(--motion-duration-normal) var(--motion-ease-smooth-out);
 }
 
 .tab-btn:hover::before {
@@ -195,7 +187,7 @@ body:not(.dark-mode) .tab-btn.active {
     width: 18px;
     font-size: 16px;
     text-align: center;
-    transition: transform var(--anim-ios-fast) var(--easing-ios-spring);
+    transition: transform var(--motion-duration-fast) var(--motion-ease-smooth-out);
 }
 
 /* Light mode: Ensure icons inherit proper color */
@@ -205,11 +197,11 @@ body:not(.dark-mode) .tab-btn i {
 
 .tab-btn:hover {
     color: var(--text-color);
-    transform: translateX(4px) scale(1.02);
+    transform: translateX(2px);
 }
 
 .tab-btn:hover i {
-    transform: scale(1.15) rotate(5deg);
+    transform: translateX(1px);
 }
 
 .tab-btn.active {
@@ -219,8 +211,8 @@ body:not(.dark-mode) .tab-btn i {
 }
 
 .tab-btn:active {
-    transform: translateX(2px) scale(0.98);
-    transition-duration: var(--anim-ios-instant);
+    transform: translateX(1px) scale(0.98);
+    transition-duration: var(--motion-duration-quick);
 }
 
 /* Right Content Area */
@@ -238,7 +230,7 @@ body:not(.dark-mode) .tab-content-area {
 
 .tab-content {
     display: none;
-    animation: fadeSlideIn var(--anim-normal) var(--easing-smooth);
+    animation: fadeSlideIn var(--motion-duration-fast) var(--motion-ease-in-out);
 }
 
 .tab-content.active {
@@ -248,7 +240,7 @@ body:not(.dark-mode) .tab-content-area {
 @keyframes fadeSlideIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(4px);
     }
 
     to {

@@ -38,7 +38,7 @@
     border: none;
     cursor: pointer;
     color: var(--text-color);
-    transition: background 0.2s ease;
+    transition: background-color var(--motion-duration-fast, 150ms) ease;
 }
 
 .memory-entry-toggle:hover {
@@ -54,7 +54,7 @@
 .memory-entry-toggle-left i {
     font-size: 16px;
     color: var(--accent-color);
-    transition: transform 0.25s ease;
+    transition: transform var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
 }
 
 .memory-entry-card.expanded .memory-entry-toggle-left i {
@@ -64,7 +64,7 @@
 .memory-entry-chevron {
     font-size: 12px;
     color: var(--text-secondary);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease);
 }
 
 .memory-entry-card.expanded .memory-entry-chevron {
@@ -81,16 +81,23 @@
 
 /* Collapsible body */
 .memory-entry-collapsible {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
 }
 
 .memory-entry-card.expanded .memory-entry-collapsible {
-    max-height: 800px;
+    grid-template-rows: 1fr;
 }
 
 .memory-entry-collapsible .memory-form {
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 18px;
+    transition: padding var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
+}
+
+.memory-entry-card.expanded .memory-entry-collapsible .memory-form {
     padding: 4px 18px 18px;
 }
 
@@ -278,18 +285,28 @@
 
 /* Expanded Details */
 .memory-card-expanded {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
 }
 
 .memory-compact-card.expanded .memory-card-expanded {
-    max-height: 1000px;
+    grid-template-rows: 1fr;
 }
 
 .memory-expanded-content {
-    padding: 0 16px 16px 16px;
-    border-top: 1px solid var(--border-color);
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 16px;
+    border-top: 0 solid var(--border-color);
+    transition:
+        padding var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out),
+        border-width var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out);
+}
+
+.memory-compact-card.expanded .memory-expanded-content {
+    padding: 0 16px 16px;
+    border-top-width: 1px;
 }
 
 .memory-detail-section {

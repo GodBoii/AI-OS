@@ -18,17 +18,17 @@
     align-items: center;
     gap: 16px;
     transition:
-        opacity 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-        transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
-        visibility 0s 0.62s;
+        opacity var(--motion-duration-fast, 150ms) ease,
+        transform var(--motion-duration-fast, 150ms) ease,
+        visibility 0s var(--motion-duration-fast, 150ms);
 }
 
 .home-suggestions-wrapper.visible {
     opacity: 1;
     visibility: visible;
     transition:
-        opacity 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s,
-        transform 0.72s cubic-bezier(0.16, 1, 0.3, 1) 0.18s,
+        opacity var(--motion-duration-deliberate, 400ms) var(--motion-ease-smooth-out, ease-out),
+        transform var(--motion-duration-deliberate, 400ms) var(--motion-ease-smooth-out, ease-out),
         visibility 0s 0s;
 }
 
@@ -48,7 +48,7 @@
     justify-content: center;
     flex-wrap: wrap;
     gap: 8px;
-    animation: welcomeOverviewRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+    animation: welcomeOverviewRise var(--motion-duration-deliberate, 400ms) var(--motion-ease-smooth-out, ease-out) both;
 }
 
 .home-pill {
@@ -137,7 +137,7 @@ body:not(.dark-mode) .home-pill.active {
     width: min(72%, 620px);
     z-index: var(--z-welcome-message, 998);
     pointer-events: auto;
-    animation: carouselRiseCenter 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+    animation: carouselRiseCenter var(--motion-duration-deliberate, 400ms) var(--motion-ease-smooth-out, ease-out) both;
 }
 
 .home-carousel.hidden {
@@ -177,7 +177,7 @@ body:not(.dark-mode) .carousel-track {
     align-items: center;
     justify-content: space-between;
     gap: 24px;
-    animation: carouselFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: carouselFadeIn var(--motion-duration-normal, 250ms) var(--motion-ease-smooth-out, ease-out) both;
 }
 
 .carousel-slide.active {
@@ -280,7 +280,43 @@ body:not(.dark-mode) .carousel-slide:hover .carousel-slide-image {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding-top: 12px;
+}
+
+.carousel-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-top: 10px;
+}
+
+.carousel-arrow {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.56;
+    transition:
+        opacity var(--motion-duration-fast, 150ms) ease,
+        background-color var(--motion-duration-fast, 150ms) ease,
+        transform var(--motion-duration-fast, 150ms) ease;
+}
+
+.carousel-arrow:hover,
+.carousel-arrow:focus-visible {
+    opacity: 1;
+    background: rgba(127, 127, 127, 0.12);
+}
+
+.carousel-arrow:active {
+    transform: scale(0.94);
 }
 
 .carousel-dot {
@@ -290,7 +326,9 @@ body:not(.dark-mode) .carousel-slide:hover .carousel-slide-image {
     border: none;
     padding: 0;
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition:
+        background-color var(--motion-duration-fast, 150ms) ease,
+        transform var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out);
 }
 
 .dark-mode .carousel-dot {

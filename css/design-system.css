@@ -189,28 +189,42 @@
   --mic-waveform-bar: #2d3748;
 }
 
-/* Animation tokens - iOS 26 Fluid Motion System */
+/* Motion tokens
+ * Keep these values intentionally small and shared. Motion should explain state
+ * changes, not make every interaction feel elastic.
+ */
 :root {
-  /* Legacy durations (kept for compatibility) */
-  --anim-fast: 200ms;
-  --anim-normal: 350ms;
-  --anim-slow: 500ms;
-  --anim-slower: 700ms;
+  --motion-duration-instant: 40ms;
+  --motion-duration-quick: 80ms;
+  --motion-duration-fast: 150ms;
+  --motion-duration-normal: 250ms;
+  --motion-duration-slow: 350ms;
+  --motion-duration-deliberate: 400ms;
+  --motion-duration-long: 500ms;
+
+  --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  /* Legacy aliases retained for existing components. */
+  --anim-fast: var(--motion-duration-fast);
+  --anim-normal: var(--motion-duration-normal);
+  --anim-slow: var(--motion-duration-deliberate);
+  --anim-slower: var(--motion-duration-long);
   
-  /* iOS 26 Fluid Durations */
-  --anim-ios-instant: 150ms;
-  --anim-ios-fast: 250ms;
-  --anim-ios-normal: 400ms;
-  --anim-ios-slow: 600ms;
-  --anim-ios-slower: 850ms;
-  --anim-ios-slowest: 1200ms;
+  --anim-ios-instant: var(--motion-duration-fast);
+  --anim-ios-fast: var(--motion-duration-normal);
+  --anim-ios-normal: var(--motion-duration-deliberate);
+  --anim-ios-slow: var(--motion-duration-long);
+  --anim-ios-slower: 600ms;
+  --anim-ios-slowest: 850ms;
   
-  /* Legacy easing (kept for compatibility) */
-  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --easing-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --easing-standard: var(--motion-ease-in-out);
+  --easing-spring: var(--motion-ease-bounce);
+  --easing-smooth: var(--motion-ease-smooth-out);
   --easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  --easing-fluid: cubic-bezier(0.16, 1, 0.3, 1);
+  --easing-fluid: var(--motion-ease-smooth-out);
   
   /* iOS 26 Fluid Easing Functions */
   --easing-ios-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -581,8 +595,18 @@ body {
   }
 }
 
-/* Respect user motion preferences */
-/* Reduced motion preference removed to force animations */
+/* Respect user motion preferences without changing component state semantics. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
 
 /* Common Component Styles */
 
@@ -1461,7 +1485,13 @@ a,
 input,
 textarea,
 select {
-  transition: all var(--anim-normal) var(--easing-smooth);
+  transition:
+    color var(--anim-fast) var(--easing-smooth),
+    background-color var(--anim-fast) var(--easing-smooth),
+    border-color var(--anim-fast) var(--easing-smooth),
+    box-shadow var(--anim-fast) var(--easing-smooth),
+    opacity var(--anim-fast) var(--easing-smooth),
+    transform var(--anim-fast) var(--easing-smooth);
 }
 
 /* Hover lift effect for cards and interactive containers */
@@ -1469,7 +1499,12 @@ select {
 .message-bubble,
 .task-item,
 .notification {
-  transition: all var(--anim-normal) var(--easing-smooth);
+  transition:
+    background-color var(--anim-normal) var(--easing-smooth),
+    border-color var(--anim-normal) var(--easing-smooth),
+    box-shadow var(--anim-normal) var(--easing-smooth),
+    opacity var(--anim-normal) var(--easing-smooth),
+    transform var(--anim-normal) var(--easing-smooth);
 }
 
 .card:hover,

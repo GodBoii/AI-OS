@@ -989,7 +989,10 @@ body.project-panel-open:not(.dark-mode) .sidebar {
   -webkit-backdrop-filter: blur(0px);
   backdrop-filter: blur(0px);
   opacity: 0;
-  transition: all 380ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity var(--motion-duration-fast, 150ms) var(--motion-ease-in-out, ease),
+    background-color var(--motion-duration-fast, 150ms) var(--motion-ease-in-out, ease),
+    backdrop-filter var(--motion-duration-fast, 150ms) var(--motion-ease-in-out, ease);
   pointer-events: none;
 }
 
@@ -999,6 +1002,7 @@ body.project-panel-open:not(.dark-mode) .sidebar {
   backdrop-filter: blur(12px) saturate(140%);
   opacity: 1;
   pointer-events: all;
+  transition-duration: var(--motion-duration-normal, 250ms);
 }
 
 /* Modal card */
@@ -1018,15 +1022,18 @@ body.project-panel-open:not(.dark-mode) .sidebar {
     0 8px 32px rgba(0, 0, 0, 0.50),
     inset 0 1px 0 rgba(255, 255, 255, 0.10),
     inset 0 -1px 0 rgba(0, 0, 0, 0.25);
-  transform: scale(0.88) translateY(16px);
+  transform: scale(0.96);
   opacity: 0;
-  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1),
-              opacity 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    transform var(--motion-duration-fast, 150ms) var(--motion-ease-in-out, ease),
+    opacity var(--motion-duration-fast, 150ms) var(--motion-ease-in-out, ease);
 }
 
 .workspace-switch-overlay.visible .workspace-switch-modal {
-  transform: scale(1) translateY(0);
+  transform: scale(1);
   opacity: 1;
+  transition-duration: var(--motion-duration-normal, 250ms);
+  transition-timing-function: var(--motion-ease-smooth-out, ease-out);
 }
 
 /* Ambient glow behind card */
@@ -1057,12 +1064,6 @@ body.project-panel-open:not(.dark-mode) .sidebar {
   box-shadow:
     0 0 24px rgba(255, 170, 50, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  animation: wsSwitchPulse 2.2s ease-in-out infinite;
-}
-
-@keyframes wsSwitchPulse {
-  0%, 100% { box-shadow: 0 0 24px rgba(255, 170, 50, 0.15), inset 0 1px 0 rgba(255,255,255,0.08); }
-  50%      { box-shadow: 0 0 36px rgba(255, 170, 50, 0.28), inset 0 1px 0 rgba(255,255,255,0.08); }
 }
 
 /* Title */
@@ -1108,7 +1109,12 @@ body.project-panel-open:not(.dark-mode) .sidebar {
   border-radius: 12px;
   border: none;
   cursor: pointer;
-  transition: all 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    color var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out),
+    background-color var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out),
+    border-color var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out),
+    box-shadow var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out),
+    transform var(--motion-duration-fast, 150ms) var(--motion-ease-smooth-out, ease-out);
   letter-spacing: 0.02em;
 }
 
@@ -1149,4 +1155,33 @@ body.project-panel-open:not(.dark-mode) .sidebar {
 .ws-btn-confirm:active,
 .ws-btn-cancel:active {
   transform: scale(0.97) translateY(0);
+}
+
+/* The warning belongs to the active theme; keep contrast high in light mode. */
+body:not(.dark-mode) .workspace-switch-modal {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 24px 70px rgba(15, 23, 42, 0.22),
+    0 8px 24px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body:not(.dark-mode) .workspace-switch-title {
+  color: #111827;
+  text-shadow: none;
+}
+
+body:not(.dark-mode) .workspace-switch-message {
+  color: #596274;
+}
+
+body:not(.dark-mode) .workspace-switch-message strong {
+  color: #1f2937;
+}
+
+body:not(.dark-mode) .ws-btn-cancel {
+  background: rgba(15, 23, 42, 0.06);
+  color: #364152;
+  border-color: rgba(15, 23, 42, 0.12);
 }
