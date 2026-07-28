@@ -78,6 +78,7 @@ class ToDoList {
             emptyState: g('tasks-empty-state'),
             tasksGrid: g('tasks-grid'),
             addFab: g('tasks-add-fab'),
+            emptyCreateBtn: g('tasks-empty-create-btn'),
             // Create modal
             newTaskModal: g('new-task-modal'),
             taskNameInput: g('task-name'),
@@ -130,6 +131,7 @@ class ToDoList {
 
     setupEventListeners() {
         this.elements.addFab?.addEventListener('click', () => this.openNewTaskModal());
+        this.elements.emptyCreateBtn?.addEventListener('click', () => this.openNewTaskModal());
         this.elements.saveTaskBtn?.addEventListener('click', () => this.saveNewTask());
         this.elements.cancelTaskBtn?.addEventListener('click', () => this.closeNewTaskModal());
         this.elements.cancelTaskBtnFooter?.addEventListener('click', () => this.closeNewTaskModal());
