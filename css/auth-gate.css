@@ -100,7 +100,7 @@
   backdrop-filter: blur(10px);
 }
 .auth-small-logo { width: 20px; height: 20px; object-fit: contain; }
-.auth-top-logo span { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.auth-top-logo span { font-size: 14px; font-weight: 600; letter-spacing: 0.04em; }
 .auth-hero-title {
   font-size: 52px; font-weight: 800; line-height: 1.15; margin: 0; letter-spacing: -0.02em;
 }

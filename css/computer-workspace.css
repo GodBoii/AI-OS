@@ -3,14 +3,14 @@
    ============================================ */
 
 :root {
-    --computer-accent: #10b981;
-    --computer-accent-strong: #34d399;
+    --computer-accent: #a9bee8;
+    --computer-accent-strong: #c1d0ee;
     --computer-danger: #ef4444;
-    --computer-glass-bg: rgba(8, 18, 16, 0.58);
-    --computer-glass-border: rgba(52, 211, 153, 0.22);
+    --computer-glass-bg: rgba(10, 10, 12, 0.88);
+    --computer-glass-border: rgba(169, 190, 232, 0.22);
     --computer-glass-shadow: 0 14px 36px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --computer-control-bg: rgba(255, 255, 255, 0.06);
-    --computer-control-hover: rgba(52, 211, 153, 0.16);
+    --computer-control-hover: rgba(169, 190, 232, 0.12);
     --computer-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -22,9 +22,7 @@
     padding: 10px 12px;
     margin: 10px 12px 0;
     border-radius: 14px;
-    background:
-        linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(20, 184, 166, 0.08)),
-        var(--computer-glass-bg);
+    background: var(--computer-glass-bg);
     border: 1px solid var(--computer-glass-border);
     box-shadow: var(--computer-glass-shadow);
     -webkit-backdrop-filter: blur(18px) saturate(160%);
@@ -70,15 +68,15 @@
     flex-shrink: 0;
     color: var(--computer-accent-strong);
     border-radius: 10px;
-    background: rgba(16, 185, 129, 0.14);
-    border: 1px solid rgba(52, 211, 153, 0.22);
-    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.12), inset 0 0 10px rgba(255, 255, 255, 0.06);
+    background: rgba(169, 190, 232, 0.10);
+    border: 1px solid rgba(169, 190, 232, 0.22);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.04);
     transition: transform 220ms var(--computer-ease), background 220ms var(--computer-ease);
 }
 
 .computer-workspace-container:hover .computer-chip-icon {
     transform: translateY(-1px) rotate(3deg);
-    background: rgba(16, 185, 129, 0.20);
+    background: rgba(169, 190, 232, 0.15);
 }
 
 .computer-chip-label {
@@ -88,7 +86,7 @@
     white-space: nowrap;
     font-size: 0.78rem;
     font-weight: 700;
-    color: rgba(240, 253, 250, 0.94);
+    color: rgba(244, 246, 250, 0.94);
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.26);
 }
 
@@ -109,7 +107,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     background: var(--computer-control-bg);
-    color: rgba(240, 253, 250, 0.82);
+    color: rgba(232, 235, 242, 0.82);
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;
@@ -136,8 +134,8 @@
     transform: translateY(-1px);
     color: #ecfeff;
     background: var(--computer-control-hover);
-    border-color: rgba(52, 211, 153, 0.30);
-    box-shadow: 0 8px 18px rgba(16, 185, 129, 0.12);
+    border-color: rgba(169, 190, 232, 0.30);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
 }
 
 .computer-dropdown-item:active {
@@ -176,9 +174,9 @@
     overflow: hidden;
     white-space: nowrap;
     border-radius: 20px;
-    border: 1px solid rgba(52, 211, 153, 0.20);
-    background: rgba(9, 22, 19, 0.88);
-    color: rgba(209, 250, 229, 0.62);
+    border: 1px solid rgba(169, 190, 232, 0.20);
+    background: rgba(10, 10, 12, 0.90);
+    color: rgba(207, 215, 231, 0.68);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
@@ -206,10 +204,10 @@ body.computer-panel-open .computer-know-me-fab {
 .computer-know-me-fab:hover {
     max-width: 130px;
     gap: 7px;
-    color: rgba(236, 253, 245, 0.94);
-    background: rgba(10, 32, 27, 0.94);
-    border-color: rgba(52, 211, 153, 0.36);
-    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: rgba(244, 246, 250, 0.94);
+    background: rgba(18, 18, 21, 0.96);
+    border-color: rgba(169, 190, 232, 0.36);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .computer-know-me-fab i {
@@ -237,11 +235,11 @@ body.computer-panel-open .computer-know-me-fab {
 
 /* Composer layout refinements when computer mode is active. */
 body.computer-panel-open .floating-input-container {
-    border-color: rgba(52, 211, 153, 0.30);
+    border-color: rgba(169, 190, 232, 0.30);
     box-shadow:
         0 8px 32px rgba(45, 55, 72, 0.15),
-        0 0 0 1px rgba(16, 185, 129, 0.16),
-        0 18px 44px rgba(16, 185, 129, 0.10);
+        0 0 0 1px rgba(169, 190, 232, 0.12),
+        0 18px 44px rgba(0, 0, 0, 0.28);
 }
 
 body.computer-panel-open .floating-input {
@@ -261,15 +259,14 @@ body.computer-panel-open .app-container::before {
     pointer-events: none;
     z-index: 0;
     background:
-        radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.12) 0%, transparent 55%),
-        radial-gradient(circle at 84% 72%, rgba(20, 184, 166, 0.07) 0%, transparent 48%);
-    opacity: 0.72;
+        radial-gradient(circle at 15% 15%, rgba(169, 190, 232, 0.06) 0%, transparent 50%);
+    opacity: 0.65;
     filter: blur(28px);
 }
 
 body.computer-panel-open .app-container {
-    border: 1px solid rgba(16, 185, 129, 0.4) !important;
-    box-shadow: 0 0 40px rgba(16, 185, 129, 0.25), inset 0 0 25px rgba(16, 185, 129, 0.15) !important;
+    border: 1px solid rgba(169, 190, 232, 0.22) !important;
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.42), inset 0 0 20px rgba(169, 190, 232, 0.04) !important;
     transition: box-shadow 0.6s ease, border 0.6s ease;
 }
 
