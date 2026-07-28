@@ -54,30 +54,12 @@ class ContextHandler {
     }
 
     bindEvents() {
-        this.elements.contextBtn?.addEventListener('click', () => {
-            this.isWindowOpen = true;
-            this.elements.contextWindow?.classList.remove('hidden');
-            this.openContextWindow();
-            
-            if (window.floatingWindowManager) {
-                window.floatingWindowManager.onWindowOpen('context');
-            }
-        });
+        this.elements.contextBtn?.addEventListener('click', () => this.showContextWindow());
 
         // Title click to close (back button behavior)
         const headerTitle = document.getElementById('context-header-title');
         if (headerTitle) {
-            headerTitle.addEventListener('click', () => {
-                this.isWindowOpen = false;
-                this.elements.contextWindow?.classList.add('hidden');
-                
-                // CRITICAL FIX: Close session history viewer when context window closes
-                this.closeSessionHistoryViewer();
-                
-                if (window.floatingWindowManager) {
-                    window.floatingWindowManager.onWindowClose('context');
-                }
-            });
+            headerTitle.addEventListener('click', () => this.hideContextWindow());
         }
 
         // Title click to close history viewer
@@ -101,6 +83,34 @@ class ContextHandler {
             this.elements.sessionsContainer.addEventListener('scroll', () => {
                 this.handleScroll();
             });
+        }
+    }
+
+    showContextWindow() {
+        this.isWindowOpen = true;
+        this.elements.contextWindow?.classList.remove('hidden');
+        this.openContextWindow();
+
+        if (window.floatingWindowManager) {
+            window.floatingWindowManager.onWindowOpen('context');
+        }
+    }
+
+    hideContextWindow() {
+        this.isWindowOpen = false;
+        this.elements.contextWindow?.classList.add('hidden');
+        this.closeSessionHistoryViewer();
+
+        if (window.floatingWindowManager) {
+            window.floatingWindowManager.onWindowClose('context');
+        }
+    }
+
+    toggleContextWindow() {
+        if (this.isWindowOpen && !this.elements.contextWindow?.classList.contains('hidden')) {
+            this.hideContextWindow();
+        } else {
+            this.showContextWindow();
         }
     }
     

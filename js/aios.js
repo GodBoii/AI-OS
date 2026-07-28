@@ -1096,7 +1096,7 @@ class AIOS {
                 key: payload.key_id,
                 subscription_id: payload.subscription_id,
                 recurring: 1,
-                name: 'Aetheria AI',
+                name: 'Aetheria ai',
                 description: `${payload.plan_name} monthly subscription`,
                 prefill: {
                     name: currentUser?.user_metadata?.name || currentUser?.user_metadata?.full_name || this.userData?.account?.name || '',
@@ -2396,7 +2396,7 @@ class AIOS {
         list.innerHTML = '';
         if (!items.length) {
             empty.classList.remove('hidden');
-            empty.innerHTML = '<div class="empty-state-text">No files found. Upload files to make them available to Aetheria AI.</div>';
+            empty.innerHTML = '<div class="empty-state-text">No files found. Upload files to make them available to Aetheria ai.</div>';
             return;
         }
         empty.classList.add('hidden');
@@ -2857,7 +2857,7 @@ class AIOS {
                         <div class="settings-card-icon"><i class="fi fi-tr-bell-ring"></i></div>
                         <div>
                             <h4 id="settings-notif-title" class="settings-card-title">Notifications</h4>
-                            <p class="settings-card-desc">Control how Aetheria AI notifies you about agent activity.</p>
+                            <p class="settings-card-desc">Control how Aetheria ai notifies you about agent activity.</p>
                         </div>
                     </div>
                     <div class="settings-items">
@@ -2948,8 +2948,8 @@ class AIOS {
                         </div>
                     </div>
                     <div class="settings-items">
-                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Minimize to System Tray</span><span class="settings-toggle-hint">Keep Aetheria AI running in the background when you close the window.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-tray"><span class="aios-toggle-slider"></span></label></div>
-                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Launch at Startup</span><span class="settings-toggle-hint">Automatically start Aetheria AI when you log in to your computer.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-startup"><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Minimize to System Tray</span><span class="settings-toggle-hint">Keep Aetheria ai running in the background when you close the window.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-tray"><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Launch at Startup</span><span class="settings-toggle-hint">Automatically start Aetheria ai when you log in to your computer.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-startup"><span class="aios-toggle-slider"></span></label></div>
                         <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Always on Top</span><span class="settings-toggle-hint">Keep the application window above all other windows.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-always-on-top"><span class="aios-toggle-slider"></span></label></div>
                         <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Auto-check for Updates</span><span class="settings-toggle-hint">Automatically check for new versions when the app starts.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-auto-update" checked><span class="aios-toggle-slider"></span></label></div>
                     </div>

@@ -7,7 +7,7 @@ import WelcomeDisplay from './welcome-display.js';
 import ConversationStateManager from './conversation-state-manager.js';
 import FloatingWindowManager from './floating-window-manager.js';
 import ShuffleMenuController from './shuffle-menu-controller.js';
-import { showConnectionError, addMessageActionButtons } from './ui-utilities.js';
+import { showConnectionError, addMessageActionButtons, exportActiveConversationPdf } from './ui-utilities.js';
 // Directly import the artifactHandler singleton to make the dependency explicit.
 import { artifactHandler } from './artifact-handler.js';
 import sessionContentViewer from './session-content-viewer.js';
@@ -1399,6 +1399,7 @@ async function startNewConversation() {
     window.chatSendInProgress = false;
 
     if (contextHandler) {
+        contextHandler.hideContextWindow();
         contextHandler.clearSelectedContext();
         // Invalidate cache so next time context window opens, it shows the new conversation
         contextHandler.invalidateCache();
@@ -1667,7 +1668,7 @@ function setupIpcListeners() {
                             const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
                             if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
-                                summaryText.textContent = "Aetheria AI's Reasoning";
+                                summaryText.textContent = "Aetheria ai's Reasoning";
                             } else {
                                 const parts = [];
                                 if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
@@ -2571,7 +2572,7 @@ function updateReasoningSummary(messageId) {
     const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
     if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
-        summaryText.textContent = "Aetheria AI's Reasoning";
+        summaryText.textContent = "Aetheria ai's Reasoning";
     } else {
         const parts = [];
         if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
@@ -2985,7 +2986,7 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
     const thinkingCount = (toolLogsHtml.match(/reasoning-thought-block/g) || []).length;
     const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
-    let summaryText = "Aetheria AI's Reasoning";
+    let summaryText = "Aetheria ai's Reasoning";
     let hasReasoning = toolLogCount > 0 || agentLogCount > 0 || thinkingCount > 0;
 
     if (hasReasoning) {
@@ -4169,7 +4170,12 @@ function init() {
     startNewConversation();
 }
 
-window.chatModule = { init };
+window.chatModule = {
+    init,
+    startNewConversation,
+    switchConversation,
+    exportConversation: exportActiveConversationPdf
+};
 
 // --- Workspace "Know Me" Modal Global bindings ---
 document.addEventListener('click', (e) => {
