@@ -1,5 +1,5 @@
 /*
- * Vanilla canvas port of the "solving" visual from thinking-orbs.
+ * Vanilla canvas port of the "solving" and "composing" visuals from thinking-orbs.
  * Source: https://github.com/JakubAntalik/thinking-orbs
  *
  * MIT License
@@ -95,6 +95,14 @@ function hashDot(a, b) {
     return hash - Math.floor(hash);
 }
 
+function fibonacciDirection(index, count) {
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const y = 1 - (2 * (index + 0.5)) / count;
+    const radial = Math.sqrt(1 - y * y);
+    const angle = index * goldenAngle;
+    return [radial * Math.cos(angle), y, radial * Math.sin(angle)];
+}
+
 function makeProjection(yaw, tilt, centerX, centerY, scale) {
     const sineTilt = Math.sin(tilt);
     const cosineTilt = Math.cos(tilt);
@@ -122,9 +130,11 @@ function paintDots(context, dots, darkMode, minimumRadius = 0.3) {
     dots.sort((a, b) => a.z - b.z);
 
     dots.forEach(dot => {
+        const alpha = dot.alpha ?? 1;
+        if (alpha < 0.02) return;
         const white = Math.min(1, Math.max(0, dot.white));
         const grayscale = Math.round((darkMode ? 1 - white : white) * 255);
-        context.fillStyle = `rgb(${grayscale}, ${grayscale}, ${grayscale})`;
+        context.fillStyle = `rgba(${grayscale}, ${grayscale}, ${grayscale}, ${alpha})`;
         context.beginPath();
         context.arc(dot.x, dot.y, Math.max(minimumRadius, dot.radius), 0, Math.PI * 2);
         context.fill();
@@ -285,6 +295,118 @@ function drawSolvingOrb(context, size, time, darkMode) {
     paintDots(context, dots, darkMode, SOLVING_OPTIONS.minimumRadius);
 }
 
+const COMPOSING_OPTIONS = Object.freeze({
+    lanes: 3,
+    segments: 44,
+    ghostCount: 38,
+    baseRadius: 1.1 * 0.85,
+    depthRadius: 1.7 * 0.85,
+    radiusPower: 0.6,
+    minimumRadius: 0.3,
+    spin: 0,
+    bandMultiplier: 3.9,
+    wobbleMultiplier: 1,
+});
+
+function drawComposingOrb(context, size, time, darkMode) {
+    const center = size / 2;
+    const sphereRadius = (size / 2) * 0.78;
+    const spin = COMPOSING_OPTIONS.spin;
+    const project = makeProjection(time * 0.1 * spin, 0.3, center, center, 1);
+    const dotScale = radiusScale(size, COMPOSING_OPTIONS.radiusPower);
+    const dots = [];
+
+    for (let index = 0; index < COMPOSING_OPTIONS.ghostCount; index += 1) {
+        const direction = fibonacciDirection(index, COMPOSING_OPTIONS.ghostCount);
+        const [x, y, z] = project(
+            direction[0] * sphereRadius,
+            direction[1] * sphereRadius,
+            direction[2] * sphereRadius,
+        );
+        const depth = (z / sphereRadius + 1) / 2;
+        dots.push({
+            x,
+            y,
+            z,
+            radius: 0.8 * dotScale,
+            white: 0.78,
+            alpha: 0.1 + 0.22 * depth,
+        });
+    }
+
+    const planeYaw = time * 0.24 * spin;
+    const planeTilt = 0.55 + 0.3 * Math.sin(time * 0.18) * spin;
+    const ux = Math.cos(planeYaw);
+    const uy = 0;
+    const uz = Math.sin(planeYaw);
+    const vx = -uz * Math.sin(planeTilt);
+    const vy = Math.cos(planeTilt);
+    const vz = ux * Math.sin(planeTilt);
+    const normalX = uy * vz - uz * vy;
+    const normalY = uz * vx - ux * vz;
+    const normalZ = ux * vy - uy * vx;
+    const laneCount = Math.max(
+        1,
+        Math.round(COMPOSING_OPTIONS.lanes * COMPOSING_OPTIONS.bandMultiplier),
+    );
+
+    for (let lane = 0; lane < laneCount; lane += 1) {
+        const laneOffset = (
+            lane - (laneCount - 1) / 2
+        ) * 0.075;
+        const edge = Math.abs(lane - (laneCount - 1) / 2)
+            / Math.max(1, (laneCount - 1) / 2);
+
+        for (let segment = 0; segment < COMPOSING_OPTIONS.segments; segment += 1) {
+            const angle = (segment / COMPOSING_OPTIONS.segments) * 2 * Math.PI;
+            const primaryWave = 0.16
+                * Math.sin(angle * 3 - time * 1.7 + lane * 0.22);
+            const secondaryWave = 0.07
+                * Math.sin(angle * 5 + time * 1.1);
+            const offset = laneOffset
+                + (primaryWave + secondaryWave)
+                * COMPOSING_OPTIONS.wobbleMultiplier;
+            const x = ux * Math.cos(angle) + vx * Math.sin(angle) + normalX * offset;
+            const y = uy * Math.cos(angle) + vy * Math.sin(angle) + normalY * offset;
+            const z = uz * Math.cos(angle) + vz * Math.sin(angle) + normalZ * offset;
+            const length = Math.sqrt(x * x + y * y + z * z);
+            const [projectedX, projectedY, projectedDepth] = project(
+                (x / length) * sphereRadius,
+                (y / length) * sphereRadius,
+                (z / length) * sphereRadius,
+            );
+            const depth = (projectedDepth / sphereRadius + 1) / 2;
+
+            dots.push({
+                x: projectedX,
+                y: projectedY,
+                z: projectedDepth,
+                radius: (
+                    COMPOSING_OPTIONS.baseRadius
+                    + COMPOSING_OPTIONS.depthRadius * depth
+                ) * (1 - 0.25 * edge) * dotScale,
+                white: 0.52 - 0.44 * depth + 0.18 * edge,
+                alpha: 0.4 + 0.6 * depth,
+            });
+        }
+    }
+
+    paintDots(context, dots, darkMode, COMPOSING_OPTIONS.minimumRadius);
+}
+
+const STATE_PRESETS = Object.freeze({
+    solving: {
+        baseSpeed: 1.82,
+        label: 'Solving…',
+        draw: drawSolvingOrb,
+    },
+    composing: {
+        baseSpeed: 2.34,
+        label: 'Listening and composing…',
+        draw: drawComposingOrb,
+    },
+});
+
 export class ThinkingOrb {
     constructor(target, options = {}) {
         if (!(target instanceof HTMLElement)) {
@@ -292,9 +414,9 @@ export class ThinkingOrb {
         }
 
         this.host = target;
-        this.state = options.state || 'solving';
+        this.state = STATE_PRESETS[options.state] ? options.state : 'solving';
         this.size = Number(options.size) || 64;
-        this.speed = Number.isFinite(Number(options.speed)) ? Number(options.speed) : 0.25;
+        this.speed = Number.isFinite(Number(options.speed)) ? Number(options.speed) : 1;
         this.paused = Boolean(options.paused);
         this.destroyed = false;
         this.isVisible = true;
@@ -307,7 +429,10 @@ export class ThinkingOrb {
         this.canvas.style.width = `${this.size}px`;
         this.canvas.style.height = `${this.size}px`;
         this.canvas.setAttribute('role', 'img');
-        this.canvas.setAttribute('aria-label', options.ariaLabel || 'Solving…');
+        this.canvas.setAttribute(
+            'aria-label',
+            options.ariaLabel || STATE_PRESETS[this.state].label,
+        );
         this.host.replaceChildren(this.canvas);
 
         this.context = this.canvas.getContext('2d');
@@ -370,16 +495,29 @@ export class ThinkingOrb {
     draw(time) {
         if (!this.context) return;
         this.context.clearRect(0, 0, this.size, this.size);
+        const preset = STATE_PRESETS[this.state] || STATE_PRESETS.solving;
         const phase = reducedMotionQuery?.matches
             ? 0.6
-            : (time / 1000) * 1.82 * this.speed;
-        drawSolvingOrb(this.context, this.size, phase, resolveDarkMode(this.canvas));
+            : (time / 1000) * preset.baseSpeed * this.speed;
+        preset.draw(
+            this.context,
+            this.size,
+            phase,
+            resolveDarkMode(this.canvas),
+        );
     }
 
     setState(state) {
-        // The vanilla port intentionally starts with the requested solving state.
-        this.state = state === 'solving' ? state : 'solving';
+        this.state = STATE_PRESETS[state] ? state : 'solving';
+        this.canvas.setAttribute('aria-label', STATE_PRESETS[this.state].label);
         this.draw(performance.now());
+    }
+
+    setAriaLabel(label) {
+        this.canvas.setAttribute(
+            'aria-label',
+            label || STATE_PRESETS[this.state].label,
+        );
     }
 
     setPaused(paused) {
