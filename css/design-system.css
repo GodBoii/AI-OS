@@ -202,9 +202,6 @@
   --background-tertiary: #e2e8f0;
   --secondary-btn-bg: #f8fafc;
   --secondary-btn-hover: #f1f5f9;
-  --mic-waveform-bg: #ffffff;
-  --mic-waveform-border: #e2e8f0;
-  --mic-waveform-bar: #2d3748;
 }
 
 /* Motion tokens
@@ -375,11 +372,6 @@
   --background-secondary:  rgba(255, 255, 255, 0.04);
   --background-tertiary:   rgba(255, 255, 255, 0.07);
   --text-muted:            rgba(255, 255, 255, 0.38);
-
-  /* === MIC WAVEFORM === */
-  --mic-waveform-bg:     #000000;
-  --mic-waveform-border: rgba(255, 255, 255, 0.15);
-  --mic-waveform-bar:    rgba(255, 255, 255, 0.85);
 
   /* === DANGER/PRIORITY/STATUS (unchanged, work on any bg) === */
   --danger-color:     var(--error-500);
