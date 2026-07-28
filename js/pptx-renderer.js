@@ -775,8 +775,8 @@ function normalizeSlide(slide, index, topic) {
 function buildPresentation(payload) {
   const pptx = new PptxGenJS();
   currentPptx = pptx;
-  pptx.author = 'Aetheria AI';
-  pptx.company = 'Aetheria AI';
+  pptx.author = 'Aetheria ai';
+  pptx.company = 'Aetheria ai';
   pptx.subject = normalizeText(payload.topic || 'AI generated presentation');
   pptx.title = normalizeText(payload.topic || 'Presentation');
   pptx.lang = 'en-US';
