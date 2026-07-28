@@ -185,10 +185,6 @@ class AudioEngine {
         }
     }
 
-    getAnalyserNode() {
-        return this.analyserNode;
-    }
-
     getSampleRate() {
         return this.sampleRate;
     }

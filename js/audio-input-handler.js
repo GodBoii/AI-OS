@@ -1,6 +1,7 @@
 // js/audio-input-handler.js - Cloud-only intelligent mic input
 import { flattenAudioChunks, normalizeAudio, nativeResample, trimSilence } from './audio-utils.js';
 import AudioEngine from './audio-engine.js';
+import { mountThinkingOrb } from './thinking-orb.js';
 
 const CLOUD_MIC_ENDPOINT = 'https://api.aetheriaai.website/api/mic/transcribe';
 const TARGET_SAMPLE_RATE = 16000;
@@ -29,9 +30,8 @@ class AudioInputHandler {
         this.micButton = null;
         this.targetTextarea = null;
         this.audioChunks = [];
-        this.waveformBars = [];
-        this.animationFrame = null;
-        this.analyser = null;
+        this.micOrb = null;
+        this.micVisualState = 'idle';
         this.capturedSampleRate = TARGET_SAMPLE_RATE;
         this.boundToggleRecording = () => this.toggleRecording();
     }
@@ -46,6 +46,7 @@ class AudioInputHandler {
         }
 
         this.micButton.addEventListener('click', this.boundToggleRecording);
+        this.setMicVisualState('idle');
         console.log('[AudioInput] Cloud mic initialized');
         return true;
     }
@@ -82,10 +83,8 @@ class AudioInputHandler {
             this.audioChunks = [];
 
             await this.audioEngine.startRecording();
-            this.analyser = this.audioEngine.getAnalyserNode();
             this.isRecording = true;
-            this.updateMicButtonUI(true);
-            this.startWaveformAnimation();
+            this.setMicVisualState('recording');
 
             console.log('[AudioInput] Recording started');
         } catch (error) {
@@ -96,36 +95,40 @@ class AudioInputHandler {
     }
 
     async stopRecording() {
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-            this.animationFrame = null;
-        }
         if (!this.isRecording) {
             return;
         }
 
         this.isRecording = false;
-        this.updateMicButtonUI(false);
+        this.isProcessing = true;
+        this.setMicVisualState('processing');
 
-        const { chunks, sampleRate } = await this.audioEngine.stopRecording();
-        this.audioChunks = chunks;
-        this.capturedSampleRate = sampleRate;
+        try {
+            const { chunks, sampleRate } = await this.audioEngine.stopRecording();
+            this.audioChunks = chunks;
+            this.capturedSampleRate = sampleRate;
 
-        await new Promise(resolve => setTimeout(resolve, 50));
-        await this.processAudio();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            await this.processAudio();
+        } catch (error) {
+            console.error('[AudioInput] Error stopping recording:', error);
+            this.isProcessing = false;
+            this.setMicVisualState('idle');
+            this.showNotification('Could not finish the voice recording.', 'error');
+        }
     }
 
     async processAudio() {
         if (this.audioChunks.length === 0) {
             console.log('[AudioInput] No audio captured');
-            this.updateMicButtonUI(false);
+            this.isProcessing = false;
+            this.setMicVisualState('idle');
             return;
         }
 
         console.log(`[AudioInput] Processing ${this.audioChunks.length} audio chunks...`);
         this.isProcessing = true;
-        this.updateMicButtonUI(false);
-        this.micButton.classList.add('processing');
+        this.setMicVisualState('processing');
 
         try {
             const rawBuffer = flattenAudioChunks(this.audioChunks);
@@ -167,7 +170,7 @@ class AudioInputHandler {
             this.showNotification(error.message || 'Failed to process audio', 'error');
         } finally {
             this.isProcessing = false;
-            this.updateMicButtonUI(false);
+            this.setMicVisualState('idle');
             this.audioChunks = [];
         }
     }
@@ -263,72 +266,71 @@ class AudioInputHandler {
         return btoa(binary);
     }
 
-    startWaveformAnimation() {
-        if (!this.analyser) return;
-        const bufferLength = this.analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
-        const animate = () => {
-            if (!this.isRecording) return;
-            this.animationFrame = requestAnimationFrame(animate);
-            this.analyser.getByteFrequencyData(dataArray);
-            this.updateWaveformBars(dataArray);
-        };
-        animate();
-    }
-
-    updateWaveformBars(dataArray) {
-        if (!this.waveformBars.length) return;
-        const barCount = this.waveformBars.length;
-        const segmentSize = Math.floor(dataArray.length / barCount);
-
-        this.waveformBars.forEach((bar, index) => {
-            let sum = 0;
-            const start = index * segmentSize;
-            const end = start + segmentSize;
-            for (let i = start; i < end; i++) sum += dataArray[i];
-
-            const average = sum / segmentSize;
-            const heightPercent = 20 + (average / 255) * 100;
-            bar.style.height = `${Math.min(heightPercent, 100)}%`;
-        });
-    }
-
-    updateMicButtonUI(isRecording) {
+    setMicVisualState(state) {
         if (!this.micButton) return;
-        this.micButton.classList.remove('processing');
-
-        if (isRecording) {
-            this.micButton.classList.add('recording');
-            this.createWaveformBars();
-        } else {
-            this.micButton.classList.remove('recording');
-            this.removeWaveformBars();
-        }
-    }
-
-    createWaveformBars() {
-        this.removeWaveformBars();
-        const container = document.createElement('div');
-        container.className = 'waveform-container';
-        for (let i = 0; i < 5; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'waveform-bar';
-            bar.style.height = `${30 + (i % 3) * 20}%`;
-            container.appendChild(bar);
-            this.waveformBars.push(bar);
-        }
+        const nextState = ['recording', 'processing'].includes(state) ? state : 'idle';
+        const isRecording = nextState === 'recording';
+        const isProcessing = nextState === 'processing';
+        const isOrbVisible = isRecording || isProcessing;
         const icon = this.micButton.querySelector('i');
-        if (icon) icon.style.display = 'none';
-        this.micButton.appendChild(container);
-    }
 
-    removeWaveformBars() {
-        const container = this.micButton?.querySelector('.waveform-container');
-        if (container) container.remove();
-        const icon = this.micButton?.querySelector('i');
-        if (icon) icon.style.display = '';
-        this.waveformBars = [];
+        this.micVisualState = nextState;
+        this.micButton.classList.toggle('recording', isRecording);
+        this.micButton.classList.toggle('processing', isProcessing);
+        this.micButton.setAttribute('aria-pressed', String(isRecording));
+        this.micButton.setAttribute('aria-busy', String(isProcessing));
+        this.micButton.setAttribute('aria-disabled', String(isProcessing));
+
+        if (!isOrbVisible) {
+            this.micOrb?.destroy();
+            this.micOrb = null;
+            this.micButton.querySelector('.mic-orb-mount')?.remove();
+            if (icon) {
+                icon.hidden = false;
+                icon.style.display = '';
+            }
+            this.micButton.setAttribute('aria-label', 'Voice input');
+            this.micButton.setAttribute('title', 'Voice input');
+            this.micButton.dataset.tooltip = 'Voice Input (Click to start)';
+            return;
+        }
+
+        let mount = this.micButton.querySelector('.mic-orb-mount');
+        if (!mount) {
+            mount = document.createElement('span');
+            mount.className = 'mic-orb-mount';
+            mount.setAttribute('aria-hidden', 'true');
+            this.micButton.appendChild(mount);
+        }
+        if (icon) {
+            icon.hidden = true;
+            icon.style.display = 'none';
+        }
+
+        const accessibleLabel = isRecording
+            ? 'Voice recording active. Click to stop.'
+            : 'Transcribing voice input…';
+        if (!this.micOrb) {
+            this.micOrb = mountThinkingOrb(mount, {
+                state: 'composing',
+                size: 64,
+                speed: 1,
+                ariaLabel: accessibleLabel,
+            });
+        } else {
+            this.micOrb.setState('composing');
+            this.micOrb.setAriaLabel(accessibleLabel);
+            this.micOrb.setPaused(false);
+        }
+
+        this.micButton.setAttribute('aria-label', accessibleLabel);
+        this.micButton.setAttribute(
+            'title',
+            isRecording ? 'Stop voice recording' : 'Transcribing voice input',
+        );
+        this.micButton.dataset.tooltip = isRecording
+            ? 'Listening… Click to stop'
+            : 'Transcribing voice input…';
     }
 
     appendToTextarea(text) {
@@ -354,10 +356,9 @@ class AudioInputHandler {
         this.isRecording = false;
         this.isProcessing = false;
 
-        if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
         this.audioEngine.setIdleState(true);
 
-        this.updateMicButtonUI(false);
+        this.setMicVisualState('idle');
     }
 
     destroy() {
@@ -365,6 +366,9 @@ class AudioInputHandler {
         if (this.micButton) {
             this.micButton.removeEventListener('click', this.boundToggleRecording);
         }
+        this.audioEngine.destroy().catch(error => {
+            console.warn('[AudioInput] Failed to destroy audio engine cleanly:', error);
+        });
         this.micButton = null;
         this.targetTextarea = null;
     }
