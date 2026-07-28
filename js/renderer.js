@@ -375,29 +375,25 @@ class UIManager {
 
             // --- Escape: Close Active Panel ---
             if (key === 'escape' && !ctrl && !shift) {
-                // Don't intercept if typing in an input
-                if (isInputFocused) return;
-                this.triggerCloseActivePanel();
+                if (this.triggerCloseActivePanel()) {
+                    e.preventDefault();
+                } else if (isInputFocused) {
+                    document.activeElement.blur();
+                }
                 return;
             }
         });
     }
 
-    triggerNewConversation() {
-        // Generate a new conversation ID and switch to it
-        const newId = crypto.randomUUID ? crypto.randomUUID() : 
-            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                const r = Math.random() * 16 | 0;
-                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-            });
-        if (window.chatModule?.switchConversation) {
-            window.chatModule.switchConversation(newId);
+    async triggerNewConversation() {
+        if (!window.chatModule?.startNewConversation) {
+            window.notificationService?.show('Chat is still loading. Try again in a moment.', 'info', 2500);
+            return;
         }
-        // Also focus the input
+
+        await window.chatModule.startNewConversation();
         this.triggerFocusChatInput();
-        if (window.notificationService) {
-            window.notificationService.show('New conversation started', 'info', 2000);
-        }
+        window.notificationService?.show('New conversation started', 'info', 2000);
     }
 
     triggerToggleSettings() {
@@ -422,7 +418,8 @@ class UIManager {
     }
 
     triggerFocusChatInput() {
-        const input = document.getElementById('message-input') ||
+        const input = document.getElementById('floating-input') ||
+                      document.getElementById('message-input') ||
                       document.querySelector('.chat-input textarea') ||
                       document.querySelector('textarea[placeholder]');
         if (input) {
@@ -442,17 +439,14 @@ class UIManager {
         }
         // Focus the task input after panel opens
         setTimeout(() => {
-            const taskInput = document.getElementById('task-input') ||
-                              document.querySelector('.task-input-field') ||
-                              document.querySelector('.todo-input input');
-            if (taskInput) taskInput.focus();
+            window.todo?.openNewTaskModal();
+            document.getElementById('task-name')?.focus();
         }, 200);
     }
 
     triggerToggleHistory() {
-        // Try using the history sidebar toggle if available
-        if (window.historyContentSidebar?.toggle) {
-            window.historyContentSidebar.toggle();
+        if (window.contextHandler?.toggleContextWindow) {
+            window.contextHandler.toggleContextWindow();
         } else {
             // Fallback: click the history button if it exists
             const historyBtn = document.querySelector('[data-action="toggle-history"]') ||
@@ -463,14 +457,10 @@ class UIManager {
     }
 
     triggerExportConversation() {
-        // Try using the export button if available
-        const exportBtn = document.querySelector('[data-action="export-conversation"]') ||
-                          document.getElementById('export-conversation-btn') ||
-                          document.querySelector('.export-btn');
-        if (exportBtn) {
-            exportBtn.click();
-        } else if (window.chatModule?.exportConversation) {
+        if (window.chatModule?.exportConversation) {
             window.chatModule.exportConversation();
+        } else {
+            window.notificationService?.show('Export is still loading. Try again in a moment.', 'info', 2500);
         }
     }
 
@@ -481,29 +471,50 @@ class UIManager {
         if (shortcutsOverlay) {
             shortcutsOverlay.classList.remove('visible');
             setTimeout(() => shortcutsOverlay.remove(), 300);
-            return;
+            return true;
+        }
+        if (!document.getElementById('new-task-modal')?.classList.contains('hidden')) {
+            window.todo?.closeNewTaskModal();
+            return true;
+        }
+        if (!document.getElementById('task-detail-modal')?.classList.contains('hidden')) {
+            window.todo?.closeTaskDetailModal();
+            return true;
+        }
+        if (!document.getElementById('user-context-modal')?.classList.contains('hidden')) {
+            window.todo?.closeContextModal();
+            return true;
+        }
+        if (window.contextHandler?.isWindowOpen) {
+            window.contextHandler.hideContextWindow();
+            return true;
+        }
+        if (window.historyContentSidebar?.isVisible?.()) {
+            window.historyContentSidebar.hide();
+            return true;
         }
         const pricingModal = document.querySelector('.pricing-modal:not(.hidden)');
         if (pricingModal && window.AIOS?.closePricingModal) {
             window.AIOS.closePricingModal();
-            return;
+            return true;
         }
         if (s.isAIOSOpen) {
             this.state.setState({ isAIOSOpen: false });
-            return;
+            return true;
         }
         if (s.isToDoListOpen) {
             this.state.setState({ isToDoListOpen: false });
-            return;
+            return true;
         }
         if (s.isProjectWorkspaceOpen) {
             this.state.setState({ isProjectWorkspaceOpen: false });
-            return;
+            return true;
         }
         if (s.isComputerWorkspaceOpen) {
             this.state.setState({ isComputerWorkspaceOpen: false });
-            return;
+            return true;
         }
+        return false;
     }
 
     showShortcutsOverlay() {

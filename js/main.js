@@ -1,7 +1,7 @@
 // main.js (Definitive Version with Correct Deep Link Handling and Logging)
 
 const electron = require('electron');
-const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog, nativeImage, Tray, Menu } = electron;
+const { app, BrowserWindow, ipcMain, BrowserView, shell, dialog, nativeImage, Tray, Menu, globalShortcut } = electron;
 const path = require('path');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
@@ -18,7 +18,7 @@ let computerToolNotificationsEnabled = true;
 let runCompleteNotificationsEnabled = true;
 
 // --- App Name Setup ---
-app.setName('Aetheria AI');
+app.setName('Aetheria ai');
 
 // --- CRITICAL: Set Application User Model ID for Windows Taskbar Icon ---
 // This ensures Windows properly associates the running app with its icon
@@ -178,10 +178,10 @@ function createSystemTray() {
         }
         const trayIcon = nativeImage.createFromPath(trayIconPath);
         appTray = new Tray(trayIcon.resize({ width: 16, height: 16 }));
-        appTray.setToolTip('Aetheria AI');
+        appTray.setToolTip('Aetheria ai');
         const contextMenu = Menu.buildFromTemplate([
             {
-                label: 'Show Aetheria AI',
+                label: 'Show Aetheria ai',
                 click: () => {
                     if (mainWindow) {
                         mainWindow.show();
@@ -257,7 +257,7 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: true,
+        frame: false,
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });
@@ -267,11 +267,25 @@ function createWindow() {
     if (process.platform === 'win32') {
         mainWindow.setIcon(icon);
         // Set overlay icon (shown in taskbar when app is running)
-        mainWindow.setOverlayIcon(icon, 'Aetheria AI');
+        mainWindow.setOverlayIcon(icon, 'Aetheria ai');
     }
 
     mainWindow.maximize();
     mainWindow.loadFile('index.html');
+    const devToolsAccelerator = 'CommandOrControl+Shift+D';
+    const registerDevToolsAccelerator = () => {
+        if (!globalShortcut.isRegistered(devToolsAccelerator)) {
+            globalShortcut.register(devToolsAccelerator, () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.toggleDevTools();
+                }
+            });
+        }
+    };
+    const unregisterDevToolsAccelerator = () => globalShortcut.unregister(devToolsAccelerator);
+    mainWindow.on('focus', registerDevToolsAccelerator);
+    mainWindow.on('blur', unregisterDevToolsAccelerator);
+    mainWindow.on('closed', unregisterDevToolsAccelerator);
 
     pythonBridge = new PythonBridge(mainWindow, mainProcessEmitter);
 
@@ -350,7 +364,7 @@ function createWindow() {
                 body += `\n${previewSnippet}`;
             }
             nativeNotificationService.showNotification(
-                'Aetheria AI',
+                'Aetheria ai',
                 body,
                 {
                     tag: `run-completed-${data?.conversationId || 'unknown'}`,
@@ -392,7 +406,7 @@ function createWindow() {
         console.log('[main.js] Launch at startup toggled:', enabled);
         app.setLoginItemSettings({
             openAtLogin: enabled,
-            name: 'Aetheria AI'
+            name: 'Aetheria ai'
         });
     });
 
