@@ -63,13 +63,13 @@
             <div class="auth-split-layout" id="auth-split-layout" style="opacity:0;transition:opacity 400ms ease;display:none;">
                 
                 <!-- Left Pane: Branding -->
-                <section class="auth-illustration-pane" aria-label="Aetheria AI">
+                <section class="auth-illustration-pane" aria-label="Aetheria ai">
                     <div class="auth-branding">
                         <div class="auth-top-logo">
-                            <img src="assets/icon.png" alt="Aetheria AI" class="auth-small-logo">
-                            <span>Aetheria AI</span>
+                            <img src="assets/icon.png" alt="Aetheria ai" class="auth-small-logo">
+                            <span>Aetheria ai</span>
                         </div>
-                        <h1 class="auth-hero-title">ELEVATE YOURSELF WITH<br><span class="auth-highlight">AETHERIA AI</span></h1>
+                        <h1 class="auth-hero-title">ELEVATE YOURSELF WITH<br><span class="auth-highlight">Aetheria ai</span></h1>
                     </div>
                 </section>
 

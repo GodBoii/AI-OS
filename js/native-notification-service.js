@@ -6,7 +6,7 @@ const path = require('path');
 class NativeNotificationService {
     constructor() {
         this.isSupported = Notification.isSupported();
-        this.appName = 'Aetheria AI';
+        this.appName = 'Aetheria ai';
         this.iconPath = this.getIconPath();
         this.notificationQueue = [];
         this.activeNotifications = new Map();

@@ -5,7 +5,7 @@
 
 class UpdateChecker {
     constructor() {
-        this.currentVersion = '1.1.4'; // Should match package.json
+        this.currentVersion = '1.2.24'; // Keep in sync with package.json
         this.githubRepo = 'GodBoii/AI-OS-website'; // Repository where releases are published
         this.updateCheckUrl = `https://api.github.com/repos/${this.githubRepo}/releases/latest`;
         this.checkInterval = 3600000; // Check every hour (in milliseconds)
@@ -91,7 +91,7 @@ class UpdateChecker {
                 icon.style.color = '#4caf50';
             }
             if (title) title.textContent = 'You\'re up to date!';
-            if (message) message.textContent = `You have the latest version of Aetheria AI (v${this.currentVersion}).`;
+            if (message) message.textContent = `You have the latest version of Aetheria ai (v${this.currentVersion}).`;
             if (updateDetails) updateDetails.classList.add('hidden');
             if (downloadBtn) downloadBtn.classList.add('hidden');
             if (checkBtn) checkBtn.disabled = false;
