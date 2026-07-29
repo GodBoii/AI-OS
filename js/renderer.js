@@ -1,3 +1,259 @@
+class SidebarDockController {
+    constructor(sidebar) {
+        this.sidebar = sidebar;
+        this.track = sidebar?.querySelector('.sidebar-icons');
+        this.items = Array.from(this.track?.querySelectorAll('.sidebar-icon') || []);
+        this.tooltip = null;
+        this.tooltipIndex = null;
+        this.models = [];
+        this.baseSize = 36;
+        this.maxScale = 1.58;
+        this.distance = 68;
+        this.popDistance = 22;
+        this.rafId = null;
+        this.lastFrame = 0;
+        this.reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false;
+
+        if (!this.sidebar || !this.track || this.items.length === 0) return;
+
+        this.init();
+    }
+
+    init() {
+        this.tooltip = document.createElement('div');
+        this.tooltip.className = 'sidebar-dock-tooltip';
+        this.tooltip.setAttribute('role', 'presentation');
+        this.tooltip.innerHTML = '<span></span>';
+        document.body.appendChild(this.tooltip);
+
+        this.items.forEach((item, index) => {
+            const label = item.getAttribute('aria-label') || item.getAttribute('title') || '';
+            item.dataset.dockLabel = label;
+            item.removeAttribute('title');
+            item.classList.add('sidebar-dock-item');
+            item.style.setProperty('--dock-z', String(index + 1));
+
+            item.addEventListener('focus', () => this.handleFocus(index));
+            item.addEventListener('blur', () => this.handleBlur());
+        });
+
+        this.syncBaseSize();
+        this.resetTargets(true);
+
+        this.sidebar.addEventListener('pointermove', (event) => this.handlePointerMove(event));
+        this.sidebar.addEventListener('pointerleave', () => this.handlePointerLeave());
+        window.addEventListener('resize', () => {
+            this.syncBaseSize();
+            this.resetTargets(true);
+        });
+
+        window.matchMedia?.('(prefers-reduced-motion: reduce)')?.addEventListener?.('change', (event) => {
+            this.reducedMotion = event.matches;
+            this.resetTargets(true);
+        });
+    }
+
+    syncBaseSize() {
+        const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        this.baseSize = Math.round(remSize * 2.25);
+    }
+
+    gaussian(distance) {
+        const spread = 2 * this.distance * this.distance;
+        return 1 + (this.maxScale - 1) * Math.exp(-(distance * distance) / spread);
+    }
+
+    setTargetsFromY(pointerY) {
+        let bestIndex = -1;
+        let bestDistance = Infinity;
+
+        this.models = this.items.map((item, index) => {
+            const previous = this.models[index] || {
+                size: this.baseSize,
+                pop: 0,
+                sizeVelocity: 0,
+                popVelocity: 0,
+            };
+            const rect = item.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            const distance = Math.abs(pointerY - centerY);
+            const scale = this.gaussian(distance);
+
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = index;
+            }
+
+            return {
+                ...previous,
+                targetSize: this.baseSize * scale,
+                targetPop: (scale - 1) * this.popDistance,
+                targetZ: Math.round(100 + scale * 100),
+            };
+        });
+
+        this.items.forEach((item, index) => {
+            item.classList.toggle('sidebar-dock-focused', index === bestIndex && bestDistance < this.distance);
+            item.style.setProperty('--dock-z', String(this.models[index].targetZ));
+        });
+
+        if (bestIndex >= 0 && bestDistance < this.distance * 0.9) {
+            this.showTooltip(bestIndex);
+        } else {
+            this.hideTooltip();
+        }
+
+        this.startAnimation();
+    }
+
+    setImmediateStyles() {
+        this.models.forEach((model, index) => {
+            model.size = model.targetSize;
+            model.pop = model.targetPop;
+            model.sizeVelocity = 0;
+            model.popVelocity = 0;
+            this.applyModel(index, model);
+        });
+        this.updateTooltipPosition();
+    }
+
+    resetTargets(immediate = false) {
+        this.models = this.items.map((item, index) => {
+            const previous = this.models[index] || {
+                size: this.baseSize,
+                pop: 0,
+                sizeVelocity: 0,
+                popVelocity: 0,
+            };
+            item.classList.remove('sidebar-dock-focused');
+            item.style.setProperty('--dock-z', String(index + 1));
+            return {
+                ...previous,
+                targetSize: this.baseSize,
+                targetPop: 0,
+                targetZ: index + 1,
+            };
+        });
+
+        if (immediate || this.reducedMotion) {
+            this.setImmediateStyles();
+        } else {
+            this.startAnimation();
+        }
+    }
+
+    handlePointerMove(event) {
+        const rect = this.track.getBoundingClientRect();
+        const outsideY = event.clientY < rect.top - 30 || event.clientY > rect.bottom + 30;
+        const outsideX = event.clientX < rect.left - 12 || event.clientX > rect.right + 90;
+
+        if (outsideY || outsideX) {
+            this.handlePointerLeave();
+            return;
+        }
+
+        this.setTargetsFromY(event.clientY);
+    }
+
+    handlePointerLeave() {
+        this.tooltipIndex = null;
+        this.hideTooltip();
+        this.resetTargets();
+    }
+
+    handleFocus(index) {
+        const rect = this.items[index]?.getBoundingClientRect();
+        if (!rect) return;
+        this.setTargetsFromY(rect.top + rect.height / 2);
+        this.showTooltip(index);
+    }
+
+    handleBlur() {
+        if (!this.sidebar.matches(':hover')) {
+            this.tooltipIndex = null;
+            this.hideTooltip();
+            this.resetTargets();
+        }
+    }
+
+    showTooltip(index) {
+        if (!this.tooltip) return;
+        const label = this.items[index]?.dataset.dockLabel;
+        if (!label) return;
+        this.tooltipIndex = index;
+        this.tooltip.querySelector('span').textContent = label;
+        this.tooltip.classList.add('visible');
+        this.updateTooltipPosition();
+    }
+
+    hideTooltip() {
+        this.tooltip?.classList.remove('visible');
+    }
+
+    updateTooltipPosition() {
+        if (!this.tooltip || this.tooltipIndex === null) return;
+        const item = this.items[this.tooltipIndex];
+        if (!item) return;
+        const rect = item.getBoundingClientRect();
+        this.tooltip.style.left = `${rect.right + 12}px`;
+        this.tooltip.style.top = `${rect.top + rect.height / 2}px`;
+    }
+
+    startAnimation() {
+        if (this.reducedMotion) {
+            this.setImmediateStyles();
+            return;
+        }
+        if (this.rafId !== null) return;
+        this.lastFrame = performance.now();
+        this.rafId = requestAnimationFrame((time) => this.animate(time));
+    }
+
+    animate(time) {
+        const dt = Math.min((time - this.lastFrame) / 16.67, 2);
+        this.lastFrame = time;
+        let settled = true;
+
+        this.models.forEach((model, index) => {
+            model.sizeVelocity += (model.targetSize - model.size) * 0.22 * dt;
+            model.sizeVelocity *= Math.pow(0.62, dt);
+            model.size += model.sizeVelocity * dt;
+
+            model.popVelocity += (model.targetPop - model.pop) * 0.22 * dt;
+            model.popVelocity *= Math.pow(0.62, dt);
+            model.pop += model.popVelocity * dt;
+
+            if (
+                Math.abs(model.targetSize - model.size) > 0.05 ||
+                Math.abs(model.sizeVelocity) > 0.05 ||
+                Math.abs(model.targetPop - model.pop) > 0.05 ||
+                Math.abs(model.popVelocity) > 0.05
+            ) {
+                settled = false;
+            }
+
+            this.applyModel(index, model);
+        });
+
+        this.updateTooltipPosition();
+
+        if (settled) {
+            this.rafId = null;
+            this.setImmediateStyles();
+            return;
+        }
+
+        this.rafId = requestAnimationFrame((nextTime) => this.animate(nextTime));
+    }
+
+    applyModel(index, model) {
+        const item = this.items[index];
+        if (!item) return;
+        item.style.setProperty('--dock-size', `${model.size.toFixed(2)}px`);
+        item.style.setProperty('--dock-pop', `${model.pop.toFixed(2)}px`);
+    }
+}
+
 class StateManager {
     constructor() {
         this._state = {
@@ -45,6 +301,7 @@ class UIManager {
         this.isDragging = false;
         this.isResizing = false;
         this.dragStart = { x: 0, y: 0 };
+        this.sidebarDock = null;
         this.init();
     }
 
@@ -53,10 +310,13 @@ class UIManager {
         this.setupEventListeners();
         this.setupStateSubscription();
         this.setupWebViewEvents();
+        this.setupSidebarDock();
     }
 
     cacheElements() {
         this.elements = {
+            sidebar: document.querySelector('.sidebar'),
+            sidebarIcons: document.querySelector('.sidebar-icons'),
             appIcon: document.getElementById('app-icon'),
             toDoListIcon: document.getElementById('to-do-list-icon'),
             projectWorkspaceIcon: document.getElementById('project-workspace-icon'),
@@ -68,6 +328,11 @@ class UIManager {
             closeBtn: document.getElementById('close-window'),
             webViewContainer: null,
         };
+    }
+
+    setupSidebarDock() {
+        if (this.sidebarDock || !this.elements.sidebar) return;
+        this.sidebarDock = new SidebarDockController(this.elements.sidebar);
     }
 
     setupWebViewEvents() {
