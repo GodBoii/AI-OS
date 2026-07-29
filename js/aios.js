@@ -39,6 +39,7 @@ class AIOS {
         this.pricingModalCloseTimer = null;
         this.pricingModalOpenFrame = null;
         this.pricingModalReturnFocus = null;
+        this.proMetalFx = null;
         window.__aiosSubscriptionLimitEventToken = window.__aiosSubscriptionLimitEventToken || self.crypto?.randomUUID?.() || String(Date.now());
     }
 
@@ -479,6 +480,7 @@ class AIOS {
             });
         });
         this.setupPricingCardMotion();
+        this.setupProMetalFx();
         this.elements.memoryForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleAddMemory();
@@ -936,6 +938,7 @@ class AIOS {
                 button.textContent = 'Upgrade to Elite';
             }
         });
+        this.syncProMetalFx();
     }
 
     renderSubscriptionSummary(summary = null) {
@@ -1037,6 +1040,7 @@ class AIOS {
                 button.textContent = planType === 'pro' ? 'Upgrade to Pro' : 'Upgrade to Elite';
             }
         });
+        this.syncProMetalFx();
     }
 
     setupPricingCardMotion() {
@@ -1081,6 +1085,35 @@ class AIOS {
             });
             shell.addEventListener('pointerleave', reset);
         });
+    }
+
+    setupProMetalFx() {
+        if (!this.elements.planBtnPro || typeof window.NativeMetalFx !== 'function') return;
+        try {
+            this.proMetalFx = new window.NativeMetalFx(this.elements.planBtnPro, {
+                preset: 'gold',
+                strength: 0.82,
+                ringWidth: 1.5,
+                shaderScale: 1.6,
+                active: false,
+                paused: true,
+            });
+            this.syncProMetalFx();
+        } catch (error) {
+            console.warn('Native metal effect could not be initialized:', error);
+            this.proMetalFx = null;
+        }
+    }
+
+    syncProMetalFx() {
+        if (!this.proMetalFx) return;
+        const modalVisible = !!this.elements.pricingModal
+            && !this.elements.pricingModal.classList.contains('hidden')
+            && !this.elements.pricingModal.classList.contains('is-closing');
+        const buttonDisabled = !!this.elements.planBtnPro?.disabled;
+        this.proMetalFx.setStrength(buttonDisabled ? 0.48 : 0.82);
+        this.proMetalFx.setPaused(!modalVisible || buttonDisabled);
+        this.proMetalFx.setActive(modalVisible);
     }
 
     trapPricingModalFocus(event) {
@@ -1150,6 +1183,7 @@ class AIOS {
         this.pricingModalOpenFrame = requestAnimationFrame(() => {
             this.elements.pricingModal.classList.add('is-open');
             this.elements.pricingModalDialog?.classList.add('is-open');
+            this.syncProMetalFx();
             this.elements.pricingModalClose?.focus({ preventScroll: true });
             this.pricingModalOpenFrame = null;
         });
@@ -1164,6 +1198,7 @@ class AIOS {
         this.elements.pricingModal.classList.add('is-closing');
         this.elements.pricingModalDialog?.classList.remove('is-open');
         this.elements.pricingModalDialog?.classList.add('is-closing');
+        this.syncProMetalFx();
         this.elements.pricingModal.setAttribute('aria-hidden', 'true');
         this.pricingModalContext = null;
         this.pricingModalCloseTimer = setTimeout(() => {
