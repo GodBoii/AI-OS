@@ -650,6 +650,192 @@ body:not(.dark-mode) .badge-error {
     color: #991b1b !important;
 }
 
+/* ===== PREMIUM PRICING ALIGNMENT ===== */
+body:not(.dark-mode) .subscription-section {
+    background:
+        radial-gradient(circle at 14% 0%, rgba(181, 130, 55, 0.1), transparent 34%),
+        rgba(252, 250, 244, 0.9) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    box-shadow:
+        0 18px 46px rgba(40, 31, 18, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+body:not(.dark-mode) .subscription-summary-card {
+    background:
+        radial-gradient(circle at 12% 0%, rgba(181, 130, 55, 0.1), transparent 34%),
+        rgba(255, 254, 249, 0.72) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    box-shadow:
+        0 14px 36px rgba(40, 31, 18, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+body:not(.dark-mode) .subscription-meta-item {
+    background: rgba(255, 255, 255, 0.54) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+}
+
+body:not(.dark-mode) .subscription-meta-item:hover {
+    background: rgba(255, 255, 255, 0.76) !important;
+    border-color: rgba(37, 34, 28, 0.22) !important;
+}
+
+body:not(.dark-mode) .subscription-title,
+body:not(.dark-mode) .subscription-current-name,
+body:not(.dark-mode) .subscription-meta-value {
+    color: #171717 !important;
+}
+
+body:not(.dark-mode) .subscription-subtitle,
+body:not(.dark-mode) .subscription-summary-label,
+body:not(.dark-mode) .subscription-meta-label,
+body:not(.dark-mode) .subscription-progress-copy {
+    color: #65615a !important;
+}
+
+body:not(.dark-mode) .subscription-status-badge {
+    background: rgba(255, 255, 255, 0.58) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+}
+
+body:not(.dark-mode) .subscription-status-badge.status-free {
+    color: #2d6f68 !important;
+}
+
+body:not(.dark-mode) .subscription-status-badge.status-pro {
+    color: #b58237 !important;
+}
+
+body:not(.dark-mode) .subscription-status-badge.status-elite {
+    color: #a8664b !important;
+}
+
+body:not(.dark-mode) .subscription-progress-track {
+    background: rgba(37, 34, 28, 0.08) !important;
+}
+
+body:not(.dark-mode) .subscription-progress-bar {
+    background: linear-gradient(90deg, #2d6f68, #b58237) !important;
+}
+
+body:not(.dark-mode) .pricing-modal-backdrop {
+    background:
+        radial-gradient(circle at 50% 16%, rgba(181, 130, 55, 0.18), transparent 28%),
+        rgba(15, 14, 12, 0.72) !important;
+}
+
+body:not(.dark-mode) .pricing-modal-dialog {
+    background:
+        radial-gradient(circle at 12% 0%, rgba(181, 130, 55, 0.12), transparent 32%),
+        radial-gradient(circle at 86% 14%, rgba(45, 111, 104, 0.1), transparent 34%),
+        linear-gradient(180deg, rgba(252, 250, 244, 0.98), rgba(248, 246, 239, 0.96)) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    box-shadow:
+        0 34px 88px rgba(40, 31, 18, 0.22),
+        0 1px 0 rgba(255, 255, 255, 0.7) inset !important;
+}
+
+body:not(.dark-mode) .pricing-modal-kicker {
+    color: #2d6f68 !important;
+}
+
+body:not(.dark-mode) .pricing-modal-title,
+body:not(.dark-mode) .pricing-plan-name,
+body:not(.dark-mode) .pricing-plan-price,
+body:not(.dark-mode) .pricing-plan-limit strong {
+    color: #171717 !important;
+}
+
+body:not(.dark-mode) .pricing-modal-message,
+body:not(.dark-mode) .pricing-modal-footnote,
+body:not(.dark-mode) .pricing-plan-copy,
+body:not(.dark-mode) .pricing-plan-features,
+body:not(.dark-mode) .pricing-plan-limit,
+body:not(.dark-mode) .pricing-plan-price span {
+    color: #65615a !important;
+}
+
+body:not(.dark-mode) .pricing-modal-close,
+body:not(.dark-mode) .pricing-plan-badge,
+body:not(.dark-mode) .pricing-plan-btn.is-current {
+    background: rgba(255, 255, 255, 0.56) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    color: #4f5968 !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card,
+body:not(.dark-mode) .pricing-plan-card:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 254, 249, 0.8), rgba(255, 255, 255, 0.52)) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    box-shadow:
+        0 18px 42px rgba(40, 31, 18, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card::before,
+body:not(.dark-mode) .pricing-plan-card.is-featured::before,
+body:not(.dark-mode) .pricing-plan-card.is-elite::before {
+    display: none !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card.is-featured,
+body:not(.dark-mode) .pricing-plan-card.is-featured:hover {
+    background:
+        radial-gradient(circle at 82% 0%, rgba(181, 130, 55, 0.14), transparent 34%),
+        rgba(255, 254, 249, 0.82) !important;
+    border-color: rgba(181, 130, 55, 0.42) !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card.is-elite,
+body:not(.dark-mode) .pricing-plan-card.is-elite:hover {
+    background:
+        radial-gradient(circle at 16% 6%, rgba(168, 102, 75, 0.12), transparent 38%),
+        radial-gradient(circle at 86% 4%, rgba(45, 111, 104, 0.12), transparent 34%),
+        rgba(255, 254, 249, 0.82) !important;
+    border-color: rgba(168, 102, 75, 0.42) !important;
+}
+
+body:not(.dark-mode) .pricing-plan-features i {
+    background: rgba(45, 111, 104, 0.14) !important;
+    color: #2d6f68 !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card.is-featured .pricing-plan-features i {
+    background: rgba(181, 130, 55, 0.16) !important;
+    color: #b58237 !important;
+}
+
+body:not(.dark-mode) .pricing-plan-card.is-elite .pricing-plan-features i {
+    background: rgba(168, 102, 75, 0.15) !important;
+    color: #a8664b !important;
+}
+
+body:not(.dark-mode) .pricing-plan-btn {
+    background: #171717 !important;
+    color: #fffaf0 !important;
+    box-shadow: 0 12px 28px rgba(23, 23, 23, 0.18) !important;
+}
+
+body:not(.dark-mode) .pricing-plan-btn:hover:not(:disabled) {
+    background: #28231b !important;
+}
+
+body:not(.dark-mode) .pricing-media-tile {
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)),
+        rgba(45, 111, 104, 0.14) !important;
+    border-color: rgba(37, 34, 28, 0.14) !important;
+    color: #171717 !important;
+}
+
+body:not(.dark-mode) .pricing-media-video {
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)),
+        rgba(168, 102, 75, 0.15) !important;
+}
+
 /* ===== TOOLTIPS ===== */
 body:not(.dark-mode) .tooltip::before {
     background-color: #1e293b !important;

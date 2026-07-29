@@ -1025,3 +1025,794 @@
 .dark-mode .pricing-plan-price span {
     color: rgba(226, 232, 240, 0.70);
 }
+
+/* ================================================================= */
+/* PREMIUM SUBSCRIPTION REDESIGN                                      */
+/* ================================================================= */
+
+:root {
+    --pricing-font: 'Outfit', var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    --pricing-ink: #171717;
+    --pricing-muted: #65615a;
+    --pricing-soft: #f6f4ee;
+    --pricing-panel: rgba(252, 250, 244, 0.96);
+    --pricing-card: rgba(255, 254, 249, 0.76);
+    --pricing-card-hover: rgba(255, 254, 249, 0.92);
+    --pricing-line: rgba(37, 34, 28, 0.12);
+    --pricing-line-strong: rgba(37, 34, 28, 0.22);
+    --pricing-gold: #b58237;
+    --pricing-gold-soft: rgba(181, 130, 55, 0.16);
+    --pricing-teal: #2d6f68;
+    --pricing-teal-soft: rgba(45, 111, 104, 0.14);
+    --pricing-clay: #a8664b;
+    --pricing-clay-soft: rgba(168, 102, 75, 0.15);
+    --pricing-shadow: rgba(40, 31, 18, 0.22);
+}
+
+.dark-mode {
+    --pricing-ink: #f5f1e8;
+    --pricing-muted: rgba(236, 229, 214, 0.7);
+    --pricing-soft: #11100e;
+    --pricing-panel: rgba(20, 19, 17, 0.96);
+    --pricing-card: rgba(255, 248, 230, 0.065);
+    --pricing-card-hover: rgba(255, 248, 230, 0.105);
+    --pricing-line: rgba(245, 237, 220, 0.13);
+    --pricing-line-strong: rgba(245, 237, 220, 0.24);
+    --pricing-gold-soft: rgba(207, 158, 84, 0.19);
+    --pricing-teal-soft: rgba(94, 157, 148, 0.18);
+    --pricing-clay-soft: rgba(190, 116, 82, 0.16);
+    --pricing-shadow: rgba(0, 0, 0, 0.68);
+}
+
+.subscription-section,
+.pricing-modal-dialog {
+    font-family: var(--pricing-font);
+}
+
+.subscription-section {
+    border-color: var(--pricing-line);
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(246, 244, 238, 0.44)),
+        var(--pricing-soft);
+    box-shadow:
+        0 18px 46px rgba(40, 31, 18, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.subscription-title,
+.pricing-modal-title,
+.pricing-plan-name,
+.pricing-plan-price,
+.subscription-current-name {
+    color: var(--pricing-ink);
+    letter-spacing: 0;
+    text-wrap: balance;
+}
+
+.subscription-subtitle,
+.pricing-modal-message,
+.pricing-plan-copy,
+.pricing-plan-features,
+.pricing-plan-limit,
+.subscription-progress-copy,
+.pricing-modal-footnote {
+    color: var(--pricing-muted);
+}
+
+.subscription-summary-card {
+    border-color: var(--pricing-line);
+    background:
+        radial-gradient(circle at 12% 0%, rgba(181, 130, 55, 0.12), transparent 34%),
+        rgba(255, 254, 249, 0.72);
+    box-shadow:
+        0 14px 36px rgba(40, 31, 18, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.subscription-meta-item {
+    border-color: var(--pricing-line);
+    background: rgba(255, 255, 255, 0.48);
+}
+
+.subscription-meta-item:hover {
+    border-color: var(--pricing-line-strong);
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 12px 28px rgba(40, 31, 18, 0.12);
+}
+
+.subscription-progress-track {
+    background: rgba(37, 34, 28, 0.08);
+}
+
+.subscription-progress-bar {
+    background: linear-gradient(90deg, var(--pricing-teal), var(--pricing-gold));
+}
+
+.subscription-status-badge {
+    min-width: 78px;
+    border-radius: 8px;
+    border-color: var(--pricing-line);
+    background: rgba(255, 255, 255, 0.58);
+}
+
+.subscription-status-badge.status-free {
+    color: var(--pricing-teal);
+}
+
+.subscription-status-badge.status-pro {
+    color: var(--pricing-gold);
+}
+
+.subscription-status-badge.status-elite {
+    color: var(--pricing-clay);
+}
+
+.pricing-modal {
+    padding: 22px;
+}
+
+.pricing-modal-backdrop {
+    background:
+        radial-gradient(circle at 50% 16%, rgba(181, 130, 55, 0.18), transparent 28%),
+        rgba(10, 9, 8, 0.78);
+}
+
+.pricing-modal-dialog {
+    width: min(1080px, 100%);
+    border-radius: 18px;
+    border-color: var(--pricing-line);
+    background:
+        radial-gradient(circle at 12% 0%, rgba(181, 130, 55, 0.16), transparent 32%),
+        radial-gradient(circle at 86% 14%, rgba(45, 111, 104, 0.12), transparent 34%),
+        linear-gradient(180deg, var(--pricing-panel), rgba(246, 244, 238, 0.92));
+    box-shadow:
+        0 34px 88px var(--pricing-shadow),
+        0 1px 0 rgba(255, 255, 255, 0.62) inset;
+    padding: 26px;
+}
+
+.pricing-modal-dialog::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.18;
+    background-image:
+        linear-gradient(rgba(37, 34, 28, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 34, 28, 0.14) 1px, transparent 1px);
+    background-size: 28px 28px;
+    -webkit-mask-image: radial-gradient(circle at 50% 14%, black, transparent 70%);
+    mask-image: radial-gradient(circle at 50% 14%, black, transparent 70%);
+}
+
+.pricing-modal-header {
+    margin-bottom: 24px;
+}
+
+.pricing-modal-kicker {
+    color: var(--pricing-teal);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+}
+
+.pricing-kicker-dot {
+    border-radius: 2px;
+    background: var(--pricing-gold);
+    box-shadow: 0 0 0 4px var(--pricing-gold-soft);
+}
+
+.pricing-modal-title {
+    max-width: 680px;
+    margin-top: 9px;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 0.98;
+    font-weight: 800;
+}
+
+.pricing-modal-message {
+    max-width: 620px;
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.55;
+    text-wrap: pretty;
+}
+
+.pricing-modal-close {
+    border-radius: 10px;
+    border-color: var(--pricing-line);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.pricing-modal-close:hover {
+    border-color: var(--pricing-line-strong);
+    background: rgba(255, 255, 255, 0.76);
+    box-shadow: 0 14px 28px rgba(40, 31, 18, 0.14);
+}
+
+.pricing-plan-grid {
+    gap: 14px;
+}
+
+.pricing-plan-shell {
+    border-radius: 14px;
+}
+
+.pricing-plan-card {
+    min-height: 414px;
+    border-radius: 14px;
+    border-color: var(--pricing-line);
+    background:
+        linear-gradient(180deg, var(--pricing-card), rgba(255, 255, 255, 0.48));
+    padding: 18px;
+    box-shadow:
+        0 16px 36px rgba(40, 31, 18, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.pricing-plan-card::before {
+    height: 3px;
+    opacity: 1;
+    background: linear-gradient(90deg, var(--pricing-line), var(--pricing-teal), var(--pricing-line));
+}
+
+.pricing-plan-card:hover {
+    border-color: var(--pricing-line-strong);
+    background: var(--pricing-card-hover);
+    box-shadow:
+        0 22px 48px rgba(40, 31, 18, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.pricing-plan-card.is-featured {
+    border-color: rgba(181, 130, 55, 0.42);
+    background:
+        radial-gradient(circle at 82% 0%, var(--pricing-gold-soft), transparent 34%),
+        var(--pricing-card);
+    box-shadow:
+        0 0 0 1px rgba(181, 130, 55, 0.16) inset,
+        0 18px 42px rgba(181, 130, 55, 0.14);
+}
+
+.pricing-plan-card.is-featured::before {
+    background: linear-gradient(90deg, rgba(181, 130, 55, 0.05), var(--pricing-gold), rgba(181, 130, 55, 0.05));
+}
+
+.pricing-plan-card.is-featured:hover {
+    border-color: rgba(181, 130, 55, 0.58);
+    box-shadow:
+        0 0 0 1px rgba(181, 130, 55, 0.24) inset,
+        0 24px 54px rgba(181, 130, 55, 0.2);
+}
+
+.pricing-plan-card.is-elite {
+    border-color: rgba(168, 102, 75, 0.42);
+    background:
+        radial-gradient(circle at 16% 6%, var(--pricing-clay-soft), transparent 38%),
+        radial-gradient(circle at 86% 4%, var(--pricing-teal-soft), transparent 34%),
+        var(--pricing-card);
+}
+
+.pricing-plan-card.is-elite::before {
+    background: linear-gradient(90deg, rgba(168, 102, 75, 0.08), var(--pricing-clay), var(--pricing-teal));
+}
+
+.pricing-plan-card.is-elite:hover {
+    border-color: rgba(168, 102, 75, 0.62);
+    box-shadow:
+        0 0 0 1px rgba(168, 102, 75, 0.2) inset,
+        0 24px 54px rgba(168, 102, 75, 0.16);
+}
+
+.pricing-plan-card.is-current-plan {
+    border-color: rgba(45, 111, 104, 0.44);
+    box-shadow:
+        0 0 0 1px rgba(45, 111, 104, 0.18) inset,
+        0 18px 42px rgba(45, 111, 104, 0.14);
+}
+
+.pricing-plan-badge {
+    min-height: 26px;
+    border-radius: 7px;
+    border-color: var(--pricing-line);
+    background: rgba(255, 255, 255, 0.52);
+    color: var(--pricing-muted);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.pricing-plan-name {
+    margin-top: 18px;
+    font-size: 26px;
+    line-height: 1;
+}
+
+.pricing-plan-price {
+    margin-top: 8px;
+    font-size: 36px;
+    font-variant-numeric: tabular-nums;
+}
+
+.pricing-plan-price span {
+    color: var(--pricing-muted);
+}
+
+.pricing-plan-copy {
+    min-height: 64px;
+    margin: 13px 0 18px;
+    font-size: 13px;
+    text-wrap: pretty;
+}
+
+.pricing-plan-features {
+    min-height: 84px;
+    gap: 8px;
+    font-size: 12.5px;
+}
+
+.pricing-plan-features i {
+    border-radius: 6px;
+    background: var(--pricing-teal-soft);
+    color: var(--pricing-teal);
+}
+
+.pricing-plan-card.is-featured .pricing-plan-features i {
+    background: var(--pricing-gold-soft);
+    color: var(--pricing-gold);
+}
+
+.pricing-plan-card.is-elite .pricing-plan-features i {
+    background: var(--pricing-clay-soft);
+    color: var(--pricing-clay);
+}
+
+.pricing-plan-limit {
+    padding-top: 14px;
+    border-top: 1px solid var(--pricing-line);
+}
+
+.pricing-plan-limit span {
+    color: var(--pricing-muted);
+    letter-spacing: 0.12em;
+}
+
+.pricing-plan-limit strong {
+    color: var(--pricing-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.pricing-plan-btn {
+    border-radius: 10px;
+    background: #171717;
+    color: #fffaf0;
+    box-shadow: 0 12px 28px rgba(23, 23, 23, 0.18);
+}
+
+.pricing-plan-btn:hover:not(:disabled) {
+    background: #28231b;
+    box-shadow:
+        0 16px 34px rgba(23, 23, 23, 0.22),
+        0 6px 16px rgba(181, 130, 55, 0.16);
+}
+
+.pricing-plan-btn.is-current {
+    border-color: var(--pricing-line);
+    background: rgba(255, 255, 255, 0.56);
+    color: var(--pricing-ink);
+    box-shadow: none;
+}
+
+.pricing-media-rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 4px 0 16px;
+}
+
+.pricing-media-tile {
+    position: relative;
+    overflow: hidden;
+    min-height: 58px;
+    border: 1px solid var(--pricing-line);
+    border-radius: 10px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)),
+        var(--pricing-teal-soft);
+    color: var(--pricing-ink);
+    display: grid;
+    align-content: end;
+    gap: 5px;
+    padding: 10px;
+}
+
+.pricing-media-tile::before {
+    content: '';
+    position: absolute;
+    inset: -35% -20% auto auto;
+    width: 76px;
+    height: 76px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.38);
+    transform: rotate(18deg);
+}
+
+.pricing-media-tile i,
+.pricing-media-tile span {
+    position: relative;
+    z-index: 1;
+}
+
+.pricing-media-tile i {
+    font-size: 14px;
+    color: var(--pricing-teal);
+}
+
+.pricing-media-tile span {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.pricing-media-video {
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)),
+        var(--pricing-clay-soft);
+}
+
+.pricing-media-video i {
+    color: var(--pricing-clay);
+}
+
+.native-metal-fx-canvas {
+    filter:
+        brightness(1.04)
+        saturate(0.92)
+        drop-shadow(0 0 5px rgba(181, 130, 55, 0.22))
+        drop-shadow(0 0 14px rgba(181, 130, 55, 0.12));
+}
+
+.pricing-modal-footer {
+    border-top-color: var(--pricing-line);
+}
+
+.pricing-modal-footnote i {
+    color: var(--pricing-teal);
+}
+
+.pricing-modal-close:focus-visible,
+.pricing-plan-btn:focus-visible,
+.subscription-manage-btn:focus-visible {
+    outline-color: var(--pricing-teal);
+}
+
+.dark-mode .subscription-section {
+    border-color: var(--pricing-line);
+    background:
+        radial-gradient(circle at 18% 0%, rgba(181, 130, 55, 0.13), transparent 34%),
+        rgba(20, 19, 17, 0.68);
+    box-shadow:
+        0 20px 52px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 248, 230, 0.08);
+}
+
+.dark-mode .subscription-summary-card,
+.dark-mode .subscription-meta-item,
+.dark-mode .pricing-modal-close,
+.dark-mode .pricing-plan-badge,
+.dark-mode .pricing-plan-btn.is-current {
+    border-color: var(--pricing-line);
+    background: rgba(255, 248, 230, 0.06);
+}
+
+.dark-mode .subscription-meta-item:hover,
+.dark-mode .pricing-modal-close:hover {
+    border-color: var(--pricing-line-strong);
+    background: rgba(255, 248, 230, 0.1);
+}
+
+.dark-mode .pricing-modal-backdrop {
+    background:
+        radial-gradient(circle at 50% 10%, rgba(181, 130, 55, 0.16), transparent 30%),
+        rgba(5, 5, 4, 0.86);
+}
+
+.dark-mode .pricing-modal-dialog {
+    border-color: var(--pricing-line);
+    background:
+        radial-gradient(circle at 12% 0%, rgba(181, 130, 55, 0.14), transparent 32%),
+        radial-gradient(circle at 88% 16%, rgba(45, 111, 104, 0.16), transparent 36%),
+        linear-gradient(180deg, var(--pricing-panel), rgba(14, 13, 12, 0.96));
+    box-shadow:
+        0 34px 88px rgba(0, 0, 0, 0.82),
+        0 1px 0 rgba(255, 248, 230, 0.08) inset;
+}
+
+.dark-mode .pricing-plan-card,
+.dark-mode .pricing-plan-card:hover,
+.dark-mode .pricing-plan-card.is-featured,
+.dark-mode .pricing-plan-card.is-featured:hover,
+.dark-mode .pricing-plan-card.is-elite,
+.dark-mode .pricing-plan-card.is-elite:hover,
+.dark-mode .pricing-plan-card.is-current-plan,
+.dark-mode .pricing-plan-card.is-current-plan:hover {
+    color: var(--pricing-ink);
+    border-color: var(--pricing-line);
+    background:
+        radial-gradient(circle at 82% 0%, rgba(181, 130, 55, 0.11), transparent 30%),
+        var(--pricing-card);
+    box-shadow:
+        0 22px 54px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 248, 230, 0.08);
+}
+
+.dark-mode .pricing-plan-card.is-featured {
+    border-color: rgba(207, 158, 84, 0.42);
+}
+
+.dark-mode .pricing-plan-card.is-featured:hover {
+    border-color: rgba(207, 158, 84, 0.58);
+    box-shadow:
+        0 0 0 1px rgba(207, 158, 84, 0.2) inset,
+        0 26px 58px rgba(0, 0, 0, 0.58),
+        0 10px 26px rgba(207, 158, 84, 0.12);
+}
+
+.dark-mode .pricing-plan-card.is-elite {
+    border-color: rgba(190, 116, 82, 0.42);
+    background:
+        radial-gradient(circle at 16% 6%, var(--pricing-clay-soft), transparent 38%),
+        radial-gradient(circle at 86% 4%, var(--pricing-teal-soft), transparent 34%),
+        var(--pricing-card);
+}
+
+.dark-mode .pricing-plan-card.is-elite:hover {
+    border-color: rgba(190, 116, 82, 0.6);
+    box-shadow:
+        0 0 0 1px rgba(190, 116, 82, 0.18) inset,
+        0 26px 58px rgba(0, 0, 0, 0.58),
+        0 10px 26px rgba(45, 111, 104, 0.12);
+}
+
+.dark-mode .pricing-modal-title,
+.dark-mode .pricing-plan-name,
+.dark-mode .pricing-plan-price,
+.dark-mode .subscription-current-name,
+.dark-mode .pricing-plan-limit strong {
+    color: var(--pricing-ink);
+    text-shadow: none;
+}
+
+.dark-mode .pricing-modal-message,
+.dark-mode .pricing-modal-footnote,
+.dark-mode .pricing-plan-copy,
+.dark-mode .subscription-subtitle,
+.dark-mode .subscription-progress-copy,
+.dark-mode .pricing-plan-features,
+.dark-mode .pricing-plan-limit,
+.dark-mode .pricing-plan-price span {
+    color: var(--pricing-muted);
+}
+
+.dark-mode .pricing-plan-btn {
+    background: #f5f1e8;
+    color: #15120d;
+    box-shadow: 0 14px 34px rgba(245, 241, 232, 0.14);
+}
+
+.dark-mode .pricing-plan-btn:hover:not(:disabled) {
+    background: #fff9ec;
+    box-shadow:
+        0 18px 42px rgba(245, 241, 232, 0.18),
+        0 6px 18px rgba(181, 130, 55, 0.18);
+}
+
+.dark-mode .pricing-media-tile {
+    background:
+        linear-gradient(135deg, rgba(255, 248, 230, 0.08), rgba(255, 248, 230, 0.03)),
+        var(--pricing-teal-soft);
+}
+
+.dark-mode .pricing-media-video {
+    background:
+        linear-gradient(135deg, rgba(255, 248, 230, 0.08), rgba(255, 248, 230, 0.03)),
+        var(--pricing-clay-soft);
+}
+
+.dark-mode .native-metal-fx-canvas {
+    filter:
+        brightness(1.12)
+        saturate(0.98)
+        drop-shadow(0 0 6px rgba(207, 158, 84, 0.32))
+        drop-shadow(0 0 16px rgba(181, 130, 55, 0.16));
+}
+
+@media (max-width: 900px) {
+    .pricing-plan-card {
+        min-height: 0;
+    }
+
+    .pricing-plan-copy,
+    .pricing-plan-features {
+        min-height: 0;
+    }
+}
+
+@media (max-width: 720px) {
+    .pricing-modal-title {
+        font-size: clamp(26px, 9vw, 34px);
+    }
+
+    .pricing-modal-dialog {
+        padding: 18px;
+        border-radius: 14px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pricing-media-tile::before {
+        transform: none;
+    }
+}
+
+/* ================================================================= */
+/* PRICING FIT CORRECTIONS                                            */
+/* ================================================================= */
+
+.floating-window.pricing-modal-expanded {
+    left: 50%;
+    width: min(1500px, calc(100vw - 96px));
+    height: min(900px, calc(100vh - 72px));
+    max-width: calc(100vw - 96px);
+    max-height: calc(100vh - 72px);
+}
+
+.pricing-modal {
+    padding: 16px 22px;
+}
+
+.pricing-modal-dialog {
+    width: min(1320px, 100%);
+    max-height: calc(100% - 16px);
+    overflow: visible;
+    padding: 22px 28px 20px;
+}
+
+.pricing-modal-dialog::before {
+    opacity: 0.1;
+}
+
+.pricing-modal-header {
+    margin-bottom: 18px;
+}
+
+.pricing-modal-title {
+    max-width: 860px;
+    font-size: clamp(30px, 3.2vw, 40px);
+    line-height: 1.02;
+}
+
+.pricing-modal-message {
+    max-width: 780px;
+    margin-top: 10px;
+}
+
+.pricing-plan-grid {
+    align-items: stretch;
+    gap: 16px;
+}
+
+.pricing-plan-shell {
+    display: flex;
+}
+
+.pricing-plan-card {
+    width: 100%;
+    min-height: 542px;
+    padding: 18px 20px 20px;
+}
+
+.pricing-plan-card::before,
+.pricing-plan-card.is-featured::before,
+.pricing-plan-card.is-elite::before {
+    display: none;
+}
+
+.pricing-plan-name {
+    margin-top: 16px;
+    font-size: 25px;
+}
+
+.pricing-plan-price {
+    margin-top: 7px;
+    font-size: 34px;
+}
+
+.pricing-plan-copy {
+    min-height: 52px;
+    margin: 12px 0 16px;
+}
+
+.pricing-plan-features {
+    min-height: 128px;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.pricing-media-rail {
+    margin: 0 0 14px;
+}
+
+.pricing-media-tile {
+    min-height: 52px;
+}
+
+.pricing-plan-limit {
+    padding-top: 13px;
+}
+
+.pricing-plan-btn,
+.native-metal-fx {
+    margin-top: 14px;
+}
+
+.pricing-modal-footer {
+    margin-top: 14px;
+    padding-top: 12px;
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+    .floating-window.pricing-modal-expanded {
+        height: calc(100vh - 48px);
+        max-height: calc(100vh - 48px);
+    }
+
+    .pricing-modal-dialog {
+        padding: 18px 24px 16px;
+    }
+
+    .pricing-modal-title {
+        font-size: clamp(27px, 2.7vw, 34px);
+    }
+
+    .pricing-plan-card {
+        min-height: 500px;
+        padding: 16px 18px 18px;
+    }
+
+    .pricing-plan-copy {
+        min-height: 46px;
+    }
+
+    .pricing-plan-features {
+        min-height: 118px;
+        font-size: 12px;
+    }
+
+    .pricing-media-tile {
+        min-height: 48px;
+    }
+}
+
+@media (max-width: 900px) {
+    .floating-window.pricing-modal-expanded {
+        width: min(760px, calc(100vw - 32px));
+        height: min(92vh, calc(100vh - 32px));
+        max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
+    }
+
+    .pricing-modal-dialog {
+        overflow: auto;
+        max-height: calc(100% - 16px);
+    }
+
+    .pricing-plan-card {
+        min-height: 0;
+    }
+
+    .pricing-plan-features {
+        min-height: 0;
+    }
+}
