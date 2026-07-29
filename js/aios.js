@@ -36,6 +36,9 @@ class AIOS {
         this.userFilesUploadInProgress = false;
         this.userFilesUploadFingerprints = new Set();
         this.pricingModalContext = null;
+        this.pricingModalCloseTimer = null;
+        this.pricingModalOpenFrame = null;
+        this.pricingModalReturnFocus = null;
         window.__aiosSubscriptionLimitEventToken = window.__aiosSubscriptionLimitEventToken || self.crypto?.randomUUID?.() || String(Date.now());
     }
 
@@ -144,10 +147,12 @@ class AIOS {
             subscriptionUsageBar: document.getElementById('subscription-usage-bar'),
             subscriptionProgressCopy: document.getElementById('subscription-progress-copy'),
             pricingModal: document.getElementById('pricing-modal'),
+            pricingModalDialog: document.querySelector('#pricing-modal .pricing-modal-dialog'),
             pricingModalBackdrop: document.getElementById('pricing-modal-backdrop'),
             pricingModalClose: document.getElementById('pricing-modal-close'),
             pricingModalMessage: document.getElementById('pricing-modal-message'),
             pricingModalFootnote: document.getElementById('pricing-modal-footnote'),
+            pricingModalFootnoteText: document.getElementById('pricing-modal-footnote-text'),
             planBtnFree: document.getElementById('plan-btn-free'),
             planBtnPro: document.getElementById('plan-btn-pro'),
             planBtnElite: document.getElementById('plan-btn-elite'),
@@ -473,6 +478,7 @@ class AIOS {
                 this.startSubscriptionCheckout(button.dataset.planType);
             });
         });
+        this.setupPricingCardMotion();
         this.elements.memoryForm?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleAddMemory();
@@ -513,8 +519,15 @@ class AIOS {
             });
         });
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && this.elements.pricingModal && !this.elements.pricingModal.classList.contains('hidden')) {
+            const isPricingOpen = this.elements.pricingModal
+                && !this.elements.pricingModal.classList.contains('hidden')
+                && !this.elements.pricingModal.classList.contains('is-closing');
+            if (event.key === 'Escape' && isPricingOpen) {
                 this.closePricingModal();
+                return;
+            }
+            if (event.key === 'Tab' && isPricingOpen) {
+                this.trapPricingModalFocus(event);
             }
         });
 
@@ -1026,8 +1039,86 @@ class AIOS {
         });
     }
 
+    setupPricingCardMotion() {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        this.elements.pricingPlanCards?.forEach((card) => {
+            const shell = card.closest('.t-tilt');
+            if (!shell || shell.dataset.tiltReady === 'true') return;
+            shell.dataset.tiltReady = 'true';
+            let animationFrame = null;
+            let pointerEvent = null;
+
+            const reset = () => {
+                if (animationFrame) cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+                pointerEvent = null;
+                shell.classList.remove('is-hover');
+                card.classList.remove('is-tilting');
+                card.style.setProperty('--tilt-rx', '0deg');
+                card.style.setProperty('--tilt-ry', '0deg');
+            };
+
+            const renderTilt = () => {
+                animationFrame = null;
+                if (!pointerEvent || reduceMotion.matches) return;
+                const bounds = shell.getBoundingClientRect();
+                if (!bounds.width || !bounds.height) return;
+                const x = Math.min(1, Math.max(0, (pointerEvent.clientX - bounds.left) / bounds.width));
+                const y = Math.min(1, Math.max(0, (pointerEvent.clientY - bounds.top) / bounds.height));
+                const maxTilt = 5;
+                shell.classList.add('is-hover');
+                card.classList.add('is-tilting');
+                card.style.setProperty('--tilt-ry', `${((x - 0.5) * maxTilt).toFixed(2)}deg`);
+                card.style.setProperty('--tilt-rx', `${((0.5 - y) * maxTilt).toFixed(2)}deg`);
+                card.style.setProperty('--tilt-gx', `${(x * 100).toFixed(1)}%`);
+                card.style.setProperty('--tilt-gy', `${(y * 100).toFixed(1)}%`);
+            };
+
+            shell.addEventListener('pointermove', (event) => {
+                if (event.pointerType !== 'mouse') return;
+                pointerEvent = event;
+                if (!animationFrame) animationFrame = requestAnimationFrame(renderTilt);
+            });
+            shell.addEventListener('pointerleave', reset);
+        });
+    }
+
+    trapPricingModalFocus(event) {
+        const dialog = this.elements.pricingModalDialog;
+        if (!dialog) return;
+        const focusable = [...dialog.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter((element) => !element.hasAttribute('hidden'));
+        if (!focusable.length) {
+            event.preventDefault();
+            dialog.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!dialog.contains(document.activeElement)) {
+            event.preventDefault();
+            first.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
+    _getPricingModalCloseDuration() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0;
+        const value = getComputedStyle(document.documentElement).getPropertyValue('--modal-close-dur').trim();
+        if (!value) return 150;
+        const duration = Number.parseFloat(value);
+        return Number.isFinite(duration) ? duration * (value.endsWith('s') && !value.endsWith('ms') ? 1000 : 1) : 150;
+    }
+
     async openPricingModal(options = {}) {
         if (!this.elements.pricingModal) return;
+        this.pricingModalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
         if (options.summary) {
             this.renderSubscriptionSummary(options.summary);
@@ -1046,20 +1137,45 @@ class AIOS {
         this.switchTab('account');
         this.pricingModalContext = options || {};
         if (this.elements.pricingModalMessage) {
-            this.elements.pricingModalMessage.textContent = options.message || 'Subscriptions are billed monthly through Razorpay.';
+            this.elements.pricingModalMessage.textContent = options.message || 'Simple monthly plans. Upgrade when your work needs more room.';
         }
-        if (this.elements.pricingModalFootnote) {
-            this.elements.pricingModalFootnote.textContent = options.footnote || 'Your current usage and renewal window will update after payment verification.';
+        if (this.elements.pricingModalFootnoteText) {
+            this.elements.pricingModalFootnoteText.textContent = options.footnote || 'Your usage and renewal window update after secure payment verification.';
         }
-        this.elements.pricingModal.classList.remove('hidden');
+        clearTimeout(this.pricingModalCloseTimer);
+        if (this.pricingModalOpenFrame) cancelAnimationFrame(this.pricingModalOpenFrame);
+        this.elements.pricingModal.classList.remove('hidden', 'is-closing');
+        this.elements.pricingModalDialog?.classList.remove('is-closing');
         this.elements.pricingModal.setAttribute('aria-hidden', 'false');
+        this.pricingModalOpenFrame = requestAnimationFrame(() => {
+            this.elements.pricingModal.classList.add('is-open');
+            this.elements.pricingModalDialog?.classList.add('is-open');
+            this.elements.pricingModalClose?.focus({ preventScroll: true });
+            this.pricingModalOpenFrame = null;
+        });
     }
 
     closePricingModal() {
-        if (!this.elements.pricingModal) return;
-        this.elements.pricingModal.classList.add('hidden');
+        if (!this.elements.pricingModal || this.elements.pricingModal.classList.contains('hidden')) return;
+        if (this.pricingModalOpenFrame) cancelAnimationFrame(this.pricingModalOpenFrame);
+        this.pricingModalOpenFrame = null;
+        clearTimeout(this.pricingModalCloseTimer);
+        this.elements.pricingModal.classList.remove('is-open');
+        this.elements.pricingModal.classList.add('is-closing');
+        this.elements.pricingModalDialog?.classList.remove('is-open');
+        this.elements.pricingModalDialog?.classList.add('is-closing');
         this.elements.pricingModal.setAttribute('aria-hidden', 'true');
         this.pricingModalContext = null;
+        this.pricingModalCloseTimer = setTimeout(() => {
+            this.elements.pricingModal.classList.add('hidden');
+            this.elements.pricingModal.classList.remove('is-closing');
+            this.elements.pricingModalDialog?.classList.remove('is-closing');
+            if (this.pricingModalReturnFocus?.isConnected) {
+                this.pricingModalReturnFocus.focus({ preventScroll: true });
+            }
+            this.pricingModalReturnFocus = null;
+            this.pricingModalCloseTimer = null;
+        }, this._getPricingModalCloseDuration());
     }
 
     async startSubscriptionCheckout(planType) {
@@ -2035,12 +2151,18 @@ class AIOS {
                     <div class="deployment-card-actions">
                         <div class="deployment-version-chip ${deployments.length > 1 ? '' : 'single'}">
                             <i class="fas fa-code-branch deployment-version-icon"></i>
-                            <select class="deployment-version-select" id="deployment-version-${this._safeText(project.site_id)}">
-                                ${deployments.map((item) => {
-                                    const isActive = String(item?.deployment_status || '').toLowerCase() === 'active';
-                                    return `<option value="${this._safeText(item.deployment_id)}" style="background:#1a1a1e;color:#f0f0f0;">v${this._safeText(item.version)}${isActive ? '  ✦ Active' : ''}</option>`;
-                                }).join('')}
-                            </select>
+                            <div class="deployment-version-dropdown" id="deployment-version-${this._safeText(project.site_id)}">
+                                <button class="deployment-version-trigger" type="button" ${deployments.length <= 1 ? 'disabled' : ''}>
+                                    <span class="deployment-version-trigger-text"></span>
+                                    ${deployments.length > 1 ? '<svg class="deployment-version-chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' : ''}
+                                </button>
+                                <ul class="deployment-version-menu">
+                                    ${deployments.map((item) => {
+                                        const isActive = String(item?.deployment_status || '').toLowerCase() === 'active';
+                                        return `<li class="deployment-version-menu-item" data-value="${this._safeText(item.deployment_id)}"><span class="deployment-version-menu-label">v${this._safeText(item.version)}</span>${isActive ? '<span class="deployment-version-active-badge">Active</span>' : ''}</li>`;
+                                    }).join('')}
+                                </ul>
+                            </div>
                         </div>
                         <button class="deployment-action-btn deployment-code-btn" title="Start Coding Workspace">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
@@ -2074,8 +2196,11 @@ class AIOS {
                     </div>
                 </div>
             `;
-
-            const versionSelect = card.querySelector('.deployment-version-select');
+            const versionDropdown = card.querySelector('.deployment-version-dropdown');
+            const versionTrigger = card.querySelector('.deployment-version-trigger');
+            const versionTriggerText = card.querySelector('.deployment-version-trigger-text');
+            const versionMenu = card.querySelector('.deployment-version-menu');
+            const versionMenuItems = card.querySelectorAll('.deployment-version-menu-item');
             const statusPill = card.querySelector('[data-field="status_badge"]');
             const fieldNodes = {
                 site_id: card.querySelector('[data-field="site_id"]'),
@@ -2103,16 +2228,47 @@ class AIOS {
                 if (fieldNodes.version) fieldNodes.version.textContent = `v${this._safeText(selectedDeployment?.version)}`;
                 if (fieldNodes.deployment_id) fieldNodes.deployment_id.textContent = this._safeText(selectedDeployment?.deployment_id);
                 if (fieldNodes.r2_prefix) fieldNodes.r2_prefix.textContent = this._safeText(selectedDeployment?.r2_prefix);
-                if (versionSelect) {
-                    versionSelect.value = String(selectedDeployment?.deployment_id || '');
-                    versionSelect.disabled = deployments.length <= 1;
+
+                // Update trigger text
+                if (versionTriggerText) {
+                    const isActive = status === 'active';
+                    versionTriggerText.textContent = `v${this._safeText(selectedDeployment?.version)}${isActive ? ' · Active' : ''}`;
                 }
+
+                // Update active state on menu items
+                versionMenuItems.forEach(item => {
+                    item.classList.toggle('selected', String(item.dataset.value) === String(selectedDeployment?.deployment_id));
+                });
             };
 
             applyDeploymentSelection(selectedDeployment?.deployment_id);
 
-            versionSelect?.addEventListener('change', (event) => {
-                applyDeploymentSelection(event.target?.value);
+            // Toggle dropdown menu
+            versionTrigger?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = versionDropdown.classList.toggle('open');
+                // Close all other open dropdowns
+                if (isOpen) {
+                    document.querySelectorAll('.deployment-version-dropdown.open').forEach(dd => {
+                        if (dd !== versionDropdown) dd.classList.remove('open');
+                    });
+                }
+            });
+
+            // Handle item selection
+            versionMenuItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    applyDeploymentSelection(item.dataset.value);
+                    versionDropdown.classList.remove('open');
+                });
+            });
+
+            // Close on outside click
+            document.addEventListener('click', (e) => {
+                if (!versionDropdown?.contains(e.target)) {
+                    versionDropdown?.classList.remove('open');
+                }
             });
 
             const expandBtn = card.querySelector('.expand-deployment-btn');

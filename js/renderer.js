@@ -899,6 +899,8 @@ class UIManager {
             window.projectWorkspace.ensureContext({}, { syncUi: true });
         }
 
+
+
         this.refreshWorkspaceIconStates(isOpen, this.state.getState().isComputerWorkspaceOpen);
 
         if (window.floatingWindowManager) {
@@ -912,6 +914,9 @@ class UIManager {
     updateComputerWorkspaceVisibility(isOpen) {
         document.getElementById('computer-workspace-chip')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('computer-panel-open', isOpen);
+
+        // Toggle the inline toolbar action buttons
+        document.getElementById('computer-toolbar-actions')?.classList.toggle('hidden', !isOpen);
 
         // Opening from sidebar must also guarantee computer routing mode is active.
         if (isOpen) {
