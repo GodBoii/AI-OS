@@ -1170,13 +1170,14 @@ class AIOS {
         this.switchTab('account');
         this.pricingModalContext = options || {};
         if (this.elements.pricingModalMessage) {
-            this.elements.pricingModalMessage.textContent = options.message || 'Simple monthly plans. Upgrade when your work needs more room.';
+            this.elements.pricingModalMessage.textContent = options.message || 'Usage, automation, and creative generation scale together. Start light, then move up when the work gets heavier.';
         }
         if (this.elements.pricingModalFootnoteText) {
             this.elements.pricingModalFootnoteText.textContent = options.footnote || 'Your usage and renewal window update after secure payment verification.';
         }
         clearTimeout(this.pricingModalCloseTimer);
         if (this.pricingModalOpenFrame) cancelAnimationFrame(this.pricingModalOpenFrame);
+        this.elements.window?.classList.add('pricing-modal-expanded');
         this.elements.pricingModal.classList.remove('hidden', 'is-closing');
         this.elements.pricingModalDialog?.classList.remove('is-closing');
         this.elements.pricingModal.setAttribute('aria-hidden', 'false');
@@ -1190,7 +1191,10 @@ class AIOS {
     }
 
     closePricingModal() {
-        if (!this.elements.pricingModal || this.elements.pricingModal.classList.contains('hidden')) return;
+        if (!this.elements.pricingModal || this.elements.pricingModal.classList.contains('hidden')) {
+            this.elements.window?.classList.remove('pricing-modal-expanded');
+            return;
+        }
         if (this.pricingModalOpenFrame) cancelAnimationFrame(this.pricingModalOpenFrame);
         this.pricingModalOpenFrame = null;
         clearTimeout(this.pricingModalCloseTimer);
@@ -1205,6 +1209,7 @@ class AIOS {
             this.elements.pricingModal.classList.add('hidden');
             this.elements.pricingModal.classList.remove('is-closing');
             this.elements.pricingModalDialog?.classList.remove('is-closing');
+            this.elements.window?.classList.remove('pricing-modal-expanded');
             if (this.pricingModalReturnFocus?.isConnected) {
                 this.pricingModalReturnFocus.focus({ preventScroll: true });
             }
