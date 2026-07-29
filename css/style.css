@@ -27,18 +27,21 @@ body {
     justify-content: center;
     padding: 0.5rem 0;
     transition: all var(--anim-normal) var(--easing-standard);
+    overflow: visible;
 }
 
 .sidebar-icons {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.42rem;
     align-items: center;
     background: transparent;
     border: none;
     border-radius: 0;
     box-shadow: none;
-    padding: 0.5rem 0;
+    padding: 0.5rem 0.25rem;
+    overflow: visible;
+    isolation: isolate;
 }
 
 .background-chat-stack {
@@ -51,39 +54,135 @@ body {
 }
 
 .sidebar-icon {
+    --dock-size: 2.25rem;
+    --dock-pop: 0px;
+    --dock-hover-lift: 0px;
+    --dock-z: 1;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: var(--dock-size);
+    height: var(--dock-size);
+    min-width: var(--dock-size);
+    min-height: var(--dock-size);
+    flex: 0 0 auto;
     border-radius: 0.5rem;
     color: var(--icon-color);
     font-size: 1.1rem;
     cursor: pointer;
-    transition: all var(--anim-normal) var(--easing-smooth);
+    transition:
+        color var(--anim-normal) var(--easing-smooth),
+        background-color var(--anim-normal) var(--easing-smooth),
+        border-color var(--anim-normal) var(--easing-smooth),
+        box-shadow var(--anim-normal) var(--easing-smooth);
+    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0);
+    transform-origin: left center;
+    will-change: width, height, transform;
+    z-index: var(--dock-z);
     background: transparent;
     border: 1.5px solid transparent;
 }
 
 .sidebar-icon:hover {
+    --dock-hover-lift: -1px;
     color: var(--accent-color);
     background-color: var(--accent-muted);
     border-color: var(--accent-color);
-    transform: translateY(-2px);
+    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0);
     box-shadow:
         0 4px 12px rgba(45, 55, 72, 0.15),
         0 2px 6px rgba(45, 55, 72, 0.10);
 }
 
 .sidebar-icon:active {
-    transform: translateY(0);
+    --dock-hover-lift: 0px;
+    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0) scale(0.97);
 }
 
 .sidebar-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 70%;
+    height: 70%;
     transition: transform var(--anim-normal) var(--easing-smooth);
+}
+
+.sidebar-icon #aios-settings-avatar-container {
+    width: 70%;
+    height: 70%;
+    border-radius: 50%;
+}
+
+.sidebar-icon #aios-settings-avatar-container svg,
+.sidebar-icon #aios-settings-avatar-container .user-avatar {
+    width: 100%;
+    height: 100%;
+}
+
+.sidebar-icon.sidebar-dock-focused {
+    color: var(--accent-color);
+}
+
+.sidebar-dock-tooltip {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1010;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(8px, -50%, 0) scale(0.96);
+    transform-origin: left center;
+    transition:
+        opacity var(--motion-duration-fast) var(--motion-ease-out),
+        transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.sidebar-dock-tooltip.visible {
+    opacity: 1;
+    transform: translate3d(0, -50%, 0) scale(1);
+}
+
+.sidebar-dock-tooltip span {
+    display: block;
+    padding: 0.38rem 0.55rem;
+    border-radius: 0.45rem;
+    background: rgba(12, 12, 12, 0.92);
+    color: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 10px 28px rgba(0, 0, 0, 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.sidebar-dock-tooltip::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    background: rgba(12, 12, 12, 0.92);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transform: translateY(-50%) rotate(45deg);
+}
+
+body:not(.dark-mode) .sidebar-dock-tooltip span {
+    background: rgba(255, 255, 255, 0.96);
+    color: #0f172a;
+    border-color: rgba(15, 23, 42, 0.1);
+    box-shadow:
+        0 10px 24px rgba(45, 55, 72, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+body:not(.dark-mode) .sidebar-dock-tooltip::before {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(15, 23, 42, 0.1);
 }
 
 .sidebar-icon.active {
@@ -497,8 +596,8 @@ body {
     }
 
     .sidebar-icon {
-        width: 2.25rem;
-        height: 2.25rem;
+        width: var(--dock-size);
+        height: var(--dock-size);
     }
 
     .window-controls-area {

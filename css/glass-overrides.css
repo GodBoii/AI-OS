@@ -110,7 +110,11 @@ body.project-panel-open:not(.dark-mode) .sidebar {
    SECTION 3 — SIDEBAR ICONS (interactive buttons in sidebar)
    ===================================================================== */
 .dark-mode .sidebar-icon {
-  transition: all var(--glass-dur-std) var(--glass-ease-spring) !important;
+  transition:
+    color var(--glass-dur-std) var(--glass-ease-spring),
+    background-color var(--glass-dur-std) var(--glass-ease-spring),
+    border-color var(--glass-dur-std) var(--glass-ease-spring),
+    box-shadow var(--glass-dur-std) var(--glass-ease-spring) !important;
 }
 
 .dark-mode .sidebar-icon:hover {
