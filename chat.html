@@ -526,45 +526,9 @@
 
 <!-- MODIFIED: Restructured floating input container -->
 <div id="floating-input-container" class="floating-input-container hidden">
-    <!-- Computer workspace controls live inside the chat composer while computer mode is open -->
-    <div id="computer-workspace-chip" class="computer-workspace-container hidden">
-        <div class="computer-chip-main" aria-live="polite">
-            <div class="computer-chip-content">
-                <div class="computer-chip-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-monitor">
-                        <rect width="20" height="14" x="2" y="3" rx="2" />
-                        <line x1="8" x2="16" y1="21" y2="21" />
-                        <line x1="12" x2="12" y1="17" y2="21" />
-                    </svg>
-                </div>
-                <span id="computer-chip-label" class="computer-chip-label">Computer Workspace</span>
-            </div>
-        </div>
-        <div class="computer-chip-actions" aria-label="Computer workspace actions">
-            <button id="computer-manual-grant-btn" class="computer-dropdown-item" aria-label="Grant computer permission"
-                title="Grant Permission">
-                <i class="fas fa-unlock-alt" aria-hidden="true"></i>
-                <span>Grant Permission</span>
-            </button>
-            <button id="computer-select-scope-btn" class="computer-dropdown-item"
-                aria-label="Select computer scope directory" title="Select Scope">
-                <i class="fas fa-folder-open" aria-hidden="true"></i>
-                <span>Scope</span>
-            </button>
-            <button id="computer-workspace-close" class="computer-dropdown-item" aria-label="Hide computer workspace"
-                title="Hide">
-                <i class="fas fa-times" aria-hidden="true"></i>
-                <span>Hide</span>
-            </button>
-            <button id="computer-exit-btn" class="computer-dropdown-item computer-dropdown-exit"
-                aria-label="Exit computer mode" title="Exit Mode">
-                <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
-                <span>Exit</span>
-            </button>
-        </div>
-    </div>
+    <!-- Computer workspace chip (hidden reference for JS compatibility) -->
+    <div id="computer-workspace-chip" class="hidden" style="display:none"></div>
+    <span id="computer-chip-label" class="hidden" style="display:none">Computer Workspace</span>
 
     <!-- NEW: Horizontal context and files bar -->
     <div id="context-files-bar" class="context-files-bar hidden">
@@ -635,7 +599,29 @@
             </button>
         </div>
         <div class="toolbar-center">
-            <!-- Empty center section -->
+            <!-- Computer workspace inline controls (shown when computer mode is active) -->
+            <div id="computer-toolbar-actions" class="computer-toolbar-actions hidden" aria-label="Computer workspace actions">
+                <button id="computer-manual-grant-btn" class="computer-toolbar-btn" aria-label="Grant computer permission"
+                    title="Grant Permission">
+                    <i class="fas fa-unlock-alt" aria-hidden="true"></i>
+                    <span>Grant</span>
+                </button>
+                <button id="computer-select-scope-btn" class="computer-toolbar-btn"
+                    aria-label="Select computer scope directory" title="Select Scope">
+                    <i class="fas fa-folder-open" aria-hidden="true"></i>
+                    <span>Scope</span>
+                </button>
+                <button id="computer-workspace-close" class="computer-toolbar-btn" aria-label="Hide computer workspace"
+                    title="Hide">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <span>Hide</span>
+                </button>
+                <button id="computer-exit-btn" class="computer-toolbar-btn computer-toolbar-exit"
+                    aria-label="Exit computer mode" title="Exit Mode">
+                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+                    <span>Exit</span>
+                </button>
+            </div>
         </div>
         <div class="toolbar-right">
             <button id="plan-mode-btn" class="plan-mode-btn tooltip" data-tooltip="Plan Mode"

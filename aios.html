@@ -796,12 +796,12 @@
 
     <div id="pricing-modal" class="pricing-modal hidden" aria-hidden="true">
         <div class="pricing-modal-backdrop" id="pricing-modal-backdrop"></div>
-        <div class="pricing-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pricing-modal-title">
+        <div class="pricing-modal-dialog t-modal" role="dialog" aria-modal="true" aria-labelledby="pricing-modal-title" aria-describedby="pricing-modal-message" tabindex="-1">
             <div class="pricing-modal-header">
                 <div>
-                    <div class="pricing-modal-kicker">Billing</div>
-                    <h3 class="pricing-modal-title" id="pricing-modal-title">Choose your plan</h3>
-                    <p class="pricing-modal-message" id="pricing-modal-message">Subscriptions are billed monthly through Razorpay.</p>
+                    <div class="pricing-modal-kicker"><span class="pricing-kicker-dot" aria-hidden="true"></span>Plans &amp; billing</div>
+                    <h3 class="pricing-modal-title" id="pricing-modal-title">Choose your pace</h3>
+                    <p class="pricing-modal-message" id="pricing-modal-message">Simple monthly plans. Upgrade when your work needs more room.</p>
                 </div>
                 <button type="button" class="pricing-modal-close" id="pricing-modal-close" aria-label="Close pricing modal">
                     <i class="fas fa-times"></i>
@@ -809,36 +809,57 @@
             </div>
 
             <div class="pricing-plan-grid">
-                <article class="pricing-plan-card" data-plan-card="free">
-                    <div class="pricing-plan-badge">Core</div>
-                    <h4 class="pricing-plan-name">Core</h4>
-                    <div class="pricing-plan-price">Rs 0<span>/month</span></div>
-                    <p class="pricing-plan-copy">For evaluation and light daily usage.</p>
-                    <div class="pricing-plan-limit">50,000 tokens/day</div>
-                    <button type="button" class="pricing-plan-btn is-current" id="plan-btn-free" data-plan-type="free" disabled>Current plan</button>
-                </article>
+                <div class="pricing-plan-shell t-tilt">
+                    <article class="pricing-plan-card t-tilt-card" data-plan-card="free" aria-labelledby="plan-name-free">
+                        <div class="t-tilt-glare" aria-hidden="true"></div>
+                        <div class="pricing-plan-badge">Core</div>
+                        <h4 class="pricing-plan-name" id="plan-name-free">Core</h4>
+                        <div class="pricing-plan-price"><span class="pricing-currency">₹</span>0<span>/month</span></div>
+                        <p class="pricing-plan-copy">A focused starting point for lighter, everyday tasks.</p>
+                        <ul class="pricing-plan-features" aria-label="Core plan includes">
+                            <li><i class="fas fa-check" aria-hidden="true"></i>Essential AI workflows</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i>Daily usage refresh</li>
+                        </ul>
+                        <div class="pricing-plan-limit"><span>Included usage</span><strong>50,000 tokens/day</strong></div>
+                        <button type="button" class="pricing-plan-btn is-current" id="plan-btn-free" data-plan-type="free" disabled>Current plan</button>
+                    </article>
+                </div>
 
-                <article class="pricing-plan-card is-featured" data-plan-card="pro">
-                    <div class="pricing-plan-badge">Most Popular</div>
-                    <h4 class="pricing-plan-name">Pro</h4>
-                    <div class="pricing-plan-price">Rs 428<span>/month</span></div>
-                    <p class="pricing-plan-copy">For steady builder workflows and larger token budgets.</p>
-                    <div class="pricing-plan-limit">5,000,000 tokens/month</div>
-                    <button type="button" class="pricing-plan-btn" id="plan-btn-pro" data-plan-type="pro">Upgrade to Pro</button>
-                </article>
+                <div class="pricing-plan-shell t-tilt">
+                    <article class="pricing-plan-card t-tilt-card is-featured" data-plan-card="pro" aria-labelledby="plan-name-pro">
+                        <div class="t-tilt-glare" aria-hidden="true"></div>
+                        <div class="pricing-plan-badge"><i class="fas fa-bolt" aria-hidden="true"></i>Recommended</div>
+                        <h4 class="pricing-plan-name" id="plan-name-pro">Pro</h4>
+                        <div class="pricing-plan-price"><span class="pricing-currency">₹</span>428<span>/month</span></div>
+                        <p class="pricing-plan-copy">Built for steady creation, coding, and deeper work.</p>
+                        <ul class="pricing-plan-features" aria-label="Pro plan includes">
+                            <li><i class="fas fa-check" aria-hidden="true"></i>100× Core capacity</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i>Monthly usage window</li>
+                        </ul>
+                        <div class="pricing-plan-limit"><span>Included usage</span><strong>5,000,000 tokens/month</strong></div>
+                        <button type="button" class="pricing-plan-btn" id="plan-btn-pro" data-plan-type="pro">Upgrade to Pro</button>
+                    </article>
+                </div>
 
-                <article class="pricing-plan-card is-elite" data-plan-card="elite">
-                    <div class="pricing-plan-badge">High Capacity</div>
-                    <h4 class="pricing-plan-name">Elite</h4>
-                    <div class="pricing-plan-price">Rs 4,428<span>/month</span></div>
-                    <p class="pricing-plan-copy">For sustained, high-volume work across coding and automation.</p>
-                    <div class="pricing-plan-limit">50,000,000 tokens/month</div>
-                    <button type="button" class="pricing-plan-btn" id="plan-btn-elite" data-plan-type="elite">Upgrade to Elite</button>
-                </article>
+                <div class="pricing-plan-shell t-tilt">
+                    <article class="pricing-plan-card t-tilt-card is-elite" data-plan-card="elite" aria-labelledby="plan-name-elite">
+                        <div class="t-tilt-glare" aria-hidden="true"></div>
+                        <div class="pricing-plan-badge"><i class="fas fa-gem" aria-hidden="true"></i>Maximum capacity</div>
+                        <h4 class="pricing-plan-name" id="plan-name-elite">Elite</h4>
+                        <div class="pricing-plan-price"><span class="pricing-currency">₹</span>4,428<span>/month</span></div>
+                        <p class="pricing-plan-copy">For sustained, high-volume automation and building.</p>
+                        <ul class="pricing-plan-features" aria-label="Elite plan includes">
+                            <li><i class="fas fa-check" aria-hidden="true"></i>10× Pro capacity</li>
+                            <li><i class="fas fa-check" aria-hidden="true"></i>High-volume workflows</li>
+                        </ul>
+                        <div class="pricing-plan-limit"><span>Included usage</span><strong>50,000,000 tokens/month</strong></div>
+                        <button type="button" class="pricing-plan-btn" id="plan-btn-elite" data-plan-type="elite">Upgrade to Elite</button>
+                    </article>
+                </div>
             </div>
 
             <div class="pricing-modal-footer">
-                <div class="pricing-modal-footnote" id="pricing-modal-footnote">Your current usage and renewal window will update after payment verification.</div>
+                <div class="pricing-modal-footnote" id="pricing-modal-footnote"><i class="fas fa-shield-halved" aria-hidden="true"></i><span id="pricing-modal-footnote-text">Your usage and renewal window update after secure payment verification.</span></div>
             </div>
         </div>
     </div>
