@@ -1202,20 +1202,45 @@ body:not(.dark-mode) .deployment-version-icon {
     color: #0f172a !important;
 }
 
-body:not(.dark-mode) .deployment-version-select {
-    color: #0f172a !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
-}
-
-body:not(.dark-mode) .deployment-version-select option {
-    background: #ffffff !important;
+body:not(.dark-mode) .deployment-version-trigger {
     color: #0f172a !important;
 }
 
-body:not(.dark-mode) .deployment-version-select option:checked,
-body:not(.dark-mode) .deployment-version-select option:hover {
-    background: #f1f5f9 !important;
-    color: #0f172a !important;
+body:not(.dark-mode) .deployment-version-trigger:hover {
+    background: rgba(15, 23, 42, 0.06) !important;
+}
+
+body:not(.dark-mode) .deployment-version-chevron {
+    color: #64748b !important;
+}
+
+body:not(.dark-mode) .deployment-version-menu {
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-color: #e2e8f0 !important;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+body:not(.dark-mode) .deployment-version-menu-item {
+    color: #334155 !important;
+}
+
+body:not(.dark-mode) .deployment-version-menu-item:hover {
+    background: rgba(99, 102, 241, 0.08) !important;
+    color: #312e81 !important;
+}
+
+body:not(.dark-mode) .deployment-version-menu-item.selected {
+    background: rgba(99, 102, 241, 0.12) !important;
+    color: #312e81 !important;
+}
+
+body:not(.dark-mode) .deployment-version-active-badge {
+    background: rgba(16, 185, 129, 0.10) !important;
+    color: #059669 !important;
+    border-color: rgba(16, 185, 129, 0.20) !important;
 }
 
 /* Action Buttons */

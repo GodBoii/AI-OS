@@ -1,3 +1,25 @@
+:root {
+    --modal-open-dur: 250ms;
+    --modal-close-dur: 150ms;
+    --modal-scale: 0.96;
+    --modal-scale-close: 0.96;
+    --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --tilt-perspective: 1000px;
+    --tilt-return: 600ms;
+    --tilt-return-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --tilt-follow: 180ms;
+    --tilt-follow-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --tilt-glare-opacity: 0.18;
+    --tilt-glare-fade: 250ms;
+    --tilt-glare-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@property --pricing-beam-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
 .subscription-section {
     margin-top: 18px;
     border: 1.5px solid var(--border-primary);
@@ -33,6 +55,12 @@
 
 .subscription-manage-btn {
     white-space: nowrap;
+    transition:
+        transform 150ms var(--modal-ease),
+        background-color 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease,
+        box-shadow 150ms ease;
 }
 
 .subscription-summary-card {
@@ -115,7 +143,11 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     padding: 12px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        transform 250ms var(--modal-ease),
+        background-color 250ms ease,
+        border-color 250ms ease,
+        box-shadow 250ms ease;
 }
 
 .subscription-meta-item:hover {
@@ -147,7 +179,7 @@
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, #38bdf8 0%, #22c55e 100%);
-    transition: width 0.25s ease;
+    transition: width 250ms var(--modal-ease);
 }
 
 .subscription-progress-copy {
@@ -164,10 +196,19 @@
     justify-content: center;
     padding: 24px;
     z-index: 30;
+    pointer-events: none;
 }
 
 .pricing-modal.hidden {
     display: none;
+}
+
+.pricing-modal.is-open {
+    pointer-events: auto;
+}
+
+.pricing-modal.is-closing {
+    pointer-events: none;
 }
 
 .pricing-modal-backdrop {
@@ -176,6 +217,18 @@
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(20px) saturate(120%);
     -webkit-backdrop-filter: blur(20px) saturate(120%);
+    opacity: 0;
+    transition: opacity var(--modal-open-dur) var(--modal-ease);
+    will-change: opacity;
+}
+
+.pricing-modal.is-open .pricing-modal-backdrop {
+    opacity: 1;
+}
+
+.pricing-modal.is-closing .pricing-modal-backdrop {
+    opacity: 0;
+    transition-duration: var(--modal-close-dur);
 }
 
 .pricing-modal-dialog {
@@ -196,6 +249,32 @@
     padding: 24px;
 }
 
+.t-modal {
+    transform-origin: center;
+    transform: scale(var(--modal-scale));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--modal-open-dur) var(--modal-ease),
+        opacity var(--modal-open-dur) var(--modal-ease);
+    will-change: transform, opacity;
+}
+
+.t-modal.is-open {
+    transform: scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.t-modal.is-closing {
+    transform: scale(var(--modal-scale-close));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--modal-close-dur) var(--modal-ease),
+        opacity var(--modal-close-dur) var(--modal-ease);
+}
+
 /* Light mode specific styling */
 :root .pricing-modal-dialog {
     background: rgba(255, 255, 255, 0.95);
@@ -214,12 +293,23 @@
 }
 
 .pricing-modal-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     color: var(--accent-color);
     opacity: 0.85;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+}
+
+.pricing-kicker-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .pricing-modal-title {
@@ -248,7 +338,12 @@
     -webkit-backdrop-filter: blur(8px);
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        transform 150ms var(--modal-ease),
+        background-color 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease,
+        box-shadow 150ms ease;
 }
 
 .pricing-modal-close:hover {
@@ -266,21 +361,50 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
+    perspective: var(--tilt-perspective);
+}
+
+.pricing-plan-shell {
+    min-width: 0;
+    border-radius: 20px;
 }
 
 .pricing-plan-card {
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 280px;
+    min-height: 360px;
     border-radius: 20px;
     border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.09));
     background: var(--glass-bg-low, rgba(255, 255, 255, 0.055));
     backdrop-filter: blur(20px) saturate(150%);
     -webkit-backdrop-filter: blur(20px) saturate(150%);
     padding: 18px;
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform:
+        perspective(var(--tilt-perspective))
+        rotateX(var(--tilt-rx, 0deg))
+        rotateY(var(--tilt-ry, 0deg));
+    transform-style: preserve-3d;
+    transition:
+        transform var(--tilt-return) var(--tilt-return-ease),
+        background-color 250ms ease,
+        border-color 250ms ease,
+        box-shadow 250ms var(--modal-ease);
     overflow: hidden;
+    will-change: transform;
+}
+
+.pricing-plan-card.is-tilting {
+    transition:
+        transform var(--tilt-follow) var(--tilt-follow-ease),
+        background-color 250ms ease,
+        border-color 250ms ease,
+        box-shadow 250ms var(--modal-ease);
+}
+
+.pricing-plan-card > :not(.t-tilt-glare) {
+    position: relative;
+    z-index: 2;
 }
 
 .pricing-plan-card::before {
@@ -301,7 +425,6 @@
 .pricing-plan-card:hover {
     background: var(--glass-bg-mid, rgba(255, 255, 255, 0.08));
     border-color: var(--glass-border-hover, rgba(255, 255, 255, 0.20));
-    transform: translateY(-4px) scale(1.02);
     box-shadow: 
         0 16px 48px rgba(0, 0, 0, 0.40),
         0 8px 24px rgba(0, 0, 0, 0.30),
@@ -318,6 +441,36 @@
     box-shadow: 
         0 0 0 1px rgba(250, 204, 21, 0.25) inset,
         0 8px 32px rgba(250, 204, 21, 0.15);
+}
+
+.pricing-plan-card.is-featured::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: 1;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: conic-gradient(
+        from var(--pricing-beam-angle),
+        transparent 0deg 228deg,
+        rgba(250, 204, 21, 0.08) 248deg,
+        rgba(255, 248, 181, 0.95) 270deg,
+        rgba(251, 191, 36, 0.72) 292deg,
+        transparent 320deg 360deg
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: pricing-border-beam 4.8s linear infinite;
+}
+
+@keyframes pricing-border-beam {
+    to {
+        --pricing-beam-angle: 360deg;
+    }
 }
 
 .pricing-plan-card.is-featured:hover {
@@ -358,6 +511,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    gap: 6px;
 }
 
 .pricing-plan-name {
@@ -375,10 +529,20 @@
 }
 
 .pricing-plan-price span {
+    display: inline-block;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
-    margin-left: 4px;
+    margin-left: 8px;
+    letter-spacing: 0;
+}
+
+.pricing-plan-price .pricing-currency {
+    margin: 0 2px 0 0;
+    color: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    vertical-align: 7px;
 }
 
 .pricing-plan-copy {
@@ -389,12 +553,53 @@
     line-height: 1.5;
 }
 
+.pricing-plan-features {
+    display: grid;
+    gap: 9px;
+    margin: 0 0 20px;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    list-style: none;
+}
+
+.pricing-plan-features li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pricing-plan-features i {
+    display: inline-grid;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(56, 189, 248, 0.11);
+    color: #38bdf8;
+    font-size: 8px;
+}
+
 .pricing-plan-limit {
     margin-top: auto;
     color: var(--text-color);
+    display: grid;
+    gap: 4px;
     font-size: 13px;
-    font-weight: 600;
     opacity: 0.9;
+}
+
+.pricing-plan-limit span {
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.pricing-plan-limit strong {
+    font-weight: 700;
 }
 
 .pricing-plan-btn {
@@ -407,7 +612,12 @@
     font-size: 14px;
     font-weight: 800;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition:
+        transform 150ms var(--modal-ease),
+        background-color 150ms ease,
+        color 150ms ease,
+        box-shadow 150ms ease,
+        opacity 150ms ease;
     position: relative;
     overflow: hidden;
 }
@@ -423,7 +633,7 @@
         transparent, 
         rgba(255, 255, 255, 0.3), 
         transparent);
-    transition: left 0.5s ease;
+    transition: left 500ms var(--modal-ease);
 }
 
 .pricing-plan-btn:hover::before {
@@ -477,10 +687,50 @@
     border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
 }
 
+.pricing-modal-footnote {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.pricing-modal-footnote i {
+    color: #22c55e;
+}
+
+.t-tilt-glare {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    background:
+        radial-gradient(circle 110px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+            rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.05) 52%, transparent 84%),
+        radial-gradient(circle 240px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+            rgba(255, 255, 255, 0.15), transparent 78%);
+    transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
+}
+
+.t-tilt.is-hover .t-tilt-glare {
+    opacity: var(--tilt-glare-opacity);
+}
+
+.pricing-modal-close:focus-visible,
+.pricing-plan-btn:focus-visible,
+.subscription-manage-btn:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 3px;
+}
+
 @media (max-width: 900px) {
     .pricing-plan-grid,
     .subscription-meta-grid {
         grid-template-columns: 1fr;
+    }
+
+    .pricing-plan-card {
+        min-height: 0;
     }
 }
 
@@ -503,6 +753,43 @@
 
     .subscription-manage-btn {
         width: 100%;
+    }
+}
+
+@media (hover: none), (pointer: coarse) {
+    .pricing-plan-card {
+        transform: none;
+        will-change: auto;
+    }
+
+    .t-tilt-glare {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-modal,
+    .pricing-modal-backdrop,
+    .pricing-plan-card,
+    .subscription-meta-item,
+    .subscription-manage-btn,
+    .pricing-plan-btn {
+        transition: none !important;
+    }
+
+    .pricing-plan-card {
+        transform: none !important;
+        will-change: auto;
+    }
+
+    .pricing-plan-card.is-featured::after {
+        animation: none;
+        --pricing-beam-angle: 270deg;
+    }
+
+    .t-tilt-glare,
+    .pricing-plan-btn::before {
+        display: none;
     }
 }
 

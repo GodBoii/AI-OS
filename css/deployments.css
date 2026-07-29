@@ -215,13 +215,13 @@
 
 /* ── Version Chip ─────────────────────────────────────────────────
    A single, self-contained chip — NO outer wrapper that creates
-   a second border layer. The select IS the chip.
+   a second border layer. Contains the custom dropdown.
    ──────────────────────────────────────────────────────────────── */
 .deployment-version-chip {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 10px 0 10px;
+    padding: 0 4px 0 10px;
     height: 32px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -241,60 +241,152 @@
     pointer-events: none;
 }
 
-/* The select itself is invisible — just text + system arrow hidden */
-.deployment-version-select {
-    /* Reset completely */
+/* ── Custom Version Dropdown ──────────────────────────────────── */
+.deployment-version-dropdown {
+    position: relative;
+}
+
+.deployment-version-trigger {
+    /* Reset */
     appearance: none;
     -webkit-appearance: none;
-    -moz-appearance: none;
     border: none;
     outline: none;
     background: transparent;
-    padding: 0;
+    padding: 0 6px;
     margin: 0;
+    /* Layout */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
     /* Typography */
     font-size: 12px;
     font-weight: 600;
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: var(--text-color);
     cursor: pointer;
-    /* Sizing */
-    min-width: 90px;
-    max-width: 130px;
-    /* Custom chevron via background */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 2px center;
-    background-size: 10px;
-    padding-right: 16px;
+    white-space: nowrap;
+    border-radius: 6px;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
-.deployment-version-select:disabled {
+.deployment-version-trigger:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.deployment-version-trigger:disabled {
     cursor: default;
     opacity: 0.65;
-    /* No custom arrow when only one version */
-    background-image: none;
-    padding-right: 0;
 }
 
-/* Force dark dropdown options — critical for Electron readability */
-.dark-mode .deployment-version-select {
-    color: rgba(240, 240, 240, 0.92);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+.deployment-version-trigger:disabled:hover {
+    background: transparent;
 }
 
-/* Options need explicit colours because Electron renders native OS dropdowns */
-.deployment-version-select option {
-    background: #1a1a1e !important;
-    color: #f0f0f0 !important;
-    font-size: 13px;
+.deployment-version-chevron {
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: transform 0.2s ease, opacity 0.15s ease;
+}
+
+.deployment-version-dropdown.open .deployment-version-chevron {
+    transform: rotate(180deg);
+    opacity: 1;
+}
+
+/* ── Dropdown Menu ────────────────────────────────────────────── */
+.deployment-version-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 150px;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    border-radius: 10px;
+    z-index: 100;
+    /* Glassmorphism card */
+    background: rgba(26, 26, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.45),
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    /* Animation origin */
+    transform-origin: top center;
+}
+
+.deployment-version-dropdown.open .deployment-version-menu {
+    display: block;
+    animation: versionMenuIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes versionMenuIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) scale(0.95) translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) scale(1) translateY(0);
+    }
+}
+
+/* ── Menu Items ───────────────────────────────────────────────── */
+.deployment-version-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: rgba(240, 240, 240, 0.85);
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
 }
 
-.deployment-version-select option:checked,
-.deployment-version-select option:hover {
-    background: #2d1f6e !important;
-    color: #e0d4ff !important;
+.deployment-version-menu-item:hover {
+    background: rgba(167, 139, 250, 0.12);
+    color: #e0d4ff;
+}
+
+.deployment-version-menu-item.selected {
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+    font-weight: 600;
+}
+
+.deployment-version-menu-label {
+    flex: 1;
+}
+
+/* Active badge inside menu items */
+.deployment-version-active-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    flex-shrink: 0;
+}
+
+/* ── Dark mode overrides ─────────────────────────────────────── */
+.dark-mode .deployment-version-trigger {
+    color: rgba(240, 240, 240, 0.92);
 }
 
 /* ── Action Buttons ─────────────────────────────────────────────── */
