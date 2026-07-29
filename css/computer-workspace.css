@@ -1,5 +1,5 @@
 /* ============================================
-   COMPUTER WORKSPACE - COMPOSER CONTROLS
+   COMPUTER WORKSPACE — INLINE TOOLBAR CONTROLS
    ============================================ */
 
 :root {
@@ -14,28 +14,22 @@
     --computer-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.computer-workspace-container {
+/* ─── Inline Toolbar Actions Container ─── */
+.computer-toolbar-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-    margin: 10px 12px 0;
-    border-radius: 14px;
-    background: var(--computer-glass-bg);
-    border: 1px solid var(--computer-glass-border);
-    box-shadow: var(--computer-glass-shadow);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    backdrop-filter: blur(18px) saturate(160%);
-    color: var(--text-color, #f3f4f6);
-    transform-origin: bottom center;
-    animation: computerComposerIn 420ms var(--computer-ease);
+    gap: 6px;
+    animation: computerToolbarIn 320ms var(--computer-ease);
 }
 
-@keyframes computerComposerIn {
+.computer-toolbar-actions.hidden {
+    display: none;
+}
+
+@keyframes computerToolbarIn {
     from {
         opacity: 0;
-        transform: translateY(12px) scale(0.98);
+        transform: translateY(4px) scale(0.96);
     }
     to {
         opacity: 1;
@@ -43,124 +37,73 @@
     }
 }
 
-.computer-workspace-container.hidden {
-    display: none;
-}
-
-.computer-chip-main {
-    min-width: 0;
-    flex: 1;
-}
-
-.computer-chip-content {
-    display: flex;
+/* ─── Individual Toolbar Buttons ─── */
+.computer-toolbar-btn {
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    min-width: 0;
-}
-
-.computer-chip-icon {
-    width: 30px;
+    justify-content: center;
+    gap: 5px;
     height: 30px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--computer-accent-strong);
-    border-radius: 10px;
-    background: rgba(169, 190, 232, 0.10);
-    border: 1px solid rgba(169, 190, 232, 0.22);
-    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.04);
-    transition: transform 220ms var(--computer-ease), background 220ms var(--computer-ease);
-}
-
-.computer-workspace-container:hover .computer-chip-icon {
-    transform: translateY(-1px) rotate(3deg);
-    background: rgba(169, 190, 232, 0.15);
-}
-
-.computer-chip-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: rgba(244, 246, 250, 0.94);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.26);
-}
-
-.computer-chip-actions {
-    display: flex !important;
-    align-items: center;
-    gap: 7px;
-    flex-shrink: 0;
-}
-
-.computer-dropdown-item {
-    min-height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
     padding: 0 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    background: var(--computer-control-bg);
-    color: rgba(232, 235, 242, 0.82);
-    font-size: 0.72rem;
-    font-weight: 700;
+    border: 1px solid rgba(169, 190, 232, 0.18);
+    border-radius: 8px;
+    background: rgba(169, 190, 232, 0.08);
+    color: rgba(200, 210, 230, 0.85);
+    font-size: 0.7rem;
+    font-weight: 600;
     line-height: 1;
     cursor: pointer;
     white-space: nowrap;
     transition:
-        transform 180ms var(--computer-ease),
-        color 180ms ease,
-        background 180ms ease,
-        border-color 180ms ease,
-        box-shadow 180ms ease;
+        transform 160ms var(--computer-ease),
+        color 160ms ease,
+        background 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
 }
 
-.computer-dropdown-item i,
-.computer-dropdown-item svg {
-    width: 14px;
-    height: 14px;
-    font-size: 0.78rem;
+.computer-toolbar-btn i,
+.computer-toolbar-btn svg {
+    width: 12px;
+    height: 12px;
+    font-size: 0.7rem;
     flex-shrink: 0;
     color: currentColor;
 }
 
-.computer-dropdown-item:hover {
+.computer-toolbar-btn:hover {
     transform: translateY(-1px);
     color: #ecfeff;
-    background: var(--computer-control-hover);
-    border-color: rgba(169, 190, 232, 0.30);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+    background: rgba(169, 190, 232, 0.16);
+    border-color: rgba(169, 190, 232, 0.32);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
-.computer-dropdown-item:active {
-    transform: translateY(0) scale(0.98);
+.computer-toolbar-btn:active {
+    transform: translateY(0) scale(0.97);
 }
 
-.computer-dropdown-item#computer-manual-grant-btn.granted {
+/* Granted state for permission button */
+.computer-toolbar-btn#computer-manual-grant-btn.granted {
     color: #dcfce7;
-    background: rgba(16, 185, 129, 0.22);
-    border-color: rgba(52, 211, 153, 0.42);
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(52, 211, 153, 0.36);
 }
 
-.computer-dropdown-exit {
-    color: rgba(254, 202, 202, 0.90);
-    border-color: rgba(239, 68, 68, 0.20);
+/* Exit button — danger style */
+.computer-toolbar-exit {
+    color: rgba(254, 202, 202, 0.85);
+    border-color: rgba(239, 68, 68, 0.18);
 }
 
-.computer-dropdown-exit:hover {
+.computer-toolbar-exit:hover {
     color: #fff1f2;
-    background: rgba(239, 68, 68, 0.18);
-    border-color: rgba(239, 68, 68, 0.38);
-    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.34);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.10);
 }
 
-/* Bottom-right Know Me button mirrors the project workspace FAB. */
+/* ─── Bottom-right Know Me FAB ─── */
 .computer-know-me-fab {
     position: fixed;
     right: 24px;
@@ -233,7 +176,7 @@ body.computer-panel-open .computer-know-me-fab {
     transition: opacity 140ms ease 150ms;
 }
 
-/* Composer layout refinements when computer mode is active. */
+/* ─── Composer layout refinements when computer mode is active ─── */
 body.computer-panel-open .floating-input-container {
     border-color: rgba(169, 190, 232, 0.30);
     box-shadow:
@@ -270,36 +213,24 @@ body.computer-panel-open .app-container {
     transition: box-shadow 0.6s ease, border 0.6s ease;
 }
 
-body:not(.dark-mode) .computer-workspace-container {
-    background:
-        linear-gradient(135deg, rgba(16, 185, 129, 0.10), rgba(20, 184, 166, 0.06)),
-        rgba(255, 255, 255, 0.82);
-    border-color: rgba(5, 150, 105, 0.22);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-body:not(.dark-mode) .computer-chip-label {
-    color: #064e3b;
-    text-shadow: none;
-}
-
-body:not(.dark-mode) .computer-dropdown-item {
+/* ─── Light Mode Overrides ─── */
+body:not(.dark-mode) .computer-toolbar-btn {
     color: #065f46;
-    background: rgba(255, 255, 255, 0.62);
+    background: rgba(16, 185, 129, 0.08);
     border-color: rgba(5, 150, 105, 0.16);
 }
 
-body:not(.dark-mode) .computer-dropdown-item:hover {
-    background: rgba(16, 185, 129, 0.12);
-    border-color: rgba(5, 150, 105, 0.26);
+body:not(.dark-mode) .computer-toolbar-btn:hover {
+    background: rgba(16, 185, 129, 0.14);
+    border-color: rgba(5, 150, 105, 0.28);
 }
 
-body:not(.dark-mode) .computer-dropdown-exit {
+body:not(.dark-mode) .computer-toolbar-exit {
     color: #b91c1c;
-    border-color: rgba(239, 68, 68, 0.20);
+    border-color: rgba(239, 68, 68, 0.18);
 }
 
-body:not(.dark-mode) .computer-dropdown-exit:hover {
+body:not(.dark-mode) .computer-toolbar-exit:hover {
     background: rgba(239, 68, 68, 0.10);
     border-color: rgba(239, 68, 68, 0.28);
 }
@@ -323,34 +254,24 @@ body:not(.dark-mode).computer-panel-open .app-container {
     box-shadow: 0 0 40px rgba(16, 185, 129, 0.2), inset 0 0 25px rgba(16, 185, 129, 0.1) !important;
 }
 
+/* ─── Responsive ─── */
 @media (max-width: 760px) {
-    .computer-workspace-container {
-        align-items: stretch;
-        flex-direction: column;
+    .computer-toolbar-btn span {
+        display: none;
     }
-
-    .computer-chip-actions {
-        flex-wrap: wrap;
-    }
-
-    .computer-dropdown-item {
-        flex: 1 1 calc(50% - 4px);
+    .computer-toolbar-btn {
+        padding: 0 8px;
+        min-width: 30px;
     }
 }
 
 @media (max-width: 520px) {
-    .computer-workspace-container {
-        margin: 8px 8px 0;
-        padding: 9px;
+    .computer-toolbar-actions {
+        gap: 4px;
     }
-
-    .computer-dropdown-item span {
-        display: none;
-    }
-
-    .computer-dropdown-item {
-        min-width: 34px;
-        padding: 0 9px;
-        flex: 1 1 auto;
+    .computer-toolbar-btn {
+        height: 28px;
+        padding: 0 6px;
+        min-width: 28px;
     }
 }

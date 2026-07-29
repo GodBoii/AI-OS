@@ -38,6 +38,7 @@ class ComputerWorkspace {
         this.el = {
             chip: document.getElementById('computer-workspace-chip'),
             label: document.getElementById('computer-chip-label'),
+            toolbarActions: document.getElementById('computer-toolbar-actions'),
             manualGrantBtn: document.getElementById('computer-manual-grant-btn'),
             selectScopeBtn: document.getElementById('computer-select-scope-btn'),
             closeBtn: document.getElementById('computer-workspace-close'),
@@ -125,6 +126,8 @@ class ComputerWorkspace {
             this.el.chip?.classList.remove('hidden');
             document.body.classList.add('computer-panel-open');
         }
+        // Show the inline toolbar buttons
+        this.el.toolbarActions?.classList.remove('hidden');
     }
 
     closePanel() {
@@ -134,6 +137,8 @@ class ComputerWorkspace {
             this.el.chip?.classList.add('hidden');
             document.body.classList.remove('computer-panel-open');
         }
+        // Hide the inline toolbar buttons
+        this.el.toolbarActions?.classList.add('hidden');
     }
 
     openComputerWorkspace(detail = {}) {
