@@ -7,6 +7,7 @@
   "scripts": {
     "start": "electron .",
     "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
+    "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
@@ -40,7 +41,8 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/node-pty/**/*"
+      "node_modules/node-pty/**/*",
+      "js/windows-native-stt.ps1"
     ],
     "win": {
       "target": "nsis",
