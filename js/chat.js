@@ -3141,11 +3141,15 @@ function hasComposerContent() {
 }
 
 const SMART_VOICE_ICON_MARKUP = `
-    <svg class="smart-voice-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect class="smart-voice-stem smart-voice-stem-a" x="4.5" y="9" width="2.4" height="6" rx="1.2"></rect>
-        <rect class="smart-voice-stem smart-voice-stem-b" x="8.8" y="6" width="2.4" height="12" rx="1.2"></rect>
-        <rect class="smart-voice-stem smart-voice-stem-c" x="13.1" y="8" width="2.4" height="8" rx="1.2"></rect>
-        <path class="smart-voice-spark" d="M19 3.8c.18 1.65 1.05 2.52 2.7 2.7-1.65.18-2.52 1.05-2.7 2.7-.18-1.65-1.05-2.52-2.7-2.7 1.65-.18 2.52-1.05 2.7-2.7Z"></path>
+    <svg class="smart-voice-icon" viewBox="0 0 28 28" aria-hidden="true">
+        <g class="smart-voice-wave">
+            <rect class="smart-voice-wave-bar smart-voice-wave-bar-a" x="3.65" y="10.5" width="2.1" height="7" rx="1.05"></rect>
+            <rect class="smart-voice-wave-bar smart-voice-wave-bar-b" x="7.95" y="7.5" width="2.1" height="13" rx="1.05"></rect>
+            <rect class="smart-voice-wave-bar smart-voice-wave-bar-c" x="12.25" y="4.5" width="2.1" height="19" rx="1.05"></rect>
+            <rect class="smart-voice-wave-bar smart-voice-wave-bar-d" x="16.55" y="7" width="2.1" height="14" rx="1.05"></rect>
+            <rect class="smart-voice-wave-bar smart-voice-wave-bar-e" x="20.85" y="10" width="2.1" height="8" rx="1.05"></rect>
+        </g>
+        <path class="smart-voice-glint" d="M23.45 2.7c.12.93.62 1.43 1.55 1.55-.93.12-1.43.62-1.55 1.55-.12-.93-.62-1.43-1.55-1.55.93-.12 1.43-.62 1.55-1.55Z"></path>
     </svg>`;
 
 function setPrimaryComposerIcon(button, action) {
