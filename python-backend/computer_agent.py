@@ -85,7 +85,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("openai/gpt-5.6-luna-pro"),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
