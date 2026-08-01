@@ -443,8 +443,16 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
 function switchConversation(conversationId) {
     if (!conversationId) return;
 
-    if (currentConversationId && currentConversationId !== conversationId && hasActiveRunForConversation(currentConversationId)) {
-        ensureBackgroundConversation(currentConversationId, { status: 'running' });
+    if (currentConversationId && currentConversationId !== conversationId) {
+        const previousConversationId = currentConversationId;
+        if (hasActiveRunForConversation(previousConversationId)) {
+            ensureBackgroundConversation(previousConversationId, { status: 'running' });
+        } else {
+            // Leaving an idle conversation ends its backend execution session and
+            // releases any cloud sandbox attached to it. Stored chat history is
+            // unaffected and can still be opened again later.
+            terminateSession(previousConversationId);
+        }
     }
 
     setCurrentConversationId(conversationId);
@@ -1721,6 +1729,9 @@ function setupIpcListeners() {
                 delete ongoingStreams[messageId];
                 if (!isConversationActive(streamConversationId)) {
                     setBackgroundConversationStatus(streamConversationId, 'completed');
+                    // The user already left this session. Allow asynchronous
+                    // artifact processing to settle, then release its sandbox.
+                    setTimeout(() => terminateSession(streamConversationId), 60_000);
                 }
 
                 // Add action buttons (copy, share) to the completed message
