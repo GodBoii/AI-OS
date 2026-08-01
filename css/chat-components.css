@@ -214,6 +214,65 @@
     height: 64px;
 }
 
+.mic-processing-indicator {
+    position: relative;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    color: currentColor;
+    pointer-events: none;
+}
+
+.mic-processing-ring {
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, currentColor 13%, transparent);
+    border-top-color: currentColor;
+    border-right-color: color-mix(in srgb, currentColor 58%, transparent);
+    filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 14%, transparent));
+    animation: micProcessingSpin 1.05s linear infinite;
+}
+
+.mic-processing-dots {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.mic-processing-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: micProcessingDot 1.2s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.mic-processing-dot-2 {
+    animation-delay: 0.16s;
+}
+
+.mic-processing-dot-3 {
+    animation-delay: 0.32s;
+}
+
+@keyframes micProcessingSpin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes micProcessingDot {
+    0%, 70%, 100% { transform: translateY(0); opacity: 0.35; }
+    35% { transform: translateY(-2px); opacity: 1; }
+}
+
 /* --- Send Button Styles --- */
 .send-btn {
     background-color: var(--action-primary-bg);
@@ -250,71 +309,121 @@
 }
 
 .smart-voice-icon {
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     display: block;
     overflow: visible;
-    fill: currentColor;
+    color: inherit;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.smart-voice-stem,
-.smart-voice-spark {
+.smart-voice-wave-bar,
+.smart-voice-glint {
+    fill: currentColor;
     transform-box: fill-box;
     transform-origin: center;
     will-change: transform, opacity;
 }
 
-.smart-voice-stem {
-    animation: smartVoiceStem 2.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+.smart-voice-wave-bar {
+    animation: smartVoiceWave 2.6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
 }
 
-.smart-voice-stem-b {
-    animation-delay: -1.9s;
+.smart-voice-wave-bar-a {
+    animation-delay: -0.18s;
 }
 
-.smart-voice-stem-c {
-    animation-delay: -0.95s;
+.smart-voice-wave-bar-b {
+    animation-delay: -0.42s;
 }
 
-.smart-voice-spark {
-    animation: smartVoiceSpark 3.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+.smart-voice-wave-bar-c {
+    animation-delay: -0.66s;
 }
 
-.send-btn.smart-voice:hover .smart-voice-stem {
-    animation-duration: 1.35s;
+.smart-voice-wave-bar-d {
+    animation-delay: -0.9s;
 }
 
-.send-btn.smart-voice:hover .smart-voice-spark {
-    animation-duration: 1.8s;
+.smart-voice-wave-bar-e {
+    animation-delay: -1.14s;
 }
 
-.send-btn:disabled .smart-voice-stem,
-.send-btn:disabled .smart-voice-spark {
+.smart-voice-glint {
+    filter: drop-shadow(0 0 2px currentColor);
+    animation: smartVoiceGlint 3.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.send-btn.smart-voice:hover .smart-voice-icon {
+    transform: scale(1.06);
+}
+
+.send-btn.smart-voice:hover .smart-voice-wave-bar {
+    animation-duration: 1.2s;
+}
+
+.send-btn.smart-voice:hover .smart-voice-glint {
+    animation-duration: 1.7s;
+}
+
+.send-btn:disabled .smart-voice-wave-bar,
+.send-btn:disabled .smart-voice-glint {
     animation-play-state: paused;
 }
 
-@keyframes smartVoiceStem {
-    0%, 100% { transform: scaleY(0.82); opacity: 0.72; }
-    45% { transform: scaleY(1); opacity: 1; }
-    68% { transform: scaleY(0.9); opacity: 0.86; }
+@keyframes smartVoiceWave {
+    0%, 100% { transform: scaleY(0.68); opacity: 0.58; }
+    22% { transform: scaleY(1); opacity: 1; }
+    46% { transform: scaleY(0.78); opacity: 0.76; }
+    68% { transform: scaleY(0.92); opacity: 0.94; }
+    84% { transform: scaleY(0.72); opacity: 0.66; }
 }
 
-@keyframes smartVoiceSpark {
-    0%, 58%, 100% { transform: scale(0.72) rotate(0deg); opacity: 0.5; }
-    70% { transform: scale(1.08) rotate(8deg); opacity: 1; }
-    82% { transform: scale(0.9) rotate(0deg); opacity: 0.78; }
+@keyframes smartVoiceGlint {
+    0%, 58%, 100% { transform: scale(0.62) rotate(0deg); opacity: 0.32; }
+    70% { transform: scale(1.08) rotate(12deg); opacity: 1; }
+    82% { transform: scale(0.82) rotate(0deg); opacity: 0.62; }
 }
 
 .send-btn.smart-voice {
     background: var(--action-secondary-bg);
     border: 1px solid var(--action-secondary-border);
     color: var(--action-secondary-fg);
+    isolation: isolate;
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, currentColor 10%, transparent),
+        inset 0 0 0 1px color-mix(in srgb, currentColor 2%, transparent);
+}
+
+.send-btn.smart-voice::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 3px;
+    border-radius: 9px;
+    background: radial-gradient(circle at 50% 38%, currentColor 0%, transparent 68%);
+    opacity: 0.035;
+    transform: scale(0.82);
+    transition: opacity 240ms ease, transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .send-btn.smart-voice:hover {
     background: var(--action-secondary-hover);
     border-color: var(--action-primary-border);
     color: var(--action-secondary-fg);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, currentColor 14%, transparent),
+        0 8px 22px color-mix(in srgb, var(--action-primary-border) 14%, transparent);
+}
+
+.send-btn.smart-voice:hover::after {
+    opacity: 0.085;
+    transform: scale(1);
+}
+
+.send-btn.smart-voice:active:not(:disabled) {
+    transform: translateY(0) scale(0.96);
+    transition-duration: 90ms;
 }
 
 .send-btn.smart-recording,
@@ -352,11 +461,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .smart-voice-stem,
-    .smart-voice-spark {
+    .smart-voice-wave-bar,
+    .smart-voice-glint {
         animation: none;
         opacity: 1;
         transform: none;
+    }
+
+    .mic-processing-ring,
+    .mic-processing-dot {
+        animation: none;
+    }
+
+    .mic-processing-dot {
+        opacity: 0.7;
     }
 }
 
