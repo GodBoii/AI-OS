@@ -291,12 +291,33 @@ class AudioInputHandler {
         return btoa(binary);
     }
 
+    createProcessingIndicator() {
+        const indicator = document.createElement('span');
+        indicator.className = 'mic-processing-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+
+        const ring = document.createElement('span');
+        ring.className = 'mic-processing-ring';
+
+        const dots = document.createElement('span');
+        dots.className = 'mic-processing-dots';
+        for (let index = 0; index < 3; index += 1) {
+            const dot = document.createElement('span');
+            dot.className = `mic-processing-dot mic-processing-dot-${index + 1}`;
+            dots.appendChild(dot);
+        }
+
+        indicator.appendChild(ring);
+        indicator.appendChild(dots);
+        return indicator;
+    }
+
     setMicVisualState(state) {
         if (!this.micButton) return;
         const nextState = ['recording', 'processing'].includes(state) ? state : 'idle';
         const isRecording = nextState === 'recording';
         const isProcessing = nextState === 'processing';
-        const isOrbVisible = isRecording || isProcessing;
+        const hasActiveVisual = isRecording || isProcessing;
         const icon = this.micButton.querySelector('[data-composer-icon], i');
         const recordingClass = `${this.stateClassPrefix}recording`;
         const processingClass = `${this.stateClassPrefix}processing`;
@@ -308,7 +329,7 @@ class AudioInputHandler {
         this.micButton.setAttribute('aria-busy', String(isProcessing));
         this.micButton.setAttribute('aria-disabled', String(isProcessing));
 
-        if (!isOrbVisible) {
+        if (!hasActiveVisual) {
             this.micOrb?.destroy();
             this.micOrb = null;
             this.micButton.querySelector('.mic-orb-mount')?.remove();
@@ -337,28 +358,38 @@ class AudioInputHandler {
 
         const accessibleLabel = isRecording
             ? 'Voice recording active. Click to stop.'
-            : 'Transcribing voice input…';
-        if (!this.micOrb) {
-            this.micOrb = mountThinkingOrb(mount, {
-                state: 'composing',
-                size: 64,
-                speed: 1,
-                ariaLabel: accessibleLabel,
-            });
+            : 'Processing speech into text...';
+
+        if (isProcessing) {
+            this.micOrb?.destroy();
+            this.micOrb = null;
+            if (!mount.querySelector('.mic-processing-indicator')) {
+                mount.replaceChildren(this.createProcessingIndicator());
+            }
         } else {
-            this.micOrb.setState('composing');
-            this.micOrb.setAriaLabel(accessibleLabel);
-            this.micOrb.setPaused(false);
+            mount.querySelector('.mic-processing-indicator')?.remove();
+            if (!this.micOrb) {
+                this.micOrb = mountThinkingOrb(mount, {
+                    state: 'composing',
+                    size: 64,
+                    speed: 1,
+                    ariaLabel: accessibleLabel,
+                });
+            } else {
+                this.micOrb.setState('composing');
+                this.micOrb.setAriaLabel(accessibleLabel);
+                this.micOrb.setPaused(false);
+            }
         }
 
         this.micButton.setAttribute('aria-label', accessibleLabel);
         this.micButton.setAttribute(
             'title',
-            isRecording ? 'Stop voice recording' : 'Transcribing voice input',
+            isRecording ? 'Stop voice recording' : 'Processing speech into text',
         );
         this.micButton.dataset.tooltip = isRecording
-            ? 'Listening… Click to stop'
-            : 'Transcribing voice input…';
+            ? 'Listening... Click to stop'
+            : 'Processing speech into text...';
         this.onStateChange(nextState);
     }
 

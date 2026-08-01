@@ -10,7 +10,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MIC_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+DEFAULT_MIC_MODEL = "xiaomi/mimo-v2.5"
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 SUPPORTED_AUDIO_FORMATS = {"wav", "mp3", "m4a", "ogg", "flac", "webm", "aac"}
