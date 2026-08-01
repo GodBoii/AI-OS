@@ -14,6 +14,10 @@ SANDBOX_API_URL = os.getenv("SANDBOX_API_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
 DATABASE_POOLER_URL = os.getenv("DATABASE_POOLER_URL") or os.getenv("SUPABASE_DB_POOLER_URL")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+BACKEND_PUBLIC_URL = os.getenv(
+    "BACKEND_PUBLIC_URL",
+    "https://api.aetheriaai.website",
+).rstrip("/")
 
 
 def _split_csv(value):

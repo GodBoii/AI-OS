@@ -4,7 +4,9 @@ import html
 import json
 import logging
 import requests
-from flask import Blueprint, request, url_for, session
+from urllib.parse import quote
+
+from flask import Blueprint, request, session
 
 import config
 from extensions import oauth
@@ -15,6 +17,12 @@ from cache_manager import CacheManager
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth_bp', __name__)
+
+
+def _oauth_callback_url(provider):
+    """Return the canonical public callback URL seen by OAuth providers."""
+    safe_provider = quote(str(provider), safe="")
+    return f"{config.BACKEND_PUBLIC_URL}/auth/{safe_provider}/callback"
 
 
 def _oauth_callback_page(*, success, provider, message, close_delay_ms):
@@ -99,7 +107,10 @@ def login_provider(provider):
         return "Authentication token is missing.", 400
 
     session['supabase_token'] = token
-    redirect_uri = url_for('auth_bp.auth_callback', provider=provider, _external=True)
+    # Cloudflare terminates TLS before forwarding the request to Flask. Building
+    # this URL from the request would therefore produce an http:// callback even
+    # though the public endpoint is HTTPS.
+    redirect_uri = _oauth_callback_url(provider)
 
     if provider == 'google':
         return oauth.google.authorize_redirect(redirect_uri, access_type='offline', prompt='consent')
@@ -127,7 +138,7 @@ def auth_callback(provider):
                     'client_id': config.VERCEL_CLIENT_ID,
                     'client_secret': config.VERCEL_CLIENT_SECRET,
                     'code': code,
-                    'redirect_uri': url_for('auth_bp.auth_callback', provider='vercel', _external=True),
+                    'redirect_uri': _oauth_callback_url('vercel'),
                 },
             )
             token_response.raise_for_status()
