@@ -47,6 +47,45 @@ run_state_manager_instance: RunStateManager = None
 # Key: (sid, conversation_id)   Value: True
 _catchup_sent: dict = {}
 _socket_auth_tokens: dict = {}
+_sid_conversations: dict[str, set[str]] = {}
+_conversation_sids: dict[str, set[str]] = {}
+_abandonment_generation: dict[str, int] = {}
+_sandbox_cleanup_loop_started = False
+
+
+def _register_socket_conversation(sid: str, conversation_id: str) -> None:
+    sid = str(sid)
+    conversation_id = str(conversation_id)
+    _sid_conversations.setdefault(sid, set()).add(conversation_id)
+    _conversation_sids.setdefault(conversation_id, set()).add(sid)
+    # Invalidate any delayed cleanup created by an earlier disconnect.
+    _abandonment_generation[conversation_id] = _abandonment_generation.get(conversation_id, 0) + 1
+
+
+def _cleanup_abandoned_conversation(conversation_id: str, generation: int) -> None:
+    """Delete session sandboxes after a disconnect grace period and run completion."""
+    eventlet.sleep(60)
+    while True:
+        if _abandonment_generation.get(conversation_id) != generation:
+            return
+        if _conversation_sids.get(conversation_id):
+            return
+        if run_state_manager_instance and run_state_manager_instance.is_running(conversation_id):
+            eventlet.sleep(5)
+            continue
+        if connection_manager_service:
+            connection_manager_service.terminate_session(conversation_id)
+        return
+
+
+def _sandbox_expiry_cleanup_loop() -> None:
+    while True:
+        try:
+            if connection_manager_service:
+                connection_manager_service.cleanup_expired_sandboxes()
+        except Exception as exc:
+            logger.error("Sandbox expiry cleanup failed: %s", exc, exc_info=True)
+        eventlet.sleep(60)
 
 
 def _normalize_agent_mode(raw_value: Any) -> str:
@@ -154,6 +193,7 @@ def _sanitize_plan_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_mgr: RunStateManager):
     """A setter function to inject dependencies from the factory."""
     global connection_manager_service, redis_client_instance, run_state_manager_instance
+    global _sandbox_cleanup_loop_started
     connection_manager_service = manager
     redis_client_instance = redis_client
     run_state_manager_instance = run_state_mgr
@@ -162,6 +202,9 @@ def set_dependencies(manager: ConnectionManager, redis_client: Redis, run_state_
     # Start browser screenshot listener
     if redis_client_instance:
         eventlet.spawn(listen_for_browser_screenshots)
+        if not _sandbox_cleanup_loop_started:
+            _sandbox_cleanup_loop_started = True
+            eventlet.spawn(_sandbox_expiry_cleanup_loop)
 
 
 def listen_for_browser_screenshots():
@@ -224,6 +267,15 @@ def on_disconnect():
     for k in to_remove:
         del _catchup_sent[k]
     _socket_auth_tokens.pop(sid, None)
+    for conversation_id in _sid_conversations.pop(str(sid), set()):
+        active_sids = _conversation_sids.get(conversation_id, set())
+        active_sids.discard(str(sid))
+        if active_sids:
+            continue
+        _conversation_sids.pop(conversation_id, None)
+        generation = _abandonment_generation.get(conversation_id, 0) + 1
+        _abandonment_generation[conversation_id] = generation
+        eventlet.spawn(_cleanup_abandoned_conversation, conversation_id, generation)
 
 
 @socketio.on("join_conversation")
@@ -270,6 +322,7 @@ def on_join_conversation(data: Dict[str, Any]):
 
     room_name = f"conv:{conversation_id}"
     join_room(room_name)
+    _register_socket_conversation(sid, conversation_id)
     logger.info(f"[Join] SID {sid} joined room {room_name}")
 
     if not run_state_manager_instance:
@@ -666,6 +719,7 @@ def on_send_message(data: str):
         # Subscribe only after authentication and ownership checks.
         room_name = f"conv:{conversation_id}"
         join_room(room_name)
+        _register_socket_conversation(sid, conversation_id)
         logger.info(f"[send_message] SID {sid} joined room {room_name}")
 
         if data.get("type") == "terminate_session":

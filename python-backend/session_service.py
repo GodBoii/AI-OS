@@ -4,6 +4,7 @@ import logging
 import json
 import requests
 import datetime
+import time
 from typing import Optional, Dict, Any
 
 # Import from our centralized config and extensions modules
@@ -29,6 +30,7 @@ class ConnectionManager:
     SESSION_TTL = 7200  # 2 hours (reduced from 24h)
     MAX_SANDBOX_IDS = 5  # Maximum sandboxes per session
     CLEANUP_BATCH_SIZE = 100  # Sessions to check per cleanup cycle
+    SANDBOX_EXPIRY_ZSET = "sandbox_expirations"
     
     def __init__(self, redis_client: RedisClient):
         """
@@ -116,12 +118,24 @@ class ConnectionManager:
             if sandbox_ids:
                 for sandbox_id in sandbox_ids:
                     try:
-                        self.http_session.delete(
-                            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}", 
+                        response = self.http_session.delete(
+                            f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}",
                             timeout=10
+                        )
+                        response.raise_for_status()
+                        self.redis_client.zrem(
+                            self.SANDBOX_EXPIRY_ZSET,
+                            self._sandbox_expiry_member(conversation_id, str(sandbox_id)),
                         )
                     except requests.RequestException as e:
                         logger.error(f"Sandbox cleanup failed ({sandbox_id}): {e}")
+                        self.redis_client.zadd(
+                            self.SANDBOX_EXPIRY_ZSET,
+                            {
+                                self._sandbox_expiry_member(conversation_id, str(sandbox_id)):
+                                time.time() + 60
+                            },
+                        )
         
         # Remove from user's session index
         if user_id:
@@ -153,6 +167,7 @@ class ConnectionManager:
             json.dumps(session_data), 
             ex=self.SESSION_TTL
         )
+        self._refresh_sandbox_expirations(conversation_id, session_data.get("sandbox_ids", []))
         
         return session_data
     
@@ -190,10 +205,79 @@ class ConnectionManager:
             json.dumps(session_data), 
             ex=self.SESSION_TTL
         )
+        self._schedule_sandbox_expiration(conversation_id, sandbox_id)
         
         return True
+
+    @staticmethod
+    def _sandbox_expiry_member(conversation_id: str, sandbox_id: str) -> str:
+        return json.dumps(
+            {"conversation_id": str(conversation_id), "sandbox_id": str(sandbox_id)},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+    def _schedule_sandbox_expiration(self, conversation_id: str, sandbox_id: str) -> None:
+        """Keep a durable cleanup record that outlives the expiring session key."""
+        member = self._sandbox_expiry_member(conversation_id, sandbox_id)
+        self.redis_client.zadd(
+            self.SANDBOX_EXPIRY_ZSET,
+            {member: time.time() + self.SESSION_TTL},
+        )
+
+    def _refresh_sandbox_expirations(self, conversation_id: str, sandbox_ids) -> None:
+        for sandbox_id in sandbox_ids or []:
+            if sandbox_id:
+                self._schedule_sandbox_expiration(conversation_id, str(sandbox_id))
+
+    def cleanup_expired_sandboxes(self) -> int:
+        """
+        Delete containers whose owning Redis session has expired.
+
+        The sorted-set member retains the sandbox ID after ``session:*`` expires,
+        which is required because Redis cannot recover values from expired keys.
+        """
+        cleaned = 0
+        now = time.time()
+        members = self.redis_client.zrangebyscore(
+            self.SANDBOX_EXPIRY_ZSET,
+            0,
+            now,
+            start=0,
+            num=self.CLEANUP_BATCH_SIZE,
+        )
+        for raw_member in members or []:
+            member = raw_member.decode("utf-8") if isinstance(raw_member, bytes) else str(raw_member)
+            try:
+                payload = json.loads(member)
+                conversation_id = str(payload["conversation_id"])
+                sandbox_id = str(payload["sandbox_id"])
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                self.redis_client.zrem(self.SANDBOX_EXPIRY_ZSET, raw_member)
+                continue
+
+            session_json = self.redis_client.get(f"session:{conversation_id}")
+            if session_json:
+                session_data = json.loads(session_json)
+                if sandbox_id in {str(value) for value in session_data.get("sandbox_ids", [])}:
+                    self._schedule_sandbox_expiration(conversation_id, sandbox_id)
+                    continue
+
+            if self._cleanup_sandbox(sandbox_id):
+                self.redis_client.zrem(self.SANDBOX_EXPIRY_ZSET, raw_member)
+                cleaned += 1
+            else:
+                # Keep the durable record and retry on the next cleanup pass.
+                self.redis_client.zadd(
+                    self.SANDBOX_EXPIRY_ZSET,
+                    {member: time.time() + 60},
+                )
+
+        if cleaned:
+            logger.info("Cleaned %s sandbox container(s) for expired sessions", cleaned)
+        return cleaned
     
-    def _cleanup_sandbox(self, sandbox_id: str):
+    def _cleanup_sandbox(self, sandbox_id: str) -> bool:
         """
         Helper method to clean up a single sandbox.
         
@@ -201,15 +285,18 @@ class ConnectionManager:
             sandbox_id (str): The sandbox ID to clean up
         """
         if not config.SANDBOX_API_URL:
-            return
+            return False
             
         try:
-            self.http_session.delete(
-                f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}", 
+            response = self.http_session.delete(
+                f"{config.SANDBOX_API_URL}/sessions/{sandbox_id}",
                 timeout=5
             )
+            response.raise_for_status()
+            return True
         except requests.RequestException as e:
             logger.error(f"Sandbox cleanup failed ({sandbox_id[:8]}): {e}")
+            return False
     
     def _cleanup_expired_sessions(self, user_id: str):
         """
