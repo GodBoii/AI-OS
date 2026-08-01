@@ -427,7 +427,8 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
 /* WebView Container */
 .webview-container {
     position: fixed;
-    z-index: 1000;
+    /* Keep the in-app browser above every floating AI-OS workspace/window. */
+    z-index: 2147483647;
     border-radius: 1rem;
     overflow: visible;
     min-width: 320px;
