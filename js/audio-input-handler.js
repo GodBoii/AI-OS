@@ -34,18 +34,31 @@ class AudioInputHandler {
         this.micVisualState = 'idle';
         this.capturedSampleRate = TARGET_SAMPLE_RATE;
         this.boundToggleRecording = () => this.toggleRecording();
+        this.bindButtonClick = true;
+        this.stateClassPrefix = '';
+        this.onStateChange = () => {};
+        this.requestController = null;
     }
 
-    initialize(micButtonElement, textareaElement) {
+    initialize(micButtonElement, textareaElement, options = {}) {
         this.micButton = micButtonElement;
         this.targetTextarea = textareaElement;
+        this.bindButtonClick = options.bindButtonClick !== false;
+        this.stateClassPrefix = typeof options.stateClassPrefix === 'string'
+            ? options.stateClassPrefix
+            : '';
+        this.onStateChange = typeof options.onStateChange === 'function'
+            ? options.onStateChange
+            : () => {};
 
         if (!this.micButton || !this.targetTextarea) {
             console.error('[AudioInput] Required elements not found');
             return false;
         }
 
-        this.micButton.addEventListener('click', this.boundToggleRecording);
+        if (this.bindButtonClick) {
+            this.micButton.addEventListener('click', this.boundToggleRecording);
+        }
         this.setMicVisualState('idle');
         console.log('[AudioInput] Cloud mic initialized');
         return true;
@@ -167,7 +180,9 @@ class AudioInputHandler {
             }
         } catch (error) {
             console.error('[AudioInput] Error processing audio:', error);
-            this.showNotification(error.message || 'Failed to process audio', 'error');
+            if (error?.name !== 'AbortError') {
+                this.showNotification(error.message || 'Failed to process audio', 'error');
+            }
         } finally {
             this.isProcessing = false;
             this.setMicVisualState('idle');
@@ -181,18 +196,28 @@ class AudioInputHandler {
             throw new Error('Please sign in to use voice input.');
         }
 
-        const response = await fetch(CLOUD_MIC_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                audio: audioBase64,
-                format: 'wav',
-                language: 'en'
-            })
-        });
+        const requestController = new AbortController();
+        this.requestController = requestController;
+        let response;
+        try {
+            response = await fetch(CLOUD_MIC_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    audio: audioBase64,
+                    format: 'wav',
+                    language: 'en'
+                }),
+                signal: requestController.signal,
+            });
+        } finally {
+            if (this.requestController === requestController) {
+                this.requestController = null;
+            }
+        }
 
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload?.ok === false) {
@@ -272,11 +297,13 @@ class AudioInputHandler {
         const isRecording = nextState === 'recording';
         const isProcessing = nextState === 'processing';
         const isOrbVisible = isRecording || isProcessing;
-        const icon = this.micButton.querySelector('i');
+        const icon = this.micButton.querySelector('[data-composer-icon], i');
+        const recordingClass = `${this.stateClassPrefix}recording`;
+        const processingClass = `${this.stateClassPrefix}processing`;
 
         this.micVisualState = nextState;
-        this.micButton.classList.toggle('recording', isRecording);
-        this.micButton.classList.toggle('processing', isProcessing);
+        this.micButton.classList.toggle(recordingClass, isRecording);
+        this.micButton.classList.toggle(processingClass, isProcessing);
         this.micButton.setAttribute('aria-pressed', String(isRecording));
         this.micButton.setAttribute('aria-busy', String(isProcessing));
         this.micButton.setAttribute('aria-disabled', String(isProcessing));
@@ -292,6 +319,7 @@ class AudioInputHandler {
             this.micButton.setAttribute('aria-label', 'Voice input');
             this.micButton.setAttribute('title', 'Voice input');
             this.micButton.dataset.tooltip = 'Voice Input (Click to start)';
+            this.onStateChange(nextState);
             return;
         }
 
@@ -331,6 +359,7 @@ class AudioInputHandler {
         this.micButton.dataset.tooltip = isRecording
             ? 'Listening… Click to stop'
             : 'Transcribing voice input…';
+        this.onStateChange(nextState);
     }
 
     appendToTextarea(text) {
@@ -353,6 +382,8 @@ class AudioInputHandler {
     }
 
     cleanup() {
+        this.requestController?.abort();
+        this.requestController = null;
         this.isRecording = false;
         this.isProcessing = false;
 
@@ -361,9 +392,22 @@ class AudioInputHandler {
         this.setMicVisualState('idle');
     }
 
+    async cancelRecording() {
+        this.requestController?.abort();
+        this.requestController = null;
+        if (this.audioEngine.isRecording) {
+            await this.audioEngine.stopRecording();
+        }
+        this.isRecording = false;
+        this.isProcessing = false;
+        this.audioChunks = [];
+        this.audioEngine.setIdleState(true);
+        this.setMicVisualState('idle');
+    }
+
     destroy() {
         this.cleanup();
-        if (this.micButton) {
+        if (this.micButton && this.bindButtonClick) {
             this.micButton.removeEventListener('click', this.boundToggleRecording);
         }
         this.audioEngine.destroy().catch(error => {

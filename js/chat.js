@@ -55,6 +55,8 @@ let shuffleMenuController = null;
 let welcomeDisplay = null;
 let floatingWindowManager = null;
 let audioInputHandler = null;
+let windowsSpeechInputHandler = null;
+let composerContentObserver = null;
 let connectionStatus = false;
 let planModeEnabled = false;
 let planGenerationInProgress = false;
@@ -1357,8 +1359,11 @@ async function persistComputerToolAttachment(metadata, toolName = 'computer_tool
 
 async function startNewConversation() {
     // Stop any ongoing audio recording
-    if (audioInputHandler && audioInputHandler.isRecording) {
-        audioInputHandler.stopRecording();
+    if (audioInputHandler && (audioInputHandler.isRecording || audioInputHandler.isProcessing)) {
+        await audioInputHandler.cancelRecording();
+    }
+    if (windowsSpeechInputHandler?.isActive?.()) {
+        await windowsSpeechInputHandler.cancel();
     }
 
     // CRITICAL: Save any pending attachment metadata before terminating
@@ -1405,6 +1410,7 @@ async function startNewConversation() {
         contextHandler.invalidateCache();
     }
     if (fileAttachmentHandler) fileAttachmentHandler.clearAttachedFiles();
+    updatePrimaryComposerAction();
 
     // Hide content button for new conversation
     hideContentButton();
@@ -1751,6 +1757,7 @@ function setupIpcListeners() {
                     sendBtn.classList.remove('sending');
                 }
                 window.chatSendInProgress = false;
+                updatePrimaryComposerAction();
             }
         } catch (error) {
             console.error('Error handling response:', error);
@@ -1763,6 +1770,7 @@ function setupIpcListeners() {
                 sendBtn.classList.remove('sending');
             }
             window.chatSendInProgress = false;
+            updatePrimaryComposerAction();
         }
     });
 
@@ -2349,6 +2357,7 @@ function setupIpcListeners() {
                 sendBtn.classList.remove('sending');
             }
             window.chatSendInProgress = false;
+            updatePrimaryComposerAction();
 
             // Mark that we need to start a new backend session on next message
             window.needsNewBackendSession = true;
@@ -3123,6 +3132,96 @@ function createMessageAttachmentRail(files = []) {
     return rail;
 }
 
+function hasComposerContent() {
+    const input = document.getElementById('floating-input');
+    const hasText = Boolean(input?.value?.trim());
+    const hasFiles = Boolean(fileAttachmentHandler?.attachedFiles?.length);
+    const hasContext = Boolean(contextHandler?.getSelectedSessions?.().length);
+    return hasText || hasFiles || hasContext;
+}
+
+const SMART_VOICE_ICON_MARKUP = `
+    <svg class="smart-voice-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect class="smart-voice-stem smart-voice-stem-a" x="4.5" y="9" width="2.4" height="6" rx="1.2"></rect>
+        <rect class="smart-voice-stem smart-voice-stem-b" x="8.8" y="6" width="2.4" height="12" rx="1.2"></rect>
+        <rect class="smart-voice-stem smart-voice-stem-c" x="13.1" y="8" width="2.4" height="8" rx="1.2"></rect>
+        <path class="smart-voice-spark" d="M19 3.8c.18 1.65 1.05 2.52 2.7 2.7-1.65.18-2.52 1.05-2.7 2.7-.18-1.65-1.05-2.52-2.7-2.7 1.65-.18 2.52-1.05 2.7-2.7Z"></path>
+    </svg>`;
+
+function setPrimaryComposerIcon(button, action) {
+    const icon = button?.querySelector('[data-composer-icon]');
+    if (!icon) return;
+    icon.hidden = false;
+    icon.style.display = '';
+    icon.innerHTML = action === 'send'
+        ? '<i class="fas fa-paper-plane" aria-hidden="true"></i>'
+        : SMART_VOICE_ICON_MARKUP;
+}
+
+function updatePrimaryComposerAction() {
+    const sendButton = document.getElementById('send-message');
+    const normalMicButton = document.getElementById('mic-button');
+    if (!sendButton) return;
+
+    const smartVoiceActive = Boolean(audioInputHandler?.isRecording || audioInputHandler?.isProcessing);
+    const normalVoiceActive = Boolean(windowsSpeechInputHandler?.isActive?.());
+    const sending = Boolean(window.chatSendInProgress || sendButton.classList.contains('sending') || planGenerationInProgress);
+    const shouldShowSend = hasComposerContent();
+
+    if (normalVoiceActive) {
+        if (!sendButton.disabled) {
+            sendButton.disabled = true;
+            sendButton.dataset.disabledByNormalVoice = 'true';
+        }
+    } else if (sendButton.dataset.disabledByNormalVoice === 'true') {
+        sendButton.disabled = false;
+        delete sendButton.dataset.disabledByNormalVoice;
+    }
+
+    if (normalMicButton) {
+        if (smartVoiceActive) {
+            if (!normalMicButton.disabled) {
+                normalMicButton.disabled = true;
+                normalMicButton.dataset.disabledBySmartVoice = 'true';
+            }
+        } else if (normalMicButton.dataset.disabledBySmartVoice === 'true') {
+            normalMicButton.disabled = false;
+            delete normalMicButton.dataset.disabledBySmartVoice;
+        }
+    }
+
+    if (smartVoiceActive || sending) return;
+
+    const action = shouldShowSend ? 'send' : 'smart-voice';
+    sendButton.dataset.composerAction = action;
+    sendButton.classList.toggle('smart-voice', action === 'smart-voice');
+    sendButton.setAttribute('aria-pressed', 'false');
+    sendButton.setAttribute('aria-busy', 'false');
+    sendButton.setAttribute('aria-disabled', String(sendButton.disabled));
+
+    setPrimaryComposerIcon(sendButton, action);
+
+    if (action === 'send') {
+        sendButton.setAttribute('aria-label', 'Send message');
+        sendButton.setAttribute('title', 'Send message');
+    } else {
+        sendButton.setAttribute('aria-label', 'Start intelligent voice input');
+        sendButton.setAttribute('title', 'Intelligent voice input');
+    }
+}
+
+async function handlePrimaryComposerAction() {
+    updatePrimaryComposerAction();
+    const sendButton = document.getElementById('send-message');
+    if (!sendButton || sendButton.disabled) return;
+
+    if (sendButton.dataset.composerAction === 'smart-voice') {
+        await audioInputHandler?.toggleRecording();
+        return;
+    }
+    await handleSendMessage();
+}
+
 function setPlanModeEnabled(enabled) {
     planModeEnabled = Boolean(enabled);
     const button = document.getElementById('plan-mode-btn');
@@ -3147,6 +3246,7 @@ function setPlanGenerating(generating) {
     if (input) {
         input.disabled = planGenerationInProgress;
     }
+    updatePrimaryComposerAction();
 }
 
 function hidePlanReview() {
@@ -3376,6 +3476,7 @@ async function requestPlanFromAgent() {
 
     floatingInput.value = '';
     floatingInput.style.height = 'auto';
+    updatePrimaryComposerAction();
     setPlanGenerating(true);
 
     ipcRenderer.send('plan-request', {
@@ -3445,6 +3546,7 @@ async function handleSendMessage() {
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
         window.chatSendInProgress = false;
+        updatePrimaryComposerAction();
         return;
     }
 
@@ -3463,6 +3565,7 @@ async function handleSendMessage() {
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
         window.chatSendInProgress = false;
+        updatePrimaryComposerAction();
         return;
     }
 
@@ -3538,6 +3641,7 @@ async function handleSendMessage() {
             sendMessageBtn.disabled = false;
             sendMessageBtn.classList.remove('sending');
             window.chatSendInProgress = false;
+            updatePrimaryComposerAction();
         }
 
         floatingInput.value = '';
@@ -3545,6 +3649,7 @@ async function handleSendMessage() {
         fileAttachmentHandler.clearAttachedFiles({ revokePreviewUrls: false });
         contextHandler.clearSelectedContext();
         pendingPlanSubmitDisplayMessage = null;
+        updatePrimaryComposerAction();
         return;
     }
 
@@ -3608,6 +3713,7 @@ async function handleSendMessage() {
         sendMessageBtn.disabled = false;
         sendMessageBtn.classList.remove('sending');
         window.chatSendInProgress = false;
+        updatePrimaryComposerAction();
         // Clear pending metadata on error
         window.pendingAttachmentMetadata = null;
     }
@@ -3617,6 +3723,7 @@ async function handleSendMessage() {
     fileAttachmentHandler.clearAttachedFiles({ revokePreviewUrls: false });
     contextHandler.clearSelectedContext();
     pendingPlanSubmitDisplayMessage = null;
+    updatePrimaryComposerAction();
 }
 
 /**
@@ -4075,19 +4182,51 @@ function init() {
     setupViewContentButton();
     console.log('[Chat] Session content viewer initialized');
 
-    // Initialize cloud mic input handler
-    const micButton = document.getElementById('mic-button');
-    if (micButton && window.AudioInputHandler) {
+    // The primary composer button owns intelligent voice input while empty.
+    const sendButton = document.getElementById('send-message');
+    if (sendButton && window.AudioInputHandler) {
         audioInputHandler = new AudioInputHandler();
-        const initialized = audioInputHandler.initialize(micButton, elements.input);
+        const initialized = audioInputHandler.initialize(sendButton, elements.input, {
+            bindButtonClick: false,
+            stateClassPrefix: 'smart-',
+            onStateChange: updatePrimaryComposerAction,
+        });
         if (!initialized) {
-            console.warn('Audio input handler could not be initialized');
+            console.warn('Intelligent voice input handler could not be initialized');
         }
     }
 
-    elements.sendBtn.addEventListener('click', handleSendMessage);
+    // The standard microphone uses Windows-native, literal dictation.
+    const micButton = document.getElementById('mic-button');
+    if (micButton && window.WindowsSpeechInputHandler) {
+        windowsSpeechInputHandler = new WindowsSpeechInputHandler();
+        const initialized = windowsSpeechInputHandler.initialize(micButton, elements.input, {
+            language: navigator.language || 'en-US',
+            canStart: () => !(audioInputHandler?.isRecording || audioInputHandler?.isProcessing),
+            onStateChange: updatePrimaryComposerAction,
+        });
+        if (!initialized) {
+            console.warn('Windows native speech input handler could not be initialized');
+        }
+    }
+
+    elements.sendBtn.addEventListener('click', handlePrimaryComposerAction);
     elements.minimizeBtn?.addEventListener('click', () => window.stateManager.setState({ isChatOpen: false }));
     elements.input.addEventListener('keypress', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } });
+    elements.input.addEventListener('input', updatePrimaryComposerAction);
+
+    const contextFilesBar = document.getElementById('context-files-bar');
+    if (contextFilesBar) {
+        composerContentObserver?.disconnect();
+        composerContentObserver = new MutationObserver(updatePrimaryComposerAction);
+        composerContentObserver.observe(contextFilesBar, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class'],
+        });
+    }
+    updatePrimaryComposerAction();
 
     document.getElementById('plan-mode-btn')?.addEventListener('click', () => {
         setPlanModeEnabled(!planModeEnabled);
