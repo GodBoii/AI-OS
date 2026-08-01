@@ -102,7 +102,8 @@ def execute_in_session(sandbox_id: str, request: CommandRequest):
         shell_command = ["/bin/bash", "-c", request.command]
         exit_code, (stdout, stderr) = container.exec_run(
             cmd=shell_command,
-            demux=True 
+            demux=True,
+            workdir=WORKSPACE_ROOT,
         )
         
         stdout_str = stdout.decode('utf-8', errors='ignore') if stdout else ""

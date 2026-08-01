@@ -509,6 +509,22 @@ class SandboxTools(Toolkit):
         otherwise returns the ID of the existing sandbox.
         Returns the unique sandbox_id string or None if creation fails.
         """
+        # An explicit session termination may happen while an agent run is still
+        # unwinding. Never create a replacement container after the owning
+        # session has been deleted from Redis.
+        if self.redis_client is not None and self.session_id:
+            try:
+                if not self.redis_client.exists(f"session:{self.session_id}"):
+                    logger.info(
+                        "Refusing sandbox creation for terminated session %s",
+                        self.session_id,
+                    )
+                    return None
+            except Exception as exc:
+                # Redis availability should not invalidate an already-running
+                # session; normal sandbox error handling remains in effect.
+                logger.warning("Unable to verify sandbox session state: %s", exc)
+
         active_id = self.session_info.get("active_sandbox_id")
         if active_id and self._is_sandbox_alive(active_id):
             return active_id
