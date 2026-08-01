@@ -324,6 +324,20 @@ body:not(.dark-mode) .memory-form button[type="submit"] * {
     color: inherit !important;
 }
 
+body:not(.dark-mode) .send-btn.smart-voice,
+body:not(.dark-mode) .send-btn.smart-voice:hover {
+    background: var(--action-secondary-bg) !important;
+    border-color: var(--action-secondary-border) !important;
+    color: var(--action-secondary-fg) !important;
+}
+
+body:not(.dark-mode) .send-btn.smart-recording,
+body:not(.dark-mode) .send-btn.smart-processing {
+    background: transparent !important;
+    border-color: transparent !important;
+    color: var(--icon-color) !important;
+}
+
 /* ===== FORMS ===== */
 body:not(.dark-mode) .form-group label {
     color: #0f172a !important;

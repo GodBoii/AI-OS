@@ -119,6 +119,47 @@
     color: var(--accent-color);
 }
 
+.mic-btn.native-starting,
+.mic-btn.native-recording,
+.mic-btn.native-processing {
+    color: var(--accent-color);
+    background: var(--accent-muted);
+    transform: none;
+}
+
+.mic-btn.native-recording {
+    box-shadow: inset 0 0 0 1px var(--action-focus-ring);
+}
+
+.mic-btn.native-starting,
+.mic-btn.native-processing {
+    cursor: progress;
+}
+
+.mic-btn.native-recording > i {
+    display: none;
+}
+
+.native-waveform {
+    width: 24px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    pointer-events: none;
+}
+
+.native-waveform-bar {
+    width: 2.5px;
+    height: 18px;
+    border-radius: 999px;
+    background: currentColor;
+    transform: scaleY(0.14);
+    transform-origin: center;
+    will-change: transform;
+}
+
 .mic-btn.recording,
 .mic-btn.processing {
     width: 64px;
@@ -190,9 +231,133 @@
 }
 
 .send-btn i,
+.composer-action-icon,
 .plan-mode-btn i,
 .plan-mode-btn span {
     color: inherit !important;
+}
+
+.composer-action-icon {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+}
+
+.composer-action-icon > i {
+    font-size: 1rem;
+}
+
+.smart-voice-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+    overflow: visible;
+    fill: currentColor;
+}
+
+.smart-voice-stem,
+.smart-voice-spark {
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: transform, opacity;
+}
+
+.smart-voice-stem {
+    animation: smartVoiceStem 2.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+.smart-voice-stem-b {
+    animation-delay: -1.9s;
+}
+
+.smart-voice-stem-c {
+    animation-delay: -0.95s;
+}
+
+.smart-voice-spark {
+    animation: smartVoiceSpark 3.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.send-btn.smart-voice:hover .smart-voice-stem {
+    animation-duration: 1.35s;
+}
+
+.send-btn.smart-voice:hover .smart-voice-spark {
+    animation-duration: 1.8s;
+}
+
+.send-btn:disabled .smart-voice-stem,
+.send-btn:disabled .smart-voice-spark {
+    animation-play-state: paused;
+}
+
+@keyframes smartVoiceStem {
+    0%, 100% { transform: scaleY(0.82); opacity: 0.72; }
+    45% { transform: scaleY(1); opacity: 1; }
+    68% { transform: scaleY(0.9); opacity: 0.86; }
+}
+
+@keyframes smartVoiceSpark {
+    0%, 58%, 100% { transform: scale(0.72) rotate(0deg); opacity: 0.5; }
+    70% { transform: scale(1.08) rotate(8deg); opacity: 1; }
+    82% { transform: scale(0.9) rotate(0deg); opacity: 0.78; }
+}
+
+.send-btn.smart-voice {
+    background: var(--action-secondary-bg);
+    border: 1px solid var(--action-secondary-border);
+    color: var(--action-secondary-fg);
+}
+
+.send-btn.smart-voice:hover {
+    background: var(--action-secondary-hover);
+    border-color: var(--action-primary-border);
+    color: var(--action-secondary-fg);
+}
+
+.send-btn.smart-recording,
+.send-btn.smart-processing {
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+    margin-block: -12px;
+    padding: 0;
+    overflow: visible;
+    color: var(--icon-color);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    transform: none;
+}
+
+.send-btn.smart-recording:hover,
+.send-btn.smart-processing:hover {
+    color: var(--icon-color);
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+}
+
+.send-btn.smart-processing {
+    cursor: progress;
+}
+
+.send-btn.smart-recording > i,
+.send-btn.smart-processing > i,
+.send-btn.smart-recording > .composer-action-icon,
+.send-btn.smart-processing > .composer-action-icon {
+    display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .smart-voice-stem,
+    .smart-voice-spark {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
 }
 
 body:not(.dark-mode) .send-btn,
@@ -211,6 +376,20 @@ body:not(.dark-mode) .plan-mode-btn.active:hover {
     background: var(--action-primary-bg);
     border-color: var(--action-primary-border);
     color: var(--action-primary-fg) !important;
+}
+
+.dark-mode .send-btn.smart-voice,
+.dark-mode .send-btn.smart-voice:hover {
+    background: var(--action-secondary-bg);
+    border-color: var(--action-secondary-border);
+    color: var(--action-secondary-fg) !important;
+}
+
+.dark-mode .send-btn.smart-recording,
+.dark-mode .send-btn.smart-processing {
+    background: transparent;
+    border-color: transparent;
+    color: var(--icon-color) !important;
 }
 
 .send-btn:focus-visible,
