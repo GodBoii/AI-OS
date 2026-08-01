@@ -152,6 +152,20 @@ contextBridge.exposeInMainWorld(
         }
     },
 
+    nativeSpeech: {
+        getStatus: () => ipcRenderer.invoke('native-speech-status'),
+        start: (options = {}) => ipcRenderer.invoke('native-speech-start', {
+            language: typeof options.language === 'string' ? options.language : 'en-US'
+        }),
+        stop: () => ipcRenderer.invoke('native-speech-stop'),
+        onEvent: (callback) => {
+            if (typeof callback !== 'function') return () => {};
+            const listener = (_event, payload) => callback(payload);
+            ipcRenderer.on('native-speech-event', listener);
+            return () => ipcRenderer.removeListener('native-speech-event', listener);
+        }
+    },
+
     // File system operations
     fs: {
         // Synchronous operations

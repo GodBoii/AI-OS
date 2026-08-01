@@ -10,6 +10,7 @@ const BrowserHandler = require('./browser-handler.js');
 const ComputerControlHandler = require('./computer-control-handler.js');
 const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
+const WindowsNativeSpeechService = require('./windows-native-speech-service.js');
 
 let mainWindow;
 let appTray = null;
@@ -42,6 +43,7 @@ let browserHandler;
 let computerControlHandler;
 let localCoderHandler;
 let nativeNotificationService;
+let windowsNativeSpeechService;
 let linkWebView = null;
 let isAppQuitting = false;
 
@@ -272,6 +274,7 @@ function createWindow() {
 
     mainWindow.maximize();
     mainWindow.loadFile('index.html');
+    windowsNativeSpeechService = new WindowsNativeSpeechService(mainWindow);
     const devToolsAccelerator = 'CommandOrControl+Shift+D';
     const registerDevToolsAccelerator = () => {
         if (!globalShortcut.isRegistered(devToolsAccelerator)) {
@@ -922,6 +925,24 @@ ipcMain.handle('export-conversation-pdf', async (event, payload) => {
 ipcMain.handle('get-path', (event, pathName) => { try { return app.getPath(pathName); } catch (error) { console.error(`Error getting path for ${pathName}:`, error); return null; } });
 ipcMain.handle('get-app-path', () => { return app.getAppPath(); });
 ipcMain.handle('resolve-app-resource', (event, ...segments) => { return path.join(app.getAppPath(), ...segments); });
+ipcMain.handle('native-speech-status', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !windowsNativeSpeechService) {
+        return { supported: false, active: false, ready: false };
+    }
+    return windowsNativeSpeechService.getStatus();
+});
+ipcMain.handle('native-speech-start', (event, options = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !windowsNativeSpeechService) {
+        return { ok: false, code: 'unavailable', error: 'Windows speech input is unavailable.' };
+    }
+    return windowsNativeSpeechService.start({ language: options?.language });
+});
+ipcMain.handle('native-speech-stop', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !windowsNativeSpeechService) {
+        return { ok: false, code: 'unavailable', error: 'Windows speech input is unavailable.' };
+    }
+    return windowsNativeSpeechService.stop();
+});
 
 // Handle save file dialog for sharing AI responses
 ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) => {
@@ -956,6 +977,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async () => {
+    if (windowsNativeSpeechService) {
+        windowsNativeSpeechService.dispose();
+        windowsNativeSpeechService = null;
+    }
+
     if (isAppQuitting) return;
     isAppQuitting = true;
 
@@ -1006,4 +1032,5 @@ app.on('before-quit', async () => {
             console.error('Error stopping Python bridge:', error.message);
         }
     }
+
 });
