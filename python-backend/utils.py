@@ -1,6 +1,6 @@
 # python-backend/utils.py
 #
-# JWT validation with Redis-backed caching (5-minute TTL).
+# Resilient JWT validation with Redis-backed caching and request coalescing.
 #
 # Why cache JWT validation?
 # ─────────────────────────
@@ -19,16 +19,23 @@
 # - TTL is 5 minutes. Supabase JWTs expire in ~1 hour by default, but we use
 #   a much shorter cache TTL so that a revoked or logged-out token stops working
 #   within 5 minutes — an acceptable window for most applications.
+# - During a Supabase transport outage only, a recently verified identity may
+#   be used past the normal five-minute cache TTL, but never past JWT expiry.
+# - A per-token Redis lock coalesces simultaneous cache misses so one frontend
+#   startup cannot fan out into many identical Supabase validation requests.
 # - The cached value is the JSON-serialised user payload (id, email, role, etc.)
 #   reconstructed into a types.SimpleNamespace on retrieval, which quacks like
 #   the real Supabase User object for all downstream code (user.id, user.email).
 
+import base64
+import binascii
 import hashlib
 import httpx
 import json
 import logging
 import time
 import types
+import uuid
 import redis
 
 from gotrue.errors import AuthApiError
@@ -51,6 +58,15 @@ _JWT_CACHE_TTL_SECONDS = 300
 # Redis key prefix — makes it easy to spot JWT cache entries in redis-cli
 # and to flush them selectively without touching other cache namespaces.
 _JWT_CACHE_PREFIX = "jwt_cache:"
+_JWT_STALE_PREFIX = "jwt_stale:"
+_JWT_VALIDATION_LOCK_PREFIX = "jwt_validation_lock:"
+_JWT_AUTH_OUTAGE_PREFIX = "jwt_auth_outage:"
+
+_JWT_STALE_TTL_SECONDS = 900
+_JWT_VALIDATION_LOCK_TTL_SECONDS = 10
+_JWT_VALIDATION_WAIT_SECONDS = 2.5
+_JWT_VALIDATION_POLL_SECONDS = 0.05
+_JWT_AUTH_OUTAGE_TTL_SECONDS = 3
 
 _AUTH_NETWORK_ATTEMPTS = 2
 _AUTH_NETWORK_RETRY_DELAY_SECONDS = 0.2
@@ -85,11 +101,26 @@ def _jwt_cache_key(jwt: str) -> str:
       2. The raw token cannot be recovered from the key (one-way function).
       3. Two identical JWTs always produce the same cache key (deterministic).
     """
-    digest = hashlib.sha256(jwt.encode("utf-8")).hexdigest()
-    return f"{_JWT_CACHE_PREFIX}{digest}"
+    return f"{_JWT_CACHE_PREFIX}{_jwt_digest(jwt)}"
 
 
-def _user_from_cache(jwt: str):
+def _jwt_digest(jwt: str) -> str:
+    return hashlib.sha256(jwt.encode("utf-8")).hexdigest()
+
+
+def _jwt_stale_key(jwt: str) -> str:
+    return f"{_JWT_STALE_PREFIX}{_jwt_digest(jwt)}"
+
+
+def _jwt_validation_lock_key(jwt: str) -> str:
+    return f"{_JWT_VALIDATION_LOCK_PREFIX}{_jwt_digest(jwt)}"
+
+
+def _jwt_auth_outage_key(jwt: str) -> str:
+    return f"{_JWT_AUTH_OUTAGE_PREFIX}{_jwt_digest(jwt)}"
+
+
+def _user_from_serialized_cache(key: str, *, label: str):
     """
     Attempt to load a previously cached user object from Redis.
 
@@ -101,7 +132,7 @@ def _user_from_cache(jwt: str):
     if r is None:
         return None
     try:
-        raw = r.get(_jwt_cache_key(jwt))
+        raw = r.get(key)
         if not raw:
             return None
         data = json.loads(raw)
@@ -109,12 +140,48 @@ def _user_from_cache(jwt: str):
         # SimpleNamespace supports attribute access (user.id, user.email, etc.)
         # which is all downstream code ever does.
         user_ns = types.SimpleNamespace(**data)
-        logger.info("[JWT Cache] HIT for user=%s", data.get("id", "unknown"))
+        logger.info("[%s] HIT for user=%s", label, data.get("id", "unknown"))
         return user_ns
     except Exception as exc:
         # Cache errors must never break authentication — just miss and continue.
-        logger.warning("[JWT Cache] Read error (treating as miss): %s", exc)
+        logger.warning("[%s] Read error (treating as miss): %s", label, exc)
         return None
+
+
+def _user_from_cache(jwt: str):
+    """Load the active five-minute verified identity cache."""
+    return _user_from_serialized_cache(
+        _jwt_cache_key(jwt),
+        label="JWT Cache",
+    )
+
+
+def _jwt_is_unexpired(jwt: str) -> bool:
+    """Use exp only to bound an identity that was previously verified."""
+    try:
+        payload_segment = jwt.split(".")[1]
+        padding = "=" * (-len(payload_segment) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_segment + padding))
+        return float(payload["exp"]) > time.time()
+    except (
+        IndexError,
+        KeyError,
+        TypeError,
+        ValueError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        binascii.Error,
+    ):
+        return False
+
+
+def _user_from_stale_cache(jwt: str):
+    if not _jwt_is_unexpired(jwt):
+        return None
+    return _user_from_serialized_cache(
+        _jwt_stale_key(jwt),
+        label="JWT Stale Cache",
+    )
 
 
 def _user_to_cache(jwt: str, user) -> None:
@@ -147,7 +214,9 @@ def _user_to_cache(jwt: str, user) -> None:
             logger.warning("[JWT Cache] Skipping cache write — could not extract user id.")
             return
 
-        r.set(_jwt_cache_key(jwt), json.dumps(payload), ex=_JWT_CACHE_TTL_SECONDS)
+        serialized = json.dumps(payload)
+        r.set(_jwt_cache_key(jwt), serialized, ex=_JWT_CACHE_TTL_SECONDS)
+        r.set(_jwt_stale_key(jwt), serialized, ex=_JWT_STALE_TTL_SECONDS)
         logger.info("[JWT Cache] WRITE user=%s TTL=%ds", payload["id"], _JWT_CACHE_TTL_SECONDS)
     except Exception as exc:
         # Cache write failures are non-fatal — the user object was already
@@ -191,6 +260,114 @@ def _validate_user_with_supabase(jwt: str):
     return None, ("Authentication service temporarily unavailable", 503)
 
 
+def _has_recent_auth_outage(jwt: str) -> bool:
+    r = _get_jwt_redis()
+    if r is None:
+        return False
+    try:
+        return bool(r.get(_jwt_auth_outage_key(jwt)))
+    except Exception as exc:
+        logger.warning("[JWT Cache] Outage marker read failed: %s", exc)
+        return False
+
+
+def _mark_auth_outage(jwt: str) -> None:
+    r = _get_jwt_redis()
+    if r is None:
+        return
+    try:
+        r.set(
+            _jwt_auth_outage_key(jwt),
+            "1",
+            ex=_JWT_AUTH_OUTAGE_TTL_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning("[JWT Cache] Outage marker write failed: %s", exc)
+
+
+def _release_validation_lock(r, lock_key: str, owner: str) -> None:
+    if r is None or not owner:
+        return
+    try:
+        r.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+            "return redis.call('del', KEYS[1]) else return 0 end",
+            1,
+            lock_key,
+            owner,
+        )
+    except Exception as exc:
+        # The lock has a short TTL, so a failed release cannot deadlock auth.
+        logger.warning("[JWT Cache] Validation lock release failed: %s", exc)
+
+
+def _validate_and_cache_user(jwt: str):
+    """Deduplicate validation and tolerate a short Supabase transport outage."""
+    if _has_recent_auth_outage(jwt):
+        stale_user = _user_from_stale_cache(jwt)
+        if stale_user is not None:
+            logger.info("[JWT Cache] Serving verified stale identity during auth outage")
+            return stale_user, None
+        return None, ("Authentication service temporarily unavailable", 503)
+
+    r = _get_jwt_redis()
+    lock_key = _jwt_validation_lock_key(jwt)
+    owner = uuid.uuid4().hex
+    acquired = True
+
+    if r is not None:
+        try:
+            acquired = bool(r.set(
+                lock_key,
+                owner,
+                nx=True,
+                ex=_JWT_VALIDATION_LOCK_TTL_SECONDS,
+            ))
+        except Exception as exc:
+            logger.warning("[JWT Cache] Validation lock unavailable: %s", exc)
+            r = None
+            acquired = True
+
+    if not acquired:
+        deadline = time.monotonic() + _JWT_VALIDATION_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            cached_user = _user_from_cache(jwt)
+            if cached_user is not None:
+                return cached_user, None
+            if _has_recent_auth_outage(jwt):
+                stale_user = _user_from_stale_cache(jwt)
+                if stale_user is not None:
+                    logger.info("[JWT Cache] Serving verified stale identity during auth outage")
+                    return stale_user, None
+                return None, ("Authentication service temporarily unavailable", 503)
+            time.sleep(_JWT_VALIDATION_POLL_SECONDS)
+
+        logger.warning("[JWT Cache] Timed out waiting for in-flight JWT validation")
+        return None, ("Authentication service temporarily unavailable", 503)
+
+    try:
+        # Close the race between the first cache read and lock acquisition.
+        cached_user = _user_from_cache(jwt)
+        if cached_user is not None:
+            return cached_user, None
+
+        logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
+        user, error = _validate_user_with_supabase(jwt)
+        if error:
+            if error[1] == 503:
+                _mark_auth_outage(jwt)
+                stale_user = _user_from_stale_cache(jwt)
+                if stale_user is not None:
+                    logger.info("[JWT Cache] Serving verified stale identity during auth outage")
+                    return stale_user, None
+            return None, error
+
+        _user_to_cache(jwt, user)
+        return user, None
+    finally:
+        _release_validation_lock(r, lock_key, owner)
+
+
 def get_user_from_token(request_object):
     """
     Validates a JWT from an Authorization header and returns the authenticated user.
@@ -221,14 +398,7 @@ def get_user_from_token(request_object):
         return cached_user, None
 
     # ── Step 2: Cache miss — validate against Supabase ──────────────────────
-    logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
-    user, error = _validate_user_with_supabase(jwt)
-    if error:
-        return None, error
-
-    # Only successful validations are cached.
-    _user_to_cache(jwt, user)
-    return user, None
+    return _validate_and_cache_user(jwt)
 
 
 def get_user_from_jwt(jwt: str):
@@ -246,10 +416,4 @@ def get_user_from_jwt(jwt: str):
     if cached_user is not None:
         return cached_user, None
 
-    logger.info("[JWT Cache] MISS — calling Supabase auth.get_user()")
-    user, error = _validate_user_with_supabase(jwt)
-    if error:
-        return None, error
-
-    _user_to_cache(jwt, user)
-    return user, None
+    return _validate_and_cache_user(jwt)
