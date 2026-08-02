@@ -69,6 +69,9 @@ class ConnectionManager:
             'enable_browser': True,
             'enable_vercel': True,
             'enable_supabase': True,
+            'enable_composio_facebook': True,
+            'enable_composio_instagram': True,
+            'enable_composio_youtube': True,
             'enable_computer_control': True  # NEW: Enable computer control by default for desktop
         }
         for key, value in default_tool_config.items():

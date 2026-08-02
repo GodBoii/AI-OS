@@ -144,14 +144,27 @@ def _sanitize_tool_config_for_user(config_data: Dict[str, Any], user_id: str) ->
         if flag in sanitized:
             sanitized[flag] = bool(sanitized.get(flag)) and service in connected_services
 
-    if "enable_composio_whatsapp" in sanitized and sanitized.get("enable_composio_whatsapp"):
+    composio_gates = {
+        "enable_composio_whatsapp": "WHATSAPP",
+        "enable_composio_facebook": "FACEBOOK",
+        "enable_composio_instagram": "INSTAGRAM",
+        "enable_composio_youtube": "YOUTUBE",
+    }
+    for flag, toolkit_slug in composio_gates.items():
+        if flag not in sanitized or not sanitized.get(flag):
+            continue
         try:
-            from composio_tools import has_active_whatsapp_connection
+            from composio_tools import has_active_composio_connection
 
-            sanitized["enable_composio_whatsapp"] = has_active_whatsapp_connection(str(user_id))
+            sanitized[flag] = has_active_composio_connection(str(user_id), toolkit_slug)
         except Exception as exc:
-            logger.warning("Failed to verify WhatsApp integration for user %s: %s", user_id, exc)
-            sanitized["enable_composio_whatsapp"] = False
+            logger.warning(
+                "Failed to verify %s integration for user %s: %s",
+                toolkit_slug,
+                user_id,
+                exc,
+            )
+            sanitized[flag] = False
 
     return sanitized
 
@@ -174,6 +187,9 @@ def _sanitize_plan_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "enable_google_drive",
         "enable_google_sheets",
         "enable_composio_whatsapp",
+        "enable_composio_facebook",
+        "enable_composio_instagram",
+        "enable_composio_youtube",
         "enable_computer_control",
     }
     return {
