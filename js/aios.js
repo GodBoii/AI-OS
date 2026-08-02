@@ -180,6 +180,9 @@ class AIOS {
             connectGoogleBtn: document.getElementById('connect-google-btn'),
             connectVercelBtn: document.getElementById('connect-vercel-btn'),
             connectSupabaseBtn: document.getElementById('connect-supabase-btn'),
+            connectFacebookBtn: document.getElementById('connect-facebook-btn'),
+            connectInstagramBtn: document.getElementById('connect-instagram-btn'),
+            connectYoutubeBtn: document.getElementById('connect-youtube-btn'),
             connectWhatsappBtn: document.getElementById('connect-whatsapp-btn'),
 
             // Deployments Tab
@@ -352,8 +355,16 @@ class AIOS {
         window.electron.ipcRenderer.on('oauth-integration-callback', async (data) => {
             console.log('[aios.js] Received OAuth integration callback:', data);
 
+            const providerLabels = {
+                composio_whatsapp: 'WhatsApp',
+                composio_facebook: 'Facebook',
+                composio_instagram: 'Instagram',
+                composio_youtube: 'YouTube'
+            };
+            const providerLabel = providerLabels[data.provider] || data.provider;
+
             if (data.success) {
-                this.showNotification(`Successfully connected to ${data.provider}!`, 'success');
+                this.showNotification(`Successfully connected to ${providerLabel}!`, 'success');
                 // Refresh integration status
                 await this.checkIntegrationStatus();
             } else {
@@ -423,6 +434,9 @@ class AIOS {
         addClickHandler(this.elements.connectGoogleBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectVercelBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectSupabaseBtn, integrationButtonHandler);
+        addClickHandler(this.elements.connectFacebookBtn, integrationButtonHandler);
+        addClickHandler(this.elements.connectInstagramBtn, integrationButtonHandler);
+        addClickHandler(this.elements.connectYoutubeBtn, integrationButtonHandler);
         addClickHandler(this.elements.connectWhatsappBtn, integrationButtonHandler);
         addClickHandler(this.elements.refreshDeploymentsBtn, (event) => {
             this._withButtonLoading(event.currentTarget, 'refresh:deployments', () => this.loadDeployments(true));
@@ -682,25 +696,32 @@ class AIOS {
                 this.showNotification('You must be logged in to connect an integration.', 'error');
                 return;
             }
+            const composioIntegrations = {
+                composio_whatsapp: { toolkit: 'WHATSAPP', label: 'WhatsApp' },
+                composio_facebook: { toolkit: 'FACEBOOK', label: 'Facebook' },
+                composio_instagram: { toolkit: 'INSTAGRAM', label: 'Instagram' },
+                composio_youtube: { toolkit: 'YOUTUBE', label: 'YouTube' }
+            };
             let authUrl;
             if (provider === 'vercel') {
                 authUrl = `https://vercel.com/integrations/aetheria-ai/new`;
-            } else if (provider === 'composio_whatsapp') {
-                const callbackUrl = 'aios://auth/callback?provider=composio_whatsapp';
+            } else if (composioIntegrations[provider]) {
+                const integration = composioIntegrations[provider];
+                const callbackUrl = `aios://auth/callback?provider=${provider}`;
                 const encodedCallbackUrl = encodeURIComponent(callbackUrl);
-                const response = await fetch(`${this.backendBaseUrl}/api/composio/connect-url?toolkit=WHATSAPP&callback_url=${encodedCallbackUrl}`, {
+                const response = await fetch(`${this.backendBaseUrl}/api/composio/connect-url?toolkit=${integration.toolkit}&callback_url=${encodedCallbackUrl}`, {
                     headers: { 'Authorization': `Bearer ${session.access_token}` }
                 });
                 const payload = await response.json();
                 if (!response.ok) {
-                    throw new Error(payload.error || 'Failed to generate Composio WhatsApp connect URL');
+                    throw new Error(payload.error || `Failed to generate ${integration.label} connect URL`);
                 }
                 const redirectUrl = payload.redirect_url;
                 if (!redirectUrl) {
                     throw new Error('Composio did not return a redirect URL.');
                 }
                 await window.electron.shell.openExternal(redirectUrl);
-                this.showNotification('Opened WhatsApp connection flow. Complete auth in browser.', 'success');
+                this.showNotification(`Opened ${integration.label} connection flow. Complete auth in browser.`, 'success');
                 setTimeout(() => this.checkIntegrationStatus(), 2500);
                 return;
             } else {
@@ -717,7 +738,14 @@ class AIOS {
 
     async disconnectIntegration(provider) {
         if (!this._ensureOnlineForAction('disconnect an integration')) return;
-        if (!confirm(`Are you sure you want to disconnect your ${provider} account?`)) return;
+        const composioIntegrations = {
+            composio_whatsapp: { toolkit: 'WHATSAPP', label: 'WhatsApp' },
+            composio_facebook: { toolkit: 'FACEBOOK', label: 'Facebook' },
+            composio_instagram: { toolkit: 'INSTAGRAM', label: 'Instagram' },
+            composio_youtube: { toolkit: 'YOUTUBE', label: 'YouTube' }
+        };
+        const providerLabel = composioIntegrations[provider]?.label || provider;
+        if (!confirm(`Are you sure you want to disconnect your ${providerLabel} account?`)) return;
 
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
@@ -726,11 +754,11 @@ class AIOS {
         }
         try {
             let response;
-            if (provider === 'composio_whatsapp') {
+            if (composioIntegrations[provider]) {
                 response = await fetch(`${this.backendBaseUrl}/api/composio/disconnect`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ toolkit: 'WHATSAPP' })
+                    body: JSON.stringify({ toolkit: composioIntegrations[provider].toolkit })
                 });
             } else {
                 response = await fetch(`${this.backendBaseUrl}/api/integrations/disconnect`, {
@@ -743,7 +771,7 @@ class AIOS {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to disconnect');
             }
-            this.showNotification(`Successfully disconnected from ${provider}.`, 'success');
+            this.showNotification(`Successfully disconnected from ${providerLabel}.`, 'success');
             this.checkIntegrationStatus();
         } catch (error) {
             console.error(`Error disconnecting ${provider}:`, error);
@@ -757,12 +785,23 @@ class AIOS {
             google: false,
             vercel: false,
             supabase: false,
+            composio_facebook: false,
+            composio_instagram: false,
+            composio_youtube: false,
             composio_whatsapp: false
         };
 
+        const composioProviders = {
+            composio_whatsapp: 'WHATSAPP',
+            composio_facebook: 'FACEBOOK',
+            composio_instagram: 'INSTAGRAM',
+            composio_youtube: 'YOUTUBE'
+        };
+        const allProviders = ['github', 'google', 'vercel', 'supabase', ...Object.keys(composioProviders)];
+
         const session = await this.authService.getSession();
         if (!session || !session.access_token) {
-            ['github', 'google', 'vercel', 'supabase', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
+            allProviders.forEach(p => this.updateIntegrationButton(p, false));
             this.emitIntegrationStatusUpdate(statusByProvider);
             return statusByProvider;
         }
@@ -779,21 +818,25 @@ class AIOS {
                 this.updateIntegrationButton(p, isConnected);
             });
 
-            const whatsappStatusResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=WHATSAPP`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            if (whatsappStatusResponse.ok) {
-                const whatsappStatusData = await whatsappStatusResponse.json();
-                statusByProvider.composio_whatsapp = !!whatsappStatusData.connected;
-                this.updateIntegrationButton('composio_whatsapp', statusByProvider.composio_whatsapp);
-            } else {
-                this.updateIntegrationButton('composio_whatsapp', false);
-            }
+            await Promise.all(Object.entries(composioProviders).map(async ([composioProvider, toolkit]) => {
+                try {
+                    const statusResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=${toolkit}`, {
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
+                    });
+                    if (statusResponse.ok) {
+                        const statusData = await statusResponse.json();
+                        statusByProvider[composioProvider] = !!statusData.connected;
+                    }
+                } catch (error) {
+                    console.warn(`Unable to check ${toolkit} connection status:`, error);
+                }
+                this.updateIntegrationButton(composioProvider, statusByProvider[composioProvider]);
+            }));
             this.emitIntegrationStatusUpdate(statusByProvider);
             return statusByProvider;
         } catch (error) {
             console.error('Error checking integration status:', error);
-            ['github', 'google', 'vercel', 'supabase', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
+            allProviders.forEach(p => this.updateIntegrationButton(p, false));
             this.emitIntegrationStatusUpdate(statusByProvider);
             return statusByProvider;
         }
@@ -814,6 +857,9 @@ class AIOS {
             google: 'connectGoogleBtn',
             vercel: 'connectVercelBtn',
             supabase: 'connectSupabaseBtn',
+            composio_facebook: 'connectFacebookBtn',
+            composio_instagram: 'connectInstagramBtn',
+            composio_youtube: 'connectYoutubeBtn',
             composio_whatsapp: 'connectWhatsappBtn'
         };
         const button = this.elements[providerToElementKey[provider]];
@@ -3272,7 +3318,7 @@ class AIOS {
             this.loadMemories();
             this.loadUsage();
         } else {
-            ['github', 'google', 'vercel', 'supabase', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
+            ['github', 'google', 'vercel', 'supabase', 'composio_facebook', 'composio_instagram', 'composio_youtube', 'composio_whatsapp'].forEach(p => this.updateIntegrationButton(p, false));
             this.renderDeployments([]);
             this.resetUserFilesUI();
             this.renderUserFiles([]);
