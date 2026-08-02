@@ -38,7 +38,29 @@ class ShuffleMenuController {
                 configKeys: ['enable_supabase']
             },
             {
+                provider: 'composio_facebook',
+                toolkit: 'FACEBOOK',
+                label: 'Facebook',
+                iconClass: 'fa-brands fa-facebook',
+                configKeys: ['enable_composio_facebook']
+            },
+            {
+                provider: 'composio_instagram',
+                toolkit: 'INSTAGRAM',
+                label: 'Instagram',
+                iconClass: 'fa-brands fa-instagram',
+                configKeys: ['enable_composio_instagram']
+            },
+            {
+                provider: 'composio_youtube',
+                toolkit: 'YOUTUBE',
+                label: 'YouTube',
+                iconClass: 'fa-brands fa-youtube',
+                configKeys: ['enable_composio_youtube']
+            },
+            {
                 provider: 'composio_whatsapp',
+                toolkit: 'WHATSAPP',
                 label: 'WhatsApp',
                 iconClass: 'fa-brands fa-whatsapp',
                 configKeys: ['enable_composio_whatsapp']
@@ -147,12 +169,17 @@ class ShuffleMenuController {
             });
         }
 
-        const whatsappResponse = await fetch(`${this.backendBaseUrl}/api/composio/status?toolkit=WHATSAPP`, { headers });
-
-        if (whatsappResponse.ok) {
-            const data = await whatsappResponse.json();
-            status.composio_whatsapp = !!data.connected;
-        }
+        const composioTools = this.integrationTools.filter((tool) => tool.toolkit);
+        await Promise.all(composioTools.map(async (tool) => {
+            const response = await fetch(
+                `${this.backendBaseUrl}/api/composio/status?toolkit=${tool.toolkit}`,
+                { headers }
+            );
+            if (response.ok) {
+                const data = await response.json();
+                status[tool.provider] = !!data.connected;
+            }
+        }));
 
         return status;
     }

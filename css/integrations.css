@@ -207,6 +207,18 @@
     fill: #25D366;
 }
 
+.integration-info .facebook-icon {
+    color: #1877F2;
+}
+
+.integration-info .instagram-icon {
+    color: #E4405F;
+}
+
+.integration-info .youtube-icon {
+    color: #FF0000;
+}
+
 .integration-info span {
     font-size: 15px;
     font-weight: 400;
