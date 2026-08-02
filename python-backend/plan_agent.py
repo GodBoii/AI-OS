@@ -296,6 +296,9 @@ def _enabled_capability_names(config: Optional[Dict[str, Any]]) -> List[str]:
         "enable_google_sheets": "Google Sheets tools",
         "enable_supabase": "Supabase tools",
         "enable_composio_whatsapp": "WhatsApp tools",
+        "enable_composio_facebook": "Facebook tools",
+        "enable_composio_instagram": "Instagram tools",
+        "enable_composio_youtube": "YouTube tools",
         "enable_computer_control": "computer-control agent",
     }
     enabled = []

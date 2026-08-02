@@ -778,6 +778,18 @@ def run_agent_and_stream(
             "enable_composio_whatsapp",
             config.COMPOSIO_ENABLE_WHATSAPP,
         )
+        session_config.setdefault(
+            "enable_composio_facebook",
+            config.COMPOSIO_ENABLE_FACEBOOK,
+        )
+        session_config.setdefault(
+            "enable_composio_instagram",
+            config.COMPOSIO_ENABLE_INSTAGRAM,
+        )
+        session_config.setdefault(
+            "enable_composio_youtube",
+            config.COMPOSIO_ENABLE_YOUTUBE,
+        )
         # Session summaries are expensive and disabled by default unless explicitly requested.
         session_config.setdefault("use_session_summaries", False)
 
