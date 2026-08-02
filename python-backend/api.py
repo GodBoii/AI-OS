@@ -211,16 +211,30 @@ def conversation_run_result(conversation_id):
 
 
 
-def _resolve_auth_config_id(toolkit_slug: str, request_auth_config_id: str | None) -> str | None:
-    if request_auth_config_id:
-        return request_auth_config_id
+COMPOSIO_SUPPORTED_TOOLKITS = {
+    "GOOGLESHEETS",
+    "WHATSAPP",
+    "FACEBOOK",
+    "INSTAGRAM",
+    "YOUTUBE",
+}
 
+
+def _normalize_composio_toolkit(toolkit_slug: str) -> str | None:
+    normalized = (toolkit_slug or "").strip().upper()
+    return normalized if normalized in COMPOSIO_SUPPORTED_TOOLKITS else None
+
+
+def _resolve_auth_config_id(toolkit_slug: str) -> str | None:
     normalized = (toolkit_slug or "").upper()
-    if normalized == "GOOGLESHEETS":
-        return config.COMPOSIO_GOOGLESHEETS_AUTH_CONFIG_ID
-    if normalized == "WHATSAPP":
-        return config.COMPOSIO_WHATSAPP_AUTH_CONFIG_ID
-    return None
+    auth_configs = {
+        "GOOGLESHEETS": config.COMPOSIO_GOOGLESHEETS_AUTH_CONFIG_ID,
+        "WHATSAPP": config.COMPOSIO_WHATSAPP_AUTH_CONFIG_ID,
+        "FACEBOOK": config.COMPOSIO_FACEBOOK_AUTH_CONFIG_ID,
+        "INSTAGRAM": config.COMPOSIO_INSTAGRAM_AUTH_CONFIG_ID,
+        "YOUTUBE": config.COMPOSIO_YOUTUBE_AUTH_CONFIG_ID,
+    }
+    return auth_configs.get(normalized)
 
 
 def _extract_host_from_header(value: Optional[str]) -> Optional[str]:
@@ -709,7 +723,9 @@ def composio_status():
     if error:
         return jsonify({"error": error[0]}), error[1]
 
-    toolkit = request.args.get('toolkit', 'GOOGLESHEETS').upper()
+    toolkit = _normalize_composio_toolkit(request.args.get('toolkit', 'GOOGLESHEETS'))
+    if not toolkit:
+        return jsonify({"error": "Unsupported Composio toolkit"}), 400
     
     cache_key = f"cache:composio_status:{user.id}:{toolkit}"
     cached_data = CacheManager.get(cache_key)
@@ -734,7 +750,9 @@ def composio_status():
                 for a in accounts
             ],
         }
-        CacheManager.set(cache_key, response_data, ttl_seconds=3600)
+        # OAuth completes outside the backend, so long-lived negative status caches
+        # can hide a newly connected account. Keep this deliberately short.
+        CacheManager.set(cache_key, response_data, ttl_seconds=30)
         return jsonify(response_data), 200
     except ComposioApiError as exc:
         return jsonify({"error": str(exc)}), 502
@@ -755,7 +773,9 @@ def composio_disconnect():
         return jsonify({"error": error[0]}), error[1]
 
     body = request.json or {}
-    toolkit = (body.get('toolkit') or 'GOOGLESHEETS').upper()
+    toolkit = _normalize_composio_toolkit(body.get('toolkit') or 'GOOGLESHEETS')
+    if not toolkit:
+        return jsonify({"error": "Unsupported Composio toolkit"}), 400
     connected_account_id = body.get('connected_account_id')
 
     try:
@@ -763,6 +783,10 @@ def composio_disconnect():
         deleted_ids = []
 
         if connected_account_id:
+            owned_accounts = client.list_connected_accounts(user_id=str(user.id), toolkit_slug=toolkit)
+            owned_account_ids = {account.get("id") for account in owned_accounts}
+            if connected_account_id not in owned_account_ids:
+                return jsonify({"error": "Connected account does not belong to this user and toolkit"}), 403
             client.delete_connected_account(connected_account_id)
             deleted_ids.append(connected_account_id)
         else:
@@ -773,7 +797,6 @@ def composio_disconnect():
                     client.delete_connected_account(account_id)
                     deleted_ids.append(account_id)
 
-        CacheManager.delete(f"cache:composio_status:{user.id}:{toolkit}")
         CacheManager.delete(f"cache:composio_status:{user.id}:{toolkit}")
         return jsonify({
             "toolkit": toolkit,
@@ -798,15 +821,18 @@ def composio_connect_url():
         return jsonify({"error": error[0]}), error[1]
 
     body = request.json if request.method == 'POST' and request.is_json else {}
-    toolkit = (request.args.get('toolkit') or (body or {}).get('toolkit') or 'GOOGLESHEETS').upper()
+    toolkit = _normalize_composio_toolkit(
+        request.args.get('toolkit') or (body or {}).get('toolkit') or 'GOOGLESHEETS'
+    )
+    if not toolkit:
+        return jsonify({"error": "Unsupported Composio toolkit"}), 400
     callback_url = request.args.get('callback_url') or (body or {}).get('callback_url') or config.FRONTEND_URL
-    request_auth_config_id = request.args.get('auth_config_id') or (body or {}).get('auth_config_id')
-    auth_config_id = _resolve_auth_config_id(toolkit, request_auth_config_id)
+    auth_config_id = _resolve_auth_config_id(toolkit)
     if not auth_config_id:
         return jsonify({
             "error": (
                 f"Auth config id is required for toolkit '{toolkit}'. "
-                f"Set COMPOSIO_{toolkit}_AUTH_CONFIG_ID in backend env or provide auth_config_id."
+                f"Set COMPOSIO_{toolkit}_AUTH_CONFIG_ID in the backend environment."
             )
         }), 400
 
@@ -823,12 +849,12 @@ def composio_connect_url():
             or result.get("url")
             or result.get("link")
         )
+        CacheManager.delete(f"cache:composio_status:{user.id}:{toolkit}")
         return jsonify({
             "toolkit": toolkit,
             "auth_config_id": auth_config_id,
             "callback_url": callback_url,
             "redirect_url": redirect_url,
-            "raw": result,
         }), 200
     except ComposioApiError as exc:
         return jsonify({"error": str(exc)}), 502
@@ -848,7 +874,9 @@ def composio_tools():
         return jsonify({"error": error[0]}), error[1]
 
     _ = user  # authenticated endpoint; user is currently not needed for listing
-    toolkit = request.args.get('toolkit', 'GOOGLESHEETS').upper()
+    toolkit = _normalize_composio_toolkit(request.args.get('toolkit', 'GOOGLESHEETS'))
+    if not toolkit:
+        return jsonify({"error": "Unsupported Composio toolkit"}), 400
     important_only = request.args.get('important', 'true').lower() == 'true'
 
     try:
@@ -1475,6 +1503,9 @@ def mindspace_ask():
             enable_google_drive=False,
             enable_google_sheets=False,
             enable_composio_whatsapp=False,
+            enable_composio_facebook=False,
+            enable_composio_instagram=False,
+            enable_composio_youtube=False,
             enable_browser=False,
             enable_computer_control=False,
             browser_tools_config=None,

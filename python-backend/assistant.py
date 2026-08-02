@@ -14,7 +14,14 @@ from agno.tools.duckduckgo import DuckDuckGoTools
 from agent_delegation_tools import AgentDelegationTools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
-from composio_tools import ComposioWhatsAppTools, has_active_whatsapp_connection
+from composio_tools import (
+    ComposioFacebookTools,
+    ComposioInstagramTools,
+    ComposioWhatsAppTools,
+    ComposioYouTubeTools,
+    has_active_composio_connection,
+    has_active_whatsapp_connection,
+)
 from database_config import get_sqlalchemy_database_url
 from github_tools import GitHubTools
 from google_drive_tools import GoogleDriveTools
@@ -58,6 +65,9 @@ def get_llm_os(
     enable_google_drive: bool = False,
     enable_google_sheets: bool = False,
     enable_composio_whatsapp: bool = False,
+    enable_composio_facebook: bool = False,
+    enable_composio_instagram: bool = False,
+    enable_composio_youtube: bool = False,
     enable_browser: bool = False,
     enable_computer_control: bool = False,
     browser_tools_config: Optional[Dict[str, Any]] = None,
@@ -182,6 +192,20 @@ def get_llm_os(
             direct_tools.append(ComposioWhatsAppTools(user_id=user_id))
         else:
             logger.info("Composio WhatsApp not active for user %s. Toolkit not injected.", user_id)
+
+    social_toolkits = [
+        (enable_composio_facebook, "FACEBOOK", ComposioFacebookTools),
+        (enable_composio_instagram, "INSTAGRAM", ComposioInstagramTools),
+        (enable_composio_youtube, "YOUTUBE", ComposioYouTubeTools),
+    ]
+    if user_id and os.getenv("COMPOSIO_API_KEY"):
+        for enabled, toolkit_slug, toolkit_class in social_toolkits:
+            if not enabled:
+                continue
+            if has_active_composio_connection(user_id=user_id, toolkit_slug=toolkit_slug):
+                direct_tools.append(toolkit_class(user_id=user_id))
+            else:
+                logger.info("Composio %s not active for user %s. Toolkit not injected.", toolkit_slug, user_id)
     if custom_tool_config:
         direct_tools.append(MediaTools(custom_tool_config=custom_tool_config))
     if enable_user_file_vault and user_id:
@@ -248,6 +272,10 @@ def get_llm_os(
         "- GoogleSheetsTools: search sheets, inspect tabs, read/write ranges, create spreadsheets",
         "- MediaTools: generate_image(prompt) and generate_video(prompt)",
         "- composio_whatsapp_tools: list_whatsapp_actions() first, then execute with exact tool_slug",
+        "- composio_facebook_tools: Facebook Pages only; list_facebook_actions() first, then execute with an exact FACEBOOK_ slug",
+        "- composio_instagram_tools: Business/Creator accounts only; list_instagram_actions() first, then execute with an exact INSTAGRAM_ slug",
+        "- composio_youtube_tools: list_youtube_actions() first, then execute with an exact YOUTUBE_ slug",
+        "For social tools, read/list operations are safe to perform as needed. Only publish, comment, reply, message, edit, or delete when the user's request clearly authorizes that exact external action; ask for confirmation when intent or target is ambiguous.",
         "- DuckDuckGoTools: fast web search",
         "- delegate_to_coder: dedicated coding-agent execution in realtime main-mode sessions",
         "- delegate_to_computer: dedicated computer-agent execution when computer control is enabled",
