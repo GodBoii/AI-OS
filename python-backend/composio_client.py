@@ -23,6 +23,7 @@ class ComposioClient:
     ) -> None:
         self.api_key = api_key or config.COMPOSIO_API_KEY
         self.base_url = (base_url or config.COMPOSIO_BASE_URL).rstrip("/")
+        self.tools_base_url = config.COMPOSIO_TOOLS_BASE_URL.rstrip("/")
         self.project_id = project_id or config.COMPOSIO_PROJECT_ID
         self.timeout_seconds = timeout_seconds
 
@@ -46,8 +47,10 @@ class ComposioClient:
         *,
         params: Optional[Dict[str, Any]] = None,
         json_payload: Optional[Dict[str, Any]] = None,
+        base_url: Optional[str] = None,
     ) -> Dict[str, Any]:
-        url = f"{self.base_url}/{path.lstrip('/')}"
+        request_base_url = (base_url or self.base_url).rstrip("/")
+        url = f"{request_base_url}/{path.lstrip('/')}"
         try:
             response = requests.request(
                 method=method.upper(),
@@ -78,12 +81,16 @@ class ComposioClient:
 
     def list_tools(self, toolkit_slug: str, important_only: bool = True) -> List[Dict[str, Any]]:
         params = {
+            # The deployed tools catalog currently filters by the singular key.
+            # Keep this explicit even though some reference pages describe the
+            # list filter as toolkit_slugs.
             "toolkit_slug": toolkit_slug,
+            "toolkit_versions": "latest",
             "limit": 100,
         }
         if important_only:
             params["important"] = "true"
-        result = self._request("GET", "/tools", params=params)
+        result = self._request("GET", "/tools", params=params, base_url=self.tools_base_url)
         return result.get("items", []) if isinstance(result, dict) else []
 
     def list_connected_accounts(
@@ -119,16 +126,20 @@ class ComposioClient:
         tool_slug: str,
         connected_account_id: str,
         user_id: Optional[str] = None,
-        entity_id: Optional[str] = None,
         arguments: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload = {
             "connected_account_id": connected_account_id,
             "user_id": user_id,
-            "entity_id": entity_id,
             "arguments": arguments or {},
         }
-        return self._request("POST", f"/tools/execute/{tool_slug}", json_payload=payload)
+        return self._request(
+            "POST",
+            f"/tools/execute/{tool_slug}",
+            params={"toolkit_versions": "latest"},
+            json_payload=payload,
+            base_url=self.tools_base_url,
+        )
 
     def delete_connected_account(self, connected_account_id: str) -> Dict[str, Any]:
         return self._request("DELETE", f"/connected_accounts/{connected_account_id}")

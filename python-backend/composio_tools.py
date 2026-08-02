@@ -93,6 +93,46 @@ class _BaseComposioToolkit(Toolkit):
             f"Call list_{toolkit_label.lower().replace(' ', '_')}_actions() first and use one of those exact slugs."
         )
 
+    def _execute_action(self, tool_slug: str, arguments_json: str = "{}") -> str:
+        if not tool_slug:
+            return "Error: tool_slug is required."
+
+        arguments, error = self._parse_arguments(arguments_json)
+        if error:
+            return error
+
+        normalized_or_error = self._validate_or_suggest_slug(tool_slug, self.TOOLKIT_LABEL)
+        if normalized_or_error is None:
+            return "Error: unable to validate tool slug."
+        if normalized_or_error.startswith("Error:"):
+            return normalized_or_error
+        normalized_slug = normalized_or_error
+
+        expected_prefix = f"{self.TOOLKIT_SLUG}_"
+        if not normalized_slug.startswith(expected_prefix):
+            return f"Error: action slug must start with '{expected_prefix}'."
+
+        try:
+            connected_account_id = self._get_connected_account_id()
+            if not connected_account_id:
+                callback_hint = config.FRONTEND_URL or "your frontend URL"
+                return (
+                    f"{self.TOOLKIT_LABEL} is not connected in Composio. "
+                    f"Use /api/composio/connect-url?toolkit={self.TOOLKIT_SLUG} to generate a connect link "
+                    f"and complete auth, then retry. Callback URL should be {callback_hint}."
+                )
+
+            result = self._get_client().execute_tool(
+                tool_slug=normalized_slug,
+                connected_account_id=connected_account_id,
+                user_id=self.user_id,
+                arguments=arguments or {},
+            )
+            return json.dumps(result, ensure_ascii=True, indent=2)
+        except ComposioApiError as exc:
+            logger.error("Composio execute failed for %s: %s", normalized_slug, exc)
+            return f"Failed to execute '{normalized_slug}': {exc}"
+
 
 class ComposioGoogleSheetsTools(_BaseComposioToolkit):
     """
@@ -141,7 +181,6 @@ class ComposioGoogleSheetsTools(_BaseComposioToolkit):
                 tool_slug=normalized_slug,
                 connected_account_id=connected_account_id,
                 user_id=self.user_id,
-                entity_id=self.user_id,
                 arguments=arguments or {},
             )
             return json.dumps(result, ensure_ascii=True, indent=2)
@@ -169,41 +208,67 @@ class ComposioWhatsAppTools(_BaseComposioToolkit):
         return self._format_actions(self.TOOLKIT_LABEL)
 
     def execute_whatsapp_action(self, tool_slug: str, arguments_json: str = "{}") -> str:
-        if not tool_slug:
-            return "Error: tool_slug is required."
+        return self._execute_action(tool_slug, arguments_json)
 
-        arguments, error = self._parse_arguments(arguments_json)
-        if error:
-            return error
 
-        normalized_or_error = self._validate_or_suggest_slug(tool_slug, self.TOOLKIT_LABEL)
-        if normalized_or_error is None:
-            return "Error: unable to validate tool slug."
-        if normalized_or_error.startswith("Error:"):
-            return normalized_or_error
-        normalized_slug = normalized_or_error
+class ComposioFacebookTools(_BaseComposioToolkit):
+    """Agno toolkit wrapper for Facebook Page actions through Composio."""
 
-        try:
-            connected_account_id = self._get_connected_account_id()
-            if not connected_account_id:
-                callback_hint = config.FRONTEND_URL or "your frontend URL"
-                return (
-                    "WhatsApp is not connected in Composio. "
-                    "Use /api/composio/connect-url?toolkit=WHATSAPP to generate a connect link "
-                    f"and complete auth, then retry. Callback URL should be {callback_hint}."
-                )
+    TOOLKIT_SLUG = "FACEBOOK"
+    TOOLKIT_LABEL = "Facebook"
 
-            result = self._get_client().execute_tool(
-                tool_slug=normalized_slug,
-                connected_account_id=connected_account_id,
-                user_id=self.user_id,
-                entity_id=self.user_id,
-                arguments=arguments or {},
-            )
-            return json.dumps(result, ensure_ascii=True, indent=2)
-        except ComposioApiError as exc:
-            logger.error("Composio execute failed for %s: %s", normalized_slug, exc)
-            return f"Failed to execute '{normalized_slug}': {exc}"
+    def __init__(self, user_id: str):
+        super().__init__(
+            name="composio_facebook_tools",
+            tools=[self.list_facebook_actions, self.execute_facebook_action],
+            user_id=user_id,
+        )
+
+    def list_facebook_actions(self) -> str:
+        return self._format_actions(self.TOOLKIT_LABEL)
+
+    def execute_facebook_action(self, tool_slug: str, arguments_json: str = "{}") -> str:
+        return self._execute_action(tool_slug, arguments_json)
+
+
+class ComposioInstagramTools(_BaseComposioToolkit):
+    """Agno toolkit wrapper for Instagram Business and Creator actions."""
+
+    TOOLKIT_SLUG = "INSTAGRAM"
+    TOOLKIT_LABEL = "Instagram"
+
+    def __init__(self, user_id: str):
+        super().__init__(
+            name="composio_instagram_tools",
+            tools=[self.list_instagram_actions, self.execute_instagram_action],
+            user_id=user_id,
+        )
+
+    def list_instagram_actions(self) -> str:
+        return self._format_actions(self.TOOLKIT_LABEL)
+
+    def execute_instagram_action(self, tool_slug: str, arguments_json: str = "{}") -> str:
+        return self._execute_action(tool_slug, arguments_json)
+
+
+class ComposioYouTubeTools(_BaseComposioToolkit):
+    """Agno toolkit wrapper for YouTube channel actions through Composio."""
+
+    TOOLKIT_SLUG = "YOUTUBE"
+    TOOLKIT_LABEL = "YouTube"
+
+    def __init__(self, user_id: str):
+        super().__init__(
+            name="composio_youtube_tools",
+            tools=[self.list_youtube_actions, self.execute_youtube_action],
+            user_id=user_id,
+        )
+
+    def list_youtube_actions(self) -> str:
+        return self._format_actions(self.TOOLKIT_LABEL)
+
+    def execute_youtube_action(self, tool_slug: str, arguments_json: str = "{}") -> str:
+        return self._execute_action(tool_slug, arguments_json)
 
 
 def has_active_google_sheets_connection(user_id: str) -> bool:
@@ -221,14 +286,23 @@ def has_active_google_sheets_connection(user_id: str) -> bool:
 
 
 def has_active_whatsapp_connection(user_id: str) -> bool:
+    return has_active_composio_connection(user_id, ComposioWhatsAppTools.TOOLKIT_SLUG)
+
+
+def has_active_composio_connection(user_id: str, toolkit_slug: str) -> bool:
     try:
         client = ComposioClient()
         accounts = client.list_connected_accounts(
             user_id=user_id,
-            toolkit_slug=ComposioWhatsAppTools.TOOLKIT_SLUG,
+            toolkit_slug=toolkit_slug,
             statuses=["ACTIVE"],
         )
         return len(accounts) > 0
     except Exception as exc:
-        logger.warning("Failed to verify Composio WhatsApp connection for user %s: %s", user_id, exc)
+        logger.warning(
+            "Failed to verify Composio %s connection for user %s: %s",
+            toolkit_slug,
+            user_id,
+            exc,
+        )
         return False
