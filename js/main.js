@@ -47,6 +47,17 @@ let windowsNativeSpeechService;
 let linkWebView = null;
 let isAppQuitting = false;
 
+const INTEGRATION_CALLBACK_PROVIDERS = new Set([
+    'github',
+    'google',
+    'vercel',
+    'supabase',
+    'composio_whatsapp',
+    'composio_facebook',
+    'composio_instagram',
+    'composio_youtube'
+]);
+
 // --- CRITICAL SECTION 1: The Deep Link Handler ---
 // This function's only job is to receive the URL from the OS and pass it to the UI.
 function parseTrustedDeepLink(rawUrl) {
@@ -66,7 +77,7 @@ function parseTrustedDeepLink(rawUrl) {
 
     if (host === 'auth' && pathName === '/callback') {
         const provider = parsed.searchParams.get('provider') || 'unknown';
-        if (!/^[a-z0-9_-]{1,64}$/i.test(provider)) {
+        if (!/^[a-z0-9_-]{1,64}$/i.test(provider) || !INTEGRATION_CALLBACK_PROVIDERS.has(provider)) {
             return null;
         }
 
@@ -115,14 +126,18 @@ function handleDeepLink(url) {
     if (trustedLink.type === 'integration-callback') {
         const params = trustedLink.parsed.searchParams;
         const error = params.get('error') || params.get('error_description');
+        const statusParam = params.get('status');
         const successParam = params.get('success');
-        const success = successParam ? successParam === 'true' : !error;
+        const success = statusParam
+            ? statusParam === 'success'
+            : (successParam ? successParam === 'true' : !error);
 
         console.log('[main.js] >>> Emitting oauth-integration-callback from deep link.');
         mainWindow.webContents.send('oauth-integration-callback', {
             success,
             provider: trustedLink.provider,
             error: error || null,
+            connectedAccountId: params.get('connected_account_id') || params.get('connectedAccountId') || null,
         });
         return;
     }
@@ -752,9 +767,13 @@ function createWindow() {
                     try {
                         const url = trustedLink.parsed;
                         const params = new URLSearchParams(url.search);
-                        const success = params.get('success') === 'true';
+                        const statusParam = params.get('status');
+                        const successParam = params.get('success');
+                        const error = params.get('error') || params.get('error_description');
+                        const success = statusParam
+                            ? statusParam === 'success'
+                            : (successParam ? successParam === 'true' : !error);
                         const provider = trustedLink.provider;
-                        const error = params.get('error');
 
                         // Close the webview
                         if (linkWebView) {
@@ -768,7 +787,8 @@ function createWindow() {
                         mainWindow.webContents.send('oauth-integration-callback', {
                             success: success,
                             provider: provider,
-                            error: error
+                            error: error,
+                            connectedAccountId: params.get('connected_account_id') || params.get('connectedAccountId') || null
                         });
 
                     } catch (e) {

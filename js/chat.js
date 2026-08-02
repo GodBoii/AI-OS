@@ -43,6 +43,9 @@ let chatConfig = {
         enable_google_drive: true,
         enable_google_sheets: true,
         enable_supabase: true,
+        enable_composio_facebook: true,
+        enable_composio_instagram: true,
+        enable_composio_youtube: true,
         enable_composio_whatsapp: true,
         enable_computer_control: true
     }
@@ -1441,6 +1444,9 @@ async function startNewConversation() {
             enable_google_drive: true,
             enable_google_sheets: true,
             enable_supabase: true,
+            enable_composio_facebook: true,
+            enable_composio_instagram: true,
+            enable_composio_youtube: true,
             enable_composio_whatsapp: true,
             enable_computer_control: true
         }
