@@ -5,7 +5,7 @@
 
 class UpdateChecker {
     constructor() {
-        this.currentVersion = '1.2.24'; // Keep in sync with package.json
+        this.currentVersion = '1.2.25'; // Keep in sync with package.json
         this.githubRepo = 'GodBoii/AI-OS-website'; // Repository where releases are published
         this.updateCheckUrl = `https://api.github.com/repos/${this.githubRepo}/releases/latest`;
         this.checkInterval = 3600000; // Check every hour (in milliseconds)
