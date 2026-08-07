@@ -1,6 +1,6 @@
 {
   "name": "aetheria-ai",
-  "version": "1.2.24",
+  "version": "1.2.25",
   "description": "Aetheria ai is an agentic desktop system that connects large language models with real-world execution.",
   "author": "Aetheria ai aetheriaai1@gmail.com",
   "main": "js/main.js",
