@@ -16,8 +16,11 @@
     animation: projectPanelSlideIn var(--anim-slow) var(--easing-fluid);
 }
 
-/* File tree item stagger animation */
-.project-file-row {
+/* File tree item stagger animation.
+   Scoped to depth-0 rows on purpose: rows inside a folder are revealed by the
+   accordion transition in project-workspace.css, and an animation on the same
+   properties would override that transition and make expanding a folder flicker. */
+.project-file-tree > .project-file-node > .project-file-row {
     animation: fileRowFadeIn var(--anim-normal) var(--easing-smooth) backwards;
 }
 
@@ -32,17 +35,17 @@
     }
 }
 
-/* Add stagger delays for file rows */
-.project-file-row:nth-child(1) { animation-delay: 0ms; }
-.project-file-row:nth-child(2) { animation-delay: 30ms; }
-.project-file-row:nth-child(3) { animation-delay: 60ms; }
-.project-file-row:nth-child(4) { animation-delay: 90ms; }
-.project-file-row:nth-child(5) { animation-delay: 120ms; }
-.project-file-row:nth-child(6) { animation-delay: 150ms; }
-.project-file-row:nth-child(7) { animation-delay: 180ms; }
-.project-file-row:nth-child(8) { animation-delay: 210ms; }
-.project-file-row:nth-child(9) { animation-delay: 240ms; }
-.project-file-row:nth-child(10) { animation-delay: 270ms; }
+/* Stagger delays for the top-level rows. The delay hangs off the <li>, which is
+   the element that actually holds a position among its siblings — the old rules
+   put :nth-child on the row itself, and since every row is the only child of its
+   <li> they all matched :nth-child(1) and the stagger never played.
+   Offset is 40ms and capped at six rows, keeping the total under ~300ms. */
+.project-file-tree > .project-file-node:nth-child(1) > .project-file-row { animation-delay: 0ms; }
+.project-file-tree > .project-file-node:nth-child(2) > .project-file-row { animation-delay: 40ms; }
+.project-file-tree > .project-file-node:nth-child(3) > .project-file-row { animation-delay: 80ms; }
+.project-file-tree > .project-file-node:nth-child(4) > .project-file-row { animation-delay: 120ms; }
+.project-file-tree > .project-file-node:nth-child(5) > .project-file-row { animation-delay: 160ms; }
+.project-file-tree > .project-file-node:nth-child(n+6) > .project-file-row { animation-delay: 200ms; }
 
 /* Button ripple effect */
 @keyframes ripple {
