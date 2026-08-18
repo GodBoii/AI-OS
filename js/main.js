@@ -661,6 +661,17 @@ function createWindow() {
         return { success: true };
     });
 
+    // Single entry point for every source-control operation. The action name
+    // travels in the payload so adding git features never needs a new channel
+    // (and never needs another preload whitelist entry).
+    ipcMain.handle('project-local-git', async (event, payload) => {
+        if (!localCoderHandler) {
+            return { success: false, error: 'Local coder handler not initialized' };
+        }
+        const body = payload && typeof payload === 'object' ? payload : {};
+        return localCoderHandler.gitAction(body);
+    });
+
     ipcMain.handle('project-local-terminal-start', async (event, payload) => {
         if (!localCoderHandler) {
             return { success: false, error: 'Local coder handler not initialized' };
