@@ -105,6 +105,9 @@ class ProjectWorkspace {
             bootstrap_context_key: null,
             deployment_dirty: false,
             deployment_diff_summary: null,
+            // Populated by detectLocalGitRepository(); null until a local
+            // folder has been inspected for a .git directory.
+            git_context: null,
         };
     }
 
@@ -343,7 +346,9 @@ class ProjectWorkspace {
         this.el.closeBtn?.addEventListener('click', () => this.closePanel());
         this.el.syncBtn?.addEventListener('click', () => this.syncWorkspaceTree());
         this.el.startChatBtn?.addEventListener('click', () => this.startCoderChat());
-        this.el.cloneRepoBtn?.addEventListener('click', () => this.cloneGithubRepo());
+        // #project-clone-repo-btn now lives inside #github-panel and is wired by
+        // js/github-panel.js so the clone shows busy state and refreshes source
+        // control afterwards. Binding it here too would clone twice.
         this.el.exitBtn?.addEventListener('click', () => this.exitProjectMode());
         this.el.mainPreviewCloseBtn?.addEventListener('click', () => this.hideMainFilePreview());
         this.el.redeployBtn?.addEventListener('click', () => this.redeployCurrentWorkspace());
@@ -385,21 +390,6 @@ class ProjectWorkspace {
         this.el.terminalOverlay?.addEventListener('click', overlayFocusHandler);
         this.el.terminalShell?.addEventListener('mousedown', overlayFocusHandler);
         this.el.terminalShell?.addEventListener('click', overlayFocusHandler);
-
-        // GitHub dropdown toggle
-        const githubToggle = document.getElementById('project-github-toggle');
-        const githubContent = document.getElementById('project-github-content');
-
-        githubToggle?.addEventListener('click', () => {
-            const isHidden = githubContent.classList.contains('hidden');
-            if (isHidden) {
-                githubContent.classList.remove('hidden');
-                githubToggle.classList.add('active');
-            } else {
-                githubContent.classList.add('hidden');
-                githubToggle.classList.remove('active');
-            }
-        });
 
         document.addEventListener('keydown', (event) => {
             if (event.key !== 'Escape') return;
@@ -489,24 +479,15 @@ class ProjectWorkspace {
             this.updateSuperHeaderModeUI();
         });
 
-        // 6. GitHub button — toggles the Clone GitHub Repo section in the sidebar
+        // 6. GitHub button — opens the anchored source-control panel that now
+        //    owns every GitHub affordance (clone, changes, branches, history,
+        //    fetch/pull/push, compare, pull requests). See js/github-panel.js.
         this.el.superGithubBtn?.addEventListener('click', () => {
-            const githubToggle = document.getElementById('project-github-toggle');
-            const githubContent = document.getElementById('project-github-content');
-            if (!githubContent || !githubToggle) return;
-
-            const isCurrentlyOpen = !githubContent.classList.contains('hidden');
-            if (isCurrentlyOpen) {
-                githubContent.classList.add('hidden');
-                githubToggle.classList.remove('active');
-                this.el.superGithubBtn.classList.remove('active');
-            } else {
-                githubContent.classList.remove('hidden');
-                githubToggle.classList.add('active');
-                this.el.superGithubBtn.classList.add('active');
-                // Scroll the github section into view smoothly
-                githubContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (window.githubPanel?.toggle) {
+                window.githubPanel.toggle();
+                return;
             }
+            this.setStatus('Source control panel is still initializing.');
         });
     }
 
@@ -518,6 +499,103 @@ class ProjectWorkspace {
         if (this.el.superLocalBtn) {
             this.el.superLocalBtn.classList.toggle('active', mode === 'local');
         }
+    }
+
+    /**
+     * Contract consumed by js/github-panel.js. Kept here because the workspace
+     * owns mode + local folder state; the panel only reads it.
+     */
+    getSourceControlContext() {
+        const state = this.getState();
+        return {
+            mode: this.getExecutionTarget(),
+            conversationId: this.getConversationId(),
+            rootPath: state?.local_context?.root_path || null,
+            isReady: Boolean(state?.local_context?.is_ready && state?.local_context?.root_path),
+            repoUrl: state?.repo_url || state?.local_context?.repo_url || null,
+            branch: state?.branch || state?.local_context?.branch || null,
+            gitContext: state?.git_context || null,
+        };
+    }
+
+    /** Renders arbitrary text (a git diff) in the shared main-area preview. */
+    showDiffPreview(title, body) {
+        const heading = String(title || 'Diff');
+        const text = String(body ?? '');
+
+        if (this.el.previewTitle) this.el.previewTitle.textContent = heading;
+        if (this.el.previewContent) this.el.previewContent.textContent = text;
+        if (this.el.mainPreviewTitle) this.el.mainPreviewTitle.textContent = heading;
+        if (this.el.mainPreviewContent) this.el.mainPreviewContent.textContent = text;
+        this.showMainFilePreview();
+    }
+
+    /**
+     * Detects whether the selected local folder is already a working git
+     * repository and adopts it. This is what makes "open a folder that already
+     * has a repo" behave like connecting to that repo rather than requiring a
+     * fresh clone: the detected remote and branch are folded back into the
+     * workspace state so cloud hand-off, the header subtitle and the source
+     * control panel all describe the same repository.
+     */
+    async detectLocalGitRepository(conversationId = this.getConversationId(), options = {}) {
+        const { announce = true } = options;
+        const state = this.getState(conversationId);
+        const rootPath = state?.local_context?.root_path;
+        if (!rootPath) return null;
+
+        const info = await this.callLocalInvoke('project-local-git', {
+            action: 'repo_info',
+            conversationId,
+            rootPath,
+        });
+
+        if (!info?.success) {
+            state.git_context = null;
+            window.githubPanel?.applyDetectedRepo?.(null, rootPath);
+            return null;
+        }
+
+        if (!info.is_repo) {
+            state.git_context = { is_repo: false, root_path: rootPath };
+            window.githubPanel?.applyDetectedRepo?.(info, rootPath);
+            if (announce) {
+                this.setStatus(`Local mode active (${rootPath}). No Git repository detected.`);
+            }
+            return info;
+        }
+
+        state.git_context = info;
+        if (info.remote_url) {
+            state.repo_url = info.remote_url;
+            state.local_context.repo_url = info.remote_url;
+        }
+        if (info.branch) {
+            state.branch = info.branch;
+            state.local_context.branch = info.branch;
+        }
+
+        this.ensureContext(
+            {
+                ...(info.remote_url ? { repo_url: info.remote_url } : {}),
+                ...(info.branch ? { branch: info.branch } : {}),
+                local_root_path: rootPath,
+                repo_name: info.remote?.name || this.deriveRepoNameFromPath(rootPath),
+            },
+            { syncUi: true }
+        );
+
+        if (announce) {
+            const identity = info.remote?.slug || this.deriveRepoNameFromPath(rootPath);
+            const branchLabel = info.is_detached ? `detached @ ${info.detached_at}` : info.branch;
+            const dirty = info.changed_count > 0
+                ? `${info.changed_count} uncommitted change${info.changed_count === 1 ? '' : 's'}`
+                : 'clean working tree';
+            this.setStatus(`Connected to Git repo ${identity} on ${branchLabel} — ${dirty}.`);
+        }
+
+        window.githubPanel?.applyDetectedRepo?.(info, rootPath);
+        return info;
     }
 
     openPanel() {
@@ -539,6 +617,7 @@ class ProjectWorkspace {
         this.closeModeWindow();
         this.closeTerminalOverlay();
         this.hideMainFilePreview();
+        window.githubPanel?.close?.();
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isProjectWorkspaceOpen: false });
         } else {
@@ -2149,6 +2228,7 @@ class ProjectWorkspace {
             await this.startLocalWatcher(conversationId, state.local_context.root_path);
             this.setStatus(`Local mode active (${state.local_context.root_path}).`);
             await this.syncWorkspaceTree();
+            await this.detectLocalGitRepository(conversationId);
             return;
         }
 
@@ -2265,6 +2345,9 @@ class ProjectWorkspace {
         this.updateModeUI();
         this.setStatus(`Local mode active. Workspace: ${selectedPath}`);
         await this.syncWorkspaceTree();
+        // A folder the user picks may already be a working git repository —
+        // adopt it instead of only offering to clone something new.
+        await this.detectLocalGitRepository(conversationId);
         return true;
     }
 
@@ -2345,6 +2428,7 @@ class ProjectWorkspace {
         this.closeModeWindow();
         this.setStatus(`Local clone complete: ${result.repo_name || repoUrl}`);
         await this.syncWorkspaceTree();
+        await this.detectLocalGitRepository(conversationId, { announce: false });
     }
 
     async toggleTerminalOverlay() {
