@@ -560,6 +560,17 @@ body:not(.dark-mode) .ghp-tab[aria-selected="true"] {
     color: var(--text-secondary, #8b949e);
 }
 
+/* Icons are emitted at 14px for list rows; scale up inside the gate badge. */
+.ghp-gate-icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+body:not(.dark-mode) .ghp-gate-icon {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
 .ghp-gate-title {
     font-size: 0.84rem;
     font-weight: 600;
@@ -777,6 +788,12 @@ body:not(.dark-mode) .ghp-input {
     display: flex;
     flex-direction: column;
     gap: 1px;
+}
+
+/* Set while a list is re-rendered purely because a filter changed — the rows
+   are not new content, so they should not replay the entrance stagger. */
+.ghp-list--no-anim .ghp-row {
+    animation: none;
 }
 
 .ghp-group-label {
