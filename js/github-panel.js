@@ -1363,6 +1363,18 @@ class GithubPanel {
         }
     }
 
+    /**
+     * Grow the commit textarea with its content instead of showing a native
+     * resize grabber. Caps out at the CSS max-height, then scrolls.
+     */
+    autoSizeCommitInput() {
+        const input = this.el.commitMessage;
+        if (!input) return;
+        input.style.height = 'auto';
+        const max = parseFloat(getComputedStyle(input).maxHeight) || 150;
+        input.style.height = `${Math.min(input.scrollHeight, max)}px`;
+    }
+
     async commit(options = {}) {
         const message = String(this.el.commitMessage?.value || '').trim();
         if (!message) {
