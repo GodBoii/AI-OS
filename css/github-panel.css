@@ -621,6 +621,37 @@ body:not(.dark-mode) .ghp-commitbox {
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.028), rgba(0, 0, 0, 0.012));
 }
 
+/* Inset surface so the message area reads as a real input, not bare text. */
+.ghp-commit-field {
+    position: relative;
+    display: flex;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.22);
+    transition:
+        border-color 160ms var(--dropdown-ease),
+        background 160ms var(--dropdown-ease);
+}
+
+.ghp-commit-field:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.ghp-commit-field:focus-within {
+    border-color: rgba(192, 132, 252, 0.45);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+body:not(.dark-mode) .ghp-commit-field {
+    border-color: rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+}
+
+body:not(.dark-mode) .ghp-commit-field:focus-within {
+    border-color: rgba(147, 51, 234, 0.4);
+    background: #ffffff;
+}
+
 .ghp-commit-input {
     width: 100%;
     min-height: 42px;
