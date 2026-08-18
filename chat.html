@@ -454,41 +454,9 @@
         <div class="project-mode-window-recommendation">Recommended: Local mode for faster iterative coding.</div>
     </div>
 
-    <div class="project-workspace-github">
-        <button id="project-github-toggle" class="project-github-toggle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                class="lucide lucide-github">
-                <path
-                    d="M15 22v-4a4.8 4.8 0 0 0-1-3.24c3-.34 6-1.53 6-6.6a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.8s-1.2-.4-3.9 1.4a13.3 13.3 0 0 0-7 0c-2.7-1.8-3.9-1.4-3.9-1.4a5 5 0 0 0-.1 3.8A5.4 5.4 0 0 0 2 12.16c0 5.1 3 6.3 6 6.6a4.8 4.8 0 0 0-1 3.24v4" />
-                <path d="M9 18c-4.51 2-5-2-7-2" />
-            </svg>
-            <span>Clone GitHub Repo</span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                class="lucide lucide-chevron-down project-github-chevron">
-                <path d="m6 9 6 6 6-6" />
-            </svg>
-        </button>
-        <div id="project-github-content" class="project-github-content hidden">
-            <input id="project-repo-url" class="project-workspace-input" type="text"
-                placeholder="GitHub repo URL (https://github.com/org/repo)" />
-            <div class="project-clone-row">
-                <input id="project-repo-branch" class="project-workspace-input" type="text" placeholder="branch"
-                    value="main" />
-                <button id="project-clone-repo-btn" class="project-action-btn project-action-btn-small">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="lucide lucide-download">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" x2="12" y1="15" y2="3" />
-                    </svg>
-                    <span>Clone</span>
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- The former "Clone GitHub Repo" accordion lived here. Every GitHub and
+         source-control affordance now lives in #github-panel, opened from the
+         GitHub pill in the super header. -->
 
     <div class="project-workspace-body">
         <div id="project-workspace-status" class="project-workspace-status">Open a deployment or clone a repo to start.
@@ -502,6 +470,256 @@
     </div>
 
 </aside>
+
+<!-- =====================================================================
+     GITHUB / SOURCE CONTROL PANEL
+     Anchored popover opened by #super-github-btn. Lives outside
+     #project-workspace-panel because that panel is 320px wide with
+     overflow:hidden, which would clip this surface.
+     ===================================================================== -->
+<div id="github-panel" class="github-panel t-dropdown" data-origin="top-right" role="dialog"
+    aria-label="GitHub and source control" aria-hidden="true">
+
+    <header class="ghp-header">
+        <span class="ghp-mark" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.24c3-.34 6-1.53 6-6.6a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.8s-1.2-.4-3.9 1.4a13.3 13.3 0 0 0-7 0c-2.7-1.8-3.9-1.4-3.9-1.4a5 5 0 0 0-.1 3.8A5.4 5.4 0 0 0 2 12.16c0 5.1 3 6.3 6 6.6a4.8 4.8 0 0 0-1 3.24v4" />
+                <path d="M9 18c-4.51 2-5-2-7-2" />
+            </svg>
+        </span>
+        <div class="ghp-identity t-stagger" id="ghp-identity">
+            <strong class="ghp-repo-name t-stagger-line t-stagger-line--1" id="ghp-repo-name">Source Control</strong>
+            <span class="ghp-repo-meta t-stagger-line t-stagger-line--2" id="ghp-repo-meta">Checking workspace…</span>
+        </div>
+        <div class="ghp-header-actions">
+            <button class="ghp-icon-btn" id="ghp-remote-btn" type="button" title="Open repository on the web"
+                aria-label="Open repository on the web">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 3h6v6" />
+                    <path d="M10 14 21 3" />
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                </svg>
+            </button>
+            <button class="ghp-icon-btn" id="ghp-refresh-btn" type="button" title="Refresh source control"
+                aria-label="Refresh source control">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                </svg>
+            </button>
+            <button class="ghp-icon-btn" id="ghp-close-btn" type="button" title="Close" aria-label="Close panel">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <div class="ghp-branchbar hidden" id="ghp-branchbar">
+        <button class="ghp-branch-chip" id="ghp-branch-chip" type="button" title="Switch branch">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="6" x2="6" y1="3" y2="15" />
+                <circle cx="18" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+            <span id="ghp-branch-name">—</span>
+        </button>
+        <div class="ghp-sync-counts" id="ghp-sync-counts">
+            <span class="ghp-count" id="ghp-behind-count" title="Commits to pull">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 5v14" />
+                    <path d="m19 12-7 7-7-7" />
+                </svg>
+                <b>0</b>
+            </span>
+            <span class="ghp-count" id="ghp-ahead-count" title="Commits to push">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 19V5" />
+                    <path d="m5 12 7-7 7 7" />
+                </svg>
+                <b>0</b>
+            </span>
+        </div>
+        <div class="ghp-branchbar-actions">
+            <button class="ghp-mini-btn" id="ghp-fetch-btn" type="button" title="Fetch from remote">Fetch</button>
+            <button class="ghp-mini-btn" id="ghp-pull-btn" type="button" title="Pull from remote">Pull</button>
+            <button class="ghp-mini-btn ghp-mini-btn-accent" id="ghp-push-btn" type="button"
+                title="Push to remote">Push</button>
+        </div>
+    </div>
+
+    <nav class="ghp-tabs t-tabs" id="ghp-tabs" role="tablist" aria-label="Source control sections">
+        <span class="t-tabs-pill ghp-tabs-pill" aria-hidden="true"></span>
+        <button class="t-tab ghp-tab" role="tab" type="button" data-pane="changes" aria-selected="true">Changes</button>
+        <button class="t-tab ghp-tab" role="tab" type="button" data-pane="branches"
+            aria-selected="false">Branches</button>
+        <button class="t-tab ghp-tab" role="tab" type="button" data-pane="history" aria-selected="false">History</button>
+        <button class="t-tab ghp-tab" role="tab" type="button" data-pane="repo" aria-selected="false">Repo</button>
+    </nav>
+
+    <div class="ghp-body" id="ghp-body">
+
+        <!-- Blocking states replace the panes entirely -->
+        <section class="ghp-gate hidden" id="ghp-gate">
+            <div class="ghp-gate-icon" id="ghp-gate-icon" aria-hidden="true"></div>
+            <strong class="ghp-gate-title" id="ghp-gate-title"></strong>
+            <p class="ghp-gate-copy" id="ghp-gate-copy"></p>
+            <div class="ghp-gate-actions" id="ghp-gate-actions"></div>
+        </section>
+
+        <section class="ghp-pane" data-pane="changes">
+            <div class="ghp-commitbox">
+                <textarea id="ghp-commit-message" class="ghp-commit-input" rows="2"
+                    placeholder="Commit message (Ctrl+Enter to commit)"></textarea>
+                <div class="ghp-commit-actions">
+                    <label class="ghp-amend">
+                        <input type="checkbox" id="ghp-amend-check" />
+                        <span>Amend</span>
+                    </label>
+                    <button class="ghp-btn" id="ghp-commit-btn" type="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3" />
+                            <line x1="3" x2="9" y1="12" y2="12" />
+                            <line x1="15" x2="21" y1="12" y2="12" />
+                        </svg>
+                        <span>Commit</span>
+                    </button>
+                    <button class="ghp-btn ghp-btn-primary" id="ghp-commit-push-btn" type="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5" />
+                            <path d="m5 12 7-7 7 7" />
+                        </svg>
+                        <span>Commit &amp; Push</span>
+                    </button>
+                </div>
+            </div>
+            <div class="ghp-list" id="ghp-changes-list" aria-live="polite"></div>
+        </section>
+
+        <section class="ghp-pane hidden" data-pane="branches">
+            <div class="ghp-search-row">
+                <svg class="ghp-search-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                </svg>
+                <input id="ghp-branch-search" class="ghp-input ghp-input-search" type="text"
+                    placeholder="Select a branch or tag to checkout" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="ghp-quick-actions">
+                <button class="ghp-quick-row" id="ghp-new-branch-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14" />
+                        <path d="M12 5v14" />
+                    </svg>
+                    <span>Create new branch…</span>
+                </button>
+                <button class="ghp-quick-row" id="ghp-new-branch-from-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14" />
+                        <path d="M12 5v14" />
+                    </svg>
+                    <span>Create new branch from…</span>
+                </button>
+                <button class="ghp-quick-row" id="ghp-compare-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m17 3-3 3 3 3" />
+                        <path d="M14 6h-4a4 4 0 0 0-4 4v1" />
+                        <path d="m7 21 3-3-3-3" />
+                        <path d="M10 18h4a4 4 0 0 0 4-4v-1" />
+                    </svg>
+                    <span>Compare branch…</span>
+                </button>
+                <button class="ghp-quick-row" id="ghp-pr-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="18" r="3" />
+                        <circle cx="6" cy="6" r="3" />
+                        <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+                        <line x1="6" x2="6" y1="9" y2="21" />
+                    </svg>
+                    <span id="ghp-pr-label">Pull request…</span>
+                </button>
+            </div>
+            <div class="ghp-compare-result hidden" id="ghp-compare-result"></div>
+            <div class="ghp-list" id="ghp-branch-list" aria-live="polite"></div>
+        </section>
+
+        <section class="ghp-pane hidden" data-pane="history">
+            <div class="ghp-list" id="ghp-log-list" aria-live="polite"></div>
+        </section>
+
+        <section class="ghp-pane hidden" data-pane="repo">
+            <div class="ghp-group-label">Clone a repository</div>
+            <div class="ghp-form">
+                <input id="project-repo-url" class="ghp-input" type="text"
+                    placeholder="Repository URL (https://github.com/org/repo)" autocomplete="off" spellcheck="false" />
+                <div class="ghp-form-row">
+                    <input id="project-repo-branch" class="ghp-input" type="text" placeholder="branch" value="main"
+                        autocomplete="off" spellcheck="false" />
+                    <button id="project-clone-repo-btn" class="ghp-btn ghp-btn-primary" type="button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        <span>Clone</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="ghp-group-label">Local workspace</div>
+            <div class="ghp-repo-facts" id="ghp-repo-facts"></div>
+            <div class="ghp-quick-actions">
+                <button class="ghp-quick-row" id="ghp-open-folder-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                    </svg>
+                    <span>Choose a different folder…</span>
+                </button>
+                <button class="ghp-quick-row" id="ghp-reveal-folder-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M15 3h6v6" />
+                        <path d="M10 14 21 3" />
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    </svg>
+                    <span>Reveal in file manager</span>
+                </button>
+                <button class="ghp-quick-row" id="ghp-terminal-btn" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 17 10 11 4 5" />
+                        <line x1="12" x2="20" y1="19" y2="19" />
+                    </svg>
+                    <span>Open git terminal</span>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <footer class="ghp-footer">
+        <span class="ghp-status" id="ghp-status">Ready.</span>
+    </footer>
+</div>
 
 <!-- Know Me FAB — global fixed position, bottom-right of the app -->
 <!-- Only visible when project workspace is open (body.project-panel-open) -->
