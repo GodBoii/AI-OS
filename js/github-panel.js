@@ -177,6 +177,7 @@ class GithubPanel {
                 this.commit({ push: false });
             }
         });
+        this.el.commitMessage?.addEventListener('input', () => this.autoSizeCommitInput());
 
         this.el.branchSearch?.addEventListener('input', () => {
             this.state.branchFilter = String(this.el.branchSearch.value || '').trim();
@@ -1402,6 +1403,7 @@ class GithubPanel {
             }
 
             if (this.el.commitMessage) this.el.commitMessage.value = '';
+            this.autoSizeCommitInput();
             if (this.el.amendCheck) this.el.amendCheck.checked = false;
             this.setStatus('Commit created.', 'success');
 
