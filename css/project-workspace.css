@@ -27,6 +27,14 @@
     opacity: 1;
     visibility: visible;
     overflow: hidden; /* Ensures content respects the border-radius */
+    /* The frameless-window drag strip (.window-drag-region: top 0, left 48px,
+       height 32px, -webkit-app-region: drag) overlaps this panel's top edge.
+       In Electron a drag region consumes mouse input at the OS level, so a
+       higher z-index does NOT make the covered controls clickable — only an
+       explicit no-drag region subtracts from it. The panel is entirely
+       interactive UI, so opt the whole thing out of window dragging. */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
 }
 
 /* Super header styles matching Cursor's minimalist top section */
@@ -37,6 +45,16 @@
     padding: 10px 14px;
     background: transparent;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    /* Sits inside the frameless-window drag strip — must be explicitly no-drag
+       so the controls below receive clicks instead of dragging the window. */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+.super-header-btn,
+.super-mode-btn {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
 }
 
 body:not(.dark-mode) .project-workspace-super-header {

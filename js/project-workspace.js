@@ -20,28 +20,63 @@ class ProjectWorkspace {
     async init() {
         try {
             await this.waitForElement('project-workspace-panel');
-            this.cacheElements();
-            this.bindEvents();
-            this.updateModeUI();
+            this.setupUi();
         } catch (error) {
             console.warn('[ProjectWorkspace] Initialization skipped:', error.message);
         }
     }
 
-    waitForElement(id, timeoutMs = 8000) {
+    /**
+     * Caches the panel elements and binds every listener. Safe to call more than
+     * once: the panel is marked so document-level listeners never stack up.
+     */
+    setupUi() {
+        const panel = document.getElementById('project-workspace-panel');
+        if (!panel) return false;
+        if (panel.dataset.pwBound === 'true') return true;
+        panel.dataset.pwBound = 'true';
+        this.cacheElements();
+        this.bindEvents();
+        this.updateModeUI();
+        return true;
+    }
+
+    /**
+     * Resolves once `id` exists in the DOM.
+     *
+     * The panel markup lives in chat.html, which renderer.js injects into
+     * #chat-root only after the auth gate is cleared. Signing in can easily take
+     * longer than any fixed budget, and the old 8s poll made init() bail out and
+     * leave every button in the panel dead with no retry. Watch for the node
+     * instead, and wait indefinitely when timeoutMs <= 0.
+     */
+    waitForElement(id, timeoutMs = 0) {
         return new Promise((resolve, reject) => {
-            const started = Date.now();
-            const timer = setInterval(() => {
-                if (document.getElementById(id)) {
-                    clearInterval(timer);
-                    resolve(true);
-                    return;
-                }
-                if (Date.now() - started > timeoutMs) {
-                    clearInterval(timer);
+            if (document.getElementById(id)) {
+                resolve(true);
+                return;
+            }
+
+            let timer = null;
+            const cleanup = () => {
+                observer.disconnect();
+                if (timer) clearTimeout(timer);
+            };
+
+            const observer = new MutationObserver(() => {
+                if (!document.getElementById(id)) return;
+                cleanup();
+                resolve(true);
+            });
+
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+
+            if (timeoutMs > 0) {
+                timer = setTimeout(() => {
+                    cleanup();
                     reject(new Error(`Element '${id}' not found`));
-                }
-            }, 80);
+                }, timeoutMs);
+            }
         });
     }
 
