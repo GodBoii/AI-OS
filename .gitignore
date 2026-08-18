@@ -1,3 +1,87 @@
-node_modules
-docker-compose.yml
+# Dependencies & Virtual Environments
+node_modules/
+dist/
+aios/
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
 python-backend/.env
+python-backend/secrets/
+
+# Docker Local Overrides
+docker-compose.yml
+docker-compose.override.yml
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python Cache & Testing
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.coverage
+htmlcov/
+.tox/
+
+# Logs, Temporary Files & Ad-hoc Scripts
+*.log
+terminal_logs.txt
+console-logs.txt
+gunicorn.ctl
+*.tmp
+*-temp.*
+css-temp.css
+fix_sockets.py
+* copy.*
+* - Copy.*
+
+# Large Media & Archives
+*.mp4
+*.zip
+*.tar.gz
+*.rar
+
+# Presentations
+*.pptx
+*.ppt
+
+# Database & SQL Files
+*.sql
+
+# Skills
+skills/
+
+# Text Files (preserve requirements and licenses)
+*.txt
+!requirements.txt
+!**/requirements.txt
+!*LICENSE*
+!*license*
+
+# Root JSON Files (preserve core configuration)
+/*.json
+!/package.json
+!/package-lock.json
+!/version.json
+python-backend/*.json
+
+# Root Markdown Notes & Reports (preserve core project documentation)
+/*.md
+!/README.md
+!/DOCKER.md
+!/EULA.md
+python-backend/changelog.md
+
+# Miscellaneous Uncommitted Documentation Folders
+How to Access v2 Changelog Documentation in Markdown/
