@@ -12,7 +12,37 @@ body {
     background-attachment: fixed;
 }
 
+/* Dock magnification channels.
+ * Registering them means --dock-press can be transitioned by CSS alone, so the
+ * pressed state never has to re-declare (and clobber) the composed transform
+ * that SidebarDockController drives.
+ */
+@property --dock-scale {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
+@property --dock-x {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+
+@property --dock-press {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
 .sidebar {
+    /* Rail geometry is a contract with SidebarDockController: icon + gap (the
+     * "pitch") must stay wider than a fully magnified icon. At 36px + 12px vs a
+     * 1.42x peak, magnified icons never collide, so neighbours never need to be
+     * shoved out of the way and whatever is under the cursor stays there.
+     */
+    --dock-size: 2.25rem;
+    --dock-gap: 0.75rem;
     position: fixed;
     top: 0;
     left: 0;
@@ -33,71 +63,102 @@ body {
 .sidebar-icons {
     display: flex;
     flex-direction: column;
-    gap: 0.42rem;
+    gap: var(--dock-gap);
     align-items: center;
     background: transparent;
     border: none;
     border-radius: 0;
     box-shadow: none;
-    padding: 0.5rem 0.25rem;
+    /* No horizontal padding: the icons are wider than the rail's inner box, and
+       every icon must share the same left edge because that is the anchor the
+       magnification grows from. */
+    padding: 0.5rem 0;
     overflow: visible;
     isolation: isolate;
 }
 
+/* Nested in .sidebar-icons, so it must reproduce the same pitch — these buttons
+   are dock items too. */
 .background-chat-stack {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: var(--dock-gap);
     width: 100%;
     align-items: center;
-    padding-top: 0.15rem;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .sidebar-icon {
-    --dock-size: 2.25rem;
-    --dock-pop: 0px;
-    --dock-hover-lift: 0px;
-    --dock-z: 1;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: var(--dock-size);
     height: var(--dock-size);
-    min-width: var(--dock-size);
-    min-height: var(--dock-size);
     flex: 0 0 auto;
     border-radius: 0.5rem;
     color: var(--icon-color);
     font-size: 1.1rem;
     cursor: pointer;
-    transition:
-        color var(--anim-normal) var(--easing-smooth),
-        background-color var(--anim-normal) var(--easing-smooth),
-        border-color var(--anim-normal) var(--easing-smooth),
-        box-shadow var(--anim-normal) var(--easing-smooth);
-    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0);
-    transform-origin: left center;
-    will-change: width, height, transform;
-    z-index: var(--dock-z);
     background: transparent;
     border: 1.5px solid transparent;
+    /* Magnification is transform-only, so it costs no layout and no paint, and
+     * grows away from the window edge instead of pushing into it.
+     * --dock-scale / --dock-x are written by SidebarDockController;
+     * --dock-press is pure CSS and multiplies in rather than overwriting.
+     */
+    transform-origin: left center;
+    transform: translate3d(var(--dock-x), 0, 0) scale(calc(var(--dock-scale) * var(--dock-press)));
+    transition:
+        --dock-press var(--motion-duration-quick) var(--motion-ease-out),
+        color var(--motion-duration-fast) var(--motion-ease-out),
+        background-color var(--motion-duration-fast) var(--motion-ease-out),
+        border-color var(--motion-duration-fast) var(--motion-ease-out),
+        box-shadow var(--motion-duration-fast) var(--motion-ease-out);
 }
 
-.sidebar-icon:hover {
-    --dock-hover-lift: -1px;
+/* The controller marks the icon nearest the pointer. Driving the hover look from
+   that instead of :hover alone keeps the rail from going dead when the cursor
+   sits in the gap between two icons. */
+.sidebar-icon:hover,
+.sidebar-icon.sidebar-dock-focused {
     color: var(--accent-color);
     background-color: var(--accent-muted);
     border-color: var(--accent-color);
-    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0);
     box-shadow:
         0 4px 12px rgba(45, 55, 72, 0.15),
         0 2px 6px rgba(45, 55, 72, 0.10);
+    z-index: 2;
 }
 
 .sidebar-icon:active {
-    --dock-hover-lift: 0px;
-    transform: translate3d(var(--dock-pop), var(--dock-hover-lift), 0) scale(0.97);
+    --dock-press: 0.94;
+}
+
+.sidebar-icon:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 2px var(--bg-color),
+        0 0 0 3.5px var(--accent-color);
+}
+
+/* Hint compositing only while the dock is in motion. At rest the icon re-rasterizes
+   at its held scale instead of being stretched from a cached texture. */
+.sidebar-icons.dock-animating .sidebar-icon {
+    will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .sidebar-icon {
+        transition: none;
+    }
+
+    .sidebar-dock-tooltip,
+    .sidebar-dock-tooltip-inner {
+        transition: none;
+    }
 }
 
 .sidebar-icon svg {
@@ -118,31 +179,40 @@ body {
     height: 100%;
 }
 
-.sidebar-icon.sidebar-dock-focused {
-    color: var(--accent-color);
-}
-
+/* Tooltip.
+ * The outer element's transform is owned by JS: x tracks the magnified icon's
+ * right edge, y is spring-driven so the label slides between icons instead of
+ * blinking out and back in. Enter/exit lives on the inner element so the two
+ * never fight over the same property.
+ */
 .sidebar-dock-tooltip {
     position: fixed;
     left: 0;
     top: 0;
     z-index: 1010;
     pointer-events: none;
+    transform: translate3d(0, -9999px, 0);
+    will-change: transform;
+}
+
+.sidebar-dock-tooltip-inner {
+    position: relative;
     opacity: 0;
-    transform: translate3d(8px, -50%, 0) scale(0.96);
+    transform: translateX(-4px) scale(0.96);
     transform-origin: left center;
     transition:
         opacity var(--motion-duration-fast) var(--motion-ease-out),
         transform var(--motion-duration-fast) var(--motion-ease-out);
 }
 
-.sidebar-dock-tooltip.visible {
+.sidebar-dock-tooltip.is-visible .sidebar-dock-tooltip-inner {
     opacity: 1;
-    transform: translate3d(0, -50%, 0) scale(1);
+    transform: none;
 }
 
-.sidebar-dock-tooltip span {
+.sidebar-dock-tooltip-label {
     display: block;
+    max-width: 15rem;
     padding: 0.38rem 0.55rem;
     border-radius: 0.45rem;
     background: rgba(12, 12, 12, 0.92);
@@ -154,11 +224,12 @@ body {
     font-family: 'Outfit', sans-serif;
     font-size: 0.78rem;
     font-weight: 500;
-    line-height: 1;
-    white-space: nowrap;
+    line-height: 1.35;
+    /* Background conversation labels carry a second status line. */
+    white-space: pre-line;
 }
 
-.sidebar-dock-tooltip::before {
+.sidebar-dock-tooltip-inner::before {
     content: '';
     position: absolute;
     left: -4px;
@@ -171,7 +242,7 @@ body {
     transform: translateY(-50%) rotate(45deg);
 }
 
-body:not(.dark-mode) .sidebar-dock-tooltip span {
+body:not(.dark-mode) .sidebar-dock-tooltip-label {
     background: rgba(255, 255, 255, 0.96);
     color: #0f172a;
     border-color: rgba(15, 23, 42, 0.1);
@@ -180,7 +251,7 @@ body:not(.dark-mode) .sidebar-dock-tooltip span {
         inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
-body:not(.dark-mode) .sidebar-dock-tooltip::before {
+body:not(.dark-mode) .sidebar-dock-tooltip-inner::before {
     background: rgba(255, 255, 255, 0.96);
     border-color: rgba(15, 23, 42, 0.1);
 }
@@ -225,10 +296,11 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
     box-shadow: 0 0 0 2px var(--bg-color);
 }
 
+/* These carry .sidebar-icon and live in the rail, so they are dock items: size
+   and transform come from the dock contract, not from local overrides. */
 .background-chat-btn {
-    width: 2.25rem;
-    height: 2.25rem;
-    min-height: 2.25rem;
+    width: var(--dock-size);
+    height: var(--dock-size);
     padding: 0;
     flex-direction: row;
     border-radius: 0.5rem;
@@ -239,14 +311,21 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
     background: transparent;
     border: 1.5px solid transparent;
     position: relative;
-    transition: all var(--anim-normal) var(--easing-smooth);
+    /* Explicit list, not `all`: it must not re-declare transform or drop the
+       --dock-press transition inherited from .sidebar-icon. */
+    transition:
+        --dock-press var(--motion-duration-quick) var(--motion-ease-out),
+        color var(--motion-duration-fast) var(--motion-ease-out),
+        background-color var(--motion-duration-fast) var(--motion-ease-out),
+        border-color var(--motion-duration-fast) var(--motion-ease-out),
+        box-shadow var(--motion-duration-fast) var(--motion-ease-out);
 }
 
-.background-chat-btn:hover {
+.background-chat-btn:hover,
+.background-chat-btn.sidebar-dock-focused {
     color: var(--accent-color);
     background-color: var(--accent-muted);
     border-color: var(--accent-color);
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(45, 55, 72, 0.15), 0 2px 6px rgba(45, 55, 72, 0.10);
 }
 
@@ -256,7 +335,9 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
     border-color: rgba(234, 179, 8, 0.2);
 }
 
-.background-chat-btn.background-chat-btn-running:hover {
+.background-chat-btn.background-chat-btn-running:hover,
+.background-chat-btn.background-chat-btn-running.sidebar-dock-focused {
+    color: #eab308;
     background: rgba(234, 179, 8, 0.12);
     border-color: rgba(234, 179, 8, 0.4);
     box-shadow: 0 4px 12px rgba(234, 179, 8, 0.15);
@@ -268,7 +349,9 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
     border-color: rgba(16, 185, 129, 0.2);
 }
 
-.background-chat-btn.background-chat-btn-completed:hover {
+.background-chat-btn.background-chat-btn-completed:hover,
+.background-chat-btn.background-chat-btn-completed.sidebar-dock-focused {
+    color: #10b981;
     background: rgba(16, 185, 129, 0.12);
     border-color: rgba(16, 185, 129, 0.4);
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
@@ -327,6 +410,16 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
     height: 32px;
     z-index: 1000;
     -webkit-app-region: drag;
+}
+
+/* The Coder Workspace panel (left: 40px, width: 320px) reaches x=360 and starts
+   at y=0, so its top control row sits underneath this drag strip. An Electron
+   drag region eats mouse events at the OS level, which made the sidebar-toggle,
+   terminal, sync, Cloud, Local and GitHub buttons unclickable. Pull the strip's
+   left edge clear of the panel while it is open so there is no overlap at all
+   (this does not depend on no-drag subtraction order). */
+body.project-panel-open .window-drag-region {
+    left: 368px;
 }
 
 .window-controls-area {
@@ -594,11 +687,6 @@ body:not(.dark-mode) .sidebar-dock-tooltip::before {
 @media (max-width: 768px) {
     .sidebar {
         width: 5%;
-    }
-
-    .sidebar-icon {
-        width: var(--dock-size);
-        height: var(--dock-size);
     }
 
     .window-controls-area {

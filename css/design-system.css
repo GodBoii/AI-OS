@@ -1015,7 +1015,8 @@ textarea.input {
 }
 
 /* ── Sidebar icons: Glass hover state ── */
-.dark-mode .sidebar-icon:hover {
+.dark-mode .sidebar-icon:hover,
+.dark-mode .sidebar-icon.sidebar-dock-focused {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.18);
   box-shadow:

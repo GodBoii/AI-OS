@@ -110,14 +110,23 @@ body.project-panel-open:not(.dark-mode) .sidebar {
    SECTION 3 — SIDEBAR ICONS (interactive buttons in sidebar)
    ===================================================================== */
 .dark-mode .sidebar-icon {
+  /* This !important shorthand replaces the whole transition list, so the dock's
+     press channel has to be repeated here or it stops easing in dark mode
+     (which is the default theme). Transform is never transitioned: the dock
+     drives it from a spring. */
   transition:
+    --dock-press var(--motion-duration-quick) var(--motion-ease-out),
     color var(--glass-dur-std) var(--glass-ease-spring),
     background-color var(--glass-dur-std) var(--glass-ease-spring),
     border-color var(--glass-dur-std) var(--glass-ease-spring),
     box-shadow var(--glass-dur-std) var(--glass-ease-spring) !important;
 }
 
-.dark-mode .sidebar-icon:hover {
+/* .sidebar-dock-focused is the dock's own "nearest icon" flag — it has to look
+   identical to :hover, otherwise the rail changes appearance as the cursor
+   crosses the gaps between icons. */
+.dark-mode .sidebar-icon:hover,
+.dark-mode .sidebar-icon.sidebar-dock-focused {
   background: var(--glass-l2) !important;
   border-color: var(--glass-edge-bright) !important;
   box-shadow: 

@@ -107,6 +107,22 @@
     box-shadow: none;
 }
 
+/* --- Keep the composer textarea flush with the container surface ---
+   Generic `.dark-mode textarea` / `.dark-mode input` rules in design-system.css
+   paint a translucent white trough, which made the top of the composer look
+   lighter than the toolbar below it. Force transparency here so the whole
+   container reads as one solid surface. */
+.dark-mode .floating-input,
+.dark-mode .floating-input:hover,
+.dark-mode .floating-input:focus,
+.dark-mode .floating-input:focus-visible {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
+}
+
 /* --- Horizontal Context and Files Bar --- */
 .context-files-bar {
     padding: 12px 16px 10px 16px;
