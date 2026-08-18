@@ -752,6 +752,55 @@ body:not(.dark-mode) .project-know-me-fab:hover {
     white-space: nowrap;
 }
 
+/* =====================================================================
+   FILE TREE DISCLOSURE
+   Folders expand and collapse. Motion follows the bundled
+   ui-motion-recipes skill:
+     - accordion    (21) grid-template-rows 0fr <-> 1fr per subtree, so the
+                         height animates with no JS measuring
+     - icon swap    (09) closed <-> open folder glyph stacked in one slot
+     - texts reveal (18) staggered blurred reveal for the rows inside
+   Expand and collapse are deliberately symmetric (250ms, same easing): this
+   reads as one reversible motion, not an open/close pair.
+   ===================================================================== */
+
+:root {
+    /* --- accordion (recipe 21) --- */
+    --tree-expand: 250ms;
+    --tree-collapse: 250ms;
+    --tree-caret: 250ms;
+    --tree-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* --- icon swap (recipe 09) --- */
+    --tree-icon-dur: 250ms;
+    --tree-icon-blur: 2px;
+    /* Recipe 09 ships a 0.25 start scale, tuned for a hamburger/close swap at
+       button size. At 14px in a dense list that reads as a pop, so the folder
+       glyph starts much closer to rest. */
+    --tree-icon-scale: 0.8;
+    --tree-icon-ease: ease-in-out;
+
+    /* --- texts reveal (recipe 18) --- */
+    --tree-row-reveal: 250ms;
+    --tree-row-blur: 2px;
+    --tree-row-stagger: 40ms;
+
+    /* Indent per level, and the row's own left inset at depth 0. */
+    --tree-indent: 14px;
+    --tree-inset: 6px;
+}
+
+.project-file-node {
+    position: relative;
+}
+
+/* Depth lives on the <ul> as --tree-depth, so the indent and the indent guide
+   are one rule each instead of an inline padding value on every row. */
+.project-file-tree .project-file-row {
+    padding-left: calc(var(--tree-inset) + var(--tree-depth, 0) * var(--tree-indent));
+    user-select: none;
+}
+
 .project-file-preview {
     display: none;
 }
