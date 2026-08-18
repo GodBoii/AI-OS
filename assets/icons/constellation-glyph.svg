@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Aetheria Constellation Glyph</title>
+  <desc id="desc">A precise network mark with luminous nodes forming an abstract A-shaped constellation.</desc>
+  <defs>
+    <linearGradient id="glyphBg" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#0c1019" />
+      <stop offset="100%" stop-color="#1b2231" />
+    </linearGradient>
+    <linearGradient id="beamGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#f3f1e8" />
+      <stop offset="50%" stop-color="#cfd4e0" />
+      <stop offset="100%" stop-color="#8e99ad" />
+    </linearGradient>
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f8f5ed" />
+      <stop offset="65%" stop-color="#d9dfe9" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#a5afc2" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#glyphBg)" />
+  <path d="M156 344 L256 168 L356 344" fill="none" stroke="url(#beamGradient)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+  <path d="M208 280 L304 280" fill="none" stroke="url(#beamGradient)" stroke-width="16" stroke-linecap="round" opacity="0.75" />
+  <path d="M178 316 L256 260 L334 316" fill="none" stroke="url(#beamGradient)" stroke-width="12" stroke-linecap="round" opacity="0.65" />
+  <g>
+    <circle cx="256" cy="170" r="54" fill="url(#nodeGlow)" />
+    <circle cx="256" cy="170" r="22" fill="#f7f4ec" />
+  </g>
+  <g>
+    <circle cx="156" cy="344" r="46" fill="url(#nodeGlow)" />
+    <circle cx="156" cy="344" r="18" fill="#e5e8f0" />
+  </g>
+  <g>
+    <circle cx="356" cy="344" r="40" fill="url(#nodeGlow)" />
+    <circle cx="356" cy="344" r="16" fill="#d6dbe6" />
+  </g>
+  <g>
+    <circle cx="208" cy="280" r="14" fill="#d9dde6" />
+    <circle cx="304" cy="280" r="12" fill="#b3bac8" />
+  </g>
+</svg>

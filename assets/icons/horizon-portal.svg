@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Aetheria Horizon Portal Icon</title>
+  <desc id="desc">A sleek luminous portal framing a rising horizon, symbolising entry into the Aetheria intelligence space.</desc>
+  <defs>
+    <linearGradient id="portalBg" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#080b13" />
+      <stop offset="100%" stop-color="#151a24" />
+    </linearGradient>
+    <linearGradient id="frameGlow" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#f5f2ea" stop-opacity="0.9" />
+      <stop offset="45%" stop-color="#d7dce7" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#7c879a" stop-opacity="0.35" />
+    </linearGradient>
+    <linearGradient id="innerPortal" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#edf0f5" stop-opacity="0.15" />
+      <stop offset="45%" stop-color="#f2efe6" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#65708a" stop-opacity="0.9" />
+    </linearGradient>
+    <radialGradient id="sunHalo" cx="50%" cy="42%" r="38%">
+      <stop offset="0%" stop-color="#f9f6ec" />
+      <stop offset="60%" stop-color="#d9d5c9" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#8f96ab" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#portalBg)" />
+  <path d="M148 120 L364 120 C388 120 408 140 408 164 L408 348 C408 372 388 392 364 392 L148 392 C124 392 104 372 104 348 L104 164 C104 140 124 120 148 120 Z" fill="none" stroke="url(#frameGlow)" stroke-width="26" />
+  <path d="M180 168 L332 168 C350 168 364 182 364 200 L364 320 C364 338 350 352 332 352 L180 352 C162 352 148 338 148 320 L148 200 C148 182 162 168 180 168 Z" fill="url(#innerPortal)" />
+  <circle cx="256" cy="230" r="116" fill="url(#sunHalo)" />
+  <path d="M188 252 L324 252 C338 252 348 262 348 276 L348 294 C348 308 338 318 324 318 L188 318 C174 318 164 308 164 294 L164 276 C164 262 174 252 188 252 Z" fill="#161b28" opacity="0.65" />
+  <path d="M220 272 L292 272 C304 272 312 280 312 292 C312 304 304 312 292 312 L220 312 C208 312 200 304 200 292 C200 280 208 272 220 272 Z" fill="#f6f3ea" opacity="0.75" />
+  <path d="M204 296 L308 296" stroke="#cfd4df" stroke-width="8" stroke-linecap="round" opacity="0.6" />
+  <circle cx="256" cy="222" r="34" fill="#f7f4ec" />
+</svg>

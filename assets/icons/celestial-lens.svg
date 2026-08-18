@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Aetheria Celestial Lens Icon</title>
+  <desc id="desc">A refined orbital lens with concentric energy rings and a luminous Aetheria core.</desc>
+  <defs>
+    <linearGradient id="lensBg" x1="15%" y1="5%" x2="85%" y2="95%">
+      <stop offset="0%" stop-color="#0d1018" />
+      <stop offset="100%" stop-color="#181d2a" />
+    </linearGradient>
+    <radialGradient id="coreHalo" cx="50%" cy="48%" r="52%">
+      <stop offset="0%" stop-color="#f7f4ec" stop-opacity="1" />
+      <stop offset="55%" stop-color="#d5d2c8" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#a0a6b4" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ringStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f4f1e5" />
+      <stop offset="60%" stop-color="#c8ccd7" />
+      <stop offset="100%" stop-color="#6a7386" />
+    </linearGradient>
+    <linearGradient id="glyphStroke" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f6f3ea" />
+      <stop offset="100%" stop-color="#afb6c5" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#lensBg)" />
+  <circle cx="256" cy="256" r="168" fill="#121621" stroke="url(#ringStroke)" stroke-width="26" opacity="0.9" />
+  <circle cx="256" cy="256" r="118" fill="none" stroke="url(#ringStroke)" stroke-width="12" stroke-dasharray="120 38" stroke-linecap="round" opacity="0.55" />
+  <circle cx="256" cy="256" r="96" fill="url(#coreHalo)" />
+  <path d="M256 168 C214 168 180 202 180 244 C180 286 214 320 256 320 C298 320 332 286 332 244 C332 202 298 168 256 168 Z" fill="#161a25" opacity="0.6" />
+  <path d="M216 320 L256 200 L296 320" fill="none" stroke="url(#glyphStroke)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="256" cy="256" r="34" fill="#f8f5ed" />
+  <path d="M208 248 C208 224 228 204 252 204" fill="none" stroke="#d7d3c7" stroke-width="10" stroke-linecap="round" opacity="0.7" />
+  <path d="M304 248 C304 272 284 292 260 292" fill="none" stroke="#aeb5c4" stroke-width="10" stroke-linecap="round" opacity="0.7" />
+</svg>

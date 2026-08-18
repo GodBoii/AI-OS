@@ -1,0 +1,47 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Aetheria Data Bloom Monogram</title>
+  <desc id="desc">A balanced monogram of interwoven arcs representing data convergence and radiant expansion.</desc>
+  <defs>
+    <linearGradient id="monogramBg" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#0b0d13" />
+      <stop offset="100%" stop-color="#161a22" />
+    </linearGradient>
+    <linearGradient id="outerArc" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#f5f2ea" />
+      <stop offset="60%" stop-color="#d6dae4" />
+      <stop offset="100%" stop-color="#8d96aa" />
+    </linearGradient>
+    <linearGradient id="innerArc" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#f2f0e8" />
+      <stop offset="100%" stop-color="#b7bfcd" />
+    </linearGradient>
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f7f4eb" />
+      <stop offset="60%" stop-color="#d7dbe6" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#9ea5b4" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#monogramBg)" />
+  <path d="M256 124 C194 124 148 182 148 254 C148 326 194 384 256 384" fill="none" stroke="url(#outerArc)" stroke-width="26" stroke-linecap="round" />
+  <path d="M256 124 C318 124 364 182 364 254 C364 326 318 384 256 384" fill="none" stroke="url(#outerArc)" stroke-width="26" stroke-linecap="round" />
+  <path d="M208 254 C208 214 234 186 264 186" fill="none" stroke="url(#innerArc)" stroke-width="18" stroke-linecap="round" />
+  <path d="M304 254 C304 294 278 322 248 322" fill="none" stroke="url(#innerArc)" stroke-width="18" stroke-linecap="round" />
+  <path d="M208 254 C208 298 236 328 264 328" fill="none" stroke="#c7ccd8" stroke-width="14" stroke-linecap="round" opacity="0.55" />
+  <path d="M304 254 C304 210 276 182 248 182" fill="none" stroke="#dee1e9" stroke-width="14" stroke-linecap="round" opacity="0.55" />
+  <g opacity="0.85">
+    <circle cx="256" cy="126" r="44" fill="url(#nodeGlow)" />
+    <circle cx="256" cy="126" r="18" fill="#f5f2ea" />
+  </g>
+  <g opacity="0.75">
+    <circle cx="186" cy="254" r="36" fill="url(#nodeGlow)" />
+    <circle cx="186" cy="254" r="14" fill="#d7dce7" />
+  </g>
+  <g opacity="0.7">
+    <circle cx="326" cy="254" r="32" fill="url(#nodeGlow)" />
+    <circle cx="326" cy="254" r="12" fill="#bcc3d1" />
+  </g>
+  <g opacity="0.85">
+    <circle cx="256" cy="382" r="40" fill="url(#nodeGlow)" />
+    <circle cx="256" cy="382" r="18" fill="#f1eee4" />
+  </g>
+</svg>
