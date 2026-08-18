@@ -30,6 +30,7 @@ class GithubPanel {
         // so the row entrance animation never replays for identical data.
         this.lastChangesSignature = null;
         this.lastBranchSignature = null;
+        this.lastBranchDataSignature = null;
         this.lastLogSignature = null;
 
         this.state = {
@@ -241,6 +242,18 @@ class GithubPanel {
         this.el.changesList?.addEventListener('click', (event) => this.onChangesListClick(event));
         this.el.branchList?.addEventListener('click', (event) => this.onBranchListClick(event));
         this.el.logList?.addEventListener('click', (event) => this.onLogListClick(event));
+
+        // Rows are role="button" and focusable, so Enter / Space must activate
+        // them the same way a pointer click does.
+        [this.el.changesList, this.el.branchList, this.el.logList].forEach((list) => {
+            list?.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const activatable = event.target?.closest?.('.ghp-row, .ghp-row-action');
+                if (!activatable) return;
+                event.preventDefault();
+                activatable.click();
+            });
+        });
 
         // Keep the popover glued to its trigger.
         window.addEventListener('resize', this.onViewportChange);
@@ -965,6 +978,7 @@ class GithubPanel {
         if (this.state.gate !== 'ready' || !data) {
             list.innerHTML = '';
             this.lastBranchSignature = null;
+            this.lastBranchDataSignature = null;
             this.updatePullRequestAffordance();
             return;
         }
@@ -972,15 +986,25 @@ class GithubPanel {
         const filter = this.state.branchFilter.toLowerCase();
         const match = (item) => !filter || item.name.toLowerCase().includes(filter);
 
-        const signature = [filter, ...['local', 'remote', 'tags'].map((key) => (data[key] || [])
-            .map((item) => `${item.is_current ? '*' : ''}${item.name}@${item.short_hash}`)
-            .join(','))].join('|');
+        const dataSignature = ['local', 'remote', 'tags']
+            .map((key) => (data[key] || [])
+                .map((item) => `${item.is_current ? '*' : ''}${item.name}@${item.short_hash}`)
+                .join(','))
+            .join('|');
+        const signature = `${filter}||${dataSignature}`;
 
         if (signature === this.lastBranchSignature) {
             this.updatePullRequestAffordance();
             return;
         }
+
+        // Typing in the filter re-renders on every keystroke. Replaying the
+        // staggered entrance each time reads as noise, so motion is reserved for
+        // the case where the underlying branch data actually changed.
+        const filterOnly = dataSignature === this.lastBranchDataSignature;
         this.lastBranchSignature = signature;
+        this.lastBranchDataSignature = dataSignature;
+        list.classList.toggle('ghp-list--no-anim', filterOnly);
 
         const fragment = document.createDocumentFragment();
         let rowIndex = 0;
@@ -1659,10 +1683,15 @@ class GithubPanel {
         return String(filePath).replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || '';
     }
 
+    /**
+     * Escapes for both text nodes and quoted attribute values. textContent
+     * round-tripping alone leaves quotes intact, which would break the `title="…"`
+     * attributes built by the template literals above.
+     */
     escape(text) {
         const div = document.createElement('div');
         div.textContent = String(text ?? '');
-        return div.innerHTML;
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     svgIcon(...paths) {
