@@ -1,256 +1,528 @@
+/**
+ * Dock-style hover magnification for the left sidebar rail.
+ *
+ * The previous implementation fed on its own output: it measured live
+ * `getBoundingClientRect()` values of icons whose width/height were mid-flight,
+ * so growing an icon reflowed the column, which moved every center, which
+ * changed the next frame's targets. Combined with a falloff radius far wider
+ * than the icon pitch (every icon inflated at once), magnified icons that
+ * overlapped and had to be untangled with per-frame z-index writes, and two
+ * different thresholds deciding "which icon is hovered", the result wobbled,
+ * flickered and thrashed layout.
+ *
+ * This version holds to four rules:
+ *   1. Rest geometry is read from `offsetTop`/`offsetHeight`, which transforms
+ *      cannot influence, and is cached. Scales always derive from rest centers,
+ *      so the magnification field can never chase itself.
+ *   2. Only `transform` animates. No width/height, so no layout or paint per
+ *      frame, and the icon grows away from the window edge.
+ *   3. The rest pitch leaves enough room that a fully magnified icon never
+ *      overlaps its neighbour, so neighbours never need displacing. Whatever is
+ *      under the cursor stays under the cursor.
+ *   4. One "focused band" decision drives the focus ring, the stacking and the
+ *      tooltip, so they cannot disagree.
+ */
 class SidebarDockController {
-    constructor(sidebar) {
-        this.sidebar = sidebar;
-        this.track = sidebar?.querySelector('.sidebar-icons');
-        this.items = Array.from(this.track?.querySelectorAll('.sidebar-icon') || []);
-        this.tooltip = null;
-        this.tooltipIndex = null;
-        this.models = [];
-        this.baseSize = 36;
-        this.maxScale = 1.58;
-        this.distance = 68;
-        this.popDistance = 22;
-        this.rafId = null;
-        this.lastFrame = 0;
-        this.reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false;
+    static DEFAULTS = {
+        /** Peak magnification. Bounded by the rest pitch — see geometry note above. */
+        maxScale: 1.42,
+        /** Gaussian falloff as a fraction of the icon pitch. Keeps the peak on one icon. */
+        falloffRatio: 0.62,
+        /** Rightward "reach" in px at peak scale. */
+        popDistance: 12,
+        /** Spring: ~0.9 damping ratio, settles in ~300ms with no visible overshoot. */
+        stiffness: 210,
+        damping: 26,
+        mass: 1,
+        /** How far past the icon stack the pointer may stray before the dock sleeps. */
+        verticalSlack: 20,
+        /** Distance from the magnified icon's right edge to the tooltip. */
+        tooltipGap: 10,
+    };
 
-        if (!this.sidebar || !this.track || this.items.length === 0) return;
+    constructor(sidebar, options = {}) {
+        this.sidebar = sidebar || null;
+        this.track = sidebar?.querySelector('.sidebar-icons') || null;
+        if (!this.sidebar || !this.track) return;
+
+        this.settings = { ...SidebarDockController.DEFAULTS, ...options };
+
+        this.items = [];
+        this.geometry = [];
+        this.springs = [];
+        this.written = [];
+
+        this.pitch = 0;
+        this.sigma = 1;
+
+        this.pointerInside = false;
+        this.pointerY = null;
+        this.keyboardIndex = -1;
+        this.focusIndex = -1;
+
+        this.rafId = null;
+        this.lastTime = 0;
+        this.needsMeasure = true;
+        this.syncQueued = false;
+
+        this.tooltip = null;
+        this.tooltipLabel = null;
+        this.tooltipVisible = false;
+        this.tooltipSpring = this.createSpring(0, 0.05);
+
+        this.frame = this.frame.bind(this);
+        this.controller = new AbortController();
+        this.motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)') || null;
+        this.reducedMotion = this.motionQuery?.matches === true;
 
         this.init();
     }
 
+    /* ---------------------------------------------------------------- setup */
+
     init() {
+        this.buildTooltip();
+        this.syncItems();
+        this.bindEvents();
+        this.start();
+    }
+
+    buildTooltip() {
         this.tooltip = document.createElement('div');
         this.tooltip.className = 'sidebar-dock-tooltip';
-        this.tooltip.setAttribute('role', 'presentation');
-        this.tooltip.innerHTML = '<span></span>';
+        // The label duplicates each button's accessible name, so hide it from AT.
+        this.tooltip.setAttribute('aria-hidden', 'true');
+
+        const inner = document.createElement('div');
+        inner.className = 'sidebar-dock-tooltip-inner';
+
+        this.tooltipLabel = document.createElement('span');
+        this.tooltipLabel.className = 'sidebar-dock-tooltip-label';
+
+        inner.appendChild(this.tooltipLabel);
+        this.tooltip.appendChild(inner);
         document.body.appendChild(this.tooltip);
+    }
 
-        this.items.forEach((item, index) => {
-            const label = item.getAttribute('aria-label') || item.getAttribute('title') || '';
-            item.dataset.dockLabel = label;
-            item.removeAttribute('title');
-            item.classList.add('sidebar-dock-item');
-            item.style.setProperty('--dock-z', String(index + 1));
+    bindEvents() {
+        const { signal } = this.controller;
 
-            item.addEventListener('focus', () => this.handleFocus(index));
-            item.addEventListener('blur', () => this.handleBlur());
-        });
+        // A single pointer stream on the rail drives every icon. Listening on the
+        // rail (not per icon) means moving through the gaps never interrupts it.
+        this.sidebar.addEventListener('pointerenter', (event) => this.handlePointer(event), { signal });
+        this.sidebar.addEventListener('pointermove', (event) => this.handlePointer(event), { signal });
+        this.sidebar.addEventListener('pointerleave', () => this.releasePointer(), { signal });
+        this.sidebar.addEventListener('pointercancel', () => this.releasePointer(), { signal });
 
-        this.syncBaseSize();
-        this.resetTargets(true);
+        this.sidebar.addEventListener('focusin', (event) => this.handleFocusIn(event), { signal });
+        this.sidebar.addEventListener('focusout', () => this.handleFocusOut(), { signal });
 
-        this.sidebar.addEventListener('pointermove', (event) => this.handlePointerMove(event));
-        this.sidebar.addEventListener('pointerleave', () => this.handlePointerLeave());
-        window.addEventListener('resize', () => {
-            this.syncBaseSize();
-            this.resetTargets(true);
-        });
+        // The pointer can end up parked over the rail with no further events
+        // (window loses focus, app is hidden). Collapse rather than stay stuck.
+        window.addEventListener('blur', () => this.sleep(), { signal });
+        window.addEventListener('resize', () => this.invalidate(), { signal });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.sleep();
+        }, { signal });
 
-        window.matchMedia?.('(prefers-reduced-motion: reduce)')?.addEventListener?.('change', (event) => {
+        if (typeof ResizeObserver === 'function') {
+            this.resizeObserver = new ResizeObserver(() => this.invalidate());
+            this.resizeObserver.observe(this.track);
+        }
+
+        if (typeof MutationObserver === 'function') {
+            // chat.js injects and removes `.sidebar-icon` buttons in this rail at
+            // runtime; the old controller snapshotted the list once and silently
+            // left those buttons out of the dock.
+            this.mutationObserver = new MutationObserver(() => this.scheduleSync());
+            this.mutationObserver.observe(this.track, { childList: true, subtree: true });
+        }
+
+        this.motionQuery?.addEventListener?.('change', (event) => {
             this.reducedMotion = event.matches;
-            this.resetTargets(true);
+            this.invalidate();
+        }, { signal });
+    }
+
+    destroy() {
+        this.controller?.abort();
+        this.resizeObserver?.disconnect();
+        this.mutationObserver?.disconnect();
+        this.stop();
+        this.items.forEach((item) => this.resetItem(item));
+        this.tooltip?.remove();
+        this.items = [];
+        this.springs = [];
+        this.geometry = [];
+    }
+
+    /* ----------------------------------------------------------- item list */
+
+    scheduleSync() {
+        if (this.syncQueued) return;
+        this.syncQueued = true;
+        requestAnimationFrame(() => {
+            this.syncQueued = false;
+            this.syncItems();
         });
     }
 
-    syncBaseSize() {
-        const remSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-        this.baseSize = Math.round(remSize * 2.25);
-    }
+    syncItems() {
+        const next = Array.from(this.track.querySelectorAll('.sidebar-icon'));
+        const unchanged = next.length === this.items.length
+            && next.every((item, index) => item === this.items[index]);
 
-    gaussian(distance) {
-        const spread = 2 * this.distance * this.distance;
-        return 1 + (this.maxScale - 1) * Math.exp(-(distance * distance) / spread);
-    }
-
-    setTargetsFromY(pointerY) {
-        let bestIndex = -1;
-        let bestDistance = Infinity;
-
-        this.models = this.items.map((item, index) => {
-            const previous = this.models[index] || {
-                size: this.baseSize,
-                pop: 0,
-                sizeVelocity: 0,
-                popVelocity: 0,
-            };
-            const rect = item.getBoundingClientRect();
-            const centerY = rect.top + rect.height / 2;
-            const distance = Math.abs(pointerY - centerY);
-            const scale = this.gaussian(distance);
-
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestIndex = index;
-            }
-
-            return {
-                ...previous,
-                targetSize: this.baseSize * scale,
-                targetPop: (scale - 1) * this.popDistance,
-                targetZ: Math.round(100 + scale * 100),
-            };
-        });
-
-        this.items.forEach((item, index) => {
-            item.classList.toggle('sidebar-dock-focused', index === bestIndex && bestDistance < this.distance);
-            item.style.setProperty('--dock-z', String(this.models[index].targetZ));
-        });
-
-        if (bestIndex >= 0 && bestDistance < this.distance * 0.9) {
-            this.showTooltip(bestIndex);
-        } else {
-            this.hideTooltip();
-        }
-
-        this.startAnimation();
-    }
-
-    setImmediateStyles() {
-        this.models.forEach((model, index) => {
-            model.size = model.targetSize;
-            model.pop = model.targetPop;
-            model.sizeVelocity = 0;
-            model.popVelocity = 0;
-            this.applyModel(index, model);
-        });
-        this.updateTooltipPosition();
-    }
-
-    resetTargets(immediate = false) {
-        this.models = this.items.map((item, index) => {
-            const previous = this.models[index] || {
-                size: this.baseSize,
-                pop: 0,
-                sizeVelocity: 0,
-                popVelocity: 0,
-            };
-            item.classList.remove('sidebar-dock-focused');
-            item.style.setProperty('--dock-z', String(index + 1));
-            return {
-                ...previous,
-                targetSize: this.baseSize,
-                targetPop: 0,
-                targetZ: index + 1,
-            };
-        });
-
-        if (immediate || this.reducedMotion) {
-            this.setImmediateStyles();
-        } else {
-            this.startAnimation();
-        }
-    }
-
-    handlePointerMove(event) {
-        const rect = this.track.getBoundingClientRect();
-        const outsideY = event.clientY < rect.top - 30 || event.clientY > rect.bottom + 30;
-        const outsideX = event.clientX < rect.left - 12 || event.clientX > rect.right + 90;
-
-        if (outsideY || outsideX) {
-            this.handlePointerLeave();
+        if (unchanged) {
+            // Content changed inside a button (chat.js rewrites its innerHTML on
+            // status updates) — geometry may have shifted, the list did not.
+            this.invalidate();
             return;
         }
 
-        this.setTargetsFromY(event.clientY);
-    }
+        const carried = new Map(this.items.map((item, index) => [item, this.springs[index]]));
+        this.items.forEach((item) => {
+            if (!next.includes(item)) this.resetItem(item);
+            else item.classList.remove('sidebar-dock-focused');
+        });
 
-    handlePointerLeave() {
-        this.tooltipIndex = null;
+        this.items = next;
+        this.springs = next.map((item) => carried.get(item) || this.createSpring(1, 0.0008));
+        this.written = next.map(() => null);
+
+        this.items.forEach((item) => {
+            item.classList.add('sidebar-dock-item');
+            this.readLabel(item);
+        });
+
+        // Indices just shifted; drop the current focus rather than mis-attribute it.
+        this.focusIndex = -1;
         this.hideTooltip();
-        this.resetTargets();
+        this.invalidate();
     }
 
-    handleFocus(index) {
-        const rect = this.items[index]?.getBoundingClientRect();
-        if (!rect) return;
-        this.setTargetsFromY(rect.top + rect.height / 2);
+    resetItem(item) {
+        item.classList.remove('sidebar-dock-item', 'sidebar-dock-focused');
+        item.style.removeProperty('--dock-scale');
+        item.style.removeProperty('--dock-x');
+    }
+
+    /**
+     * Native `title` would duplicate our tooltip, so it is hoisted into
+     * `data-dock-label`. chat.js re-adds `title` whenever a background
+     * conversation changes status, so this is re-checked on every read.
+     */
+    readLabel(item) {
+        const title = item.getAttribute('title');
+        if (title) {
+            item.dataset.dockLabel = title;
+            item.removeAttribute('title');
+            // Dynamically injected buttons carry no aria-label; without this,
+            // stripping `title` would leave them unnamed for screen readers.
+            if (!item.getAttribute('aria-label')) {
+                item.setAttribute('aria-label', title.replace(/\s*\n\s*/g, ' — '));
+            }
+        }
+        return item.dataset.dockLabel || item.getAttribute('aria-label') || '';
+    }
+
+    /* ------------------------------------------------------------ geometry */
+
+    invalidate() {
+        this.needsMeasure = true;
+        this.start();
+    }
+
+    /**
+     * `offsetTop`/`offsetHeight` are layout values, immune to the transforms this
+     * controller applies, so re-measuring mid-hover is safe and never feeds back
+     * into the magnification. Every `.sidebar-icon` resolves its offsets against
+     * the fixed-position rail, including the ones nested in the background chat
+     * stack.
+     */
+    measure() {
+        this.needsMeasure = false;
+
+        const railRect = this.sidebar.getBoundingClientRect();
+        this.geometry = this.items.map((item) => {
+            const height = item.offsetHeight;
+            const rendered = item.offsetParent !== null && height > 0;
+            const top = railRect.top + item.offsetTop;
+            return {
+                rendered,
+                top,
+                height,
+                centerY: top + height / 2,
+                left: railRect.left + item.offsetLeft,
+                width: item.offsetWidth,
+            };
+        });
+
+        this.pitch = this.derivePitch();
+        this.sigma = Math.max(1, this.pitch * this.settings.falloffRatio);
+
+        // Background conversation buttons rewrite their label as their status
+        // changes; keep an open tooltip in sync with it.
+        if (this.tooltipVisible && this.focusIndex !== -1) {
+            const label = this.readLabel(this.items[this.focusIndex]);
+            if (label) this.tooltipLabel.textContent = label;
+        }
+    }
+
+    derivePitch() {
+        const centers = this.geometry.filter((entry) => entry.rendered);
+        if (centers.length > 1) {
+            const span = centers[centers.length - 1].centerY - centers[0].centerY;
+            return span / (centers.length - 1);
+        }
+        return centers.length === 1 ? centers[0].height : 0;
+    }
+
+    /* ------------------------------------------------------------- pointer */
+
+    handlePointer(event) {
+        // Touch has no hover state; magnifying on tap would leave the dock stuck.
+        if (event.pointerType === 'touch') return;
+        this.pointerInside = true;
+        this.pointerY = event.clientY;
+        this.start();
+    }
+
+    releasePointer() {
+        this.pointerInside = false;
+        this.pointerY = null;
+        this.start();
+    }
+
+    sleep() {
+        this.pointerInside = false;
+        this.pointerY = null;
+        this.keyboardIndex = -1;
+        this.start();
+    }
+
+    handleFocusIn(event) {
+        const item = event.target?.closest?.('.sidebar-icon');
+        // Only keyboard focus anchors the dock. A click already has the pointer
+        // driving it, and would otherwise leave the icon magnified afterwards.
+        const keyboard = item?.matches?.(':focus-visible') === true;
+        this.keyboardIndex = keyboard ? this.items.indexOf(item) : -1;
+        this.start();
+    }
+
+    handleFocusOut() {
+        this.keyboardIndex = -1;
+        this.start();
+    }
+
+    /* --------------------------------------------------------------- solve */
+
+    peakScale() {
+        return this.reducedMotion ? 1 : this.settings.maxScale;
+    }
+
+    popFor(scale) {
+        return this.reducedMotion ? 0 : (scale - 1) * this.settings.popDistance;
+    }
+
+    anchorY() {
+        if (this.pointerInside && this.pointerY !== null) return this.pointerY;
+        const entry = this.geometry[this.keyboardIndex];
+        return entry?.rendered ? entry.centerY : null;
+    }
+
+    /**
+     * The one threshold in the whole effect: the anchor has to sit alongside the
+     * icon stack, not merely somewhere on the full-height rail.
+     */
+    resolveFocus(anchorY) {
+        let index = -1;
+        let nearest = Infinity;
+
+        for (let i = 0; i < this.geometry.length; i += 1) {
+            const entry = this.geometry[i];
+            if (!entry.rendered) continue;
+            const distance = Math.abs(anchorY - entry.centerY);
+            if (distance < nearest) {
+                nearest = distance;
+                index = i;
+            }
+        }
+
+        if (index === -1) return -1;
+        const reach = this.pitch / 2 + this.settings.verticalSlack;
+        return nearest <= reach ? index : -1;
+    }
+
+    resolveTargets() {
+        const anchorY = this.anchorY();
+        const focus = anchorY === null ? -1 : this.resolveFocus(anchorY);
+        const peak = this.peakScale();
+        const spread = 2 * this.sigma * this.sigma;
+
+        for (let i = 0; i < this.springs.length; i += 1) {
+            const entry = this.geometry[i];
+            let target = 1;
+            if (focus !== -1 && entry?.rendered && peak > 1) {
+                const distance = anchorY - entry.centerY;
+                target = 1 + (peak - 1) * Math.exp(-(distance * distance) / spread);
+            }
+            this.springs[i].target = target;
+        }
+
+        if (focus !== this.focusIndex) this.applyFocus(focus);
+
+        // Re-read each frame so the label keeps tracking its icon after a
+        // re-measure (window resize, rail contents changing) and not just on
+        // focus changes.
+        if (this.focusIndex !== -1) {
+            const centerY = this.geometry[this.focusIndex]?.centerY;
+            if (centerY !== undefined) this.tooltipSpring.target = centerY;
+        }
+    }
+
+    applyFocus(index) {
+        this.items[this.focusIndex]?.classList.remove('sidebar-dock-focused');
+        this.focusIndex = index;
+
+        if (index === -1) {
+            this.hideTooltip();
+            return;
+        }
+
+        this.items[index].classList.add('sidebar-dock-focused');
         this.showTooltip(index);
     }
 
-    handleBlur() {
-        if (!this.sidebar.matches(':hover')) {
-            this.tooltipIndex = null;
-            this.hideTooltip();
-            this.resetTargets();
-        }
-    }
+    /* ------------------------------------------------------------- tooltip */
 
     showTooltip(index) {
-        if (!this.tooltip) return;
-        const label = this.items[index]?.dataset.dockLabel;
-        if (!label) return;
-        this.tooltipIndex = index;
-        this.tooltip.querySelector('span').textContent = label;
-        this.tooltip.classList.add('visible');
-        this.updateTooltipPosition();
+        const label = this.readLabel(this.items[index]);
+        const centerY = this.geometry[index]?.centerY;
+        if (!label || centerY === undefined) {
+            this.hideTooltip();
+            return;
+        }
+
+        this.tooltipLabel.textContent = label;
+        this.tooltipSpring.target = centerY;
+
+        if (!this.tooltipVisible) {
+            // First appearance: land on the icon rather than sliding in from
+            // wherever the label happened to be last time.
+            this.tooltipSpring.value = centerY;
+            this.tooltipSpring.velocity = 0;
+            this.tooltipVisible = true;
+            this.placeTooltip();
+            this.tooltip.classList.add('is-visible');
+        }
     }
 
     hideTooltip() {
-        this.tooltip?.classList.remove('visible');
+        if (!this.tooltipVisible) return;
+        this.tooltipVisible = false;
+        this.tooltip.classList.remove('is-visible');
     }
 
-    updateTooltipPosition() {
-        if (!this.tooltip || this.tooltipIndex === null) return;
-        const item = this.items[this.tooltipIndex];
-        if (!item) return;
-        const rect = item.getBoundingClientRect();
-        this.tooltip.style.left = `${rect.right + 12}px`;
-        this.tooltip.style.top = `${rect.top + rect.height / 2}px`;
+    placeTooltip() {
+        if (!this.tooltipVisible || this.focusIndex === -1) return;
+        const entry = this.geometry[this.focusIndex];
+        if (!entry) return;
+
+        // Icons scale from their left edge, so the right edge is a pure function
+        // of the animated scale — no layout read needed to track it.
+        const scale = this.springs[this.focusIndex]?.value ?? 1;
+        const x = entry.left + entry.width * scale + this.popFor(scale) + this.settings.tooltipGap;
+        const y = this.tooltipSpring.value;
+
+        this.tooltip.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) translateY(-50%)`;
     }
 
-    startAnimation() {
-        if (this.reducedMotion) {
-            this.setImmediateStyles();
-            return;
+    /* -------------------------------------------------------------- motion */
+
+    createSpring(value, epsilon) {
+        return { value, target: value, velocity: 0, epsilon };
+    }
+
+    /** Semi-implicit Euler with fixed sub-steps: stable at any refresh rate. */
+    advance(spring, dt) {
+        if (this.reducedMotion || dt <= 0) {
+            const moved = spring.value !== spring.target;
+            spring.value = spring.target;
+            spring.velocity = 0;
+            return moved;
         }
+
+        const { stiffness, damping, mass } = this.settings;
+        const steps = Math.min(8, Math.max(1, Math.ceil(dt * 240)));
+        const step = dt / steps;
+
+        for (let i = 0; i < steps; i += 1) {
+            const accel = (-stiffness * (spring.value - spring.target) - damping * spring.velocity) / mass;
+            spring.velocity += accel * step;
+            spring.value += spring.velocity * step;
+        }
+
+        if (Math.abs(spring.target - spring.value) < spring.epsilon
+            && Math.abs(spring.velocity) < spring.epsilon * 8) {
+            spring.value = spring.target;
+            spring.velocity = 0;
+            return false;
+        }
+        return true;
+    }
+
+    start() {
         if (this.rafId !== null) return;
-        this.lastFrame = performance.now();
-        this.rafId = requestAnimationFrame((time) => this.animate(time));
+        this.track.classList.add('dock-animating');
+        this.lastTime = performance.now();
+        this.rafId = requestAnimationFrame(this.frame);
     }
 
-    animate(time) {
-        const dt = Math.min((time - this.lastFrame) / 16.67, 2);
-        this.lastFrame = time;
-        let settled = true;
-
-        this.models.forEach((model, index) => {
-            model.sizeVelocity += (model.targetSize - model.size) * 0.22 * dt;
-            model.sizeVelocity *= Math.pow(0.62, dt);
-            model.size += model.sizeVelocity * dt;
-
-            model.popVelocity += (model.targetPop - model.pop) * 0.22 * dt;
-            model.popVelocity *= Math.pow(0.62, dt);
-            model.pop += model.popVelocity * dt;
-
-            if (
-                Math.abs(model.targetSize - model.size) > 0.05 ||
-                Math.abs(model.sizeVelocity) > 0.05 ||
-                Math.abs(model.targetPop - model.pop) > 0.05 ||
-                Math.abs(model.popVelocity) > 0.05
-            ) {
-                settled = false;
-            }
-
-            this.applyModel(index, model);
-        });
-
-        this.updateTooltipPosition();
-
-        if (settled) {
+    stop() {
+        if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
             this.rafId = null;
-            this.setImmediateStyles();
-            return;
+        }
+        // Dropping the compositing hint at rest lets the icon re-rasterize
+        // crisply instead of being stretched from a cached texture.
+        this.track.classList.remove('dock-animating');
+    }
+
+    frame(now) {
+        // Clamped so a stalled window (hidden tab, dragged window) resumes from
+        // a sane step instead of exploding the integrator.
+        const dt = Math.min((now - this.lastTime) / 1000, 0.05);
+        this.lastTime = now;
+
+        if (this.needsMeasure) this.measure();
+        this.resolveTargets();
+
+        let moving = false;
+        for (let i = 0; i < this.springs.length; i += 1) {
+            const spring = this.springs[i];
+            if (this.advance(spring, dt)) moving = true;
+            this.write(i, spring.value);
         }
 
-        this.rafId = requestAnimationFrame((nextTime) => this.animate(nextTime));
+        if (this.advance(this.tooltipSpring, dt)) moving = true;
+        this.placeTooltip();
+
+        if (!moving) {
+            this.stop();
+            return;
+        }
+        this.rafId = requestAnimationFrame(this.frame);
     }
 
-    applyModel(index, model) {
+    write(index, scale) {
         const item = this.items[index];
         if (!item) return;
-        item.style.setProperty('--dock-size', `${model.size.toFixed(2)}px`);
-        item.style.setProperty('--dock-pop', `${model.pop.toFixed(2)}px`);
+        const value = scale.toFixed(4);
+        if (this.written[index] === value) return;
+
+        this.written[index] = value;
+        item.style.setProperty('--dock-scale', value);
+        item.style.setProperty('--dock-x', `${this.popFor(scale).toFixed(2)}px`);
     }
 }
 
@@ -1072,7 +1344,19 @@ class UIManager {
         document.getElementById('floating-input-container')?.classList.toggle('hidden', !isOpen);
     }
 
+    /** Keeps a rail icon's selected look and its accessible toggle state in sync. */
+    setSidebarIconState(icon, isActive) {
+        if (!icon) return;
+        icon.classList.toggle('active', isActive);
+        icon.setAttribute('aria-pressed', String(isActive));
+    }
+
     updateAIOSVisibility(isOpen) {
+        // The two workspace icons already reflect their panel; without this the
+        // profile and tasks icons were the only ones in the rail with no
+        // selected state at all.
+        this.setSidebarIconState(this.elements.appIcon, isOpen);
+
         if (window.AIOS?.initialized) {
             document.getElementById('floating-window')?.classList.toggle('hidden', !isOpen);
             
@@ -1093,6 +1377,7 @@ class UIManager {
     }
 
     updateToDoListVisibility(isOpen) {
+        this.setSidebarIconState(this.elements.toDoListIcon, isOpen);
         document.getElementById('to-do-list-container')?.classList.toggle('hidden', !isOpen);
         // Full-screen takeover: hide chat and floating input when tasks open
         document.getElementById('chat-container')?.classList.toggle('hidden', isOpen);
@@ -1141,13 +1426,13 @@ class UIManager {
         const computerModeActive = this.isComputerModeActive();
 
         if (this.elements.projectWorkspaceIcon) {
-            this.elements.projectWorkspaceIcon.classList.toggle('active', projectOpen);
+            this.setSidebarIconState(this.elements.projectWorkspaceIcon, projectOpen);
             this.elements.projectWorkspaceIcon.classList.toggle('workspace-mode-active', projectModeActive);
             this.elements.projectWorkspaceIcon.classList.toggle('workspace-mode-hidden', projectModeActive && !projectOpen);
         }
 
         if (this.elements.computerWorkspaceIcon) {
-            this.elements.computerWorkspaceIcon.classList.toggle('active', computerOpen);
+            this.setSidebarIconState(this.elements.computerWorkspaceIcon, computerOpen);
             this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-active', computerModeActive);
             this.elements.computerWorkspaceIcon.classList.toggle('workspace-mode-hidden', computerModeActive && !computerOpen);
         }
