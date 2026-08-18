@@ -1444,6 +1444,12 @@ class UIManager {
         document.getElementById('project-workspace-panel')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('project-panel-open', isOpen);
 
+        // The source-control popover is anchored to a control inside the panel,
+        // so it must never outlive it.
+        if (!isOpen) {
+            window.githubPanel?.close?.();
+        }
+
         // Opening from sidebar must also guarantee project routing mode is active.
         if (isOpen && window.projectWorkspace?.ensureContext) {
             window.projectWorkspace.ensureContext({}, { syncUi: true });
