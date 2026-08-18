@@ -834,6 +834,36 @@ body:not(.dark-mode) .project-know-me-fab:hover {
     color: var(--accent-color);
 }
 
+/* --- Recipe 09: closed / open folder glyph in a single slot ------------ */
+.project-file-folder {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.project-file-folder .project-file-glyph {
+    grid-area: 1 / 1;
+    display: inline-flex;
+    transition:
+        opacity var(--tree-icon-dur) var(--tree-icon-ease),
+        filter var(--tree-icon-dur) var(--tree-icon-ease),
+        transform var(--tree-icon-dur) var(--tree-icon-ease);
+}
+
+.project-file-folder .project-file-glyph[data-glyph="open"],
+.project-file-node[data-open="true"] > .project-file-row .project-file-glyph[data-glyph="closed"] {
+    opacity: 0;
+    filter: blur(var(--tree-icon-blur));
+    transform: scale(var(--tree-icon-scale));
+}
+
+.project-file-folder .project-file-glyph[data-glyph="closed"],
+.project-file-node[data-open="true"] > .project-file-row .project-file-glyph[data-glyph="open"] {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+}
+
 .project-file-preview {
     display: none;
 }
