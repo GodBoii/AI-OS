@@ -875,27 +875,70 @@ class LocalCoderHandler {
         };
     }
 
+    /**
+     * Spawns a process and buffers its output.
+     *
+     * `options.timeoutMs` is optional and additive: existing callers that pass
+     * only `{ cwd }` keep the previous "wait forever" behaviour. Network git
+     * operations pass a budget so a credential-helper stall surfaces as an
+     * error instead of hanging the renderer's pending invoke() forever.
+     */
     async _spawnAndCollect(command, args = [], options = {}) {
+        const { timeoutMs, ...spawnOptions } = options && typeof options === 'object' ? options : {};
+
         return new Promise((resolve) => {
-            const child = spawn(command, args, {
-                ...options,
-                windowsHide: true,
-            });
+            let child;
+            try {
+                child = spawn(command, args, {
+                    ...spawnOptions,
+                    windowsHide: true,
+                });
+            } catch (error) {
+                resolve({ exitCode: 1, stdout: '', stderr: error.message, timedOut: false });
+                return;
+            }
 
             let stdout = '';
             let stderr = '';
+            let settled = false;
+            let timedOut = false;
+            let timer = null;
 
-            child.stdout.on('data', (chunk) => {
+            const finish = (exitCode) => {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                resolve({
+                    exitCode: Number.isInteger(exitCode) ? exitCode : 1,
+                    stdout,
+                    stderr,
+                    timedOut,
+                });
+            };
+
+            const budget = Number(timeoutMs);
+            if (Number.isFinite(budget) && budget > 0) {
+                timer = setTimeout(() => {
+                    timedOut = true;
+                    try {
+                        child.kill();
+                    } catch (_error) {
+                        // Process already gone.
+                    }
+                    finish(124);
+                }, budget);
+            }
+
+            child.stdout?.on('data', (chunk) => {
                 stdout += String(chunk || '');
             });
-            child.stderr.on('data', (chunk) => {
+            child.stderr?.on('data', (chunk) => {
                 stderr += String(chunk || '');
             });
-            child.on('close', (exitCode) => {
-                resolve({ exitCode: Number.isInteger(exitCode) ? exitCode : 1, stdout, stderr });
-            });
+            child.on('close', (exitCode) => finish(exitCode));
             child.on('error', (error) => {
-                resolve({ exitCode: 1, stdout, stderr: `${stderr}\n${error.message}`.trim() });
+                stderr = `${stderr}\n${error.message}`.trim();
+                finish(1);
             });
         });
     }
@@ -1005,6 +1048,771 @@ class LocalCoderHandler {
 
         files.sort((a, b) => a.localeCompare(b));
         return files;
+    }
+
+    /* =====================================================================
+       SOURCE CONTROL BRIDGE
+       A single renderer-facing entry point (`gitAction`) backed by focused
+       helpers. Everything runs with the workspace root as cwd and reuses the
+       same path-scoping guard as the file helpers above, so no operation can
+       escape the folder the user picked.
+       ===================================================================== */
+
+    /**
+     * Git environment for non-interactive execution.
+     *
+     * GIT_TERMINAL_PROMPT=0 makes git fail fast instead of blocking on a stdin
+     * username prompt (there is no TTY attached here). A GUI credential helper
+     * such as Git Credential Manager still runs normally, so real auth flows
+     * keep working. LC_ALL=C keeps stderr parseable across locales.
+     */
+    _gitEnv() {
+        return {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+            GIT_OPTIONAL_LOCKS: '0',
+            GIT_PAGER: 'cat',
+            LC_ALL: 'C',
+        };
+    }
+
+    async _git(rootPath, args, options = {}) {
+        const result = await this._spawnAndCollect('git', args, {
+            cwd: rootPath,
+            env: this._gitEnv(),
+            timeoutMs: Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 30000,
+        });
+
+        return {
+            ok: result.exitCode === 0,
+            exit_code: result.exitCode,
+            stdout: String(result.stdout || ''),
+            stderr: String(result.stderr || ''),
+            timed_out: Boolean(result.timedOut),
+            command: ['git', ...args].join(' '),
+        };
+    }
+
+    _gitFailure(result, fallback = 'git command failed') {
+        if (result?.timed_out) {
+            return `${result.command} timed out. If this was a network operation, check your credentials or connection.`;
+        }
+        const text = String(result?.stderr || result?.stdout || '').trim();
+        const lower = text.toLowerCase();
+        if (lower.includes('enoent') || lower.includes('not recognized as an internal or external command')) {
+            return 'Git is not installed or not available in PATH.';
+        }
+        if (lower.includes('could not read username') || lower.includes('terminal prompts disabled')) {
+            return 'Git needs credentials for this remote. Configure a credential helper or use an SSH remote.';
+        }
+        return text || fallback;
+    }
+
+    /** Turns any supported remote URL into a browsable https URL + owner/name. */
+    _parseGitRemote(remoteUrl) {
+        const raw = String(remoteUrl || '').trim();
+        if (!raw) return null;
+
+        const patterns = [
+            /^git@([^:]+):(.+?)(?:\.git)?\/?$/i,
+            /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i,
+            /^git:\/\/([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i,
+            /^https?:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?\/?$/i,
+        ];
+
+        for (const pattern of patterns) {
+            const match = raw.match(pattern);
+            if (!match) continue;
+            const host = match[1];
+            const slug = String(match[2] || '').replace(/^\/+/, '').replace(/\/+$/, '');
+            if (!slug) continue;
+            const segments = slug.split('/').filter(Boolean);
+            return {
+                host,
+                slug,
+                owner: segments.length > 1 ? segments.slice(0, -1).join('/') : null,
+                name: segments[segments.length - 1] || slug,
+                web_url: `https://${host}/${slug}`,
+                is_github: /(^|\.)github\.com$/i.test(host),
+            };
+        }
+
+        return null;
+    }
+
+    async gitAction(payload = {}) {
+        const action = String(payload?.action || '').trim();
+        if (!action) {
+            return { success: false, error: 'action is required' };
+        }
+
+        const root = await this._resolveRootPath(payload?.conversationId, payload?.rootPath);
+        if (!root.ok) {
+            return { success: false, error: root.error };
+        }
+
+        // `init` must target exactly the folder the user selected. Everything
+        // else runs from the repository top level: `git status --porcelain`
+        // reports paths relative to the repo root, so using the same directory
+        // as cwd keeps every path we hand back round-trippable even when the
+        // selected folder is a subdirectory of a larger repository.
+        let workRoot = root.path;
+        if (action !== 'init') {
+            const topLevel = await this._git(root.path, ['rev-parse', '--show-toplevel']);
+            if (topLevel.ok && topLevel.stdout.trim()) {
+                workRoot = path.resolve(topLevel.stdout.trim());
+            }
+        }
+
+        try {
+            switch (action) {
+                case 'repo_info':
+                    return await this._scRepoInfo(workRoot);
+                case 'overview':
+                    return await this._scOverview(workRoot);
+                case 'status':
+                    return await this._scStatus(workRoot);
+                case 'branches':
+                    return await this._scBranches(workRoot);
+                case 'log':
+                    return await this._scLog(workRoot, payload.limit);
+                case 'file_diff':
+                    return await this._scFileDiff(workRoot, payload);
+                case 'stage':
+                    return await this._scStage(workRoot, payload);
+                case 'unstage':
+                    return await this._scUnstage(workRoot, payload);
+                case 'discard':
+                    return await this._scDiscard(workRoot, payload);
+                case 'commit':
+                    return await this._scCommit(workRoot, payload);
+                case 'fetch':
+                    return await this._scRemoteOp(workRoot, ['fetch', '--all', '--prune']);
+                case 'pull':
+                    return await this._scRemoteOp(workRoot, ['pull']);
+                case 'push':
+                    return await this._scPush(workRoot, payload);
+                case 'checkout':
+                    return await this._scCheckout(workRoot, payload);
+                case 'compare':
+                    return await this._scCompare(workRoot, payload);
+                case 'init':
+                    return await this._scInit(root.path);
+                default:
+                    return { success: false, error: `Unknown git action: ${action}` };
+            }
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    async _scRepoInfo(rootPath) {
+        const inside = await this._git(rootPath, ['rev-parse', '--is-inside-work-tree']);
+        if (!inside.ok) {
+            const lower = `${inside.stderr}`.toLowerCase();
+            if (lower.includes('enoent') || lower.includes('not recognized as an internal or external command')) {
+                return { success: false, error: 'Git is not installed or not available in PATH.' };
+            }
+            return { success: true, is_repo: false, root_path: rootPath };
+        }
+
+        const [topLevel, symbolic, abbrev, upstream, originUrl, remotes, headCommit] = await Promise.all([
+            this._git(rootPath, ['rev-parse', '--show-toplevel']),
+            this._git(rootPath, ['symbolic-ref', '--short', 'HEAD']),
+            this._git(rootPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+            this._git(rootPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+            this._git(rootPath, ['config', '--get', 'remote.origin.url']),
+            this._git(rootPath, ['remote']),
+            this._git(rootPath, ['log', '-1', '--pretty=format:%H\u001f%h\u001f%s\u001f%an\u001f%ar\u001f%aI']),
+        ]);
+
+        const hasCommits = headCommit.ok && Boolean(headCommit.stdout.trim());
+        const symbolicBranch = symbolic.ok ? symbolic.stdout.trim() : '';
+        const abbrevBranch = abbrev.ok ? abbrev.stdout.trim() : '';
+        const isDetached = !symbolicBranch && abbrevBranch === 'HEAD';
+        const branch = symbolicBranch || (isDetached ? '' : abbrevBranch);
+
+        const upstreamRef = upstream.ok ? upstream.stdout.trim() : '';
+        let ahead = 0;
+        let behind = 0;
+        if (upstreamRef && hasCommits) {
+            const counts = await this._git(rootPath, ['rev-list', '--left-right', '--count', `${upstreamRef}...HEAD`]);
+            if (counts.ok) {
+                const [behindRaw, aheadRaw] = counts.stdout.trim().split(/\s+/);
+                behind = Number(behindRaw) || 0;
+                ahead = Number(aheadRaw) || 0;
+            }
+        }
+
+        const remoteUrl = originUrl.ok ? originUrl.stdout.trim() : '';
+        const remoteList = remotes.ok
+            ? remotes.stdout.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+            : [];
+
+        let lastCommit = null;
+        if (hasCommits) {
+            const [full, short, subject, author, relative, isoDate] = headCommit.stdout.split('\u001f');
+            lastCommit = {
+                hash: full || '',
+                short_hash: short || '',
+                subject: subject || '',
+                author: author || '',
+                relative_date: relative || '',
+                iso_date: isoDate || '',
+            };
+        }
+
+        const shortStatus = await this._git(rootPath, ['status', '--porcelain', '--untracked-files=all']);
+        const changedCount = shortStatus.ok
+            ? shortStatus.stdout.split(/\r?\n/).filter((line) => line.trim()).length
+            : 0;
+
+        return {
+            success: true,
+            is_repo: true,
+            root_path: topLevel.ok ? topLevel.stdout.trim() : rootPath,
+            branch,
+            is_detached: isDetached,
+            detached_at: isDetached && lastCommit ? lastCommit.short_hash : null,
+            has_commits: hasCommits,
+            upstream: upstreamRef || null,
+            ahead,
+            behind,
+            remote_url: remoteUrl || null,
+            remotes: remoteList,
+            remote: this._parseGitRemote(remoteUrl),
+            default_branch: await this._scDefaultBranch(rootPath),
+            last_commit: lastCommit,
+            changed_count: changedCount,
+            is_dirty: changedCount > 0,
+        };
+    }
+
+    async _scDefaultBranch(rootPath) {
+        const originHead = await this._git(rootPath, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+        if (originHead.ok) {
+            const value = originHead.stdout.trim();
+            if (value) return value.replace(/^origin\//, '');
+        }
+
+        for (const candidate of ['main', 'master', 'develop']) {
+            const exists = await this._git(rootPath, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${candidate}`]);
+            if (exists.ok && exists.stdout.trim()) return candidate;
+        }
+        for (const candidate of ['main', 'master']) {
+            const exists = await this._git(rootPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${candidate}`]);
+            if (exists.ok && exists.stdout.trim()) return candidate;
+        }
+        return null;
+    }
+
+    /**
+     * Parses `git status --porcelain=v1 -z` into staged / unstaged buckets.
+     *
+     * -z is used so paths containing spaces or unicode survive intact. In -z
+     * mode git drops the ` -> ` rename arrow and emits the new path first,
+     * followed by the original path as a separate NUL-terminated field.
+     */
+    async _scStatus(rootPath) {
+        const result = await this._git(rootPath, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+        if (!result.ok) {
+            return { success: false, error: this._gitFailure(result, 'git status failed') };
+        }
+
+        const fields = result.stdout.split('\0');
+        const staged = [];
+        const unstaged = [];
+        const conflicted = [];
+
+        for (let index = 0; index < fields.length; index += 1) {
+            const entry = fields[index];
+            if (!entry || entry.length < 3) continue;
+
+            const indexCode = entry[0];
+            const workTreeCode = entry[1];
+            let filePath = entry.slice(3);
+            let originalPath = null;
+
+            if (indexCode === 'R' || indexCode === 'C') {
+                originalPath = fields[index + 1] || null;
+                index += 1;
+            }
+
+            const base = {
+                path: filePath.replace(/\\/g, '/'),
+                original_path: originalPath ? originalPath.replace(/\\/g, '/') : null,
+                index_code: indexCode,
+                work_tree_code: workTreeCode,
+            };
+
+            const isConflict = indexCode === 'U'
+                || workTreeCode === 'U'
+                || (indexCode === 'A' && workTreeCode === 'A')
+                || (indexCode === 'D' && workTreeCode === 'D');
+
+            if (isConflict) {
+                conflicted.push({ ...base, code: '!', label: 'Conflict', untracked: false });
+                continue;
+            }
+
+            if (indexCode === '?' && workTreeCode === '?') {
+                unstaged.push({ ...base, code: 'U', label: this._scCodeLabel('?'), untracked: true });
+                continue;
+            }
+
+            if (indexCode !== ' ' && indexCode !== '?') {
+                staged.push({ ...base, code: indexCode, label: this._scCodeLabel(indexCode), untracked: false });
+            }
+            if (workTreeCode !== ' ' && workTreeCode !== '?') {
+                unstaged.push({ ...base, code: workTreeCode, label: this._scCodeLabel(workTreeCode), untracked: false });
+            }
+        }
+
+        return {
+            success: true,
+            staged,
+            unstaged,
+            conflicted,
+            total: staged.length + unstaged.length + conflicted.length,
+        };
+    }
+
+    _scCodeLabel(code) {
+        switch (code) {
+            case 'M': return 'Modified';
+            case 'A': return 'Added';
+            case 'D': return 'Deleted';
+            case 'R': return 'Renamed';
+            case 'C': return 'Copied';
+            case 'T': return 'Type changed';
+            case '?': return 'Untracked';
+            case 'U': return 'Conflict';
+            default: return 'Changed';
+        }
+    }
+
+    async _scBranches(rootPath) {
+        const format = [
+            '%(refname:short)',
+            '%(refname)',
+            '%(upstream:short)',
+            '%(objectname:short)',
+            '%(committerdate:relative)',
+            '%(HEAD)',
+            '%(contents:subject)',
+        ].join('\u001f');
+
+        const result = await this._git(rootPath, [
+            'for-each-ref',
+            `--format=${format}`,
+            '--sort=-committerdate',
+            'refs/heads',
+            'refs/remotes',
+            'refs/tags',
+        ]);
+
+        if (!result.ok) {
+            return { success: false, error: this._gitFailure(result, 'Unable to list branches') };
+        }
+
+        const local = [];
+        const remote = [];
+        const tags = [];
+
+        for (const line of result.stdout.split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            const [shortName, fullRef, upstream, shortHash, relativeDate, headMarker, subject] = line.split('\u001f');
+            if (!fullRef) continue;
+            // origin/HEAD is a symbolic alias for the default branch, not a branch.
+            if (/^refs\/remotes\/[^/]+\/HEAD$/.test(fullRef)) continue;
+
+            const item = {
+                name: shortName || '',
+                ref: fullRef,
+                upstream: upstream || null,
+                short_hash: shortHash || '',
+                relative_date: relativeDate || '',
+                subject: subject || '',
+                is_current: String(headMarker || '').trim() === '*',
+            };
+
+            if (fullRef.startsWith('refs/heads/')) {
+                item.type = 'local';
+                local.push(item);
+            } else if (fullRef.startsWith('refs/remotes/')) {
+                item.type = 'remote';
+                remote.push(item);
+            } else {
+                item.type = 'tag';
+                tags.push(item);
+            }
+        }
+
+        return { success: true, local, remote, tags };
+    }
+
+    async _scLog(rootPath, limit) {
+        const count = Math.max(1, Math.min(Number(limit) || 30, 200));
+        const result = await this._git(rootPath, [
+            'log',
+            `-${count}`,
+            '--pretty=format:%H\u001f%h\u001f%s\u001f%an\u001f%ar\u001f%D',
+        ]);
+
+        if (!result.ok) {
+            const lower = `${result.stderr}`.toLowerCase();
+            if (lower.includes('does not have any commits') || lower.includes('bad revision')) {
+                return { success: true, commits: [] };
+            }
+            return { success: false, error: this._gitFailure(result, 'Unable to read commit history') };
+        }
+
+        const commits = result.stdout
+            .split(/\r?\n/)
+            .filter((line) => line.trim())
+            .map((line) => {
+                const [hash, shortHash, subject, author, relativeDate, refs] = line.split('\u001f');
+                return {
+                    hash: hash || '',
+                    short_hash: shortHash || '',
+                    subject: subject || '',
+                    author: author || '',
+                    relative_date: relativeDate || '',
+                    refs: String(refs || '').trim(),
+                };
+            });
+
+        return { success: true, commits };
+    }
+
+    async _scFileDiff(rootPath, payload = {}) {
+        const relativePath = String(payload?.path || '').trim();
+        if (!relativePath) return { success: false, error: 'path is required' };
+
+        const scoped = this._resolveScopedPath(rootPath, relativePath);
+        if (!scoped.ok) return { success: false, error: scoped.error };
+
+        if (payload?.untracked) {
+            try {
+                const data = await fsp.readFile(scoped.path);
+                if (data.includes(0)) {
+                    return { success: true, path: relativePath, is_binary: true, diff: '' };
+                }
+                const text = data.toString('utf8').slice(0, 200000);
+                const body = text
+                    .split(/\r?\n/)
+                    .map((line) => `+${line}`)
+                    .join('\n');
+                return {
+                    success: true,
+                    path: relativePath,
+                    untracked: true,
+                    diff: `new file: ${relativePath}\n--- /dev/null\n+++ b/${relativePath}\n${body}`,
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        const args = payload?.staged
+            ? ['diff', '--cached', '--', relativePath]
+            : ['diff', '--', relativePath];
+        const result = await this._git(rootPath, args);
+        if (!result.ok) {
+            return { success: false, error: this._gitFailure(result, 'Unable to read diff') };
+        }
+
+        return {
+            success: true,
+            path: relativePath,
+            staged: Boolean(payload?.staged),
+            diff: result.stdout,
+        };
+    }
+
+    _scNormalizePaths(paths) {
+        return (Array.isArray(paths) ? paths : [])
+            .map((item) => String(item || '').trim())
+            .filter(Boolean)
+            .slice(0, 500);
+    }
+
+    async _scStage(rootPath, payload = {}) {
+        const args = payload?.all
+            ? ['add', '-A', '--', '.']
+            : ['add', '--', ...this._scNormalizePaths(payload?.paths)];
+
+        if (!payload?.all && args.length <= 2) {
+            return { success: false, error: 'No files selected to stage.' };
+        }
+
+        const result = await this._git(rootPath, args);
+        return result.ok
+            ? { success: true }
+            : { success: false, error: this._gitFailure(result, 'Unable to stage changes') };
+    }
+
+    async _scUnstage(rootPath, payload = {}) {
+        const paths = this._scNormalizePaths(payload?.paths);
+        const args = payload?.all
+            ? ['reset', '-q', 'HEAD', '--', '.']
+            : ['reset', '-q', 'HEAD', '--', ...paths];
+
+        if (!payload?.all && paths.length === 0) {
+            return { success: false, error: 'No files selected to unstage.' };
+        }
+
+        const result = await this._git(rootPath, args);
+        return result.ok
+            ? { success: true }
+            : { success: false, error: this._gitFailure(result, 'Unable to unstage changes') };
+    }
+
+    /**
+     * Destructive: reverts working-tree changes and deletes untracked files.
+     * The renderer confirms with the user before calling this.
+     */
+    async _scDiscard(rootPath, payload = {}) {
+        const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+        if (entries.length === 0) {
+            return { success: false, error: 'No files selected to discard.' };
+        }
+
+        const tracked = [];
+        const untracked = [];
+        for (const entry of entries) {
+            const relativePath = String(entry?.path || '').trim();
+            if (!relativePath) continue;
+            if (entry?.untracked) untracked.push(relativePath);
+            else tracked.push(relativePath);
+        }
+
+        const errors = [];
+
+        for (const relativePath of untracked) {
+            const scoped = this._resolveScopedPath(rootPath, relativePath);
+            if (!scoped.ok) {
+                errors.push(`${relativePath}: ${scoped.error}`);
+                continue;
+            }
+            try {
+                await fsp.rm(scoped.path, { recursive: true, force: true });
+            } catch (error) {
+                errors.push(`${relativePath}: ${error.message}`);
+            }
+        }
+
+        if (tracked.length > 0) {
+            const reset = await this._git(rootPath, ['reset', '-q', 'HEAD', '--', ...tracked]);
+            if (!reset.ok && !`${reset.stderr}`.toLowerCase().includes('did not match')) {
+                errors.push(this._gitFailure(reset, 'Unable to unstage before discarding'));
+            }
+            const checkout = await this._git(rootPath, ['checkout', '-q', '--', ...tracked]);
+            if (!checkout.ok) {
+                errors.push(this._gitFailure(checkout, 'Unable to discard tracked changes'));
+            }
+        }
+
+        if (errors.length > 0) {
+            return { success: false, error: errors.join(' | ') };
+        }
+        return { success: true, discarded: tracked.length + untracked.length };
+    }
+
+    async _scCommit(rootPath, payload = {}) {
+        const message = String(payload?.message || '').trim();
+        if (!message) {
+            return { success: false, error: 'A commit message is required.' };
+        }
+
+        if (payload?.stageAll) {
+            const staged = await this._scStage(rootPath, { all: true });
+            if (!staged.success) return staged;
+        }
+
+        const args = ['commit', '-m', message];
+        if (payload?.amend) args.push('--amend');
+
+        const result = await this._git(rootPath, args, { timeoutMs: 60000 });
+        if (!result.ok) {
+            const combined = `${result.stdout}\n${result.stderr}`.toLowerCase();
+            if (combined.includes('nothing to commit')) {
+                return { success: false, error: 'Nothing to commit. Stage some changes first.' };
+            }
+            if (combined.includes('please tell me who you are') || combined.includes('unable to auto-detect email')) {
+                return {
+                    success: false,
+                    error: 'Git identity is not configured. Run: git config --global user.name "..." and user.email "..."',
+                };
+            }
+            return { success: false, error: this._gitFailure(result, 'Commit failed') };
+        }
+
+        return { success: true, output: result.stdout.trim() };
+    }
+
+    async _scRemoteOp(rootPath, args) {
+        const result = await this._git(rootPath, args, { timeoutMs: 180000 });
+        if (!result.ok) {
+            return { success: false, error: this._gitFailure(result, `${args[0]} failed`) };
+        }
+        return {
+            success: true,
+            output: `${result.stdout}\n${result.stderr}`.trim(),
+        };
+    }
+
+    async _scPush(rootPath, payload = {}) {
+        const info = await this._scRepoInfo(rootPath);
+        if (!info.success) return info;
+        if (!info.is_repo) return { success: false, error: 'Not a Git repository.' };
+        if (!info.has_commits) return { success: false, error: 'Nothing to push yet — create a commit first.' };
+        if (info.is_detached) return { success: false, error: 'HEAD is detached. Check out a branch before pushing.' };
+
+        const remote = String(payload?.remote || '').trim() || (info.remotes[0] || 'origin');
+        const branch = String(payload?.branch || '').trim() || info.branch;
+        if (!branch) return { success: false, error: 'Unable to resolve the current branch.' };
+        if (!info.remotes.length) return { success: false, error: 'No git remote is configured for this repository.' };
+
+        // With an upstream configured, a bare `git push` targets exactly the
+        // tracked remote/branch pair. Naming a remote explicitly could send the
+        // branch somewhere other than where it tracks.
+        const args = info.upstream
+            ? ['push']
+            : ['push', '--set-upstream', remote, branch];
+
+        const result = await this._git(rootPath, args, { timeoutMs: 180000 });
+        if (!result.ok) {
+            return { success: false, error: this._gitFailure(result, 'Push failed') };
+        }
+        return {
+            success: true,
+            output: `${result.stdout}\n${result.stderr}`.trim(),
+            set_upstream: !info.upstream,
+        };
+    }
+
+    async _scCheckout(rootPath, payload = {}) {
+        const target = String(payload?.branch || payload?.ref || '').trim();
+        if (!target) return { success: false, error: 'A branch name is required.' };
+        if (/^-/.test(target)) return { success: false, error: 'Invalid branch name.' };
+
+        if (payload?.create) {
+            const from = String(payload?.from || '').trim();
+            const args = ['checkout', '-b', target];
+            if (from) args.push(from);
+            const created = await this._git(rootPath, args, { timeoutMs: 60000 });
+            return created.ok
+                ? { success: true, branch: target, created: true }
+                : { success: false, error: this._gitFailure(created, 'Unable to create branch') };
+        }
+
+        if (payload?.detach) {
+            const detached = await this._git(rootPath, ['checkout', '--detach', target], { timeoutMs: 60000 });
+            return detached.ok
+                ? { success: true, branch: target, detached: true }
+                : { success: false, error: this._gitFailure(detached, 'Unable to check out detached HEAD') };
+        }
+
+        // Checking out `origin/feature` should create a tracking local branch,
+        // matching how VS Code and GitHub Desktop behave, rather than dropping
+        // the user into a detached HEAD.
+        const remoteMatch = target.match(/^([^/]+)\/(.+)$/);
+        if (remoteMatch) {
+            const remotes = await this._git(rootPath, ['remote']);
+            const knownRemotes = remotes.ok
+                ? remotes.stdout.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+                : [];
+            if (knownRemotes.includes(remoteMatch[1])) {
+                const localName = remoteMatch[2];
+                const localExists = await this._git(rootPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${localName}`]);
+                if (!(localExists.ok && localExists.stdout.trim())) {
+                    const tracked = await this._git(rootPath, ['checkout', '-b', localName, '--track', target], { timeoutMs: 60000 });
+                    return tracked.ok
+                        ? { success: true, branch: localName, tracking: target }
+                        : { success: false, error: this._gitFailure(tracked, 'Unable to check out remote branch') };
+                }
+                const switched = await this._git(rootPath, ['checkout', localName], { timeoutMs: 60000 });
+                return switched.ok
+                    ? { success: true, branch: localName }
+                    : { success: false, error: this._gitFailure(switched, 'Unable to switch branch') };
+            }
+        }
+
+        const result = await this._git(rootPath, ['checkout', target], { timeoutMs: 60000 });
+        return result.ok
+            ? { success: true, branch: target }
+            : { success: false, error: this._gitFailure(result, 'Unable to switch branch') };
+    }
+
+    async _scCompare(rootPath, payload = {}) {
+        const base = String(payload?.base || '').trim();
+        const head = String(payload?.head || 'HEAD').trim();
+        if (!base) return { success: false, error: 'A base branch is required.' };
+        if (/^-/.test(base) || /^-/.test(head)) return { success: false, error: 'Invalid ref.' };
+
+        const range = `${base}...${head}`;
+        const [counts, stat, commits] = await Promise.all([
+            this._git(rootPath, ['rev-list', '--left-right', '--count', range]),
+            this._git(rootPath, ['diff', '--stat', range]),
+            this._git(rootPath, ['log', '--oneline', '-20', `${base}..${head}`]),
+        ]);
+
+        if (!counts.ok) {
+            return { success: false, error: this._gitFailure(counts, 'Unable to compare branches') };
+        }
+
+        const [behindRaw, aheadRaw] = counts.stdout.trim().split(/\s+/);
+        return {
+            success: true,
+            base,
+            head,
+            behind: Number(behindRaw) || 0,
+            ahead: Number(aheadRaw) || 0,
+            diff_stat: stat.ok ? stat.stdout.trim() : '',
+            commits: commits.ok
+                ? commits.stdout.split(/\r?\n/).filter((line) => line.trim())
+                : [],
+        };
+    }
+
+    async _scInit(rootPath) {
+        const withBranch = await this._git(rootPath, ['init', '-b', 'main'], { timeoutMs: 60000 });
+        if (withBranch.ok) {
+            return { success: true, output: withBranch.stdout.trim() };
+        }
+
+        // `git init -b` needs git >= 2.28; fall back for older installs.
+        const legacy = await this._git(rootPath, ['init'], { timeoutMs: 60000 });
+        return legacy.ok
+            ? { success: true, output: legacy.stdout.trim() }
+            : { success: false, error: this._gitFailure(legacy, 'Unable to initialize repository') };
+    }
+
+    /** Single round-trip used by the panel so one refresh is one IPC call. */
+    async _scOverview(rootPath) {
+        const info = await this._scRepoInfo(rootPath);
+        if (!info.success) return info;
+        if (!info.is_repo) {
+            return { success: true, repo: info, status: null, branches: null, log: null };
+        }
+
+        const [status, branches, log] = await Promise.all([
+            this._scStatus(rootPath),
+            this._scBranches(rootPath),
+            this._scLog(rootPath, 30),
+        ]);
+
+        return {
+            success: true,
+            repo: info,
+            status: status.success ? status : null,
+            branches: branches.success ? branches : null,
+            log: log.success ? log : null,
+            partial_errors: [status, branches, log]
+                .filter((item) => !item.success)
+                .map((item) => item.error),
+        };
     }
 
     async cleanup() {
