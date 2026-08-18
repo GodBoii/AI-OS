@@ -447,6 +447,7 @@ body:not(.dark-mode) .ghp-tabs-pill {
     color: var(--text-secondary, #8b949e);
     font-size: 0.72rem;
     font-weight: 600;
+    white-space: nowrap;
     cursor: pointer;
     transition: color 150ms var(--tabs-ease);
 }
