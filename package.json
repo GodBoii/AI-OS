@@ -1,11 +1,12 @@
 {
   "name": "aetheria-ai",
-  "version": "1.2.25",
+  "version": "1.2.26",
   "description": "Aetheria ai is an agentic desktop system that connects large language models with real-world execution.",
   "author": "Aetheria ai aetheriaai1@gmail.com",
   "main": "js/main.js",
   "scripts": {
     "start": "electron .",
+    "build": "electron-builder",
     "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
     "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
