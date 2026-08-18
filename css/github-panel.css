@@ -653,17 +653,20 @@ body:not(.dark-mode) .ghp-commit-field:focus-within {
 }
 
 .ghp-commit-input {
+    box-sizing: border-box;
     width: 100%;
-    min-height: 42px;
-    max-height: 120px;
-    resize: vertical;
+    min-height: 54px;
+    max-height: 150px;
+    resize: none;
+    overflow-y: auto;
     border: none;
     background: transparent;
     color: var(--text-color, #e6edf3);
     font-family: inherit;
     font-size: 0.76rem;
-    line-height: 1.5;
-    padding: 0;
+    line-height: 1.55;
+    padding: 8px 10px 20px;
+    scrollbar-width: thin;
 }
 
 .ghp-commit-input:focus {
@@ -672,7 +675,16 @@ body:not(.dark-mode) .ghp-commit-field:focus-within {
 
 .ghp-commit-input::placeholder {
     color: var(--text-secondary, #8b949e);
-    opacity: 0.62;
+    opacity: 0.6;
+}
+
+.ghp-commit-input::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ghp-commit-input::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .ghp-commit-actions {
