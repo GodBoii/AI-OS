@@ -117,6 +117,7 @@ const validInvokeChannels = [
     'project-local-file-content',
     'project-watch-local-workspace',
     'project-unwatch-local-workspace',
+    'project-local-git',
     'project-local-terminal-start',
     'project-local-terminal-send',
     'project-local-terminal-resize',
