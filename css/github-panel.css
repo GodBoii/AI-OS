@@ -1,0 +1,1320 @@
+/* =====================================================================
+   GITHUB / SOURCE CONTROL PANEL
+   Anchored popover opened by the GitHub pill in the coder workspace
+   super header. Replaces the old "Clone GitHub Repo" sidebar accordion.
+
+   Motion follows the bundled ui-motion-recipes skill:
+     - menu dropdown (05) for the popover open/close
+     - tabs sliding  (16) for the section switcher
+     - texts reveal  (18) for the header identity + list rows
+     - skeleton      (14) pulse for loading rows
+     - shimmer text  (15) for the busy status line
+   ===================================================================== */
+
+:root {
+    /* --- menu dropdown (recipe 05) --- */
+    --dropdown-open-dur: 250ms;
+    --dropdown-close-dur: 150ms;
+    --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --dropdown-open-scale: 0.97;
+    --dropdown-close-scale: 0.99;
+    --dropdown-offset: 6px;
+
+    /* --- tabs sliding (recipe 16) --- */
+    --tabs-dur: 250ms;
+    --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* --- texts reveal (recipe 18) --- */
+    --reveal-dur: 500ms;
+    --reveal-ease: ease-in-out;
+    --reveal-distance: 12px;
+    --reveal-blur: 3px;
+    --reveal-stagger: 40ms;
+
+    /* --- skeleton pulse (recipe 14) --- */
+    --skel-pulse-dur: 1400ms;
+
+    /* --- shimmer text (recipe 15) --- */
+    --shimmer-dur: 1800ms;
+}
+
+/* ---------------------------------------------------------------------
+   SHELL
+   --------------------------------------------------------------------- */
+.github-panel {
+    position: fixed;
+    top: 52px;
+    left: 60px;
+    width: 384px;
+    max-width: calc(100vw - 80px);
+    max-height: min(600px, calc(100vh - 96px));
+    display: flex;
+    flex-direction: column;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 34%),
+        rgba(11, 11, 12, 0.975);
+    border: 1px solid rgba(255, 255, 255, 0.085);
+    border-radius: 14px;
+    box-shadow:
+        0 28px 70px rgba(0, 0, 0, 0.72),
+        0 8px 22px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
+    color: var(--text-color, #e6edf3);
+    font-size: 0.78rem;
+    overflow: hidden;
+    z-index: 1080;
+    /* The frameless-window drag strip overlaps the top of the app; an
+       explicit no-drag region is the only thing that returns clicks. */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+body:not(.dark-mode) .github-panel {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 36%),
+        rgba(252, 252, 253, 0.985);
+    border-color: rgba(0, 0, 0, 0.09);
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.16),
+        0 6px 18px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    color: #111827;
+}
+
+/* --- Recipe 05: menu dropdown, origin-aware open / close ------------- */
+.github-panel.t-dropdown {
+    transform-origin: top left;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(var(--dropdown-open-scale)) translateY(calc(var(--dropdown-offset) * -1));
+    pointer-events: none;
+    transition:
+        opacity var(--dropdown-close-dur) var(--dropdown-ease),
+        transform var(--dropdown-close-dur) var(--dropdown-ease),
+        visibility 0s linear var(--dropdown-close-dur);
+    will-change: transform, opacity;
+}
+
+.github-panel.t-dropdown[data-origin="top-right"] {
+    transform-origin: top right;
+}
+
+.github-panel.t-dropdown.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+    transition:
+        opacity var(--dropdown-open-dur) var(--dropdown-ease),
+        transform var(--dropdown-open-dur) var(--dropdown-ease),
+        visibility 0s linear 0s;
+}
+
+/* Close is deliberately faster and travels less than open. The visibility
+   delay is what keeps the panel painted for the length of the fade. */
+.github-panel.t-dropdown.is-closing {
+    opacity: 0;
+    transform: scale(var(--dropdown-close-scale)) translateY(0);
+    transition:
+        opacity var(--dropdown-close-dur) var(--dropdown-ease),
+        transform var(--dropdown-close-dur) var(--dropdown-ease),
+        visibility 0s linear var(--dropdown-close-dur);
+}
+
+/* ---------------------------------------------------------------------
+   HEADER
+   --------------------------------------------------------------------- */
+.ghp-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 12px 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+    flex-shrink: 0;
+}
+
+body:not(.dark-mode) .ghp-header {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.ghp-mark {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(192, 132, 252, 0.11);
+    border: 1px solid rgba(192, 132, 252, 0.22);
+    color: #c084fc;
+}
+
+.ghp-identity {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.ghp-repo-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ghp-repo-meta {
+    font-size: 0.68rem;
+    color: var(--text-secondary, #8b949e);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Recipe 18: the two identity lines rise with a blur, offset by one stagger
+   step, every time the panel opens or the repo identity changes. */
+.github-panel.is-open .ghp-identity .t-stagger-line {
+    animation: ghpRowReveal var(--reveal-dur) var(--reveal-ease) both;
+}
+
+.github-panel.is-open .ghp-identity .t-stagger-line--1 {
+    animation-delay: 0ms;
+}
+
+.github-panel.is-open .ghp-identity .t-stagger-line--2 {
+    animation-delay: var(--reveal-stagger);
+}
+
+.ghp-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.ghp-icon-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--icon-color, #8b949e);
+    cursor: pointer;
+    transition:
+        color 150ms var(--dropdown-ease),
+        background 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        transform 150ms var(--dropdown-ease);
+}
+
+.ghp-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.075);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-color, #e6edf3);
+}
+
+.ghp-icon-btn:active {
+    transform: scale(0.94);
+}
+
+.ghp-icon-btn[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+body:not(.dark-mode) .ghp-icon-btn:hover {
+    background: rgba(0, 0, 0, 0.055);
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #111827;
+}
+
+/* Refresh spins while a git call is in flight. */
+.github-panel.is-busy #ghp-refresh-btn svg {
+    animation: ghpSpin 900ms linear infinite;
+}
+
+@keyframes ghpSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------------------------------------------------------------------
+   BRANCH BAR
+   --------------------------------------------------------------------- */
+.ghp-branchbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+    flex-shrink: 0;
+}
+
+body:not(.dark-mode) .ghp-branchbar {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.ghp-branchbar.hidden {
+    display: none;
+}
+
+.ghp-branch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 150px;
+    padding: 4px 8px;
+    border: 1px solid rgba(134, 239, 172, 0.24);
+    border-radius: 999px;
+    background: rgba(134, 239, 172, 0.09);
+    color: #86efac;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    cursor: pointer;
+    transition:
+        background 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        transform 180ms var(--dropdown-ease);
+}
+
+.ghp-branch-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ghp-branch-chip:hover {
+    background: rgba(134, 239, 172, 0.16);
+    border-color: rgba(134, 239, 172, 0.38);
+    transform: translateY(-1px);
+}
+
+.ghp-branch-chip.is-detached {
+    border-color: rgba(251, 191, 36, 0.28);
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+}
+
+.ghp-sync-counts {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+}
+
+.ghp-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary, #8b949e);
+    transition: color 250ms var(--dropdown-ease), opacity 250ms var(--dropdown-ease);
+}
+
+.ghp-count[data-empty="true"] {
+    opacity: 0.35;
+}
+
+.ghp-count#ghp-ahead-count:not([data-empty="true"]) {
+    color: #7dd3fc;
+}
+
+.ghp-count#ghp-behind-count:not([data-empty="true"]) {
+    color: #fbbf24;
+}
+
+.ghp-branchbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.ghp-mini-btn {
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-secondary, #8b949e);
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background 150ms var(--dropdown-ease),
+        color 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        transform 180ms var(--dropdown-ease);
+}
+
+.ghp-mini-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-color, #e6edf3);
+    border-color: rgba(255, 255, 255, 0.16);
+    transform: translateY(-1px);
+}
+
+.ghp-mini-btn:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.ghp-mini-btn-accent {
+    border-color: rgba(125, 211, 252, 0.28);
+    background: rgba(125, 211, 252, 0.1);
+    color: #7dd3fc;
+}
+
+.ghp-mini-btn-accent:hover {
+    background: rgba(125, 211, 252, 0.18);
+    border-color: rgba(125, 211, 252, 0.42);
+    color: #bae6fd;
+}
+
+.ghp-mini-btn[disabled],
+.ghp-btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+body:not(.dark-mode) .ghp-mini-btn {
+    background: rgba(0, 0, 0, 0.035);
+    border-color: rgba(0, 0, 0, 0.09);
+}
+
+body:not(.dark-mode) .ghp-mini-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #111827;
+}
+
+/* ---------------------------------------------------------------------
+   TABS — recipe 16 (sliding pill)
+   --------------------------------------------------------------------- */
+.ghp-tabs {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+    flex-shrink: 0;
+}
+
+body:not(.dark-mode) .ghp-tabs {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.ghp-tabs-pill {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    height: calc(100% - 12px);
+    width: 0;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.085);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    pointer-events: none;
+    transform: translateX(0);
+    transition:
+        transform var(--tabs-dur) var(--tabs-ease),
+        width var(--tabs-dur) var(--tabs-ease);
+    will-change: transform, width;
+}
+
+body:not(.dark-mode) .ghp-tabs-pill {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.ghp-tab {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    padding: 5px 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary, #8b949e);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 150ms var(--tabs-ease);
+}
+
+.ghp-tab:hover {
+    color: var(--text-color, #e6edf3);
+}
+
+.ghp-tab[aria-selected="true"] {
+    color: var(--text-color, #f0f6fc);
+}
+
+body:not(.dark-mode) .ghp-tab[aria-selected="true"] {
+    color: #111827;
+}
+
+/* Git-dependent tabs read as unavailable while the gate is showing. */
+.ghp-tab.is-muted {
+    opacity: 0.5;
+}
+
+/* Count badge appended to the Changes tab. */
+.ghp-tab-badge {
+    display: inline-block;
+    margin-left: 5px;
+    min-width: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(192, 132, 252, 0.2);
+    color: #d8b4fe;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 15px;
+    font-variant-numeric: tabular-nums;
+    vertical-align: 1px;
+}
+
+/* ---------------------------------------------------------------------
+   BODY / PANES
+   --------------------------------------------------------------------- */
+.ghp-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 10px 12px 12px;
+}
+
+.ghp-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ghp-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.ghp-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.ghp-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: ghpPaneIn 250ms var(--reveal-ease) both;
+}
+
+.ghp-pane.hidden,
+.ghp-gate.hidden {
+    display: none;
+}
+
+@keyframes ghpPaneIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+        filter: blur(2px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+/* ---------------------------------------------------------------------
+   GATE (blocking empty states)
+   --------------------------------------------------------------------- */
+.ghp-gate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 26px 18px 22px;
+    animation: ghpPaneIn 250ms var(--reveal-ease) both;
+}
+
+.ghp-gate-icon {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary, #8b949e);
+}
+
+.ghp-gate-title {
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.ghp-gate-copy {
+    margin: 0;
+    max-width: 260px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--text-secondary, #8b949e);
+}
+
+.ghp-gate-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+/* ---------------------------------------------------------------------
+   COMMIT BOX
+   --------------------------------------------------------------------- */
+.ghp-commitbox {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.028);
+    transition: border-color 250ms var(--dropdown-ease), background 250ms var(--dropdown-ease);
+}
+
+.ghp-commitbox:focus-within {
+    border-color: rgba(192, 132, 252, 0.34);
+    background: rgba(192, 132, 252, 0.035);
+}
+
+body:not(.dark-mode) .ghp-commitbox {
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.ghp-commit-input {
+    width: 100%;
+    min-height: 42px;
+    max-height: 120px;
+    resize: vertical;
+    border: none;
+    background: transparent;
+    color: var(--text-color, #e6edf3);
+    font-family: inherit;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    padding: 0;
+}
+
+.ghp-commit-input:focus {
+    outline: none;
+}
+
+.ghp-commit-input::placeholder {
+    color: var(--text-secondary, #8b949e);
+    opacity: 0.62;
+}
+
+.ghp-commit-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ghp-amend {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: auto;
+    font-size: 0.68rem;
+    color: var(--text-secondary, #8b949e);
+    cursor: pointer;
+    user-select: none;
+}
+
+.ghp-amend input {
+    width: 12px;
+    height: 12px;
+    accent-color: #c084fc;
+    cursor: pointer;
+}
+
+.ghp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color, #e6edf3);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        color 150ms var(--dropdown-ease),
+        transform 180ms var(--dropdown-ease);
+}
+
+.ghp-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+}
+
+.ghp-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.ghp-btn-primary {
+    border-color: rgba(192, 132, 252, 0.32);
+    background: rgba(192, 132, 252, 0.13);
+    color: #d8b4fe;
+}
+
+.ghp-btn-primary:hover {
+    background: rgba(192, 132, 252, 0.22);
+    border-color: rgba(192, 132, 252, 0.48);
+    color: #e9d5ff;
+}
+
+body:not(.dark-mode) .ghp-btn {
+    background: rgba(0, 0, 0, 0.035);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #111827;
+}
+
+body:not(.dark-mode) .ghp-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------------------------------------------------------------------
+   INPUTS
+   --------------------------------------------------------------------- */
+.ghp-form {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.ghp-form-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 7px;
+    align-items: center;
+}
+
+.ghp-input {
+    width: 100%;
+    height: 31px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text-color, #e6edf3);
+    padding: 0 10px;
+    font-size: 0.74rem;
+    transition:
+        border-color 150ms var(--dropdown-ease),
+        background 150ms var(--dropdown-ease),
+        box-shadow 150ms var(--dropdown-ease);
+}
+
+.ghp-input:focus {
+    outline: none;
+    border-color: rgba(192, 132, 252, 0.42);
+    background: rgba(192, 132, 252, 0.05);
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.14);
+}
+
+.ghp-input::placeholder {
+    color: var(--text-secondary, #8b949e);
+    opacity: 0.62;
+}
+
+body:not(.dark-mode) .ghp-input {
+    background: rgba(0, 0, 0, 0.025);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #111827;
+}
+
+.ghp-search-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.ghp-search-icon {
+    position: absolute;
+    left: 9px;
+    color: var(--text-secondary, #8b949e);
+    pointer-events: none;
+}
+
+.ghp-input-search {
+    padding-left: 28px;
+}
+
+/* ---------------------------------------------------------------------
+   LISTS AND ROWS
+   --------------------------------------------------------------------- */
+.ghp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.ghp-group-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px 3px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #8b949e);
+}
+
+.ghp-group-label .ghp-group-count {
+    font-weight: 600;
+    letter-spacing: 0;
+    opacity: 0.7;
+}
+
+.ghp-group-label .ghp-group-actions {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.ghp-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 28px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-color, #e6edf3);
+    font-size: 0.74rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        transform 150ms var(--dropdown-ease);
+    /* Recipe 18: staggered blurred rise, capped so long lists stay snappy. */
+    animation: ghpRowReveal var(--reveal-dur) var(--reveal-ease) both;
+    animation-delay: calc(var(--row-index, 0) * var(--reveal-stagger));
+}
+
+@keyframes ghpRowReveal {
+    from {
+        opacity: 0;
+        transform: translateY(var(--reveal-distance));
+        filter: blur(var(--reveal-blur));
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+.ghp-row:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ghp-row.is-current {
+    background: rgba(134, 239, 172, 0.09);
+    border-color: rgba(134, 239, 172, 0.22);
+}
+
+body:not(.dark-mode) .ghp-row:hover {
+    background: rgba(0, 0, 0, 0.045);
+    border-color: rgba(0, 0, 0, 0.07);
+}
+
+.ghp-row-icon {
+    flex-shrink: 0;
+    width: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-color, #8b949e);
+}
+
+.ghp-row-copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.ghp-row-title {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+.ghp-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.ghp-row-dir,
+.ghp-row-sub {
+    font-size: 0.66rem;
+    color: var(--text-secondary, #8b949e);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ghp-row-mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.66rem;
+    color: var(--text-secondary, #8b949e);
+    flex-shrink: 0;
+}
+
+/* Status letter badge (M / A / D / R / U …) */
+.ghp-code {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-secondary, #8b949e);
+}
+
+.ghp-code[data-code="M"],
+.ghp-code[data-code="T"] {
+    color: #fbbf24;
+}
+
+.ghp-code[data-code="A"] {
+    color: #86efac;
+}
+
+.ghp-code[data-code="D"] {
+    color: #f87171;
+}
+
+.ghp-code[data-code="R"],
+.ghp-code[data-code="C"] {
+    color: #7dd3fc;
+}
+
+.ghp-code[data-code="U"] {
+    color: #c084fc;
+}
+
+.ghp-code[data-code="!"] {
+    color: #f87171;
+}
+
+/* Per-row hover actions */
+.ghp-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+    opacity: 0;
+    transform: translateX(3px);
+    transition:
+        opacity 150ms var(--dropdown-ease),
+        transform 150ms var(--dropdown-ease);
+}
+
+.ghp-row:hover .ghp-row-actions,
+.ghp-row:focus-within .ghp-row-actions {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.ghp-row-action {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--icon-color, #8b949e);
+    cursor: pointer;
+    transition:
+        background 120ms var(--dropdown-ease),
+        color 120ms var(--dropdown-ease),
+        transform 150ms var(--dropdown-ease);
+}
+
+.ghp-row-action:hover {
+    background: rgba(255, 255, 255, 0.11);
+    color: var(--text-color, #e6edf3);
+}
+
+.ghp-row-action:active {
+    transform: scale(0.9);
+}
+
+.ghp-row-action.is-danger:hover {
+    background: rgba(248, 113, 113, 0.16);
+    color: #fca5a5;
+}
+
+.ghp-check-mark {
+    flex-shrink: 0;
+    color: #86efac;
+}
+
+/* Quick action rows (create branch, compare, …) */
+.ghp-quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.ghp-quick-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 7px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-color, #e6edf3);
+    font-size: 0.74rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background 150ms var(--dropdown-ease),
+        border-color 150ms var(--dropdown-ease),
+        color 150ms var(--dropdown-ease);
+}
+
+.ghp-quick-row svg {
+    flex-shrink: 0;
+    color: var(--icon-color, #8b949e);
+    transition: color 150ms var(--dropdown-ease), transform 200ms var(--dropdown-ease);
+}
+
+.ghp-quick-row:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ghp-quick-row:hover svg {
+    color: #c084fc;
+    transform: scale(1.08);
+}
+
+.ghp-quick-row[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.ghp-quick-row[disabled]:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+body:not(.dark-mode) .ghp-quick-row:hover {
+    background: rgba(0, 0, 0, 0.045);
+    border-color: rgba(0, 0, 0, 0.07);
+}
+
+/* Empty state inside a list */
+.ghp-empty {
+    padding: 16px 8px;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #8b949e);
+    animation: ghpPaneIn 250ms var(--reveal-ease) both;
+}
+
+/* ---------------------------------------------------------------------
+   SKELETON — recipe 14 pulse
+   --------------------------------------------------------------------- */
+.ghp-skel-row {
+    height: 26px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.055);
+    animation: ghpSkelPulse var(--skel-pulse-dur) linear infinite;
+    animation-delay: calc(var(--row-index, 0) * 90ms);
+}
+
+body:not(.dark-mode) .ghp-skel-row {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+@keyframes ghpSkelPulse {
+
+    0%,
+    100% {
+        opacity: 0.45;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   COMPARE RESULT
+   --------------------------------------------------------------------- */
+.ghp-compare-result {
+    padding: 9px 10px;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 9px;
+    background: rgba(125, 211, 252, 0.055);
+    animation: ghpPaneIn 250ms var(--reveal-ease) both;
+}
+
+.ghp-compare-result.hidden {
+    display: none;
+}
+
+.ghp-compare-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.ghp-compare-pre {
+    margin: 0;
+    max-height: 150px;
+    overflow: auto;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.65rem;
+    line-height: 1.5;
+    color: var(--text-secondary, #8b949e);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ---------------------------------------------------------------------
+   REPO FACTS
+   --------------------------------------------------------------------- */
+.ghp-repo-facts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.026);
+}
+
+body:not(.dark-mode) .ghp-repo-facts {
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.ghp-fact {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.7rem;
+}
+
+.ghp-fact-key {
+    flex-shrink: 0;
+    width: 74px;
+    color: var(--text-secondary, #8b949e);
+}
+
+.ghp-fact-val {
+    flex: 1;
+    min-width: 0;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.66rem;
+    word-break: break-all;
+}
+
+/* ---------------------------------------------------------------------
+   FOOTER STATUS — recipe 15 shimmer while busy
+   --------------------------------------------------------------------- */
+.ghp-footer {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.055);
+    background: rgba(255, 255, 255, 0.018);
+}
+
+body:not(.dark-mode) .ghp-footer {
+    border-top-color: rgba(0, 0, 0, 0.06);
+    background: rgba(0, 0, 0, 0.015);
+}
+
+.ghp-status {
+    display: block;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    color: var(--text-secondary, #8b949e);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ghp-status[data-tone="error"] {
+    color: #fca5a5;
+}
+
+.ghp-status[data-tone="success"] {
+    color: #86efac;
+}
+
+.github-panel.is-busy .ghp-status {
+    background: linear-gradient(90deg,
+            var(--text-secondary, #8b949e) 0%,
+            var(--text-secondary, #8b949e) 40%,
+            #f0f6fc 50%,
+            var(--text-secondary, #8b949e) 60%,
+            var(--text-secondary, #8b949e) 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: ghpShimmer var(--shimmer-dur) linear infinite;
+}
+
+@keyframes ghpShimmer {
+    from {
+        background-position: 150% 0;
+    }
+
+    to {
+        background-position: -150% 0;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   GITHUB PILL INDICATOR (super header)
+   --------------------------------------------------------------------- */
+.super-mode-github {
+    position: relative;
+}
+
+.super-mode-github[data-git="clean"]::after,
+.super-mode-github[data-git="dirty"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #86efac;
+    box-shadow: 0 0 0 1.5px rgba(8, 8, 8, 0.9);
+    animation: ghpDotPop 400ms cubic-bezier(0.34, 1.36, 0.64, 1) both;
+}
+
+.super-mode-github[data-git="dirty"]::after {
+    background: #fbbf24;
+}
+
+@keyframes ghpDotPop {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* ---------------------------------------------------------------------
+   RESPONSIVE
+   --------------------------------------------------------------------- */
+@media (max-width: 900px) {
+    .github-panel {
+        width: min(360px, calc(100vw - 70px));
+    }
+}
+
+/* ---------------------------------------------------------------------
+   REDUCED MOTION
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+
+    .github-panel.t-dropdown,
+    .github-panel.t-dropdown.is-open,
+    .github-panel.t-dropdown.is-closing {
+        transition: opacity 1ms linear, visibility 0s linear;
+        transform: none;
+    }
+
+    .ghp-tabs-pill {
+        transition: none;
+    }
+
+    .ghp-pane,
+    .ghp-gate,
+    .ghp-row,
+    .ghp-empty,
+    .ghp-compare-result,
+    .github-panel.is-open .ghp-identity .t-stagger-line {
+        animation: none;
+    }
+
+    .ghp-skel-row,
+    .github-panel.is-busy #ghp-refresh-btn svg,
+    .github-panel.is-busy .ghp-status {
+        animation: none;
+    }
+
+    .github-panel.is-busy .ghp-status {
+        -webkit-text-fill-color: currentColor;
+        background: none;
+    }
+
+    .ghp-row:hover,
+    .ghp-btn:hover,
+    .ghp-mini-btn:hover,
+    .ghp-branch-chip:hover,
+    .ghp-icon-btn:active,
+    .ghp-row-action:active {
+        transform: none;
+    }
+
+    .ghp-row-actions {
+        transition: none;
+        transform: none;
+    }
+
+    .super-mode-github[data-git="clean"]::after,
+    .super-mode-github[data-git="dirty"]::after {
+        animation: none;
+    }
+}
