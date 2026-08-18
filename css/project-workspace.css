@@ -801,6 +801,39 @@ body:not(.dark-mode) .project-know-me-fab:hover {
     user-select: none;
 }
 
+.project-file-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    transform: rotate(0deg);
+    transition: transform var(--tree-caret) var(--tree-ease),
+        color var(--anim-fast) var(--easing-smooth);
+}
+
+/* Files and empty folders keep the slot so names stay aligned by depth. */
+.project-file-caret.is-leaf svg {
+    display: none;
+}
+
+.project-file-caret svg {
+    /* The caret is rotated, not path-morphed: CSS `d:` interpolation is
+       Chromium-only and would snap elsewhere. */
+    vector-effect: non-scaling-stroke;
+}
+
+.project-file-node[data-open="true"] > .project-file-row .project-file-caret {
+    transform: rotate(90deg);
+}
+
+.project-file-row:hover .project-file-caret,
+.project-file-row.selected .project-file-caret {
+    color: var(--accent-color);
+}
+
 .project-file-preview {
     display: none;
 }
