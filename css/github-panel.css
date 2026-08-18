@@ -687,6 +687,40 @@ body:not(.dark-mode) .ghp-commit-field:focus-within {
     background: rgba(255, 255, 255, 0.12);
 }
 
+/* Keyboard affordance: only shown while the field is empty. */
+.ghp-commit-hint {
+    position: absolute;
+    right: 8px;
+    bottom: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    pointer-events: none;
+    opacity: 0.55;
+    transition: opacity 160ms var(--dropdown-ease);
+}
+
+.ghp-commit-input:not(:placeholder-shown)~.ghp-commit-hint {
+    opacity: 0;
+}
+
+.ghp-commit-hint kbd {
+    padding: 1px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary, #8b949e);
+    font-family: inherit;
+    font-size: 0.58rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+body:not(.dark-mode) .ghp-commit-hint kbd {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.04);
+}
+
 .ghp-commit-actions {
     display: flex;
     align-items: center;
