@@ -580,10 +580,15 @@
 
         <section class="ghp-pane" data-pane="changes">
             <div class="ghp-commitbox">
-                <textarea id="ghp-commit-message" class="ghp-commit-input" rows="2"
-                    placeholder="Commit message (Ctrl+Enter to commit)"></textarea>
+                <div class="ghp-commit-field">
+                    <textarea id="ghp-commit-message" class="ghp-commit-input" rows="2" spellcheck="false"
+                        aria-label="Commit message" placeholder="Summary of your changes"></textarea>
+                    <span class="ghp-commit-hint" aria-hidden="true">
+                        <kbd>Ctrl</kbd><kbd>Enter</kbd>
+                    </span>
+                </div>
                 <div class="ghp-commit-actions">
-                    <label class="ghp-amend">
+                    <label class="ghp-amend" title="Replace the previous commit instead of creating a new one">
                         <input type="checkbox" id="ghp-amend-check" />
                         <span>Amend</span>
                     </label>
