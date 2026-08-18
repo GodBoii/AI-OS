@@ -191,10 +191,6 @@
     }
 }
 
-.project-github-content:not(.hidden) {
-    animation: dropdownSlide var(--anim-normal) var(--easing-smooth);
-}
-
 /* Button icon bounce on hover */
 @keyframes iconBounce {
     0%, 100% {
@@ -207,15 +203,6 @@
 
 .project-action-btn:hover i {
     animation: iconBounce 0.5s var(--easing-smooth);
-}
-
-/* Chevron rotation animation */
-.project-github-chevron {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.project-github-toggle.active .project-github-chevron {
-    transform: rotate(180deg);
 }
 
 /* Exit button pulse on hover */
