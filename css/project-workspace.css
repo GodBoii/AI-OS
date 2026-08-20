@@ -801,69 +801,6 @@ body:not(.dark-mode) .project-know-me-fab:hover {
     user-select: none;
 }
 
-.project-file-caret {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    color: var(--text-secondary);
-    transform: rotate(0deg);
-    transition: transform var(--tree-caret) var(--tree-ease),
-        color var(--anim-fast) var(--easing-smooth);
-}
-
-/* Files and empty folders keep the slot so names stay aligned by depth. */
-.project-file-caret.is-leaf svg {
-    display: none;
-}
-
-.project-file-caret svg {
-    /* The caret is rotated, not path-morphed: CSS `d:` interpolation is
-       Chromium-only and would snap elsewhere. */
-    vector-effect: non-scaling-stroke;
-}
-
-.project-file-node[data-open="true"] > .project-file-row .project-file-caret {
-    transform: rotate(90deg);
-}
-
-.project-file-row:hover .project-file-caret,
-.project-file-row.selected .project-file-caret {
-    color: var(--accent-color);
-}
-
-/* --- Recipe 09: closed / open folder glyph in a single slot ------------ */
-.project-file-folder {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-}
-
-.project-file-folder .project-file-glyph {
-    grid-area: 1 / 1;
-    display: inline-flex;
-    transition:
-        opacity var(--tree-icon-dur) var(--tree-icon-ease),
-        filter var(--tree-icon-dur) var(--tree-icon-ease),
-        transform var(--tree-icon-dur) var(--tree-icon-ease);
-}
-
-.project-file-folder .project-file-glyph[data-glyph="open"],
-.project-file-node[data-open="true"] > .project-file-row .project-file-glyph[data-glyph="closed"] {
-    opacity: 0;
-    filter: blur(var(--tree-icon-blur));
-    transform: scale(var(--tree-icon-scale));
-}
-
-.project-file-folder .project-file-glyph[data-glyph="closed"],
-.project-file-node[data-open="true"] > .project-file-row .project-file-glyph[data-glyph="open"] {
-    opacity: 1;
-    filter: blur(0);
-    transform: scale(1);
-}
-
 .project-file-preview {
     display: none;
 }
