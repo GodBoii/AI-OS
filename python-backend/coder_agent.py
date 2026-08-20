@@ -103,10 +103,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        # Large generated files are carried inside tool-call arguments. Request a
-        # large completion budget explicitly so the provider does not truncate
-        # write_file/create_file arguments before their closing JSON delimiter.
-        model=get_openrouter_model("openai/gpt-5.6-luna-pro", max_tokens=65_536),
+        model=get_openrouter_model("openai/gpt-5.6-luna"),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
