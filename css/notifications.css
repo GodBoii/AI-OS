@@ -1,343 +1,547 @@
-/* notifications.css - Unified Notification System with Glassmorphism */
+/* notifications.css - in-app notification (toast) system.
+ *
+ * Structure built by js/notification-service.js:
+ *
+ *   .unified-notification            motion shell (enter / exit / stack collapse)
+ *     .notification-surface          the visible card (glass, hover lift, drag)
+ *       .notification-icon           type chip with inline SVG
+ *       .notification-content        message + optional action
+ *       .notification-close          dismiss
+ *       .notification-progress       countdown hairline
+ *
+ * Keeping the transform work on the shell and the backdrop-filter work on the
+ * surface matters: a `filter` on an ancestor creates a new backdrop root and
+ * silently kills `backdrop-filter` on its descendants.
+ */
 
 /* Container */
 .unified-notification-container {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    bottom: 22px;
+    right: 22px;
+    z-index: 10000;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    z-index: 10000;
+    gap: 10px;
+    width: min(378px, calc(100vw - 44px));
     pointer-events: none;
-    max-width: 400px;
+
+    /* Motion contract. notification-service.js reads these so JS timing and
+       CSS timing cannot drift apart. */
+    --notification-enter: 380ms;
+    --notification-exit: 200ms;
+    --notification-collapse: 300ms;
 }
 
-/* Base Notification */
+/* Motion shell */
 .unified-notification {
+    width: 100%;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.96);
+    will-change: transform, opacity;
+    transition:
+        opacity var(--notification-exit) var(--motion-ease-out),
+        transform var(--notification-exit) var(--motion-ease-out);
+}
+
+.unified-notification.show {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    transition:
+        opacity var(--notification-enter) var(--motion-ease-smooth-out),
+        transform var(--notification-enter) var(--motion-ease-smooth-out);
+}
+
+/* Depth cue: once the stack is deep, the oldest card recedes instead of
+   competing with the newest one. */
+.unified-notification.show:nth-last-child(n + 4) {
+    opacity: 0.62;
+}
+
+/* Leaves toward the edge it lives on, faster than it arrived. */
+.unified-notification.hide {
+    opacity: 0;
+    transform: translate3d(30px, 0, 0) scale(0.97);
+}
+
+.unified-notification.hide .notification-surface {
+    filter: blur(2px);
+    transition-duration: var(--notification-exit);
+}
+
+/* Card */
+.notification-surface {
     position: relative;
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
-    border-radius: 12px;
-    min-width: 300px;
-    max-width: 400px;
-    pointer-events: all;
+    gap: 11px;
+    padding: 12px 12px 13px;
+    border-radius: var(--radius-2xl, 16px);
     overflow: hidden;
+    user-select: none;
+    touch-action: pan-y;
 
-    /* Glassmorphism Effect */
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px) saturate(180%);
-    -webkit-backdrop-filter: blur(10px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    /* Type accents, overridden per variant below. */
+    --toast-accent: #475569;
+    --toast-tint: rgba(71, 85, 105, 0.10);
+    --toast-ring: rgba(71, 85, 105, 0.24);
+    --toast-glow: rgba(71, 85, 105, 0.10);
+    --toast-track: rgba(71, 85, 105, 0.16);
 
-    /* Animation */
-    opacity: 0;
-    transform: translateY(16px) scale(0.97);
-    filter: blur(2px);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.88));
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(15, 23, 42, 0.09);
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.05),
+        0 8px 20px -8px rgba(15, 23, 42, 0.16),
+        0 24px 48px -24px rgba(15, 23, 42, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
+
+    /* Entrance cross-blur lives here, not on the shell. */
+    filter: blur(3px);
+    will-change: transform, filter;
     transition:
-        opacity var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease),
-        transform var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease),
-        filter var(--motion-duration-normal, 250ms) var(--motion-ease-in-out, ease),
-        box-shadow var(--motion-duration-fast, 150ms) ease;
+        filter var(--notification-enter) var(--motion-ease-smooth-out),
+        transform 240ms var(--motion-ease-bounce),
+        box-shadow var(--motion-duration-fast) ease,
+        border-color var(--motion-duration-fast) ease;
 }
 
-.dark-mode .unified-notification {
-    background: rgba(15, 23, 42, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-}
-
-/* Show Animation */
-.unified-notification.show {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+.unified-notification.show .notification-surface {
     filter: blur(0);
-    transition-duration: var(--motion-duration-slow, 350ms);
-    transition-timing-function: var(--motion-ease-smooth-out, ease-out);
 }
 
-/* Hide Animation */
-.unified-notification.hide {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-    filter: blur(1px);
+/* Light bleeding in from the status source. Replaces the stock 4px left bar. */
+.notification-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: radial-gradient(132px 96px at 2px 50%, var(--toast-glow), transparent 72%);
+    pointer-events: none;
 }
 
-/* Hover Effect */
-.unified-notification:hover {
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+/* Glass edge, tinted by type. */
+.notification-surface::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    z-index: 1;
+    background: linear-gradient(90deg, transparent, var(--toast-ring) 20%, transparent 76%);
+    pointer-events: none;
 }
 
-/* Icon */
+.unified-notification:hover .notification-surface,
+.unified-notification:focus-within .notification-surface {
+    transform: translate3d(0, -2px, 0);
+    border-color: rgba(15, 23, 42, 0.14);
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.06),
+        0 14px 28px -10px rgba(15, 23, 42, 0.20),
+        0 32px 62px -28px rgba(15, 23, 42, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.unified-notification.is-dragging .notification-surface {
+    transition: none;
+    cursor: grabbing;
+}
+
+.dark-mode .notification-surface {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.045));
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.6),
+        0 10px 28px -10px rgba(0, 0, 0, 0.7),
+        0 28px 60px -28px rgba(0, 0, 0, 0.85),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .unified-notification:hover .notification-surface,
+.dark-mode .unified-notification:focus-within .notification-surface {
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.6),
+        0 16px 34px -12px rgba(0, 0, 0, 0.75),
+        0 34px 68px -30px rgba(0, 0, 0, 0.9),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Icon chip */
 .notification-icon {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    color: var(--toast-accent);
+    background: var(--toast-tint);
+    box-shadow: inset 0 0 0 1px var(--toast-ring);
+
+    opacity: 0;
+    transform: scale(0.76);
+    transition:
+        opacity var(--motion-duration-normal) var(--motion-ease-out) 60ms,
+        transform 420ms var(--motion-ease-bounce) 60ms;
+}
+
+.unified-notification.show .notification-icon {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.notification-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+/* Confirmation and failure are worth a beat of motion. Routine states are not. */
+.notification-icon-draw {
+    stroke-dasharray: var(--draw-len, 12);
+    stroke-dashoffset: var(--draw-len, 12);
+    transition: stroke-dashoffset 400ms var(--motion-ease-out) 190ms;
+}
+
+.unified-notification.show .notification-icon-draw {
+    stroke-dashoffset: 0;
+}
+
+.notification-connection .notification-icon svg {
+    animation: notification-spin 1.1s linear infinite;
+}
+
+@keyframes notification-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Content */
 .notification-content {
-    flex: 1;
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
+    padding-top: 6px;
 }
 
 .notification-message {
-    color: var(--text-color);
-    font-size: 14px;
-    line-height: 1.5;
-    word-wrap: break-word;
-}
-
-/* Close Button */
-.notification-close {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition:
-        color var(--motion-duration-fast, 150ms) ease,
-        background-color var(--motion-duration-fast, 150ms) ease;
-    font-size: 14px;
-    padding: 0;
-}
-
-.notification-close:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-color);
-}
-
-.dark-mode .notification-close:hover {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-/* Progress Bar */
-.notification-progress {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    height: 3px;
-    width: 100%;
-    background: rgba(255, 255, 255, 0.3);
-    transform-origin: left;
-}
-
-@keyframes progress {
-    from {
-        transform: scaleX(1);
-    }
-
-    to {
-        transform: scaleX(0);
-    }
-}
-
-/* Type Variants */
-.notification-success {
-    border-left: 4px solid var(--success-500, #10b981);
-}
-
-.notification-success .notification-icon {
-    color: var(--success-500, #10b981);
-}
-
-.notification-success .notification-progress {
-    background: var(--success-500, #10b981);
-}
-
-.notification-error {
-    border-left: 4px solid var(--error-500, #ef4444);
-}
-
-.notification-error .notification-icon {
-    color: var(--error-500, #ef4444);
-}
-
-.notification-error .notification-progress {
-    background: var(--error-500, #ef4444);
-}
-
-.notification-warning {
-    border-left: 4px solid var(--warning-500, #f59e0b);
-}
-
-.notification-warning .notification-icon {
-    color: var(--warning-500, #f59e0b);
-}
-
-.notification-warning .notification-progress {
-    background: var(--warning-500, #f59e0b);
-}
-
-.notification-info {
-    border-left: 4px solid var(--accent-color, #374151);
-}
-
-.notification-info .notification-icon {
-    color: var(--accent-color, #374151);
-}
-
-.notification-info .notification-progress {
-    background: var(--accent-color, #374151);
-}
-
-.notification-connection {
-    border-left: 4px solid var(--accent-hover, #1f2937);
-}
-
-.notification-connection .notification-icon {
-    color: var(--accent-hover, #1f2937);
-}
-
-/* Computer Tool Notification - Elegant & Minimal */
-.notification-computer-tool {
-    border-left: 4px solid var(--neutral-700, #374151);
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(16px) saturate(200%);
-    -webkit-backdrop-filter: blur(16px) saturate(200%);
-}
-
-.dark-mode .notification-computer-tool {
-    background: rgba(31, 41, 55, 0.85);
-    border-left-color: var(--neutral-500, #6b7280);
-}
-
-.notification-computer-tool .notification-icon {
-    color: var(--neutral-700, #374151);
-    font-size: 18px;
-}
-
-.dark-mode .notification-computer-tool .notification-icon {
-    color: var(--neutral-400, #9ca3af);
-}
-
-.notification-computer-tool .notification-message {
+    margin: 0;
+    font-family: var(--font-sans);
     font-size: 13px;
     font-weight: 500;
-    letter-spacing: 0.01em;
+    line-height: 1.42;
+    letter-spacing: -0.005em;
     color: var(--text-color);
-    opacity: 0.95;
+    overflow-wrap: anywhere;
+
+    /* Long errors stay readable instead of growing a wall of text. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    overflow: hidden;
+
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+    transition:
+        opacity var(--motion-duration-slow) var(--motion-ease-out) 90ms,
+        transform var(--notification-enter) var(--motion-ease-smooth-out) 90ms;
 }
 
-.notification-computer-tool .notification-progress {
-    background: linear-gradient(90deg,
-            var(--neutral-700, #374151),
-            var(--neutral-600, #52525b));
-    height: 2px;
+.unified-notification.show .notification-message {
+    opacity: 1;
+    transform: none;
 }
 
-.dark-mode .notification-computer-tool .notification-progress {
-    background: linear-gradient(90deg,
-            var(--neutral-500, #6b7280),
-            var(--neutral-400, #9ca3af));
-}
-
-/* Hover effect for computer tool notifications */
-.notification-computer-tool:hover {
-    border-left-width: 5px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-}
-
-.dark-mode .notification-computer-tool:hover {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-/* Retry Button */
+/* Action */
 .notification-retry-btn {
+    align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    color: var(--text-color);
-    font-size: 13px;
+    height: 27px;
+    padding: 0 11px;
+    border-radius: var(--radius-lg, 8px);
+    border: 1px solid var(--action-secondary-border);
+    background: var(--action-secondary-bg);
+    color: var(--action-secondary-fg);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
     cursor: pointer;
-    transition: all 0.2s ease;
+
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+    transition:
+        opacity var(--motion-duration-slow) var(--motion-ease-out) 140ms,
+        transform var(--notification-enter) var(--motion-ease-smooth-out) 140ms,
+        background-color var(--motion-duration-fast) ease,
+        border-color var(--motion-duration-fast) ease;
+}
+
+.unified-notification.show .notification-retry-btn {
+    opacity: 1;
+    transform: none;
 }
 
 .notification-retry-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
+    background: var(--action-secondary-hover);
+    border-color: var(--border-accent);
 }
 
-.dark-mode .notification-retry-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+.notification-retry-btn:active {
+    transform: scale(0.97);
 }
 
-.dark-mode .notification-retry-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.notification-retry-btn svg {
+    width: 12px;
+    height: 12px;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .unified-notification-container {
-        left: 16px;
-        right: 16px;
-        bottom: 16px;
-        max-width: none;
-    }
-
-    .unified-notification {
-        min-width: auto;
-        max-width: none;
-    }
+/* Close */
+.notification-close {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-top: 3px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 0.45;
+    cursor: pointer;
+    transition:
+        opacity var(--motion-duration-fast) ease,
+        background-color var(--motion-duration-fast) ease,
+        color var(--motion-duration-fast) ease,
+        transform var(--motion-duration-fast) var(--motion-ease-out);
 }
 
-/* Reduced Motion */
-/* Reduced-motion behavior is centralized in design-system.css. */
-
-/* High Contrast Mode */
-@media (prefers-contrast: high) {
-    .unified-notification {
-        border: 2px solid currentColor;
-        background: var(--window-bg);
-        backdrop-filter: none;
-    }
+.unified-notification:hover .notification-close,
+.unified-notification:focus-within .notification-close {
+    opacity: 1;
 }
 
-/* Accessibility - Focus Styles */
-.notification-close:focus-visible {
-    outline: 2px solid var(--accent-color);
-    outline-offset: 2px;
+.notification-close:hover {
+    background: var(--accent-muted);
+    color: var(--text-color);
 }
 
+.notification-close:active {
+    transform: scale(0.9);
+}
+
+.notification-close svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+}
+
+/* Countdown hairline. Inset and quiet: it reports time left, it is not an alarm. */
+.notification-progress {
+    position: absolute;
+    z-index: 1;
+    left: 12px;
+    right: 12px;
+    bottom: 6px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--toast-track);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity var(--motion-duration-normal) ease 170ms;
+}
+
+.unified-notification.show .notification-progress {
+    opacity: 1;
+}
+
+.notification-progress-fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--toast-accent);
+    opacity: 0.72;
+    transform-origin: left center;
+    transition: opacity var(--motion-duration-fast) ease;
+}
+
+/* Hovering the stack holds every timer. Say so. */
+.unified-notification.is-paused .notification-progress-fill {
+    opacity: 0.3;
+}
+
+/* Type variants, light theme.
+   Accents are darkened from the raw 500 ramp so a 16px stroke clears 3:1
+   against the near-white card. */
+.notification-success .notification-surface {
+    --toast-accent: #0d9668;
+    --toast-tint: rgba(16, 185, 129, 0.11);
+    --toast-ring: rgba(16, 185, 129, 0.30);
+    --toast-glow: rgba(16, 185, 129, 0.13);
+    --toast-track: rgba(16, 185, 129, 0.16);
+}
+
+.notification-error .notification-surface {
+    --toast-accent: #dc2626;
+    --toast-tint: rgba(239, 68, 68, 0.10);
+    --toast-ring: rgba(239, 68, 68, 0.30);
+    --toast-glow: rgba(239, 68, 68, 0.12);
+    --toast-track: rgba(239, 68, 68, 0.16);
+}
+
+.notification-warning .notification-surface {
+    --toast-accent: #b45309;
+    --toast-tint: rgba(245, 158, 11, 0.12);
+    --toast-ring: rgba(245, 158, 11, 0.34);
+    --toast-glow: rgba(245, 158, 11, 0.14);
+    --toast-track: rgba(245, 158, 11, 0.18);
+}
+
+.notification-computer-tool .notification-surface {
+    --toast-accent: #52525b;
+    --toast-tint: rgba(82, 82, 91, 0.09);
+    --toast-ring: rgba(82, 82, 91, 0.22);
+    --toast-glow: rgba(82, 82, 91, 0.09);
+    --toast-track: rgba(82, 82, 91, 0.15);
+}
+
+/* Type variants, dark theme. Lifted for legibility on pure black. */
+.dark-mode .notification-info .notification-surface,
+.dark-mode .notification-connection .notification-surface {
+    --toast-accent: #cbd5e1;
+    --toast-tint: rgba(203, 213, 225, 0.11);
+    --toast-ring: rgba(203, 213, 225, 0.24);
+    --toast-glow: rgba(203, 213, 225, 0.09);
+    --toast-track: rgba(203, 213, 225, 0.18);
+}
+
+.dark-mode .notification-success .notification-surface {
+    --toast-accent: #34d399;
+    --toast-tint: rgba(52, 211, 153, 0.14);
+    --toast-ring: rgba(52, 211, 153, 0.30);
+    --toast-glow: rgba(52, 211, 153, 0.12);
+    --toast-track: rgba(52, 211, 153, 0.20);
+}
+
+.dark-mode .notification-error .notification-surface {
+    --toast-accent: #f87171;
+    --toast-tint: rgba(248, 113, 113, 0.14);
+    --toast-ring: rgba(248, 113, 113, 0.30);
+    --toast-glow: rgba(248, 113, 113, 0.12);
+    --toast-track: rgba(248, 113, 113, 0.20);
+}
+
+.dark-mode .notification-warning .notification-surface {
+    --toast-accent: #fbbf24;
+    --toast-tint: rgba(251, 191, 36, 0.14);
+    --toast-ring: rgba(251, 191, 36, 0.30);
+    --toast-glow: rgba(251, 191, 36, 0.12);
+    --toast-track: rgba(251, 191, 36, 0.20);
+}
+
+.dark-mode .notification-computer-tool .notification-surface {
+    --toast-accent: #a1a1aa;
+    --toast-tint: rgba(161, 161, 170, 0.10);
+    --toast-ring: rgba(161, 161, 170, 0.22);
+    --toast-glow: rgba(161, 161, 170, 0.08);
+    --toast-track: rgba(161, 161, 170, 0.18);
+}
+
+/* Computer-tool notices are ambient status, so they sit a step quieter. */
+.notification-computer-tool .notification-message {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* Focus */
+.notification-close:focus-visible,
 .notification-retry-btn:focus-visible {
     outline: 2px solid var(--accent-color);
     outline-offset: 2px;
+    opacity: 1;
 }
 
+/* Responsive */
+@media (max-width: 768px) {
+    .unified-notification-container {
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+        width: auto;
+    }
+}
 
-/* Progress Notification Styles */
+/* Reduced motion.
+ * Transition and animation durations are already zeroed globally in
+ * design-system.css. Two things still need handling here: the countdown fill is
+ * driven by the Web Animations API (which the global rule cannot reach), and a
+ * frozen full-width bar would read as a stuck loader. Hide it and let the
+ * dismiss timer run silently.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .notification-progress {
+        opacity: 0 !important;
+    }
+
+    .notification-progress-fill {
+        transform: scaleX(1) !important;
+    }
+
+    .unified-notification:hover .notification-surface,
+    .unified-notification:focus-within .notification-surface {
+        transform: none;
+    }
+}
+
+/* High contrast */
+@media (prefers-contrast: high) {
+    .notification-surface {
+        background: var(--window-bg);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        border: 2px solid currentColor;
+    }
+
+    .notification-surface::before,
+    .notification-surface::after {
+        display: none;
+    }
+
+    .notification-close {
+        opacity: 1;
+    }
+}
+
+/* Download progress variant (styling only; no caller creates this yet) */
 .download-progress-container {
     position: relative;
     width: 100%;
     height: 6px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--toast-track);
     border-radius: 3px;
-    margin-top: 8px;
+    margin-top: 2px;
     overflow: hidden;
-}
-
-.dark-mode .download-progress-container {
-    background: rgba(0, 0, 0, 0.2);
 }
 
 .download-progress-bar {
@@ -345,19 +549,18 @@
     left: 0;
     top: 0;
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-color), var(--accent-hover));
+    width: 0;
+    background: var(--toast-accent);
     border-radius: 3px;
-    transition: width 0.3s ease-out;
-    box-shadow: 0 0 10px rgba(var(--accent-color-rgb, 99, 102, 241), 0.5);
+    transition: width var(--motion-duration-slow) var(--motion-ease-smooth-out);
 }
 
 .download-progress-text {
-    position: absolute;
-    right: 0;
-    top: -20px;
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 600;
-    color: var(--accent-color);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
 }
 
 .notification-progress-type .notification-content {
