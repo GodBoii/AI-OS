@@ -296,7 +296,7 @@ def get_llm_os(
 
     return Team(
         name="Aetheria_AI",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("openai/gpt-5.6-luna"),
         members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,
