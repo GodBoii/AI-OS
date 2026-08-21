@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
-from openrouter_reasoning_model import get_openrouter_model
+from primary_model_factory import get_primary_model
 from agno.models.groq import Groq
 from agno.tools import Toolkit
 
@@ -15,6 +15,7 @@ from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
 from database_config import get_sqlalchemy_database_url
+from model_routing import DEFAULT_MODEL_ID
 
 
 def _db_url_sqlalchemy() -> str:
@@ -36,6 +37,7 @@ def get_coder_agent(
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
     persist_session: bool = True,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> Agent:
     """
     Dedicated coding-only Agent used for project workspace mode.
@@ -103,7 +105,7 @@ def get_coder_agent(
 
     return Agent(
         name="Aetheria_Coder",
-        model=get_openrouter_model("openai/gpt-5.6-luna"),
+        model=get_primary_model(model_id),
         role=(
             "Dedicated software engineering agent for project mode. "
             "Executes coding, repository, sandbox, file-vault, and deployment operations."
