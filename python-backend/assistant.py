@@ -28,6 +28,7 @@ from google_drive_tools import GoogleDriveTools
 from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from media_tools import MediaTools
+from model_routing import DEFAULT_MODEL_ID
 from ppt_tools import build_presentation_agent
 from supabase_tools import SupabaseTools
 from user_file_vault_tools import UserFileVaultTools
@@ -76,6 +77,7 @@ def get_llm_os(
     session_id: Optional[str] = None,
     message_id: Optional[str] = None,
     enable_user_file_vault: bool = True,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> Team:
     """
     Build the main Aetheria AI team.
@@ -89,6 +91,7 @@ def get_llm_os(
     _ = computer_tools_config
 
     from openrouter_reasoning_model import get_openrouter_model
+    from primary_model_factory import get_primary_model
 
     direct_tools: List[Union[Toolkit, callable]] = []
     members: List[Union[Agent, Team]] = []
@@ -296,7 +299,7 @@ def get_llm_os(
 
     return Team(
         name="Aetheria_AI",
-        model=get_openrouter_model("openai/gpt-5.6-luna"),
+        model=get_primary_model(model_id),
         members=members,
         tools=direct_tools,
         instructions=aetheria_instructions,
