@@ -3324,6 +3324,20 @@ function setPlanModeEnabled(enabled) {
         button.classList.toggle('active', planModeEnabled);
         button.setAttribute('aria-pressed', planModeEnabled ? 'true' : 'false');
     }
+    syncComposerModeVisual();
+}
+
+function getComposerVisualMode() {
+    if (planModeEnabled && ultraThinkEnabled) return 'plan-ultra';
+    if (ultraThinkEnabled) return 'ultra';
+    if (planModeEnabled) return 'plan';
+    return 'standard';
+}
+
+function syncComposerModeVisual() {
+    const container = document.getElementById('floating-input-container');
+    if (!container) return;
+    container.dataset.composerMode = getComposerVisualMode();
 }
 
 function syncUltraThinkButton() {
@@ -3340,6 +3354,7 @@ function syncUltraThinkButton() {
         : route === 'ultra'
             ? 'Ultra Think is active for this conversation'
             : 'Use Ultra Think for this conversation';
+    syncComposerModeVisual();
 }
 
 function setUltraThinkEnabled(enabled) {
@@ -4371,6 +4386,7 @@ function init() {
         });
     }
     updatePrimaryComposerAction();
+    syncComposerModeVisual();
 
     document.getElementById('plan-mode-btn')?.addEventListener('click', () => {
         setPlanModeEnabled(!planModeEnabled);
