@@ -23,6 +23,7 @@
 .attach-btn,
 .tool-btn,
 .shuffle-btn,
+.ultra-think-btn,
 .plan-mode-btn,
 .mic-btn {
     background-color: transparent;
@@ -46,6 +47,7 @@
 .attach-btn:hover,
 .tool-btn:hover,
 .shuffle-btn:hover,
+.ultra-think-btn:hover,
 .plan-mode-btn:hover,
 .mic-btn:hover {
     color: var(--accent-color);
@@ -58,13 +60,15 @@
 
 .tool-btn.active,
 .shuffle-btn.active,
+.ultra-think-btn.active,
 .plan-mode-btn.active {
     background: var(--action-primary-bg);
     border-color: var(--action-primary-border);
     color: var(--action-primary-fg);
 }
 
-.plan-mode-btn {
+.plan-mode-btn,
+.ultra-think-btn {
     width: auto;
     min-width: 72px;
     padding: 0 12px;
@@ -74,22 +78,35 @@
     color: var(--action-secondary-fg);
 }
 
-.plan-mode-btn:hover {
+.plan-mode-btn:hover,
+.ultra-think-btn:hover {
     background: var(--action-secondary-hover);
     border-color: var(--action-primary-border);
     color: var(--action-secondary-fg);
 }
 
-.plan-mode-btn.active:hover {
+.plan-mode-btn.active:hover,
+.ultra-think-btn.active:hover {
     background: var(--action-primary-hover);
     border-color: var(--action-primary-hover);
     color: var(--action-primary-fg);
 }
 
-.plan-mode-label {
+.plan-mode-label,
+.ultra-think-label {
     font-size: 0.86rem;
     font-weight: 650;
     line-height: 1;
+}
+
+.ultra-think-btn {
+    min-width: 124px;
+}
+
+.ultra-think-btn.is-locked {
+    cursor: not-allowed;
+    opacity: 0.72;
+    transform: none;
 }
 
 /* Shuffle button: When menu is open, icon turns black on white background */
@@ -292,7 +309,9 @@
 .send-btn i,
 .composer-action-icon,
 .plan-mode-btn i,
-.plan-mode-btn span {
+.plan-mode-btn span,
+.ultra-think-btn i,
+.ultra-think-btn span {
     color: inherit !important;
 }
 
@@ -481,7 +500,9 @@
 body:not(.dark-mode) .send-btn,
 body:not(.dark-mode) .send-btn:hover,
 body:not(.dark-mode) .plan-mode-btn.active,
-body:not(.dark-mode) .plan-mode-btn.active:hover {
+body:not(.dark-mode) .plan-mode-btn.active:hover,
+body:not(.dark-mode) .ultra-think-btn.active,
+body:not(.dark-mode) .ultra-think-btn.active:hover {
     background: var(--action-primary-bg);
     border-color: var(--action-primary-border);
     color: var(--action-primary-fg) !important;
@@ -490,7 +511,9 @@ body:not(.dark-mode) .plan-mode-btn.active:hover {
 .dark-mode .send-btn,
 .dark-mode .send-btn:hover,
 .dark-mode .plan-mode-btn.active,
-.dark-mode .plan-mode-btn.active:hover {
+.dark-mode .plan-mode-btn.active:hover,
+.dark-mode .ultra-think-btn.active,
+.dark-mode .ultra-think-btn.active:hover {
     background: var(--action-primary-bg);
     border-color: var(--action-primary-border);
     color: var(--action-primary-fg) !important;
@@ -511,7 +534,8 @@ body:not(.dark-mode) .plan-mode-btn.active:hover {
 }
 
 .send-btn:focus-visible,
-.plan-mode-btn:focus-visible {
+.plan-mode-btn:focus-visible,
+.ultra-think-btn:focus-visible {
     outline: 2px solid var(--action-primary-border);
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--action-focus-ring);
@@ -953,10 +977,20 @@ body:not(.dark-mode) .plan-mode-btn.active:hover {
     .attach-btn,
     .tool-btn,
     .shuffle-btn,
+    .ultra-think-btn,
     .mic-btn {
         width: 36px;
         height: 36px;
         font-size: 0.9rem;
+    }
+
+    .ultra-think-btn {
+        min-width: 36px;
+        padding: 0;
+    }
+
+    .ultra-think-label {
+        display: none;
     }
 
     .send-btn.sending::before {
