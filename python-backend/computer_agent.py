@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Union
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.groq import Groq
-from openrouter_reasoning_model import get_openrouter_model
+from primary_model_factory import get_primary_model
 from agno.tools import Toolkit
 
 from browser_tools import BrowserTools
@@ -14,6 +14,7 @@ from google_drive_tools import GoogleDriveTools
 from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from database_config import get_sqlalchemy_database_url
+from model_routing import DEFAULT_MODEL_ID
 
 
 def _db_url_sqlalchemy() -> str:
@@ -36,6 +37,7 @@ def get_computer_agent(
     delegation_id: Optional[str] = None,
     delegated_agent: Optional[str] = None,
     persist_session: bool = True,
+    model_id: str = DEFAULT_MODEL_ID,
 ) -> Agent:
     """
     Dedicated desktop/browser automation agent used for computer workspace mode.
@@ -85,7 +87,7 @@ def get_computer_agent(
 
     return Agent(
         name="Aetheria_Computer",
-        model=get_openrouter_model("openai/gpt-5.6-luna"),
+        model=get_primary_model(model_id),
         role=(
             "Dedicated computer control and browser automation agent. "
             "Executes local desktop actions and interactive browser tasks."
