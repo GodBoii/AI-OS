@@ -2,6 +2,12 @@
 /* UNIFIED FLOATING INPUT COMPONENT                                */
 /* ================================================================= */
 
+@property --composer-beam-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
 /* --- Main Input Container --- */
 .floating-input-container {
     position: fixed;
@@ -26,6 +32,233 @@
     transition: all var(--anim-normal) var(--easing-standard);
     opacity: 1;
     visibility: visible;
+    isolation: isolate;
+}
+
+/* Plan and Ultra Think use one edge effect each. The masks keep the animated
+   layers on the perimeter, away from the prompt and toolbar hit targets. */
+.floating-input-container::before,
+.floating-input-container::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.floating-input-container::before {
+    inset: -2px;
+    z-index: 4;
+    padding: 2px;
+    border-radius: 18px;
+    background: transparent;
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    transition:
+        opacity 220ms var(--easing-standard),
+        filter 220ms var(--easing-standard);
+}
+
+.floating-input-container::after {
+    inset: -7px;
+    z-index: -1;
+    border-radius: 22px;
+    transform: scale(0.985);
+    transition: opacity 320ms var(--easing-standard);
+}
+
+/* Plan mode: quiet blueprint light with a single measured tracer. */
+.floating-input-container[data-composer-mode='plan'] {
+    background:
+        linear-gradient(180deg, rgba(12, 29, 33, 0.96), rgba(12, 18, 21, 0.96));
+    border-color: rgba(111, 225, 244, 0.36);
+    box-shadow:
+        0 12px 42px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(111, 225, 244, 0.08) inset,
+        0 0 26px rgba(60, 190, 214, 0.12);
+}
+
+.floating-input-container[data-composer-mode='plan']::before {
+    opacity: 0.84;
+    background: conic-gradient(
+        from var(--composer-beam-angle),
+        transparent 0deg 210deg,
+        rgba(68, 172, 196, 0.08) 224deg,
+        #77e8f7 244deg,
+        #f3fdff 253deg,
+        #4fb7d0 264deg,
+        transparent 284deg 360deg
+    );
+    filter: drop-shadow(0 0 4px rgba(105, 226, 245, 0.52));
+    animation: composer-plan-orbit 8s linear infinite;
+}
+
+.floating-input-container[data-composer-mode='plan']::after {
+    opacity: 0.5;
+    background:
+        radial-gradient(60% 95% at 50% 100%, rgba(73, 197, 220, 0.2), transparent 72%),
+        radial-gradient(45% 75% at 4% 30%, rgba(121, 231, 247, 0.12), transparent 70%);
+    filter: blur(12px);
+    animation: composer-plan-breathe 4.8s ease-in-out infinite;
+}
+
+/* Ultra Think: a chromatic liquid-metal edge with a denser, faster aura. */
+.floating-input-container[data-composer-mode='ultra'],
+.floating-input-container[data-composer-mode='plan-ultra'] {
+    background:
+        radial-gradient(circle at 88% 115%, rgba(255, 150, 111, 0.1), transparent 38%),
+        radial-gradient(circle at 8% -20%, rgba(117, 232, 246, 0.1), transparent 34%),
+        rgba(9, 10, 11, 0.96);
+    border-color: rgba(224, 245, 244, 0.25);
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.58),
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+        0 0 32px rgba(123, 224, 236, 0.12),
+        0 0 44px rgba(255, 139, 111, 0.08);
+}
+
+.floating-input-container[data-composer-mode='ultra']::before,
+.floating-input-container[data-composer-mode='plan-ultra']::before {
+    opacity: 0.9;
+    background: conic-gradient(
+        from var(--composer-beam-angle),
+        #080909 0deg,
+        #e7fcff 30deg,
+        #72deef 54deg,
+        #d8ff91 84deg,
+        #111413 116deg,
+        #ff9184 151deg,
+        #ffd681 187deg,
+        #f8fff3 221deg,
+        #67ddea 258deg,
+        #0a0b0c 303deg,
+        #eefeff 340deg,
+        #080909 360deg
+    );
+    filter:
+        brightness(1.12)
+        saturate(1.12)
+        drop-shadow(0 0 5px rgba(120, 227, 239, 0.4));
+    animation: composer-ultra-orbit 3.4s linear infinite;
+}
+
+.floating-input-container[data-composer-mode='ultra']::after,
+.floating-input-container[data-composer-mode='plan-ultra']::after {
+    opacity: 0.64;
+    background: conic-gradient(
+        from 18deg,
+        rgba(91, 220, 236, 0.34),
+        rgba(204, 255, 139, 0.2),
+        rgba(255, 132, 119, 0.3),
+        rgba(255, 207, 115, 0.22),
+        rgba(91, 220, 236, 0.34)
+    );
+    filter: blur(18px) saturate(1.18);
+    animation: composer-ultra-breathe 3.6s ease-in-out infinite;
+}
+
+.floating-input-container[data-composer-mode='plan-ultra']::before {
+    filter:
+        brightness(1.18)
+        saturate(1.08)
+        drop-shadow(0 0 6px rgba(112, 230, 247, 0.52));
+}
+
+.floating-input-container[data-composer-mode='plan-ultra']::after {
+    background:
+        radial-gradient(58% 100% at 12% 100%, rgba(86, 221, 241, 0.32), transparent 72%),
+        conic-gradient(
+            from 18deg,
+            rgba(91, 220, 236, 0.32),
+            rgba(210, 255, 146, 0.18),
+            rgba(255, 138, 120, 0.26),
+            rgba(255, 210, 122, 0.2),
+            rgba(91, 220, 236, 0.32)
+        );
+}
+
+.floating-input-container[data-composer-mode='plan']:focus-within::before,
+.floating-input-container[data-composer-mode='ultra']:focus-within::before,
+.floating-input-container[data-composer-mode='plan-ultra']:focus-within::before {
+    opacity: 1;
+    filter: brightness(1.2) saturate(1.12) drop-shadow(0 0 7px rgba(123, 231, 244, 0.6));
+}
+
+.floating-input-container.hidden::before,
+.floating-input-container.hidden::after {
+    animation-play-state: paused;
+}
+
+@keyframes composer-plan-orbit {
+    0% { --composer-beam-angle: 12deg; }
+    50% { --composer-beam-angle: 192deg; }
+    100% { --composer-beam-angle: 372deg; }
+}
+
+@keyframes composer-ultra-orbit {
+    0% { --composer-beam-angle: 0deg; }
+    50% { --composer-beam-angle: 180deg; }
+    100% { --composer-beam-angle: 360deg; }
+}
+
+@keyframes composer-plan-breathe {
+    0%, 100% { opacity: 0.36; transform: scale(0.985); }
+    50% { opacity: 0.56; transform: scale(1); }
+}
+
+@keyframes composer-ultra-breathe {
+    0%, 100% { opacity: 0.46; transform: scale(0.985); }
+    50% { opacity: 0.7; transform: scale(1.008); }
+}
+
+body:not(.dark-mode) .floating-input-container[data-composer-mode='plan'] {
+    background: linear-gradient(180deg, rgba(249, 253, 253, 0.98), rgba(239, 248, 249, 0.98));
+    border-color: rgba(20, 128, 151, 0.32);
+    box-shadow:
+        0 12px 36px rgba(36, 78, 88, 0.14),
+        0 0 0 1px rgba(33, 139, 160, 0.08) inset,
+        0 0 24px rgba(55, 169, 190, 0.1);
+}
+
+body:not(.dark-mode) .floating-input-container[data-composer-mode='ultra'],
+body:not(.dark-mode) .floating-input-container[data-composer-mode='plan-ultra'] {
+    background:
+        radial-gradient(circle at 88% 115%, rgba(234, 111, 80, 0.1), transparent 38%),
+        radial-gradient(circle at 8% -20%, rgba(36, 158, 178, 0.1), transparent 34%),
+        rgba(250, 252, 250, 0.98);
+    border-color: rgba(64, 94, 96, 0.28);
+    box-shadow:
+        0 14px 40px rgba(45, 68, 70, 0.16),
+        0 0 0 1px rgba(255, 255, 255, 0.72) inset,
+        0 0 28px rgba(41, 157, 176, 0.1),
+        0 0 38px rgba(224, 101, 73, 0.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .floating-input-container[data-composer-mode='plan']::before,
+    .floating-input-container[data-composer-mode='plan']::after,
+    .floating-input-container[data-composer-mode='ultra']::before,
+    .floating-input-container[data-composer-mode='ultra']::after,
+    .floating-input-container[data-composer-mode='plan-ultra']::before,
+    .floating-input-container[data-composer-mode='plan-ultra']::after {
+        animation: none;
+        transform: none;
+    }
+}
+
+@media (forced-colors: active) {
+    .floating-input-container[data-composer-mode='plan'],
+    .floating-input-container[data-composer-mode='ultra'],
+    .floating-input-container[data-composer-mode='plan-ultra'] {
+        border-color: Highlight;
+    }
+
+    .floating-input-container::before,
+    .floating-input-container::after {
+        display: none;
+    }
 }
 
 /* --- Centered Input State (No Messages) --- */
