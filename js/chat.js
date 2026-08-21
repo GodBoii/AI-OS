@@ -62,6 +62,7 @@ let windowsSpeechInputHandler = null;
 let composerContentObserver = null;
 let connectionStatus = false;
 let planModeEnabled = false;
+let ultraThinkEnabled = false;
 let planGenerationInProgress = false;
 let pendingPlanRequestId = null;
 let pendingPlanMessageId = null;
@@ -75,6 +76,7 @@ const conversationThreads = new Map();
 const conversationLabels = new Map();
 const queuedConversations = new Map();
 const persistedComputerOutputIds = new Set();
+const conversationPrimaryRoutes = new Map();
 const maxFileSize = 50 * 1024 * 1024; // 50MB limit
 const supportedFileTypes = {
     // Text / code files
@@ -104,8 +106,68 @@ const supportedFileTypes = {
     'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'xls': 'application/vnd.ms-excel',
     'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'ppt': 'application/vnd.ms-powerpoint'
+    'ppt': 'application/vnd.ms-powerpoint',
+    'mp4': 'video/mp4', 'webm': 'video/webm',
+    'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska'
 };
+
+const videoAttachmentExtensions = new Set(['mp4', 'webm', 'avi', 'mov', 'mkv']);
+
+function isVideoAttachment(file) {
+    const mimeType = String(file?.type || file?.mime_type || '').trim().toLowerCase();
+    if (mimeType.startsWith('video/')) return true;
+    const name = String(file?.name || file?.filename || '').trim().toLowerCase();
+    const extension = name.includes('.') ? name.split('.').pop() : '';
+    return videoAttachmentExtensions.has(extension);
+}
+
+function getAttachedFilesIncludingPending() {
+    return Array.isArray(fileAttachmentHandler?.attachedFiles)
+        ? fileAttachmentHandler.attachedFiles
+        : [];
+}
+
+function hasVideoAttachments(files = getAttachedFilesIncludingPending()) {
+    return Array.from(files || []).some(isVideoAttachment);
+}
+
+function getConversationPrimaryRoute() {
+    return currentConversationId ? conversationPrimaryRoutes.get(currentConversationId) || null : null;
+}
+
+function validateAttachmentForCurrentMode(file) {
+    if (!isVideoAttachment(file)) return { allowed: true };
+    if (ultraThinkEnabled || getConversationPrimaryRoute() === 'ultra') {
+        return {
+            allowed: false,
+            message: 'Video attachments are unavailable in Ultra Think mode.'
+        };
+    }
+    return { allowed: true };
+}
+
+function commitPrimaryRouteForSend(files) {
+    const route = getConversationPrimaryRoute();
+    const includesVideo = hasVideoAttachments(files);
+    if ((ultraThinkEnabled || route === 'ultra') && includesVideo) {
+        showNotification('Video attachments are unavailable in Ultra Think mode.', 'error');
+        return false;
+    }
+    if (route === 'video' && ultraThinkEnabled) {
+        showNotification('Start a new conversation to use Ultra Think after video input.', 'error');
+        return false;
+    }
+
+    if (!route && currentConversationId) {
+        if (ultraThinkEnabled) {
+            conversationPrimaryRoutes.set(currentConversationId, 'ultra');
+        } else if (includesVideo) {
+            conversationPrimaryRoutes.set(currentConversationId, 'video');
+        }
+    }
+    syncUltraThinkButton();
+    return true;
+}
 
 function setCurrentConversationId(conversationId) {
     currentConversationId = conversationId;
@@ -417,6 +479,11 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
         conversationLabels.delete(previousConversationId);
     }
 
+    if (conversationPrimaryRoutes.has(previousConversationId)) {
+        conversationPrimaryRoutes.set(nextConversationId, conversationPrimaryRoutes.get(previousConversationId));
+        conversationPrimaryRoutes.delete(previousConversationId);
+    }
+
     const queueEntry = queuedConversations.get(previousConversationId);
     if (queueEntry) {
         queuedConversations.delete(previousConversationId);
@@ -459,6 +526,9 @@ function switchConversation(conversationId) {
     }
 
     setCurrentConversationId(conversationId);
+    const primaryRoute = conversationPrimaryRoutes.get(conversationId) || null;
+    ultraThinkEnabled = primaryRoute === 'ultra';
+    syncUltraThinkButton();
     const chatMessages = getChatMessagesRoot();
     const nextThread = getOrCreateConversationThread(conversationId);
     if (!chatMessages || !nextThread) {
@@ -1406,6 +1476,8 @@ async function startNewConversation() {
 
     const nextConversationId = self.crypto.randomUUID();
     setCurrentConversationId(nextConversationId);
+    ultraThinkEnabled = false;
+    syncUltraThinkButton();
     console.log(`Starting new conversation with ID: ${currentConversationId}`);
 
     getOrCreateConversationThread(currentConversationId);
@@ -2376,8 +2448,10 @@ function setupIpcListeners() {
             window.chatSendInProgress = false;
             updatePrimaryComposerAction();
 
-            // Mark that we need to start a new backend session on next message
-            window.needsNewBackendSession = true;
+            // Validation errors leave the current backend session healthy.
+            if (!error?.recoverable) {
+                window.needsNewBackendSession = true;
+            }
 
             // Clear pending attachment metadata on error (won't be saved)
             console.log('[AttachmentDB] Clearing pending metadata due to error');
@@ -3252,6 +3326,42 @@ function setPlanModeEnabled(enabled) {
     }
 }
 
+function syncUltraThinkButton() {
+    const button = document.getElementById('ultra-think-btn');
+    if (!button) return;
+    const route = getConversationPrimaryRoute();
+    if (route === 'ultra') ultraThinkEnabled = true;
+    button.classList.toggle('active', ultraThinkEnabled);
+    button.classList.toggle('is-locked', route === 'ultra' || route === 'video');
+    button.setAttribute('aria-pressed', ultraThinkEnabled ? 'true' : 'false');
+    button.setAttribute('aria-disabled', route === 'ultra' || route === 'video' ? 'true' : 'false');
+    button.title = route === 'video'
+        ? 'Start a new conversation to use Ultra Think after video input'
+        : route === 'ultra'
+            ? 'Ultra Think is active for this conversation'
+            : 'Use Ultra Think for this conversation';
+}
+
+function setUltraThinkEnabled(enabled) {
+    const nextEnabled = Boolean(enabled);
+    const route = getConversationPrimaryRoute();
+    if (nextEnabled && route === 'video') {
+        showNotification('Start a new conversation to use Ultra Think after video input.', 'error');
+        return false;
+    }
+    if (nextEnabled && hasVideoAttachments()) {
+        showNotification('Remove video attachments before enabling Ultra Think.', 'error');
+        return false;
+    }
+    if (!nextEnabled && route === 'ultra') {
+        showNotification('Ultra Think is fixed for this conversation. Start a new conversation to change modes.', 'error');
+        return false;
+    }
+    ultraThinkEnabled = nextEnabled;
+    syncUltraThinkButton();
+    return true;
+}
+
 function setPlanGenerating(generating) {
     planGenerationInProgress = Boolean(generating);
     const planButton = document.getElementById('plan-mode-btn');
@@ -3590,6 +3700,15 @@ async function handleSendMessage() {
         return;
     }
 
+    if (!commitPrimaryRouteForSend(attachedFiles)) {
+        floatingInput.disabled = false;
+        sendMessageBtn.disabled = false;
+        sendMessageBtn.classList.remove('sending');
+        window.chatSendInProgress = false;
+        updatePrimaryComposerAction();
+        return;
+    }
+
     // Check if we need to create a new backend session (after error)
     if (window.needsNewBackendSession) {
         // Generate new conversation ID for backend
@@ -3643,6 +3762,7 @@ async function handleSendMessage() {
             files: attachedFiles,
             context_session_ids: contextSessionIds,
             agent_mode: resolveAgentMode(),
+            thinking_mode: ultraThinkEnabled ? 'ultra' : 'standard',
             coder_execution_target: resolveCoderExecutionTarget(),
             is_cloud_mode: resolveIsCloudMode(),
             workspace_context: resolveWorkspaceContextPayload(),
@@ -3709,6 +3829,7 @@ async function handleSendMessage() {
         files: attachedFiles,
         context_session_ids: contextSessionIds,
         agent_mode: resolveAgentMode(),
+        thinking_mode: ultraThinkEnabled ? 'ultra' : 'standard',
         coder_execution_target: resolveCoderExecutionTarget(),
         is_cloud_mode: resolveIsCloudMode(),
         workspace_context: resolveWorkspaceContextPayload(),
@@ -4191,7 +4312,9 @@ function init() {
     }
     setupIpcListeners();
     initializeAutoExpandingTextarea();
-    fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize);
+    fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize, {
+        validateAttachment: validateAttachmentForCurrentMode
+    });
 
     // Expose fileAttachmentHandler globally for context re-use
     window.fileAttachmentHandler = fileAttachmentHandler;
@@ -4254,6 +4377,10 @@ function init() {
         if (!planModeEnabled) {
             hidePlanReview();
         }
+    });
+
+    document.getElementById('ultra-think-btn')?.addEventListener('click', () => {
+        setUltraThinkEnabled(!ultraThinkEnabled);
     });
 
     // Set up scroll detection for sticky-scroll behavior (like ChatGPT/Claude)
