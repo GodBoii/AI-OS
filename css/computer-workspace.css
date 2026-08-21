@@ -12,13 +12,16 @@
     --computer-control-bg: rgba(255, 255, 255, 0.06);
     --computer-control-hover: rgba(169, 190, 232, 0.12);
     --computer-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --dropdown-open-dur: 250ms;
+    --dropdown-close-dur: 150ms;
+    --dropdown-pre-scale: 0.97;
+    --dropdown-closing-scale: 0.99;
+    --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ─── Inline Toolbar Actions Container ─── */
+/* ─── Compact computer workspace menu ─── */
 .computer-toolbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    position: relative;
     animation: computerToolbarIn 320ms var(--computer-ease);
 }
 
@@ -37,19 +40,18 @@
     }
 }
 
-/* ─── Individual Toolbar Buttons ─── */
-.computer-toolbar-btn {
+.computer-toolbar-trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    height: 30px;
-    padding: 0 10px;
+    gap: 7px;
+    min-height: 36px;
+    padding: 0 12px;
     border: 1px solid rgba(169, 190, 232, 0.18);
-    border-radius: 8px;
+    border-radius: 10px;
     background: rgba(169, 190, 232, 0.08);
     color: rgba(200, 210, 230, 0.85);
-    font-size: 0.7rem;
+    font-size: 0.76rem;
     font-weight: 600;
     line-height: 1;
     cursor: pointer;
@@ -62,16 +64,16 @@
         box-shadow 160ms ease;
 }
 
-.computer-toolbar-btn i,
-.computer-toolbar-btn svg {
+.computer-toolbar-trigger i {
     width: 12px;
     height: 12px;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     flex-shrink: 0;
     color: currentColor;
 }
 
-.computer-toolbar-btn:hover {
+.computer-toolbar-trigger:hover,
+.computer-toolbar-actions.menu-open .computer-toolbar-trigger {
     transform: translateY(-1px);
     color: #ecfeff;
     background: rgba(169, 190, 232, 0.16);
@@ -79,28 +81,137 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
-.computer-toolbar-btn:active {
+.computer-toolbar-trigger:active {
     transform: translateY(0) scale(0.97);
+}
+
+.computer-toolbar-trigger:focus-visible,
+.computer-toolbar-btn:focus-visible {
+    outline: 2px solid var(--computer-accent-strong);
+    outline-offset: 2px;
+}
+
+.computer-toolbar-chevron {
+    margin-left: 2px;
+    opacity: 0.58;
+    transition: transform 180ms var(--computer-ease);
+}
+
+.computer-toolbar-actions.menu-open .computer-toolbar-chevron {
+    transform: rotate(180deg);
+}
+
+.computer-toolbar-menu {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    z-index: 1200;
+    display: grid;
+    width: 220px;
+    padding: 6px;
+    border: 1px solid var(--computer-glass-border);
+    border-radius: 12px;
+    background: var(--computer-glass-bg);
+    box-shadow: var(--computer-glass-shadow);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    margin-left: -110px;
+}
+
+.computer-toolbar-menu[hidden] {
+    display: none;
+}
+
+.t-dropdown {
+    transform-origin: top left;
+    transform: scale(var(--dropdown-pre-scale));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--dropdown-open-dur) var(--dropdown-ease),
+        opacity var(--dropdown-open-dur) var(--dropdown-ease);
+    will-change: transform, opacity;
+}
+
+.t-dropdown[data-origin="top-right"] { transform-origin: top right; }
+.t-dropdown[data-origin="top-center"] { transform-origin: top center; }
+.t-dropdown[data-origin="bottom-left"] { transform-origin: bottom left; }
+.t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
+.t-dropdown[data-origin="bottom-right"] { transform-origin: bottom right; }
+
+.t-dropdown.is-open {
+    transform: scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.t-dropdown.is-closing {
+    transform: scale(var(--dropdown-closing-scale));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--dropdown-close-dur) var(--dropdown-ease),
+        opacity var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+/* ─── Menu actions ─── */
+.computer-toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(220, 226, 239, 0.88);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: color 140ms ease, background 140ms ease;
+}
+
+.computer-toolbar-btn i,
+.computer-toolbar-btn svg {
+    width: 15px;
+    font-size: 0.76rem;
+    flex-shrink: 0;
+    color: currentColor;
+    text-align: center;
+}
+
+.computer-toolbar-btn:hover {
+    color: #f4f7ff;
+    background: var(--computer-control-hover);
+}
+
+.computer-toolbar-btn:active {
+    background: rgba(169, 190, 232, 0.2);
 }
 
 /* Granted state for permission button */
 .computer-toolbar-btn#computer-manual-grant-btn.granted {
     color: #dcfce7;
-    background: rgba(16, 185, 129, 0.18);
-    border-color: rgba(52, 211, 153, 0.36);
+}
+
+.computer-toolbar-btn#computer-manual-grant-btn.granted:hover {
+    background: rgba(16, 185, 129, 0.14);
 }
 
 /* Exit button — danger style */
 .computer-toolbar-exit {
     color: rgba(254, 202, 202, 0.85);
-    border-color: rgba(239, 68, 68, 0.18);
+    margin-top: 4px;
+    border-top: 1px solid rgba(239, 68, 68, 0.14);
+    border-radius: 0 0 8px 8px;
 }
 
 .computer-toolbar-exit:hover {
     color: #fff1f2;
     background: rgba(239, 68, 68, 0.16);
-    border-color: rgba(239, 68, 68, 0.34);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.10);
 }
 
 /* ─── Bottom-right Know Me FAB ─── */
@@ -214,15 +325,31 @@ body.computer-panel-open .app-container {
 }
 
 /* ─── Light Mode Overrides ─── */
-body:not(.dark-mode) .computer-toolbar-btn {
+body:not(.dark-mode) .computer-toolbar-trigger {
     color: #065f46;
     background: rgba(16, 185, 129, 0.08);
     border-color: rgba(5, 150, 105, 0.16);
 }
 
-body:not(.dark-mode) .computer-toolbar-btn:hover {
+body:not(.dark-mode) .computer-toolbar-trigger:hover,
+body:not(.dark-mode) .computer-toolbar-actions.menu-open .computer-toolbar-trigger {
     background: rgba(16, 185, 129, 0.14);
     border-color: rgba(5, 150, 105, 0.28);
+}
+
+body:not(.dark-mode) .computer-toolbar-menu {
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(5, 150, 105, 0.18);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+}
+
+body:not(.dark-mode) .computer-toolbar-btn {
+    color: #334155;
+}
+
+body:not(.dark-mode) .computer-toolbar-btn:hover {
+    color: #064e3b;
+    background: rgba(16, 185, 129, 0.10);
 }
 
 body:not(.dark-mode) .computer-toolbar-exit {
@@ -256,22 +383,33 @@ body:not(.dark-mode).computer-panel-open .app-container {
 
 /* ─── Responsive ─── */
 @media (max-width: 760px) {
-    .computer-toolbar-btn span {
-        display: none;
-    }
-    .computer-toolbar-btn {
-        padding: 0 8px;
-        min-width: 30px;
+    .computer-toolbar-trigger {
+        min-height: 34px;
+        padding-inline: 10px;
     }
 }
 
 @media (max-width: 520px) {
-    .computer-toolbar-actions {
-        gap: 4px;
+    .computer-toolbar-trigger span {
+        display: none;
     }
-    .computer-toolbar-btn {
-        height: 28px;
-        padding: 0 6px;
-        min-width: 28px;
+
+    .computer-toolbar-trigger {
+        width: 34px;
+        padding: 0;
+    }
+
+    .computer-toolbar-trigger .computer-toolbar-chevron {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .computer-toolbar-actions {
+        animation: none;
+    }
+
+    .t-dropdown {
+        transition: none !important;
     }
 }
