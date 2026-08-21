@@ -824,28 +824,38 @@
             </button>
         </div>
         <div class="toolbar-center">
-            <!-- Computer workspace inline controls (shown when computer mode is active) -->
-            <div id="computer-toolbar-actions" class="computer-toolbar-actions hidden" aria-label="Computer workspace actions">
-                <button id="computer-manual-grant-btn" class="computer-toolbar-btn" aria-label="Grant computer permission"
-                    title="Grant Permission">
-                    <i class="fas fa-unlock-alt" aria-hidden="true"></i>
-                    <span>Grant</span>
+            <!-- Computer workspace actions collapse into one menu to keep the composer balanced. -->
+            <div id="computer-toolbar-actions" class="computer-toolbar-actions hidden">
+                <button id="computer-toolbar-trigger" class="computer-toolbar-trigger" type="button"
+                    aria-label="Open computer workspace actions" aria-haspopup="menu" aria-expanded="false"
+                    aria-controls="computer-toolbar-menu">
+                    <i class="fas fa-desktop" aria-hidden="true"></i>
+                    <span>Computer Workspace</span>
+                    <i class="fas fa-chevron-up computer-toolbar-chevron" aria-hidden="true"></i>
                 </button>
-                <button id="computer-select-scope-btn" class="computer-toolbar-btn"
-                    aria-label="Select computer scope directory" title="Select Scope">
-                    <i class="fas fa-folder-open" aria-hidden="true"></i>
-                    <span>Scope</span>
-                </button>
-                <button id="computer-workspace-close" class="computer-toolbar-btn" aria-label="Hide computer workspace"
-                    title="Hide">
-                    <i class="fas fa-times" aria-hidden="true"></i>
-                    <span>Hide</span>
-                </button>
-                <button id="computer-exit-btn" class="computer-toolbar-btn computer-toolbar-exit"
-                    aria-label="Exit computer mode" title="Exit Mode">
-                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
-                    <span>Exit</span>
-                </button>
+                <div id="computer-toolbar-menu" class="computer-toolbar-menu t-dropdown" data-origin="bottom-center"
+                    role="menu" aria-label="Computer workspace actions" aria-hidden="true" hidden>
+                    <button id="computer-manual-grant-btn" class="computer-toolbar-btn" type="button" role="menuitem"
+                        tabindex="-1" aria-label="Grant computer permission">
+                        <i class="fas fa-unlock-alt" aria-hidden="true"></i>
+                        <span>Grant Permission</span>
+                    </button>
+                    <button id="computer-select-scope-btn" class="computer-toolbar-btn" type="button" role="menuitem"
+                        tabindex="-1" aria-label="Select computer scope directory">
+                        <i class="fas fa-folder-open" aria-hidden="true"></i>
+                        <span>Scope</span>
+                    </button>
+                    <button id="computer-workspace-close" class="computer-toolbar-btn" type="button" role="menuitem"
+                        tabindex="-1" aria-label="Hide computer workspace">
+                        <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                        <span>Hide</span>
+                    </button>
+                    <button id="computer-exit-btn" class="computer-toolbar-btn computer-toolbar-exit" type="button"
+                        role="menuitem" tabindex="-1" aria-label="Exit computer mode">
+                        <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+                        <span>Exit</span>
+                    </button>
+                </div>
             </div>
         </div>
         <div class="toolbar-right">
