@@ -1473,6 +1473,9 @@ class UIManager {
 
         // Toggle the inline toolbar action buttons
         document.getElementById('computer-toolbar-actions')?.classList.toggle('hidden', !isOpen);
+        if (!isOpen) {
+            window.computerWorkspace?.closeActionsMenu?.({ restoreFocus: false });
+        }
 
         // Opening from sidebar must also guarantee computer routing mode is active.
         if (isOpen) {
