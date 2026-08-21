@@ -24,6 +24,7 @@ from run_state_manager import RunStateManager
 from cache_manager import CacheManager
 from assistant_stream_utils import build_system_assistant_terminal_message
 from tool_event_payload import serialize_tool_event
+from model_routing import is_video_attachment, resolve_primary_model
 from deploy_platform import (
     get_deployment_file_bytes,
     get_deployment_summary,
@@ -673,7 +674,7 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
                     images.append(Image(content=file_bytes, name=file_name))
                 elif file_type.startswith('audio/'):
                     audio.append(Audio(content=file_bytes, format=file_type.split('/')[-1], name=file_name))
-                elif file_type.startswith('video/'):
+                elif is_video_attachment(file_data):
                     videos.append(Video(content=file_bytes, name=file_name))
                 else:
                     safe_mime_type = _normalize_agno_mime_type(file_name=file_name, file_type=file_type)
@@ -804,6 +805,7 @@ def run_agent_and_stream(
         # Internal routing metadata should not be forwarded to get_llm_os kwargs.
         session_agent_mode = str(session_config.pop("agent_mode", "default")).strip().lower()
         session_coder_target = str(session_config.pop("coder_execution_target", "cloud")).strip().lower()
+        session_primary_model_route = session_config.pop("primary_model_route", None)
         if session_coder_target not in ("local", "cloud"):
             session_coder_target = "cloud"
 
@@ -821,6 +823,24 @@ def run_agent_and_stream(
         ).strip().lower()
         if requested_coder_target not in ("local", "cloud"):
             requested_coder_target = "cloud"
+
+        incoming_files = turn_data.get("files", []) or []
+        if not isinstance(incoming_files, list):
+            incoming_files = []
+        model_selection = resolve_primary_model(
+            thinking_mode=turn_data.get("thinking_mode"),
+            files=incoming_files,
+            sticky_route=session_primary_model_route,
+        )
+        logger.info(
+            "[MODEL_ROUTING] conversation=%s agent_mode=%s thinking_mode=%s has_video=%s route=%s model=%s",
+            conversation_id,
+            requested_mode,
+            model_selection.thinking_mode,
+            model_selection.has_video,
+            model_selection.sticky_route or "default",
+            model_selection.model_id,
+        )
 
         session_data = _ensure_project_workspace_bootstrap(
             session_data=session_data,
@@ -843,6 +863,7 @@ def run_agent_and_stream(
                 debug_mode=config.AGNO_DEBUG_MODE,
                 enable_github=session_config.get("enable_github", True),
                 coder_execution_target=requested_coder_target,
+                model_id=model_selection.model_id,
             )
         elif requested_mode == "computer":
             agent = get_computer_agent(
@@ -858,6 +879,7 @@ def run_agent_and_stream(
                 enable_google_email=bool(session_config.get("enable_google_email", True)),
                 enable_google_drive=bool(session_config.get("enable_google_drive", True)),
                 enable_google_sheets=bool(session_config.get("enable_google_sheets", True)),
+                model_id=model_selection.model_id,
             )
         elif requested_mode == "system-assistant":
             mobile_tools_config = {
@@ -886,12 +908,12 @@ def run_agent_and_stream(
                 custom_tool_config=realtime_tool_config,
                 session_id=conversation_id,  # NEW: For persistence
                 message_id=message_id,  # NEW: For persistence
+                model_id=model_selection.model_id,
                 **llm_os_config
             )
         # --- MODIFICATION END ---
 
         # 3. Process Input Data
-        incoming_files = turn_data.get('files', []) or []
         images, audio, videos, other_files = process_files(incoming_files)
         inline_text_files_prompt = build_inline_text_files_prompt(incoming_files)
         current_session_state = {'turn_context': turn_data}
