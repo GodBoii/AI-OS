@@ -2,6 +2,7 @@ class ComputerWorkspace {
     constructor() {
         this.initialized = false;
         this.activeContext = null;
+        this.menuCloseTimer = null;
         this.init();
     }
 
@@ -39,6 +40,8 @@ class ComputerWorkspace {
             chip: document.getElementById('computer-workspace-chip'),
             label: document.getElementById('computer-chip-label'),
             toolbarActions: document.getElementById('computer-toolbar-actions'),
+            toolbarTrigger: document.getElementById('computer-toolbar-trigger'),
+            toolbarMenu: document.getElementById('computer-toolbar-menu'),
             manualGrantBtn: document.getElementById('computer-manual-grant-btn'),
             selectScopeBtn: document.getElementById('computer-select-scope-btn'),
             closeBtn: document.getElementById('computer-workspace-close'),
@@ -47,14 +50,132 @@ class ComputerWorkspace {
     }
 
     bindEvents() {
-        this.el.manualGrantBtn?.addEventListener('click', () => this.manualGrantPermission());
-        this.el.selectScopeBtn?.addEventListener('click', () => this.selectScopeDirectory());
-        this.el.closeBtn?.addEventListener('click', () => this.closePanel());
-        this.el.exitBtn?.addEventListener('click', () => this.exitComputerMode());
+        this.el.toolbarTrigger?.addEventListener('click', (event) => {
+            event.stopPropagation();
+            this.toggleActionsMenu();
+        });
+        this.el.toolbarTrigger?.addEventListener('keydown', (event) => this.handleTriggerKeydown(event));
+        this.el.toolbarMenu?.addEventListener('keydown', (event) => this.handleMenuKeydown(event));
+
+        this.el.manualGrantBtn?.addEventListener('click', () => {
+            this.closeActionsMenu({ restoreFocus: false });
+            void this.manualGrantPermission();
+        });
+        this.el.selectScopeBtn?.addEventListener('click', () => {
+            this.closeActionsMenu({ restoreFocus: false });
+            void this.selectScopeDirectory();
+        });
+        this.el.closeBtn?.addEventListener('click', () => {
+            this.closeActionsMenu({ restoreFocus: false });
+            this.closePanel();
+        });
+        this.el.exitBtn?.addEventListener('click', () => {
+            this.closeActionsMenu({ restoreFocus: false });
+            this.exitComputerMode();
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!this.el.toolbarActions?.contains(event.target)) {
+                this.closeActionsMenu({ restoreFocus: false });
+            }
+        });
 
         document.addEventListener('computer-workspace:open', (event) => {
             this.openComputerWorkspace(event?.detail || {});
         });
+    }
+
+    getMenuItems() {
+        return Array.from(this.el.toolbarMenu?.querySelectorAll('[role="menuitem"]') || []);
+    }
+
+    openActionsMenu({ focus = false } = {}) {
+        if (!this.el.toolbarMenu || !this.el.toolbarTrigger) return;
+
+        if (this.menuCloseTimer !== null) {
+            clearTimeout(this.menuCloseTimer);
+            this.menuCloseTimer = null;
+        }
+        this.el.toolbarMenu.hidden = false;
+        this.el.toolbarMenu.setAttribute('aria-hidden', 'false');
+        this.el.toolbarMenu.classList.remove('is-closing');
+        void this.el.toolbarMenu.offsetWidth;
+        this.el.toolbarMenu.classList.add('is-open');
+        this.el.toolbarActions?.classList.add('menu-open');
+        this.el.toolbarTrigger.setAttribute('aria-expanded', 'true');
+
+        if (focus) {
+            this.getMenuItems()[0]?.focus();
+        }
+    }
+
+    closeActionsMenu({ restoreFocus = false } = {}) {
+        if (!this.el.toolbarMenu || !this.el.toolbarTrigger || !this.el.toolbarMenu.classList.contains('is-open')) return;
+
+        this.el.toolbarMenu.classList.remove('is-open');
+        this.el.toolbarMenu.classList.add('is-closing');
+        this.el.toolbarMenu.setAttribute('aria-hidden', 'true');
+        this.el.toolbarActions?.classList.remove('menu-open');
+        this.el.toolbarTrigger.setAttribute('aria-expanded', 'false');
+
+        const closeDuration = Number.parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue('--dropdown-close-dur')
+        ) || 150;
+        this.menuCloseTimer = setTimeout(() => {
+            this.el.toolbarMenu?.classList.remove('is-closing');
+            if (this.el.toolbarMenu) this.el.toolbarMenu.hidden = true;
+            this.menuCloseTimer = null;
+        }, closeDuration);
+
+        if (restoreFocus) {
+            this.el.toolbarTrigger.focus();
+        }
+    }
+
+    toggleActionsMenu() {
+        if (this.el.toolbarMenu?.classList.contains('is-open')) {
+            this.closeActionsMenu();
+        } else {
+            this.openActionsMenu();
+        }
+    }
+
+    handleTriggerKeydown(event) {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+
+        event.preventDefault();
+        this.openActionsMenu({ focus: true });
+        if (event.key === 'ArrowUp') {
+            this.getMenuItems().at(-1)?.focus();
+        }
+    }
+
+    handleMenuKeydown(event) {
+        const menuItems = this.getMenuItems();
+        const currentIndex = menuItems.indexOf(document.activeElement);
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closeActionsMenu({ restoreFocus: true });
+            return;
+        }
+
+        if (event.key === 'Tab') {
+            this.closeActionsMenu();
+            return;
+        }
+
+        const keyTargets = {
+            ArrowDown: currentIndex < 0 ? 0 : (currentIndex + 1) % menuItems.length,
+            ArrowUp: currentIndex < 0 ? menuItems.length - 1 : (currentIndex - 1 + menuItems.length) % menuItems.length,
+            Home: 0,
+            End: menuItems.length - 1,
+        };
+        const targetIndex = keyTargets[event.key];
+        if (targetIndex === undefined || !menuItems[targetIndex]) return;
+
+        event.preventDefault();
+        menuItems[targetIndex].focus();
     }
 
     setStatus(message) {
@@ -131,6 +252,7 @@ class ComputerWorkspace {
     }
 
     closePanel() {
+        this.closeActionsMenu({ restoreFocus: false });
         if (window.stateManager?.setState) {
             window.stateManager.setState({ isComputerWorkspaceOpen: false });
         } else {
