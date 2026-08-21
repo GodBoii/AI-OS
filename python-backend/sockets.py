@@ -31,6 +31,7 @@ from plan_agent import stream_plan
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
+from model_routing import ModelRoutingError, normalize_thinking_mode, resolve_primary_model
 from cache_manager import CacheManager
 from socket_security import can_access_conversation, safe_socket_message_metadata
 from utils import get_user_from_jwt
@@ -115,6 +116,10 @@ def _sanitize_tool_config_for_user(config_data: Dict[str, Any], user_id: str) ->
     truth, so enabled third-party tools must be gated by stored integrations.
     """
     sanitized = dict(config_data or {})
+    # Model selection is server-owned. Never accept model routing metadata from clients.
+    sanitized.pop("model_id", None)
+    sanitized.pop("primary_model_route", None)
+    sanitized.pop("thinking_mode", None)
 
     try:
         response = (
@@ -750,6 +755,32 @@ def on_send_message(data: str):
         requested_coder_target = _normalize_coder_execution_target(
             data.get("coder_execution_target") or (data.get("config", {}) or {}).get("coder_execution_target")
         )
+        requested_thinking_mode = normalize_thinking_mode(data.get("thinking_mode"))
+        incoming_files = data.get("files", [])
+        if not isinstance(incoming_files, list):
+            incoming_files = []
+
+        existing_session = connection_manager_service.get_session(conversation_id) or {}
+        existing_session_config = existing_session.get("config", {})
+        if not isinstance(existing_session_config, dict):
+            existing_session_config = {}
+        try:
+            model_selection = resolve_primary_model(
+                thinking_mode=requested_thinking_mode,
+                files=incoming_files,
+                sticky_route=existing_session_config.get("primary_model_route"),
+            )
+        except ModelRoutingError as exc:
+            return socketio.emit(
+                "error",
+                {
+                    "message": str(exc),
+                    "code": exc.code,
+                    "recoverable": True,
+                },
+                room=sid,
+            )
+
         workspace_context = data.get("workspace_context")
         if not isinstance(workspace_context, dict):
             workspace_context = {}
@@ -759,12 +790,14 @@ def on_send_message(data: str):
             str(user.id),
         )
 
-        if not connection_manager_service.get_session(conversation_id):
+        if not existing_session:
             device_type = data.get("deviceType", "web")
             session_config = dict(incoming_config)
             session_config["agent_mode"] = requested_agent_mode
             session_config["coder_execution_target"] = requested_coder_target
             session_config["workspace_context"] = workspace_context
+            if model_selection.sticky_route:
+                session_config["primary_model_route"] = model_selection.sticky_route
             connection_manager_service.create_session(
                 conversation_id,
                 str(user.id),
@@ -787,6 +820,8 @@ def on_send_message(data: str):
             session_config["agent_mode"] = requested_agent_mode
             session_config["coder_execution_target"] = requested_coder_target
             session_config["workspace_context"] = workspace_context
+            if model_selection.sticky_route:
+                session_config["primary_model_route"] = model_selection.sticky_route
             session_data["config"] = session_config
             connection_manager_service.redis_client.set(
                 f"session:{conversation_id}",
@@ -815,14 +850,15 @@ def on_send_message(data: str):
 
         turn_data = {
             "user_message": data.get("message", ""),
-            "files": data.get("files", []),
+            "files": incoming_files,
             "coder_execution_target": requested_coder_target,
+            "thinking_mode": requested_thinking_mode,
         }
         context_session_ids = data.get("context_session_ids", [])
         message_id = data.get("id") or str(uuid.uuid4())
 
         # --- Register user-uploaded files in session_content for persistence ---
-        files = data.get("files", [])
+        files = incoming_files
         if files:
             try:
                 from sandbox_persistence import get_persistence_service
