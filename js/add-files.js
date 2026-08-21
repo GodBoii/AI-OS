@@ -1,7 +1,10 @@
 // add-files.js (Corrected with proper URL, Race Condition Fix, and Drag & Drop Support)
 
 class FileAttachmentHandler {
-    constructor(socket, supportedFileTypes, maxFileSize) {
+    constructor(socket, supportedFileTypes, maxFileSize, options = {}) {
+        this.validateAttachment = typeof options.validateAttachment === 'function'
+            ? options.validateAttachment
+            : null;
         this.supportedFileTypes = supportedFileTypes || {
             // Text / code files (content sent inline with query)
             'txt': 'text/plain', 'js': 'text/javascript', 'jsx': 'text/javascript',
@@ -478,6 +481,15 @@ class FileAttachmentHandler {
         }
 
         for (const file of files) {
+            const policyResult = this.validateAttachment ? this.validateAttachment(file) : null;
+            if (policyResult === false || typeof policyResult === 'string' || policyResult?.allowed === false) {
+                const message = typeof policyResult === 'string'
+                    ? policyResult
+                    : policyResult?.message || `File is not allowed: ${file.name}`;
+                alert(message);
+                continue;
+            }
+
             if (file.size > this.maxFileSize) {
                 alert(`File too large: ${file.name} (max size: ${Math.round(this.maxFileSize / 1024 / 1024)}MB)`);
                 continue;
