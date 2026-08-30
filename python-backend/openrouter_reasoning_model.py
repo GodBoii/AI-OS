@@ -1,11 +1,15 @@
+import base64
+import mimetypes
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from pydantic import BaseModel
 
 from agno.models.openrouter import OpenRouter
+from agno.models.message import Message
 from agno.models.response import ModelResponse
 
 
@@ -14,17 +18,16 @@ def _read_reasoning_config() -> Optional[Dict[str, Any]]:
     if enabled in {"0", "false", "no", "off"}:
         return None
 
-    config: Dict[str, Any] = {"enabled": True, "exclude": False}
+    config: Dict[str, Any] = {"effort": "xhigh", "exclude": False}
 
     effort = os.getenv("OPENROUTER_REASONING_EFFORT")
     if effort:
-        config.pop("enabled", None)
         config["effort"] = effort.strip()
 
     max_tokens = os.getenv("OPENROUTER_REASONING_MAX_TOKENS")
     if max_tokens:
         try:
-            config.pop("enabled", None)
+            config.pop("effort", None)
             config["max_tokens"] = int(max_tokens)
         except ValueError:
             pass
@@ -79,6 +82,34 @@ class OpenRouterReasoning(OpenRouter):
     """
 
     reasoning: Optional[Dict[str, Any]] = None
+
+    def _format_message(self, message: Message, compress_tool_results: bool = False) -> Dict[str, Any]:
+        videos = list(message.videos or [])
+        message_without_videos = message.model_copy(update={"videos": None}) if videos else message
+        try:
+            message_dict = super()._format_message(
+                message_without_videos,
+                compress_tool_results=compress_tool_results,
+            )
+        except TypeError as exc:
+            if "compress_tool_results" not in str(exc):
+                raise
+            message_dict = super()._format_message(message_without_videos)
+
+        if videos:
+            content = message_dict.get("content")
+            if isinstance(content, str):
+                content = [{"type": "text", "text": content}]
+            elif not isinstance(content, list):
+                content = []
+
+            for video in videos:
+                video_url = _openrouter_video_url(video)
+                if video_url:
+                    content.append({"type": "video_url", "video_url": {"url": video_url}})
+            message_dict["content"] = content
+
+        return message_dict
 
     def get_request_params(
         self,
@@ -146,3 +177,39 @@ class OpenRouterReasoning(OpenRouter):
 
 def get_openrouter_model(model: str = "xiaomi/mimo-v2.5", **kwargs: Any) -> OpenRouterReasoning:
     return OpenRouterReasoning(id=model, **kwargs)
+
+
+def _openrouter_video_url(video: Any) -> Optional[str]:
+    url = getattr(video, "url", None)
+    if url:
+        return str(url)
+
+    content = getattr(video, "content", None)
+    filepath = getattr(video, "filepath", None)
+    if content is None and filepath:
+        content = Path(filepath).read_bytes()
+    if not content:
+        return None
+
+    mime_type = _video_mime_type(video)
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _video_mime_type(video: Any) -> str:
+    mime_type = getattr(video, "mime_type", None)
+    if mime_type:
+        return str(mime_type)
+
+    format_hint = getattr(video, "format", None)
+    name_hint = getattr(video, "name", None)
+    filepath = getattr(video, "filepath", None)
+    if format_hint:
+        suffix = f".{str(format_hint).lstrip('.')}"
+    else:
+        candidate = str(name_hint or filepath or "video.mp4")
+        suffix = candidate if candidate.startswith(".") else Path(candidate).suffix
+    guessed_type = mimetypes.guess_type(f"video{suffix}")[0]
+    if guessed_type == "video/quicktime":
+        return "video/mov"
+    return guessed_type or "video/mp4"
