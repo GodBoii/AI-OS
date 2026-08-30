@@ -1,6 +1,4 @@
 from agno.agent import Agent, AgentMemory
-from agno.models.google import Gemini
-from agno.models.groq import Groq
 from agno.storage.json import JsonStorage
 from agno.memory.db.sqlite import SqliteMemoryDb
 from agno.memory.classifier import MemoryClassifier
@@ -15,6 +13,9 @@ from agno.media import Image, Audio, Video
 from typing import List, Optional, Dict, Any, Union
 import base64
 import requests
+
+from model_routing import DEFAULT_MODEL_ID
+from openrouter_reasoning_model import get_openrouter_model
 
 def get_deepsearch(
     ddg_search: bool = False,
@@ -48,8 +49,8 @@ def get_deepsearch(
     # Configure memory
     if use_memory:
         memory = AgentMemory(
-            classifier=MemoryClassifier(model=Gemini(id="gemini-2.0-flash")),
-            summarizer=MemorySummarizer(model=Gemini(id="gemini-2.0-flash")),
+            classifier=MemoryClassifier(model=get_openrouter_model(DEFAULT_MODEL_ID)),
+            summarizer=MemorySummarizer(model=get_openrouter_model(DEFAULT_MODEL_ID)),
             db=SqliteMemoryDb(table_name="ai_os_agent_memory", db_file="storage/tmp/aios_memory.db"),
             create_user_memories=True,
             create_session_summary=use_session_summaries
@@ -88,7 +89,7 @@ def get_deepsearch(
     if python_assistant:
         python = Agent(
             name="Python Assistant",
-            model=Gemini(id="gemini-2.0-flash"),
+            model=get_openrouter_model(DEFAULT_MODEL_ID),
             tools=[PythonTools()],
             role="Python agent",
             instructions=["you can write and run python code to fulfill users request"],
@@ -101,7 +102,7 @@ def get_deepsearch(
     if web_crawler:
         crawler = Agent(
             name="Crawler",
-            model=Gemini(id="gemini-2.0-flash"),
+            model=get_openrouter_model(DEFAULT_MODEL_ID),
             description="for the given url crawl the page and extract the text",
             tools=[Crawl4aiTools(max_length=None)],
             show_tool_calls=True,
@@ -161,7 +162,7 @@ def get_deepsearch(
                     "   - Think critically and evaluate the information you gather from different sources. Do not simply repeat information without considering its validity and reliability.",
                     ],
         team=team,
-        model=Gemini(id="gemini-2.0-flash"),
+        model=get_openrouter_model(DEFAULT_MODEL_ID),
         reasoning=False,
         markdown=True,
         storage=JsonStorage(dir_path="storage/tmp/deepsearch_agent_sessions.json"),
