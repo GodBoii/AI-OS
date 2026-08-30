@@ -5,9 +5,10 @@ from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Optional
 
 
-DEFAULT_MODEL_ID = "openai/gpt-5.6-luna"
-ULTRA_MODEL_ID = "openai/gpt-5.6-luna-pro"
-VIDEO_MODEL_ID = "google/gemini-3.7-flash"
+GLM_MODEL_ID = "z-ai/glm-5.3-flash"
+DEFAULT_MODEL_ID = GLM_MODEL_ID
+ULTRA_MODEL_ID = GLM_MODEL_ID
+VIDEO_MODEL_ID = GLM_MODEL_ID
 
 STANDARD_THINKING_MODE = "standard"
 ULTRA_THINKING_MODE = "ultra"
@@ -69,9 +70,9 @@ def resolve_primary_model(
     """
     Select the active top-level agent model.
 
-    Normal Luna conversations may be promoted by their first special input.
-    Once promoted to the video or Ultra route, the conversation keeps that
-    primary model for later turns and cannot switch to the incompatible route.
+    Standard conversations may be promoted by their first special input.
+    The route remains sticky for later turns even though Standard, video, and
+    Ultra currently share the same GLM model.
     """
     normalized_mode = normalize_thinking_mode(thinking_mode)
     normalized_route = normalize_sticky_route(sticky_route)
