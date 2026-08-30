@@ -675,7 +675,13 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
                 elif file_type.startswith('audio/'):
                     audio.append(Audio(content=file_bytes, format=file_type.split('/')[-1], name=file_name))
                 elif is_video_attachment(file_data):
-                    videos.append(Video(content=file_bytes, name=file_name))
+                    videos.append(
+                        Video(
+                            content=file_bytes,
+                            name=file_name,
+                            mime_type=file_type if file_type.startswith("video/") else None,
+                        )
+                    )
                 else:
                     safe_mime_type = _normalize_agno_mime_type(file_name=file_name, file_type=file_type)
                     if safe_mime_type != file_type:
