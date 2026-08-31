@@ -631,6 +631,9 @@ class AIOS {
             if (this.elements.settingsAvatarContainer) {
                 this.elements.settingsAvatarContainer.appendChild(icon);
             }
+            // The reset above wiped the animated rail icon along with the old
+            // avatar, so it has to be remounted.
+            window.animatedIcons?.refresh();
             // The identity card will be hidden by updateAuthUI, so no need to add an icon there.
             return;
         }
@@ -665,6 +668,10 @@ class AIOS {
                 container.appendChild(initialsDiv);
             }
         });
+
+        // A real avatar takes over the rail button, so this either unmounts the
+        // animated gear or leaves it in place, depending on what landed there.
+        window.animatedIcons?.refresh();
 
         // 2. Update Name/Email in Identity Card
         if (name) {
@@ -3093,10 +3100,33 @@ class AIOS {
             settingsPanel.innerHTML = `
                 <h3 class="tab-heading">Settings</h3>
 
+                <!-- Appearance Section -->
+                <section class="settings-card" aria-labelledby="settings-appearance-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon" data-settings-icon="appearance"><i class="fas fa-magic"></i></div>
+                        <div>
+                            <h4 id="settings-appearance-title" class="settings-card-title">Appearance</h4>
+                            <p class="settings-card-desc">How Aetheria ai looks and moves.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Animated Icons</span>
+                                <span class="settings-toggle-hint">Replace the icons in the sidebar, window controls, chat composer, workspaces and this window with animated ones. They loop gently, speed up on hover, and follow your current theme. Held still if your system asks for reduced motion.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-appearance-animated-icons">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Notifications Section -->
                 <section class="settings-card" aria-labelledby="settings-notif-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fi fi-tr-bell-ring"></i></div>
+                        <div class="settings-card-icon" data-settings-icon="notifications"><i class="fi fi-tr-bell-ring"></i></div>
                         <div>
                             <h4 id="settings-notif-title" class="settings-card-title">Notifications</h4>
                             <p class="settings-card-desc">Control how Aetheria ai notifies you about agent activity.</p>
@@ -3159,7 +3189,7 @@ class AIOS {
                 <!-- Keyboard Shortcuts Section -->
                 <section class="settings-card" aria-labelledby="settings-kb-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fi fi-tr-keyboard"></i></div>
+                        <div class="settings-card-icon" data-settings-icon="shortcuts"><i class="fi fi-tr-keyboard"></i></div>
                         <div>
                             <h4 id="settings-kb-title" class="settings-card-title">Keyboard Shortcuts</h4>
                             <p class="settings-card-desc">Quick actions via keyboard. Press <kbd style="background:var(--accent-muted);padding:2px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;">Ctrl + /</kbd> anytime.</p>
@@ -3183,7 +3213,7 @@ class AIOS {
                 <!-- General Section -->
                 <section class="settings-card" aria-labelledby="settings-general-title">
                     <div class="settings-card-header">
-                        <div class="settings-card-icon"><i class="fi fi-tr-customization-cogwheel"></i></div>
+                        <div class="settings-card-icon" data-settings-icon="general"><i class="fi fi-tr-customization-cogwheel"></i></div>
                         <div>
                             <h4 id="settings-general-title" class="settings-card-title">General</h4>
                             <p class="settings-card-desc">App behavior and preferences.</p>
@@ -3209,6 +3239,10 @@ class AIOS {
 
         // Re-query tabs/tabContents so the new elements are picked up by cacheElements
         this.initSettingsListeners();
+
+        // The nav button and card headers above only exist now, so the animated
+        // icon manager has to be told to look again.
+        window.animatedIcons?.refresh();
     }
 
     initSettingsListeners() {
@@ -3230,6 +3264,11 @@ class AIOS {
             const c = document.getElementById(id);
             if (!c) continue;
             c.checked = !!nS[key];
+            // switchTab('settings') calls this function again every time the tab
+            // is opened. Without this guard each visit stacks another change
+            // listener on the same checkbox.
+            if (c.dataset.settingsBound === '1') continue;
+            c.dataset.settingsBound = '1';
             c.addEventListener('change', () => {
                 nS[key] = c.checked;
                 try { localStorage.setItem(NK, JSON.stringify(nS)); } catch(_e){}
@@ -3250,26 +3289,33 @@ class AIOS {
         // â”€â”€ General Settings â”€â”€
         let gs = {};
         try { const r = localStorage.getItem(GK); if (r) gs = JSON.parse(r); } catch(_e){}
-        const gS = { minimizeToTray: false, launchAtStartup: false, alwaysOnTop: false, autoCheckUpdates: true, ...gs };
+        const gS = { minimizeToTray: false, launchAtStartup: false, alwaysOnTop: false, autoCheckUpdates: true, animatedIcons: false, ...gs };
         const gM = {
             'settings-general-tray': { key: 'minimizeToTray', ipc: 'set-minimize-to-tray' },
             'settings-general-startup': { key: 'launchAtStartup', ipc: 'set-launch-at-startup' },
             'settings-general-always-on-top': { key: 'alwaysOnTop', ipc: 'set-always-on-top' },
             'settings-general-auto-update': { key: 'autoCheckUpdates', ipc: null },
+            'settings-appearance-animated-icons': { key: 'animatedIcons', ipc: null },
         };
         for (const [id, cfg] of Object.entries(gM)) {
             const c = document.getElementById(id);
             if (!c) continue;
             c.checked = !!gS[cfg.key];
+            if (c.dataset.settingsBound === '1') continue;
+            c.dataset.settingsBound = '1';
             c.addEventListener('change', () => {
                 gS[cfg.key] = c.checked;
                 try { localStorage.setItem(GK, JSON.stringify(gS)); } catch(_e){}
                 if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, c.checked);
                 if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = c.checked;
+                if (cfg.key === 'animatedIcons') window.animatedIcons?.setEnabled(c.checked);
             });
             // Apply initial state on load
             if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, gS[cfg.key]);
             if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = gS[cfg.key];
+            // animatedIcons is deliberately not applied here: animated-icons.js
+            // already read the stored value before first paint, and re-applying
+            // would replay the introduction animation on every settings visit.
         }
     }
 
