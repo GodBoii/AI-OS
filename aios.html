@@ -797,21 +797,17 @@
                                 <i class="fi fi-tr-check-circle"></i>
                             </div>
                             <div class="update-info">
-                                <h4 id="update-status-title">Checking for updates...</h4>
-                                <p id="update-status-message">Please wait while we check for the latest version.</p>
-                                <p class="current-version">Current Version: <span id="current-version-display">1.2.24</span></p>
+                                <h4 id="update-status-title">Software updates</h4>
+                                <p id="update-status-message">Check whether a newer version is available.</p>
+                                <p class="current-version">Current Version: <span id="current-version-display">&mdash;</span></p>
                                 <p class="last-check">Last checked: <span id="last-check-time">Never</span></p>
+                                <div id="update-progress" class="update-progress hidden" role="progressbar" aria-label="Update download progress"><div id="update-progress-bar" class="update-progress-bar"></div></div>
                             </div>
                         </div>
 
                         <div id="update-details" class="update-details hidden">
                             <h4>What's New in v<span id="new-version-number"></span></h4>
                             <div id="release-notes-content" class="release-notes"></div>
-                            
-                            <div class="download-options">
-                                <h5>Download Options:</h5>
-                                <div id="download-links" class="download-links-grid"></div>
-                            </div>
                         </div>
 
                         <div class="update-actions">
@@ -819,10 +815,7 @@
                                 <i class="fi fi-tr-refresh"></i>
                                 Check for Updates
                             </button>
-                            <button class="btn-primary hidden" id="download-update-btn">
-                                <i class="fi fi-tr-download"></i>
-                                Download Update
-                            </button>
+                            <button class="btn-primary hidden" id="update-action-btn"></button>
                         </div>
                     </div>
                 </div>
