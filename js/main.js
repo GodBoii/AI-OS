@@ -11,6 +11,7 @@ const ComputerControlHandler = require('./computer-control-handler.js');
 const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
 const WindowsNativeSpeechService = require('./windows-native-speech-service.js');
+const { initUpdater } = require('./updater.js');
 
 let mainWindow;
 let appTray = null;
@@ -991,6 +992,8 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
         event.reply('save-file-result', { success: false, error: error.message });
     }
 });
+
+initUpdater(() => mainWindow);
 
 app.whenReady().then(createWindow);
 
