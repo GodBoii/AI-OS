@@ -114,61 +114,25 @@
     text-decoration: underline;
 }
 
-.download-options {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-color);
+/* Download progress. Only visible while an update is being fetched. */
+.update-progress {
+    margin-top: 14px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-color);
+    overflow: hidden;
 }
 
-.download-links-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    margin-top: 12px;
+.update-progress.hidden {
+    display: none;
 }
 
-.download-link {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    background: var(--hover-bg, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    text-decoration: none;
-    color: var(--text-color);
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.download-link:hover {
-    background: var(--hover-bg-strong, rgba(255, 255, 255, 0.1));
-    border-color: var(--primary-color);
-    transform: translateY(-2px);
-}
-
-.download-link.recommended {
-    border-color: var(--primary-color);
-    background: rgba(var(--primary-color-rgb, 0, 123, 255), 0.1);
-}
-
-.platform-icon {
-    font-size: 24px;
-}
-
-.platform-name {
-    flex: 1;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.recommended-badge {
-    font-size: 11px;
-    padding: 2px 8px;
+.update-progress-bar {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
     background: var(--primary-color);
-    color: var(--action-primary-fg);
-    border-radius: 12px;
-    font-weight: 600;
+    transition: width 200ms ease-out;
 }
 
 .update-actions {
