@@ -96,7 +96,9 @@ const validReceiveChannels = [
     // Conversation title from backend
     'conversation_title',
     // Settings responses
-    'setting-changed'
+    'setting-changed',
+    // Update download/install progress
+    'updater-event'
 ];
 
 const validInvokeChannels = [
@@ -121,7 +123,8 @@ const validInvokeChannels = [
     'project-local-terminal-start',
     'project-local-terminal-send',
     'project-local-terminal-resize',
-    'project-local-terminal-stop'
+    'project-local-terminal-stop',
+    'updater-action'
 ];
 
 // Expose protected methods to the renderer process
