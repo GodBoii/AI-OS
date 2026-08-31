@@ -103,13 +103,19 @@ function parseTrustedDeepLink(rawUrl) {
     return null;
 }
 
+// Brings the main window back from any hidden/minimized state. Returns false when
+// there is no usable window. `show()` is required because "minimize to tray" hides
+// the window rather than minimizing it, so isMinimized()/focus() alone are no-ops.
+function showMainWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return true;
+}
+
 function handleDeepLink(url) {
     console.log('[main.js] >>> handleDeepLink function triggered.');
-
-    if (!mainWindow) {
-        console.error('[main.js] >>> Error: mainWindow is not available. The app might still be launching.');
-        return;
-    }
 
     const trustedLink = parseTrustedDeepLink(url);
     if (!trustedLink) {
@@ -118,10 +124,10 @@ function handleDeepLink(url) {
     }
 
     // Bring the app window to the front, this is crucial.
-    if (mainWindow.isMinimized()) {
-        mainWindow.restore();
+    if (!showMainWindow()) {
+        console.error('[main.js] >>> Error: mainWindow is not available. The app might still be launching.');
+        return;
     }
-    mainWindow.focus();
 
     if (trustedLink.type === 'integration-callback') {
         const params = trustedLink.parsed.searchParams;
@@ -164,10 +170,9 @@ if (!gotTheLock) {
         if (deepLinkUrl) {
             console.log('[main.js] >>> Deep link found in second instance arguments.');
             handleDeepLink(deepLinkUrl);
-        } else if (mainWindow) {
-            // If it wasn't a deep link, just focus the existing window.
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
+        } else {
+            // If it wasn't a deep link, just surface the existing window.
+            showMainWindow();
         }
     });
 
@@ -199,13 +204,7 @@ function createSystemTray() {
         const contextMenu = Menu.buildFromTemplate([
             {
                 label: 'Show Aetheria ai',
-                click: () => {
-                    if (mainWindow) {
-                        mainWindow.show();
-                        if (mainWindow.isMinimized()) mainWindow.restore();
-                        mainWindow.focus();
-                    }
-                }
+                click: () => { showMainWindow(); }
             },
             { type: 'separator' },
             {
@@ -217,13 +216,7 @@ function createSystemTray() {
             }
         ]);
         appTray.setContextMenu(contextMenu);
-        appTray.on('double-click', () => {
-            if (mainWindow) {
-                mainWindow.show();
-                if (mainWindow.isMinimized()) mainWindow.restore();
-                mainWindow.focus();
-            }
-        });
+        appTray.on('double-click', () => { showMainWindow(); });
         console.log('[Tray] System tray created successfully');
     } catch (error) {
         console.error('[Tray] Error creating system tray:', error);
