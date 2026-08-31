@@ -1307,6 +1307,8 @@ class UIManager {
         pill.classList.toggle('workspace-pill-coder', showProject);
         pill.classList.toggle('workspace-pill-computer', showComputer);
 
+        window.animatedIcons?.setIcon('#active-workspace-pill', showComputer ? 'monitor' : 'code');
+
         if (showProject) {
             label.textContent = 'Coder Workspace';
             icon.className = 'fas fa-code active-workspace-pill-icon';
@@ -1328,15 +1330,22 @@ class UIManager {
 
     updateTheme(isDarkMode) {
         document.body.classList.toggle('dark-mode', isDarkMode);
-        if (this.elements.themeToggle) {
-            this.elements.themeToggle.querySelector('i').className = isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
+        // The <i> is still the source of truth even when animated icons are on:
+        // animated-icons.js hides it rather than removing it, so this keeps the
+        // static icon correct for the moment the preference is switched off.
+        const themeIcon = this.elements.themeToggle?.querySelector('i');
+        if (themeIcon) {
+            themeIcon.className = isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
         }
+        window.animatedIcons?.setIcon('#theme-toggle', isDarkMode ? 'sun' : 'moon');
     }
 
     updateWindowControls(isMaximized) {
-        if (this.elements.resizeBtn) {
-            this.elements.resizeBtn.querySelector('i').className = isMaximized ? 'fas fa-compress' : 'fas fa-expand';
+        const resizeIcon = this.elements.resizeBtn?.querySelector('i');
+        if (resizeIcon) {
+            resizeIcon.className = isMaximized ? 'fas fa-compress' : 'fas fa-expand';
         }
+        window.animatedIcons?.setIcon('#resize-window', isMaximized ? 'restore' : 'maximize');
     }
 
     updateChatVisibility(isOpen) {
@@ -1347,8 +1356,14 @@ class UIManager {
     /** Keeps a rail icon's selected look and its accessible toggle state in sync. */
     setSidebarIconState(icon, isActive) {
         if (!icon) return;
+        const wasActive = icon.classList.contains('active');
         icon.classList.toggle('active', isActive);
         icon.setAttribute('aria-pressed', String(isActive));
+        // Replay the animated icon on the transition into active so opening a
+        // panel reads as a deliberate action, not just a colour change.
+        if (isActive && !wasActive) {
+            window.animatedIcons?.play(icon.querySelector('.anim-icon'));
+        }
     }
 
     updateAIOSVisibility(isOpen) {
@@ -1545,6 +1560,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     ]);
 
     uiManager.cacheElements();
+    // The settings window markup only exists now that loadModule has run.
+    window.animatedIcons?.refresh();
     const initialState = stateManager.getState();
     uiManager.updateTheme(initialState.isDarkMode);
     uiManager.updateChatVisibility(initialState.isChatOpen);
