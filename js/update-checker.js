@@ -23,27 +23,42 @@ class UpdateChecker {
     }
 
     async init() {
-        this.ipc = window.electron?.ipcRenderer;
-        if (!this.ipc) {
+        if (this.ipc) return; // Already initialised; never stack listeners twice.
+
+        const ipc = window.electron?.ipcRenderer;
+        if (!ipc) {
             console.warn('Update checker: IPC bridge unavailable');
             return;
         }
+        this.ipc = ipc;
 
-        const result = await this.ipc.invoke('updater-action', { action: 'version' });
-        this.currentVersion = result?.version || '';
-
-        this.ipc.receive('updater-event', (payload) => this.onUpdaterEvent(payload));
+        // Listeners go up before any await so a slow or failing main process
+        // cannot leave the Updates tab permanently inert.
+        this.ipc.on('updater-event', (payload) => this.onUpdaterEvent(payload));
 
         // The Settings markup is injected asynchronously by renderer.js, so the
         // buttons do not exist yet. Delegate from document, in the capture phase
-        // so nothing inside the settings window can swallow the click.
+        // so nothing inside the settings window can swallow the click. Opening
+        // the tab re-renders, which is how state set before the markup existed
+        // reaches the screen.
         document.addEventListener('click', (event) => {
             if (event.target.closest?.('#check-updates-btn')) this.check(false);
             else if (event.target.closest?.('#update-action-btn')) this.runAction();
+            else if (event.target.closest?.('[data-tab="updates"]')) this.render();
         }, true);
 
         setTimeout(() => { if (this.autoCheckEnabled) this.check(true); }, 8000);
         setInterval(() => { if (this.autoCheckEnabled) this.check(true); }, this.checkInterval);
+
+        const status = await this.ipc.invoke('updater-action', { action: 'version' });
+        this.currentVersion = status?.version || '';
+
+        if (status?.downloadedVersion) {
+            this.info = { version: status.downloadedVersion, releaseNotes: null };
+            this.setState('downloaded');
+        } else {
+            this.render();
+        }
     }
 
     async check(silent) {
@@ -96,7 +111,8 @@ class UpdateChecker {
                 this.setState('up-to-date');
                 break;
             case 'progress':
-                this.percent = Math.round(payload.percent || 0);
+                // Main already collapsed these to whole percents.
+                this.percent = payload.percent || 0;
                 this.setState('downloading');
                 break;
             case 'downloaded':
@@ -146,12 +162,15 @@ class UpdateChecker {
     render() {
         const el = (id) => document.getElementById(id);
         const title = el('update-status-title');
-        if (!title) return; // Settings markup not injected yet.
-
-        const view = this.view();
         const icon = el('update-icon');
         const actionBtn = el('update-action-btn');
         const progress = el('update-progress');
+
+        // Every element below lives in the same injected fragment, so one gate
+        // covers them all. Missing means Settings has not loaded yet.
+        if (!title || !icon || !actionBtn || !progress) return;
+
+        const view = this.view();
 
         icon.innerHTML = `<i class="${view.icon}"></i>`;
         icon.style.color = view.color || '';
