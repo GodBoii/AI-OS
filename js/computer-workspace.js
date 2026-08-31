@@ -110,7 +110,7 @@ class ComputerWorkspace {
     }
 
     closeActionsMenu({ restoreFocus = false } = {}) {
-        if (!this.el.toolbarMenu || !this.el.toolbarTrigger || !this.el.toolbarMenu.classList.contains('is-open')) return;
+        if (!this.el?.toolbarMenu || !this.el.toolbarTrigger || !this.el.toolbarMenu.classList.contains('is-open')) return;
 
         this.el.toolbarMenu.classList.remove('is-open');
         this.el.toolbarMenu.classList.add('is-closing');
