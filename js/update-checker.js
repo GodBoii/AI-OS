@@ -1,179 +1,186 @@
 /**
- * Update Checker Service
- * Checks for new versions and notifies users
+ * Update checker (renderer side).
+ *
+ * Downloading and installing happens in the main process (js/updater.js). This
+ * file only drives the Updates tab in Settings and the "update available" toast.
+ * Builds that cannot update themselves (dev runs, .deb/.rpm, unsigned macOS)
+ * fall back to the releases page.
  */
+
+const RELEASES_PAGE = 'https://github.com/GodBoii/AI-OS-website/releases/latest';
 
 class UpdateChecker {
     constructor() {
-        this.currentVersion = '1.2.26'; // Keep in sync with package.json
-        this.githubRepo = 'GodBoii/AI-OS-website'; // Repository where releases are published
-        this.updateCheckUrl = `https://api.github.com/repos/${this.githubRepo}/releases/latest`;
-        this.checkInterval = 3600000; // Check every hour (in milliseconds)
+        this.currentVersion = '';
+        this.state = 'idle';
+        this.info = null;
+        this.percent = 0;
+        this.error = null;
         this.lastCheckTime = null;
-        this.latestUpdateData = null; // Store latest update info
-        this.updateAvailable = false;
+        this.silentCheck = true;
+        this.checkInterval = 3600000;
         this.autoCheckEnabled = true; // Controlled by settings
     }
 
-    /**
-     * Initialize the update checker
-     */
-    init() {
-        // Check on startup (after 10 seconds delay)
-        setTimeout(() => {
-            if (this.autoCheckEnabled) this.checkForUpdates();
-        }, 10000);
+    async init() {
+        this.ipc = window.electron?.ipcRenderer;
+        if (!this.ipc) {
+            console.warn('Update checker: IPC bridge unavailable');
+            return;
+        }
 
-        // Check periodically
-        setInterval(() => {
-            if (this.autoCheckEnabled) this.checkForUpdates();
-        }, this.checkInterval);
+        const result = await this.ipc.invoke('updater-action', { action: 'version' });
+        this.currentVersion = result?.version || '';
 
-        // Setup UI event listeners
-        this.setupUIListeners();
+        this.ipc.receive('updater-event', (payload) => this.onUpdaterEvent(payload));
 
-        console.log('Update checker initialized');
+        // The Settings markup is injected asynchronously by renderer.js, so the
+        // buttons do not exist yet. Delegate from document, in the capture phase
+        // so nothing inside the settings window can swallow the click.
+        document.addEventListener('click', (event) => {
+            if (event.target.closest?.('#check-updates-btn')) this.check(false);
+            else if (event.target.closest?.('#update-action-btn')) this.runAction();
+        }, true);
+
+        setTimeout(() => { if (this.autoCheckEnabled) this.check(true); }, 8000);
+        setInterval(() => { if (this.autoCheckEnabled) this.check(true); }, this.checkInterval);
     }
 
-    /**
-     * Setup UI event listeners for Updates tab
-     */
-    setupUIListeners() {
-        const checkBtn = document.getElementById('check-updates-btn');
-        const downloadBtn = document.getElementById('download-update-btn');
+    async check(silent) {
+        // A download in flight owns the UI; a background check must not reset it.
+        if (this.state === 'downloading' || this.state === 'downloaded') return;
 
-        if (checkBtn) {
-            checkBtn.addEventListener('click', () => this.manualCheck());
-        }
+        this.silentCheck = silent;
+        this.error = null;
+        this.lastCheckTime = new Date();
+        this.setState('checking');
 
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', () => {
-                if (this.latestUpdateData) {
-                    const downloadUrl = this.getDownloadUrl(this.latestUpdateData);
-                    window.open(downloadUrl, '_blank');
-                }
-            });
-        }
-    }
+        const result = await this.ipc.invoke('updater-action', { action: 'check' });
+        // On success the update-available / update-not-available event has
+        // already set the final state.
+        if (result?.ok) return;
 
-    /**
-     * Update the Updates tab UI
-     */
-    updateUI(status = 'checking') {
-        const icon = document.getElementById('update-icon');
-        const title = document.getElementById('update-status-title');
-        const message = document.getElementById('update-status-message');
-        const lastCheck = document.getElementById('last-check-time');
-        const currentVersionDisplay = document.getElementById('current-version-display');
-        const updateDetails = document.getElementById('update-details');
-        const downloadBtn = document.getElementById('download-update-btn');
-        const checkBtn = document.getElementById('check-updates-btn');
-
-        if (currentVersionDisplay) {
-            currentVersionDisplay.textContent = this.currentVersion;
-        }
-
-        if (lastCheck && this.lastCheckTime) {
-            const timeAgo = this.getTimeAgo(this.lastCheckTime);
-            lastCheck.textContent = timeAgo;
-        }
-
-        if (status === 'checking') {
-            if (icon) icon.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            if (title) title.textContent = 'Checking for updates...';
-            if (message) message.textContent = 'Please wait while we check for the latest version.';
-            if (updateDetails) updateDetails.classList.add('hidden');
-            if (downloadBtn) downloadBtn.classList.add('hidden');
-            if (checkBtn) checkBtn.disabled = true;
-        } else if (status === 'up-to-date') {
-            if (icon) {
-                icon.innerHTML = '<i class="fas fa-check-circle"></i>';
-                icon.style.color = '#4caf50';
-            }
-            if (title) title.textContent = 'You\'re up to date!';
-            if (message) message.textContent = `You have the latest version of Aetheria ai (v${this.currentVersion}).`;
-            if (updateDetails) updateDetails.classList.add('hidden');
-            if (downloadBtn) downloadBtn.classList.add('hidden');
-            if (checkBtn) checkBtn.disabled = false;
-        } else if (status === 'update-available') {
-            if (icon) {
-                icon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
-                icon.style.color = '#ff9800';
-            }
-            if (title) title.textContent = 'Update Available!';
-            if (message) message.textContent = `Version ${this.latestUpdateData.version} is now available.`;
-            if (updateDetails) {
-                updateDetails.classList.remove('hidden');
-                this.populateUpdateDetails();
-            }
-            if (downloadBtn) downloadBtn.classList.remove('hidden');
-            if (checkBtn) checkBtn.disabled = false;
-        } else if (status === 'error') {
-            if (icon) {
-                icon.innerHTML = '<i class="fas fa-times-circle"></i>';
-                icon.style.color = '#f44336';
-            }
-            if (title) title.textContent = 'Check Failed';
-            if (message) message.textContent = 'Unable to check for updates. Please try again later.';
-            if (updateDetails) updateDetails.classList.add('hidden');
-            if (downloadBtn) downloadBtn.classList.add('hidden');
-            if (checkBtn) checkBtn.disabled = false;
+        if (result?.code === 'unsupported') {
+            this.setState('unsupported');
+        } else {
+            this.error = result?.error || null;
+            this.setState('error');
         }
     }
 
-    /**
-     * Populate update details in the UI
-     */
-    populateUpdateDetails() {
-        const versionNumber = document.getElementById('new-version-number');
-        const releaseNotes = document.getElementById('release-notes-content');
-        const downloadLinks = document.getElementById('download-links');
-
-        if (!this.latestUpdateData) return;
-
-        if (versionNumber) {
-            versionNumber.textContent = this.latestUpdateData.version;
-        }
-
-        if (releaseNotes) {
-            releaseNotes.innerHTML = this.latestUpdateData.releaseNotes;
-        }
-
-        if (downloadLinks && this.latestUpdateData.downloads) {
-            downloadLinks.innerHTML = '';
-            const platform = this.detectPlatform();
-
-            const platformNames = {
-                'windows': { icon: '🪟', name: 'Windows' },
-                'linux-appimage': { icon: '🐧', name: 'Linux AppImage' },
-                'linux-deb': { icon: '🐧', name: 'Linux (Debian)' },
-                'linux-rpm': { icon: '🐧', name: 'Linux (RPM)' },
-                'mac': { icon: '🍎', name: 'macOS' }
-            };
-
-            Object.entries(this.latestUpdateData.downloads).forEach(([key, url]) => {
-                const info = platformNames[key] || { icon: '📦', name: key };
-                const isRecommended = (platform === 'windows' && key === 'windows') ||
-                    (platform === 'linux' && key === 'linux-appimage') ||
-                    (platform === 'mac' && key === 'mac');
-
-                const link = document.createElement('a');
-                link.href = url;
-                link.className = 'download-link' + (isRecommended ? ' recommended' : '');
-                link.target = '_blank';
-                link.innerHTML = `
-                    <span class="platform-icon">${info.icon}</span>
-                    <span class="platform-name">${info.name}</span>
-                    ${isRecommended ? '<span class="recommended-badge">Recommended</span>' : ''}
-                `;
-                downloadLinks.appendChild(link);
-            });
+    async runAction() {
+        if (this.state === 'available') {
+            this.percent = 0;
+            this.setState('downloading');
+            const result = await this.ipc.invoke('updater-action', { action: 'download' });
+            if (!result?.ok) {
+                this.error = result?.error || null;
+                this.setState('error');
+            }
+        } else if (this.state === 'downloaded') {
+            await this.ipc.invoke('updater-action', { action: 'install' });
+        } else {
+            window.electron?.shell?.openExternal(RELEASES_PAGE);
         }
     }
 
+    onUpdaterEvent(payload = {}) {
+        switch (payload.type) {
+            case 'available':
+                this.info = { version: payload.version, releaseNotes: payload.releaseNotes };
+                this.setState('available');
+                if (this.silentCheck) this.notifyUpdate(payload.version);
+                break;
+            case 'not-available':
+                this.info = null;
+                this.setState('up-to-date');
+                break;
+            case 'progress':
+                this.percent = Math.round(payload.percent || 0);
+                this.setState('downloading');
+                break;
+            case 'downloaded':
+                this.setState('downloaded');
+                break;
+            case 'error':
+                this.error = payload.error;
+                this.setState('error');
+                break;
+        }
+    }
+
+    setState(state) {
+        this.state = state;
+        this.render();
+    }
+
     /**
-     * Get time ago string
+     * Presentation for the current state. Keeping this separate from render()
+     * means the DOM writes below stay uniform regardless of state.
      */
+    view() {
+        const version = this.info?.version;
+
+        switch (this.state) {
+            case 'checking':
+                return { icon: 'fas fa-spinner fa-spin', title: 'Checking for updates...', message: 'Contacting the release server.', busy: true };
+            case 'up-to-date':
+                return { icon: 'fas fa-check-circle', color: '#4caf50', title: 'You\'re up to date', message: `Aetheria ai v${this.currentVersion} is the latest version.` };
+            case 'available':
+                return { icon: 'fas fa-arrow-circle-down', color: '#ff9800', title: 'Update available', message: `Version ${version} is ready to download.`, action: 'Download update', actionIcon: 'fi fi-tr-download' };
+            case 'downloading':
+                return { icon: 'fas fa-spinner fa-spin', color: '#ff9800', title: 'Downloading update', message: `Version ${version}, ${this.percent}% complete.`, busy: true, action: `Downloading ${this.percent}%`, actionIcon: 'fi fi-tr-download' };
+            case 'downloaded':
+                // Re-checking is pointless once the installer is on disk, so the
+                // check button stays disabled here too.
+                return { icon: 'fas fa-check-circle', color: '#4caf50', title: 'Update ready to install', message: `Version ${version} installs when the app restarts.`, busy: true, action: 'Restart and install', actionIcon: 'fi fi-tr-refresh' };
+            case 'unsupported':
+                return { icon: 'fas fa-info-circle', title: 'In-app updates unavailable', message: 'This build cannot install updates itself. Download the latest release manually.', action: 'Open releases page', actionIcon: 'fi fi-tr-download' };
+            case 'error':
+                return { icon: 'fas fa-times-circle', color: '#f44336', title: 'Update check failed', message: this.error || 'Could not reach the release server.', action: 'Open releases page', actionIcon: 'fi fi-tr-download' };
+            default:
+                return { icon: 'fi fi-tr-check-circle', title: 'Software updates', message: 'Check whether a newer version is available.' };
+        }
+    }
+
+    render() {
+        const el = (id) => document.getElementById(id);
+        const title = el('update-status-title');
+        if (!title) return; // Settings markup not injected yet.
+
+        const view = this.view();
+        const icon = el('update-icon');
+        const actionBtn = el('update-action-btn');
+        const progress = el('update-progress');
+
+        icon.innerHTML = `<i class="${view.icon}"></i>`;
+        icon.style.color = view.color || '';
+        title.textContent = view.title;
+        el('update-status-message').textContent = view.message;
+        el('current-version-display').textContent = this.currentVersion || 'unknown';
+        el('last-check-time').textContent = this.lastCheckTime ? this.getTimeAgo(this.lastCheckTime) : 'Never';
+        el('check-updates-btn').disabled = Boolean(view.busy);
+
+        actionBtn.classList.toggle('hidden', !view.action);
+        actionBtn.disabled = this.state === 'downloading';
+        if (view.action) actionBtn.innerHTML = `<i class="${view.actionIcon}"></i> ${view.action}`;
+
+        progress.classList.toggle('hidden', this.state !== 'downloading');
+        progress.setAttribute('aria-valuenow', String(this.percent));
+        el('update-progress-bar').style.width = `${this.percent}%`;
+
+        el('update-details').classList.toggle('hidden', !this.info);
+        if (this.info) {
+            el('new-version-number').textContent = this.info.version;
+            el('release-notes-content').innerHTML = this.sanitizeNotes(this.info.releaseNotes);
+        }
+    }
+
+    sanitizeNotes(html) {
+        const notes = html || 'Bug fixes and improvements.';
+        return window.DOMPurify ? window.DOMPurify.sanitize(notes) : notes;
+    }
+
     getTimeAgo(date) {
         const seconds = Math.floor((new Date() - date) / 1000);
 
@@ -184,351 +191,32 @@ class UpdateChecker {
     }
 
     /**
-     * Check for updates from GitHub Releases API
+     * One toast per version, on automatic checks only. Clicking it opens the
+     * Updates tab where the download lives.
      */
-    async checkForUpdates(silent = false) {
-        try {
-            if (!silent) {
-                this.updateUI('checking');
-            }
-
-            this.lastCheckTime = new Date();
-
-            const response = await fetch(this.updateCheckUrl, {
-                cache: 'no-cache',
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Cache-Control': 'no-cache'
-                }
-            });
-
-            if (!response.ok) {
-                console.warn('Failed to check for updates:', response.status);
-                if (!silent) {
-                    this.updateUI('error');
-                }
-                return;
-            }
-
-            const release = await response.json();
-
-            // Extract version from tag_name (remove 'v' prefix if present)
-            const latestVersion = release.tag_name.replace(/^v/, '');
-
-            if (this.isNewerVersion(latestVersion, this.currentVersion)) {
-                // Transform GitHub release data to our format
-                const updateData = this.transformReleaseData(release, latestVersion);
-                this.latestUpdateData = updateData;
-                this.updateAvailable = true;
-
-                if (!silent) {
-                    this.updateUI('update-available');
-                }
-
-                // Show notification only on automatic checks (not manual)
-                if (silent) {
-                    this.notifyUpdate(updateData);
-                }
-            } else {
-                this.updateAvailable = false;
-                this.latestUpdateData = null;
-                console.log('App is up to date:', this.currentVersion);
-
-                if (!silent) {
-                    this.updateUI('up-to-date');
-                }
-            }
-        } catch (error) {
-            console.error('Error checking for updates:', error);
-            if (!silent) {
-                this.updateUI('error');
-            }
-        }
-    }
-
-    /**
-     * Transform GitHub release data to our internal format
-     */
-    transformReleaseData(release, version) {
-        const downloads = {};
-
-        // Parse assets to find platform-specific downloads
-        if (release.assets && release.assets.length > 0) {
-            release.assets.forEach(asset => {
-                const name = asset.name.toLowerCase();
-
-                if (name.endsWith('.exe')) {
-                    downloads.windows = asset.browser_download_url;
-                } else if (name.endsWith('.appimage')) {
-                    downloads['linux-appimage'] = asset.browser_download_url;
-                } else if (name.endsWith('.deb')) {
-                    downloads['linux-deb'] = asset.browser_download_url;
-                } else if (name.endsWith('.rpm')) {
-                    downloads['linux-rpm'] = asset.browser_download_url;
-                } else if (name.endsWith('.dmg')) {
-                    downloads.mac = asset.browser_download_url;
-                }
-            });
-        }
-
-        // Convert markdown release notes to HTML (basic conversion)
-        const releaseNotes = this.markdownToHtml(release.body || 'Bug fixes and improvements');
-
-        return {
-            version: version,
-            releaseDate: release.published_at.split('T')[0],
-            downloadUrl: release.html_url,
-            downloads: downloads,
-            releaseNotes: releaseNotes,
-            critical: false, // Can be determined by checking release name/body for keywords
-            minVersion: '1.0.0'
-        };
-    }
-
-    /**
-     * Basic markdown to HTML conversion for release notes
-     */
-    markdownToHtml(markdown) {
-        if (!markdown) return 'Bug fixes and improvements';
-
-        let html = markdown
-            // Headers
-            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-            // Bold
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/__(.+?)__/g, '<strong>$1</strong>')
-            // Italic
-            .replace(/\*(.+?)\*/g, '<em>$1</em>')
-            .replace(/_(.+?)_/g, '<em>$1</em>')
-            // Lists
-            .replace(/^\* (.+)$/gim, '<li>$1</li>')
-            .replace(/^- (.+)$/gim, '<li>$1</li>')
-            // Links
-            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-            // Line breaks
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/\n/g, '<br>');
-
-        // Wrap lists
-        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-
-        // Wrap in paragraph if not already wrapped
-        if (!html.startsWith('<')) {
-            html = `<p>${html}</p>`;
-        }
-
-        return html;
-    }
-
-    /**
-     * Compare version numbers (semantic versioning)
-     */
-    isNewerVersion(latest, current) {
-        const latestParts = latest.split('.').map(Number);
-        const currentParts = current.split('.').map(Number);
-
-        for (let i = 0; i < 3; i++) {
-            if (latestParts[i] > currentParts[i]) return true;
-            if (latestParts[i] < currentParts[i]) return false;
-        }
-        return false;
-    }
-
-    /**
-     * Detect user's platform
-     */
-    detectPlatform() {
-        const platform = navigator.platform.toLowerCase();
-        const userAgent = navigator.userAgent.toLowerCase();
-
-        if (platform.includes('win')) return 'windows';
-        if (platform.includes('mac')) return 'mac';
-        if (platform.includes('linux')) return 'linux';
-
-        // Fallback to user agent
-        if (userAgent.includes('windows')) return 'windows';
-        if (userAgent.includes('mac')) return 'mac';
-        if (userAgent.includes('linux')) return 'linux';
-
-        return 'unknown';
-    }
-
-    /**
-     * Get appropriate download URL for user's platform
-     */
-    getDownloadUrl(updateData) {
-        const platform = this.detectPlatform();
-
-        // If platform-specific downloads exist
-        if (updateData.downloads) {
-            if (platform === 'windows' && updateData.downloads.windows) {
-                return updateData.downloads.windows;
-            }
-            if (platform === 'linux') {
-                // Prefer AppImage for Linux
-                return updateData.downloads['linux-appimage'] ||
-                    updateData.downloads['linux-deb'] ||
-                    updateData.downloads['linux-rpm'];
-            }
-            if (platform === 'mac' && updateData.downloads.mac) {
-                return updateData.downloads.mac;
-            }
-        }
-
-        // Fallback to general download URL
-        return updateData.downloadUrl;
-    }
-
-    /**
-     * Show update notification to user
-     */
-    notifyUpdate(updateData) {
-        const { version, critical } = updateData;
-        const downloadUrl = this.getDownloadUrl(updateData);
-
-        // Check if we already notified about this version
-        const lastNotified = localStorage.getItem('lastNotifiedVersion');
-        if (lastNotified === version) {
-            return; // Don't spam notifications
-        }
-
-        // Show simple notification
-        const message = `Version ${version} is now available! Click to view details.`;
-        const type = critical ? 'warning' : 'info';
-
-        if (window.notificationService) {
-            const notifId = window.notificationService.show(message, type, 8000);
-
-            // Add click handler to notification to open Updates tab
-            setTimeout(() => {
-                const notifElement = document.querySelector(`[data-notification-id="${notifId}"]`);
-                if (notifElement) {
-                    notifElement.style.cursor = 'pointer';
-                    notifElement.addEventListener('click', () => {
-                        // Open AIOS settings to Updates tab
-                        if (window.AIOS) {
-                            window.AIOS.showWindow();
-                            window.AIOS.switchTab('updates');
-                        }
-                    });
-                }
-            }, 100);
-        } else {
-            // Fallback to browser notification
-            this.showBrowserNotification(version, downloadUrl);
-        }
-
-        // Store that we've notified about this version
+    notifyUpdate(version) {
+        if (localStorage.getItem('lastNotifiedVersion') === version) return;
         localStorage.setItem('lastNotifiedVersion', version);
-    }
+        if (!window.notificationService) return;
 
-    /**
-     * Show release notes in a modal
-     */
-    showReleaseNotes(notes, version, updateData) {
-        const downloadUrl = this.getDownloadUrl(updateData);
-        const platform = this.detectPlatform();
+        const id = window.notificationService.show(
+            `Version ${version} is available. Open Settings to install it.`, 'info', 8000);
 
-        // Build download options HTML
-        let downloadOptions = '';
-        if (updateData.downloads) {
-            downloadOptions = '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color, #333);"><p style="margin-bottom: 8px; font-weight: 500;">Download for other platforms:</p><div style="display: flex; flex-direction: column; gap: 8px;">';
-
-            if (updateData.downloads.windows) {
-                downloadOptions += `<a href="${updateData.downloads.windows}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🪟 Windows (.exe)</a>`;
-            }
-            if (updateData.downloads['linux-appimage']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-appimage']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux AppImage</a>`;
-            }
-            if (updateData.downloads['linux-deb']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-deb']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux (.deb)</a>`;
-            }
-            if (updateData.downloads['linux-rpm']) {
-                downloadOptions += `<a href="${updateData.downloads['linux-rpm']}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🐧 Linux (.rpm)</a>`;
-            }
-            if (updateData.downloads.mac) {
-                downloadOptions += `<a href="${updateData.downloads.mac}" target="_blank" style="color: var(--primary-color); text-decoration: none;">🍎 macOS (.dmg)</a>`;
-            }
-
-            downloadOptions += '</div></div>';
-        }
-
-        const modal = document.createElement('div');
-        modal.className = 'update-modal';
-        modal.innerHTML = `
-            <div class="update-modal-content">
-                <div class="update-modal-header">
-                    <h2>What's New in v${version}</h2>
-                    <button class="update-modal-close">&times;</button>
-                </div>
-                <div class="update-modal-body">
-                    ${notes || 'Bug fixes and improvements'}
-                    ${downloadOptions}
-                </div>
-                <div class="update-modal-footer">
-                    <button class="btn-secondary update-modal-later">Remind Me Later</button>
-                    <button class="btn-primary update-modal-download">Download for ${platform === 'windows' ? 'Windows' : platform === 'linux' ? 'Linux' : 'Your Platform'}</button>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-
-        // Event listeners
-        modal.querySelector('.update-modal-close').onclick = () => modal.remove();
-        modal.querySelector('.update-modal-later').onclick = () => modal.remove();
-        modal.querySelector('.update-modal-download').onclick = () => {
-            window.open(downloadUrl, '_blank');
-            modal.remove();
-        };
-        modal.onclick = (e) => {
-            if (e.target === modal) modal.remove();
-        };
-    }
-
-    /**
-     * Fallback browser notification
-     */
-    showBrowserNotification(version, downloadUrl) {
-        if ('Notification' in window && Notification.permission === 'granted') {
-            const notification = new Notification('Update Available', {
-                body: `Version ${version} is ready to download`,
-                icon: 'assets/icon.png'
+        setTimeout(() => {
+            const toast = document.querySelector(`[data-notification-id="${id}"]`);
+            if (!toast) return;
+            toast.style.cursor = 'pointer';
+            toast.addEventListener('click', () => {
+                window.AIOS?.showWindow();
+                window.AIOS?.switchTab('updates');
             });
-
-            notification.onclick = () => {
-                window.open(downloadUrl, '_blank');
-            };
-        }
-    }
-
-    /**
-     * Dismiss update notification
-     */
-    dismissUpdateNotification(version) {
-        localStorage.setItem('dismissedVersion', version);
-        localStorage.setItem('dismissedAt', Date.now());
-    }
-
-    /**
-     * Manual check for updates (triggered by user)
-     */
-    async manualCheck() {
-        if (window.notificationService) {
-            window.notificationService.show('Checking for updates...', 'info', 2000);
-        }
-
-        await this.checkForUpdates(false); // false = not silent, update UI
+        }, 100);
     }
 }
 
-// Initialize on page load
 const updateChecker = new UpdateChecker();
 window.updateChecker = updateChecker;
 
-// Auto-start if DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => updateChecker.init());
 } else {
