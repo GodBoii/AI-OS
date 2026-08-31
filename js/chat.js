@@ -3248,9 +3248,17 @@ function setPrimaryComposerIcon(button, action) {
     if (!icon) return;
     icon.hidden = false;
     icon.style.display = '';
+    // updatePrimaryComposerAction runs on every keystroke, so rebuilding the
+    // markup when the action has not changed threw away and recreated the icon
+    // on each character. That was invisible waste before; with animated icons
+    // mounted inside this node it also restarted their animation mid-typing.
+    if (icon.dataset.composerIconState === action) return;
+    icon.dataset.composerIconState = action;
     icon.innerHTML = action === 'send'
         ? '<i class="fas fa-paper-plane" aria-hidden="true"></i>'
         : SMART_VOICE_ICON_MARKUP;
+    // The rewrite above removed the animated icon along with the old glyph.
+    window.animatedIcons?.refresh('#send-message [data-composer-icon]');
 }
 
 function updatePrimaryComposerAction() {
