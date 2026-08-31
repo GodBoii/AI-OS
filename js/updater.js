@@ -12,6 +12,7 @@ const { app, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 let downloadedVersion = null;
+let lastSentPercent = -1;
 
 function initUpdater(getWindow) {
     // Downloading is an explicit user action, so the check must not start one.
@@ -31,7 +32,16 @@ function initUpdater(getWindow) {
         releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : null
     }));
     autoUpdater.on('update-not-available', () => emit('not-available'));
-    autoUpdater.on('download-progress', ({ percent }) => emit('progress', { percent }));
+
+    // This fires per chunk. Collapsing it to whole percents keeps a 145 MB
+    // download from pushing thousands of IPC messages at the renderer.
+    autoUpdater.on('download-progress', ({ percent }) => {
+        const whole = Math.round(percent || 0);
+        if (whole === lastSentPercent) return;
+        lastSentPercent = whole;
+        emit('progress', { percent: whole });
+    });
+
     autoUpdater.on('update-downloaded', (info) => {
         downloadedVersion = info.version;
         emit('downloaded', { version: info.version });
@@ -41,8 +51,12 @@ function initUpdater(getWindow) {
     ipcMain.handle('updater-action', async (event, payload = {}) => {
         if (event.sender !== getWindow()?.webContents) return { ok: false, code: 'denied' };
 
-        // Reported in dev too, so the settings panel can show the real version.
-        if (payload.action === 'version') return { ok: true, version: app.getVersion() };
+        // Answered in dev too, so the settings panel can show the real version.
+        // downloadedVersion lets a reloaded renderer recover the ready-to-install
+        // state instead of offering the same download again.
+        if (payload.action === 'version') {
+            return { ok: true, version: app.getVersion(), downloadedVersion };
+        }
         if (!app.isPackaged) return { ok: false, code: 'unsupported' };
 
         try {
@@ -51,6 +65,7 @@ function initUpdater(getWindow) {
                     await autoUpdater.checkForUpdates();
                     return { ok: true };
                 case 'download':
+                    lastSentPercent = -1;
                     await autoUpdater.downloadUpdate();
                     return { ok: true };
                 case 'install':
