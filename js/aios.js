@@ -2908,7 +2908,7 @@ class AIOS {
     async loadUserData() {
         const defaultData = {
             account: { email: 'user@example.com', name: 'User Name' },
-            about: { version: '1.0.0', lastUpdate: new Date().toISOString() }
+            about: { version: '1.2.29', lastUpdate: new Date().toISOString() }
         };
         try {
             const profilePath = window.electron.path.join(this.userDataPath, 'profile.json');
