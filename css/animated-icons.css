@@ -1,0 +1,377 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Animated Icons
+   Motion and sizing for the inline SVGs mounted by js/animated-icons.js.
+
+   The loops run continuously. Each motion occupies only the first 28% of its
+   cycle and holds still for the remaining 72%, which is what keeps a permanent
+   animation calm to sit next to and leaves the compositor idle most of the
+   time. `--ai-phase` (written per icon by the manager) offsets each icon around
+   the cycle so nothing pulses in lockstep.
+
+   Motion is declared by labelling parts rather than by writing an animation per
+   icon: a part carries `data-p="<primitive>"` naming one of the shared motions
+   below, plus an optional `data-s="1..4"` stagger step. Adding an icon costs no
+   CSS. Parts needing a pivot other than the icon centre carry an inline
+   `transform-origin` in the registry.
+
+   All colour comes from `currentColor`, so the existing dark/light rules in
+   style.css, aios.css, chat-components.css and theme-light.css already theme
+   these icons. Nothing here sets a colour value.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.anim-icon {
+    /* Idle rhythm, and the energised rhythm on hover or keyboard focus. Only
+       the duration changes; the phase offset is anchored to --ai-base so a
+       hover cannot shunt the icon to a different point in its cycle. */
+    --ai-cycle: 5.4s;
+    --ai-base: 5.4s;
+    --ai-step: 0.035;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.anim-icon.anim-icon-hover {
+    --ai-cycle: 1.5s;
+}
+
+/* The original icon node is kept in the DOM so its owner can keep writing to it
+   (theme toggle class flips, avatar rendering, composer send/voice swaps). It is
+   only hidden.
+
+   Marked with an attribute rather than a class because UIManager.updateTheme,
+   updateWindowControls and updateActiveWorkspacePill all assign
+   `icon.className = 'fas fa-...'` wholesale. A class would be wiped by those
+   writes, unhiding the glyph and stacking two icons in one button. */
+[data-anim-hidden] {
+    display: none !important;
+}
+
+/* chat-components.css hides the mic glyph with `.mic-btn.native-recording > i`
+   while the native waveform is on screen. The animated icon is a sibling `svg`,
+   so it needs the same treatment or it shows through the waveform. */
+.mic-btn.native-recording > .anim-icon {
+    display: none;
+}
+
+/* ── Colour ────────────────────────────────────────────────────────────
+   The goal is that an animated icon paints exactly what the icon it replaced
+   would have painted, on every surface, in both themes. The way to get that is
+   to be cascaded like a normal `svg` and inherit from the host, which is also
+   the contract theme-light.css applies to the font glyphs
+   (`body:not(.dark-mode) i, .fa, .fas, .fi { color: inherit !important }`).
+
+   So: no !important here. An earlier version used it and quietly overrode
+   legitimate per-panel rules such as `.ghp-quick-row svg`, which made the
+   GitHub panel's quick actions brighter than every other icon on that surface.
+   Any rule that deliberately colours an `svg` should keep winning. */
+.anim-icon,
+.anim-icon * {
+    color: inherit;
+}
+
+/* Light mode needs one notch more specificity than theme-light.css's opening
+   `body:not(.dark-mode) * { color: #0f172a }`. That universal selector reaches
+   every path, and because `currentColor` resolves against the element it sits on
+   rather than the SVG root, it would pin all 48 icons to one hard-coded slate
+   regardless of the surface they sit on, including the dark panels the light
+   theme leaves alone. */
+body:not(.dark-mode) .anim-icon,
+body:not(.dark-mode) .anim-icon * {
+    color: inherit;
+}
+
+/* Inheriting is the right default but not universally safe, because the light
+   theme converts some panels and leaves others dark. `ensureLegible` in
+   js/animated-icons.js measures the result and writes an inline colour on the
+   few icons where the inherited value does not clear 3:1 against the surface it
+   landed on. Inline style beats everything here, which is the point. */
+
+/* Settings navigation, light mode: nothing is declared on purpose. The light
+   theme's own `body:not(.dark-mode) .tab-btn svg` rule is `!important` and more
+   specific, so it lands #475569 on the icon and #0f172a on the active one,
+   which is what it also puts on the neighbouring `.tab-btn span` label. Note
+   this is deliberately *not* the colour the Flaticon glyph renders: that glyph
+   inherits the button's own #a0a0a8, roughly 2.2:1 against the cream sidebar.
+   Matching the visible label is the correct read of the light theme. */
+
+/* ── Sizing per host ───────────────────────────────────────────────── */
+
+/* Sidebar rail: `.sidebar-icon svg` in style.css already sizes these to 70% of
+   the button (100% inside the avatar container), so only weight is set. */
+.sidebar-icon > .anim-icon,
+.sidebar-icon #aios-settings-avatar-container > .anim-icon {
+    stroke-width: 1.9;
+}
+
+/* Window controls: matches the 0.9rem font-size the Font Awesome glyphs used. */
+.window-control-btn > .anim-icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    stroke-width: 2.1;
+}
+
+/* Settings window navigation: mirrors `.tab-btn i` in aios.css so label
+   alignment is identical whether the preference is on or off. */
+.tab-btn > .anim-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 12px;
+    stroke-width: 1.7;
+    transition: transform var(--motion-duration-fast, 160ms) var(--motion-ease-smooth-out, ease-out);
+}
+
+.tab-btn:hover > .anim-icon {
+    transform: translateX(1px);
+}
+
+/* Settings card headers sit in a 40px accent tile. */
+.settings-card-icon > .anim-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.7;
+}
+
+/* Composer toolbar. The glyphs here render around 15px, and the buttons are
+   flex rows whose labels sit beside the icon. */
+.anim-icon[data-anim-variant="composer"] {
+    width: 15px;
+    height: 15px;
+    stroke-width: 1.85;
+}
+
+/* The send button's icon lives inside `.composer-action-icon`, which owns its
+   own box, so the SVG fills it rather than declaring a size. */
+.anim-icon[data-anim-variant="composer-send"] {
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.9;
+}
+
+.anim-icon[data-anim-variant="panel"] {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.9;
+}
+
+.anim-icon[data-anim-variant="panel-sm"] {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+}
+
+.anim-icon[data-anim-variant="panel-xs"] {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2.05;
+}
+
+.anim-icon[data-anim-variant="panel-lg"] {
+    width: 22px;
+    height: 22px;
+    stroke-width: 1.8;
+}
+
+/* Coder-workspace mode pills carry a 13px icon plus a text label. */
+.anim-icon[data-anim-variant="pill"] {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2;
+}
+
+/* The tasks empty state draws at 40px with a lighter weight. */
+.anim-icon[data-anim-variant="hero"] {
+    width: 40px;
+    height: 40px;
+    stroke-width: 1.5;
+}
+
+@media (max-width: 768px) {
+    .tab-btn > .anim-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Motion primitives.
+
+   Gated on prefers-reduced-motion, so the reduced-motion path still gets every
+   icon, just held still. Also paused outright while the window is hidden.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+
+    .anim-icon [data-p] {
+        /* view-box origins let every part pivot around a point expressed in the
+           same 24-unit space as the path data. */
+        transform-box: view-box;
+        transform-origin: 12px 12px;
+        animation-duration: var(--ai-cycle);
+        animation-iteration-count: infinite;
+        animation-fill-mode: both;
+        animation-delay: calc(var(--ai-base) * var(--ai-phase, 0));
+    }
+
+    .anim-icon [data-s="1"] { animation-delay: calc(var(--ai-base) * (var(--ai-phase, 0) + var(--ai-step))); }
+    .anim-icon [data-s="2"] { animation-delay: calc(var(--ai-base) * (var(--ai-phase, 0) + var(--ai-step) * 2)); }
+    .anim-icon [data-s="3"] { animation-delay: calc(var(--ai-base) * (var(--ai-phase, 0) + var(--ai-step) * 3)); }
+    .anim-icon [data-s="4"] { animation-delay: calc(var(--ai-base) * (var(--ai-phase, 0) + var(--ai-step) * 4)); }
+
+    body.anim-icons-paused .anim-icon [data-p] {
+        animation-play-state: paused;
+    }
+
+    /* ── Primitive assignment ──────────────────────────────────────── */
+    [data-p="spin"]   { animation-name: ai-spin;   animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+    [data-p="pulse"]  { animation-name: ai-pulse;  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+    [data-p="swell"]  { animation-name: ai-swell;  animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="draw"]   { animation-name: ai-draw;   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+    [data-p="fade"]   { animation-name: ai-fade;   animation-timing-function: ease-in-out; }
+    [data-p="dim"]    { animation-name: ai-dim;    animation-timing-function: ease-in-out; }
+    [data-p="press"]  { animation-name: ai-press;  animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="tilt"]   { animation-name: ai-tilt;   animation-timing-function: cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+    [data-p="up"]     { animation-name: ai-up;     animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="down"]   { animation-name: ai-down;   animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="left"]   { animation-name: ai-left;   animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="right"]  { animation-name: ai-right;  animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="lift"]   { animation-name: ai-lift;   animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="hinge"]  { animation-name: ai-hinge;  animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="drop"]   { animation-name: ai-drop;   animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    [data-p="flick"]  { animation-name: ai-flick;  animation-timing-function: ease-in-out; }
+    [data-p="sweep"]  { animation-name: ai-sweep;  animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+    [data-p="bar"]    { animation-name: ai-bar;    animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="out-tl"] { animation-name: ai-out-tl; animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="out-tr"] { animation-name: ai-out-tr; animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="out-bl"] { animation-name: ai-out-bl; animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+    [data-p="out-br"] { animation-name: ai-out-br; animation-timing-function: cubic-bezier(0.34, 1.4, 0.64, 1); }
+
+    /* ── Keyframes ─────────────────────────────────────────────────────
+       Motion lives in 0%–28%; 28%–100% is the hold. Every one of these ends
+       where it started, so a loop never shows a seam. */
+
+    @keyframes ai-spin {
+        0% { transform: rotate(0deg); }
+        28%, 100% { transform: rotate(360deg); }
+    }
+
+    @keyframes ai-pulse {
+        0%, 28%, 100% { transform: scale(1); }
+        13% { transform: scale(0.74); }
+    }
+
+    @keyframes ai-swell {
+        0%, 28%, 100% { transform: scale(1); }
+        13% { transform: scale(1.14); }
+    }
+
+    /* Animating dasharray from 1 to 1 keeps the value interpolatable while only
+       the offset moves. It lands on a whole stroke and stays there for the hold,
+       so the icon looks untouched between cycles.
+
+       This one gets a 12% window rather than the usual 28%. A draw starts from
+       nothing, and for icons whose only part is a draw (the check on the design
+       mode Done button) a longer window would leave the button looking empty for
+       over a second of every cycle. At 12% it reads as a quick redraw. */
+    @keyframes ai-draw {
+        0% { stroke-dasharray: 1; stroke-dashoffset: 1; }
+        12%, 100% { stroke-dasharray: 1; stroke-dashoffset: 0; }
+    }
+
+    /* For accents that should not be visible at rest: stars, scan lines, the
+       slash inside the code glyph. */
+    @keyframes ai-fade {
+        0%, 28%, 100% { opacity: 0; transform: scale(0.4); }
+        14% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes ai-dim {
+        0%, 28%, 100% { opacity: 1; }
+        14% { opacity: 0.34; }
+    }
+
+    @keyframes ai-press {
+        0%, 28%, 100% { transform: translateY(0); }
+        14% { transform: translateY(1.4px); }
+    }
+
+    @keyframes ai-tilt {
+        0%, 28%, 100% { transform: rotate(0deg); }
+        8% { transform: rotate(10deg); }
+        17% { transform: rotate(-7deg); }
+        23% { transform: rotate(3deg); }
+    }
+
+    @keyframes ai-up {
+        0%, 28%, 100% { transform: translateY(0); }
+        14% { transform: translateY(-2px); }
+    }
+
+    @keyframes ai-down {
+        0%, 28%, 100% { transform: translateY(0); }
+        14% { transform: translateY(1.8px); }
+    }
+
+    @keyframes ai-left {
+        0%, 28%, 100% { transform: translateX(0); }
+        14% { transform: translateX(-1.8px); }
+    }
+
+    @keyframes ai-right {
+        0%, 28%, 100% { transform: translateX(0); }
+        14% { transform: translateX(1.8px); }
+    }
+
+    @keyframes ai-lift {
+        0%, 28%, 100% { transform: translate(0, 0); }
+        14% { transform: translate(1.4px, -1.8px); }
+    }
+
+    @keyframes ai-hinge {
+        0%, 28%, 100% { transform: translateY(0) rotate(0deg); }
+        14% { transform: translateY(-1.6px) rotate(-4deg); }
+    }
+
+    @keyframes ai-drop {
+        0% { transform: translateY(-2.5px); opacity: 0; }
+        17%, 28%, 100% { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes ai-flick {
+        0%, 28%, 100% { transform: scale(1); opacity: 1; }
+        10% { transform: scale(0.6); opacity: 0.5; }
+        20% { transform: scale(1.12); opacity: 1; }
+    }
+
+    @keyframes ai-sweep {
+        0% { opacity: 0; transform: translateY(0); }
+        6%, 22% { opacity: 0.9; }
+        28%, 100% { opacity: 0; transform: translateY(8.5px); }
+    }
+
+    /* Waveform bars. All five are drawn centred on y=12, so one origin works. */
+    @keyframes ai-bar {
+        0%, 28%, 100% { transform: scaleY(1); }
+        9% { transform: scaleY(0.42); }
+        19% { transform: scaleY(1.16); }
+    }
+
+    @keyframes ai-out-tl {
+        0%, 28%, 100% { transform: translate(0, 0); }
+        14% { transform: translate(-1.4px, -1.4px); }
+    }
+
+    @keyframes ai-out-tr {
+        0%, 28%, 100% { transform: translate(0, 0); }
+        14% { transform: translate(1.4px, -1.4px); }
+    }
+
+    @keyframes ai-out-bl {
+        0%, 28%, 100% { transform: translate(0, 0); }
+        14% { transform: translate(-1.4px, 1.4px); }
+    }
+
+    @keyframes ai-out-br {
+        0%, 28%, 100% { transform: translate(0, 0); }
+        14% { transform: translate(1.4px, 1.4px); }
+    }
+}
