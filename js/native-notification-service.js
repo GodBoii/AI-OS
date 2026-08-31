@@ -83,24 +83,13 @@ class NativeNotificationService {
             // Handle notification click
             notification.on('click', () => {
                 console.log('NativeNotificationService: Notification clicked');
-                // Bring app to foreground
-                if (this.mainWindow) {
-                    if (this.mainWindow.isMinimized()) {
-                        this.mainWindow.restore();
-                    }
-                    this.mainWindow.focus();
-                }
+                this.revealMainWindow();
             });
 
             // Handle action button click
             notification.on('action', (event, index) => {
                 console.log(`NativeNotificationService: Action ${index} clicked`);
-                if (this.mainWindow) {
-                    if (this.mainWindow.isMinimized()) {
-                        this.mainWindow.restore();
-                    }
-                    this.mainWindow.focus();
-                }
+                this.revealMainWindow();
             });
 
             // Handle notification close
@@ -148,12 +137,7 @@ class NativeNotificationService {
             const notification = new Notification(notificationConfig);
 
             notification.on('click', () => {
-                if (this.mainWindow) {
-                    if (this.mainWindow.isMinimized()) {
-                        this.mainWindow.restore();
-                    }
-                    this.mainWindow.focus();
-                }
+                this.revealMainWindow();
             });
 
             notification.show();
@@ -210,6 +194,19 @@ class NativeNotificationService {
      */
     setMainWindow(window) {
         this.mainWindow = window;
+    }
+
+    /**
+     * Bring the main window forward. `show()` is required because "minimize to
+     * tray" hides the window instead of minimizing it, which makes both
+     * isMinimized() and focus() no-ops.
+     */
+    revealMainWindow() {
+        const window = this.mainWindow;
+        if (!window || window.isDestroyed()) return;
+        if (window.isMinimized()) window.restore();
+        window.show();
+        window.focus();
     }
 
     /**
