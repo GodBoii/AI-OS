@@ -550,8 +550,11 @@ body:not(.dark-mode) .ultra-think-btn.active:hover {
     overflow: hidden;
 }
 
-/* Smooth icon fade out */
-.send-btn.sending i {
+/* Smooth icon fade out. Fading the host, not `i`, is what keeps the triangle
+   alone in the button: the host holds whichever shape the current action
+   resolved to - a font glyph, the inline voice-wave SVG, or the animated icon
+   mounted by animated-icons.js - and only the first of those is an `i`. */
+.send-btn.sending > .composer-action-icon {
     opacity: 0;
     transform: scale(0);
     transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
