@@ -240,3 +240,237 @@ body:not(.dark-mode) .settings-shortcut-keys kbd {
     border-color: rgba(0,0,0,0.1);
     color: #475569;
 }
+
+/* ── Card Header Alignment ─────────────────────────────────────────── */
+/* css/aios.css also defines .settings-card-header, with justify-content:
+   space-between for a different [.settings-card-header-left, .settings-card-actions]
+   structure. Cards in this tab are [icon, text], so space-between shoved every
+   title block to the far right edge. Scoped to #settings-tab so the other
+   structure keeps its own behaviour. */
+#settings-tab .settings-card-header {
+    justify-content: flex-start;
+}
+
+#settings-tab .settings-card-header > div:not(.settings-card-icon) {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+}
+
+/* ── Value Controls (selects, inputs, buttons) ──────────────────────── */
+/* The `settings-field-` prefix is deliberate. `.settings-select` is already taken
+   by css/aios.css with `width: 100%`, which stretched the control across the row
+   and crushed its label into a one-word column. */
+
+/* Rows whose control is too wide to sit beside the label stack instead. */
+.settings-stack-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 24px;
+    transition: background 0.2s ease;
+}
+
+.settings-stack-row:hover {
+    background: rgba(255,255,255,0.02);
+}
+
+/* Keeps the divider between rows consistent when the two row types mix. */
+:is(.settings-toggle-row, .settings-stack-row) + :is(.settings-toggle-row, .settings-stack-row) {
+    border-top: 1px solid rgba(255,255,255,0.03);
+}
+
+.settings-field-pair {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.settings-field-select,
+.settings-field-input,
+.settings-field-btn {
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-primary, #e2e8f0);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 7px 10px;
+    min-height: 34px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+/* Fixed widths, and no growing or shrinking: the label beside these needs the
+   remaining space, and a control that resizes with its value looks broken. */
+.settings-field-select {
+    width: 136px;
+    flex: 0 0 auto;
+    /* Native select keeps the platform popup, keyboard behaviour and a11y. */
+    cursor: pointer;
+}
+
+.settings-field-num {
+    width: 76px;
+    flex: 0 0 auto;
+    text-align: right;
+}
+
+.settings-field-textarea {
+    width: 100%;
+    resize: vertical;
+    line-height: 1.5;
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-size: 12px;
+}
+
+/* Free-text fields inside a stacked row take the width the label does not need. */
+.settings-field-pair .settings-field-input:not(.settings-field-num) {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.settings-field-select:hover,
+.settings-field-input:hover {
+    border-color: rgba(255,255,255,0.18);
+}
+
+.settings-field-select:focus-visible,
+.settings-field-input:focus-visible,
+.settings-field-btn:focus-visible {
+    outline: 2px solid var(--accent-color, rgba(230,230,235,0.95));
+    outline-offset: 1px;
+}
+
+.settings-field-btn {
+    font-weight: 500;
+    padding: 7px 16px;
+    background: var(--accent-muted, rgba(255,255,255,0.08));
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.settings-field-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.2);
+}
+
+.settings-field-btn:disabled {
+    opacity: 0.5;
+    cursor: progress;
+}
+
+.settings-field-btn-sm {
+    font-size: 12px;
+    padding: 4px 12px;
+    min-height: 28px;
+}
+
+/* ── Saved Sites List ──────────────────────────────────────────────── */
+.settings-site-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    /* Caps growth without hiding anything: a busy profile has dozens of sites. */
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+}
+
+/* Collapses to nothing until the first refresh, so the empty state is the
+   status line below rather than an empty box. */
+.settings-site-list:empty {
+    display: none;
+}
+
+.settings-site-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+}
+
+.settings-site-row + .settings-site-row {
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.settings-site-domain {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: var(--text-primary, #e2e8f0);
+    /* Domains can be long; truncate rather than pushing the button off the row. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-site-meta {
+    font-size: 11.5px;
+    color: var(--text-secondary, #94a3b8);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.settings-field-status {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--text-secondary, #94a3b8);
+}
+
+/* Paired with the message text, so status is never colour-only. */
+.settings-field-status.is-error {
+    color: #f87171;
+}
+
+.settings-toggle-hint code {
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+}
+
+body:not(.dark-mode) .settings-stack-row:hover {
+    background: rgba(0,0,0,0.02);
+}
+
+body:not(.dark-mode) :is(.settings-toggle-row, .settings-stack-row) + :is(.settings-toggle-row, .settings-stack-row) {
+    border-top-color: rgba(0,0,0,0.05);
+}
+
+body:not(.dark-mode) .settings-field-select,
+body:not(.dark-mode) .settings-field-input,
+body:not(.dark-mode) .settings-field-btn {
+    color: #1e293b;
+    background: rgba(0,0,0,0.03);
+    border-color: rgba(0,0,0,0.12);
+}
+
+body:not(.dark-mode) .settings-field-select:hover,
+body:not(.dark-mode) .settings-field-input:hover,
+body:not(.dark-mode) .settings-field-btn:hover:not(:disabled) {
+    border-color: rgba(0,0,0,0.22);
+}
+
+body:not(.dark-mode) .settings-field-btn:hover:not(:disabled) {
+    background: rgba(0,0,0,0.06);
+}
+
+body:not(.dark-mode) .settings-field-status.is-error {
+    color: #dc2626;
+}
+
+body:not(.dark-mode) .settings-site-list {
+    border-color: rgba(0,0,0,0.1);
+}
+
+body:not(.dark-mode) .settings-site-row + .settings-site-row {
+    border-top-color: rgba(0,0,0,0.07);
+}
+
+body:not(.dark-mode) .settings-toggle-hint code {
+    background: rgba(0,0,0,0.05);
+}
