@@ -3186,6 +3186,90 @@ class AIOS {
                     </div>
                 </section>
 
+                <!-- Browser Automation Section -->
+                <section class="settings-card" aria-labelledby="settings-browser-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon" data-settings-icon="browser"><i class="fas fa-globe"></i></div>
+                        <div>
+                            <h4 id="settings-browser-title" class="settings-card-title">Browser Automation</h4>
+                            <p class="settings-card-desc">How the agent drives Chrome on this computer.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <label class="settings-toggle-label" for="settings-browser-visibility">Window mode</label>
+                                <span class="settings-toggle-hint">Visible shows the window. Background runs a real browser that never takes focus. Hidden runs it headless, which is faster but blocked by more sites. Applies on the next browser start.</span>
+                            </div>
+                            <select class="settings-field-select" id="settings-browser-visibility">
+                                <option value="visible">Visible</option>
+                                <option value="background">Background</option>
+                                <option value="headless">Hidden</option>
+                            </select>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <label class="settings-toggle-label" for="settings-browser-idle">Close when idle</label>
+                                <span class="settings-toggle-hint">Minutes of inactivity before the browser closes to free memory. It reopens on the next request. Set 0 to keep it running.</span>
+                            </div>
+                            <input class="settings-field-input settings-field-num" type="number" id="settings-browser-idle" min="0" max="600" step="1" placeholder="15">
+                        </div>
+                        <div class="settings-stack-row">
+                            <div class="settings-toggle-info">
+                                <label class="settings-toggle-label" for="settings-browser-blocked">Blocked sites</label>
+                                <span class="settings-toggle-hint">One domain per line. Subdomains are covered too, so <code>google.com</code> also blocks <code>mail.google.com</code>.</span>
+                            </div>
+                            <textarea class="settings-field-input settings-field-textarea" id="settings-browser-blocked" rows="3" spellcheck="false" placeholder="bank.example.com"></textarea>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Browser Sessions Section -->
+                <section class="settings-card" aria-labelledby="settings-sessions-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon" data-settings-icon="sessions"><i class="fas fa-key"></i></div>
+                        <div>
+                            <h4 id="settings-sessions-title" class="settings-card-title">Browser Sign-in &amp; Cookies</h4>
+                            <p class="settings-card-desc">The logins the agent's browser remembers.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-stack-row">
+                            <div class="settings-toggle-info">
+                                <label class="settings-toggle-label" for="settings-browser-open-url">Open the agent's browser</label>
+                                <span class="settings-toggle-hint">Opens the exact Chrome profile the agent uses, with no agent attached. Sign in to Chrome or to any site, including 2FA and passkeys, and every later run reuses it, hidden mode included. Leave the address empty to just open the window.</span>
+                            </div>
+                            <div class="settings-field-pair">
+                                <input class="settings-field-input" type="text" id="settings-browser-open-url" placeholder="Optional: accounts.google.com" spellcheck="false" autocomplete="url">
+                                <button class="settings-field-btn" type="button" id="settings-browser-open-btn">Open</button>
+                            </div>
+                            <span class="settings-field-status" id="settings-browser-open-status" role="status" aria-live="polite"></span>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Stay signed in</span>
+                                <span class="settings-toggle-hint">Keep these logins between sessions. Off wipes the whole browser profile when you quit Aetheria ai.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-browser-keep-signed-in">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-stack-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label" id="settings-browser-sites-label">Saved sites and cookies</span>
+                                <span class="settings-toggle-hint">Every site the agent's browser is holding cookies for. Clearing one signs the agent out of it and removes what that site stored.</span>
+                            </div>
+                            <div class="settings-field-pair">
+                                <button class="settings-field-btn" type="button" id="settings-browser-sites-refresh">Refresh</button>
+                                <button class="settings-field-btn" type="button" id="settings-browser-cookies-clear">Clear all cookies</button>
+                            </div>
+                            <ul class="settings-site-list" id="settings-browser-sites" aria-labelledby="settings-browser-sites-label"></ul>
+                            <span class="settings-field-status" id="settings-browser-sites-status" role="status" aria-live="polite">Not loaded yet. Refresh to read what the browser has saved.</span>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Keyboard Shortcuts Section -->
                 <section class="settings-card" aria-labelledby="settings-kb-title">
                     <div class="settings-card-header">
@@ -3245,9 +3329,175 @@ class AIOS {
         window.animatedIcons?.refresh();
     }
 
+    /**
+     * Browser settings are owned by the main process, not localStorage, because
+     * BrowserHandler reads them when it launches Chrome. Every write goes through
+     * main's validator and the sanitized result is written back into the control,
+     * so out-of-range input corrects itself in front of the user.
+     */
+    async initBrowserSettings() {
+        const ipc = window.electron?.ipcRenderer;
+        if (!ipc?.invoke) return;
+
+        const fields = [
+            ['settings-browser-visibility', 'visibility', el => el.value],
+            ['settings-browser-idle', 'idleCloseMinutes', el => Number(el.value)],
+            ['settings-browser-keep-signed-in', 'keepSignedIn', el => el.checked],
+            ['settings-browser-blocked', 'blockedDomains', el => el.value.split(/[\s,]+/).filter(Boolean)],
+        ];
+
+        const paint = (el, key, values) => {
+            if (el.type === 'checkbox') el.checked = !!values[key];
+            else if (key === 'blockedDomains') el.value = (values[key] || []).join('\n');
+            else el.value = values[key];
+        };
+
+        // A settings panel must never surface a raw IPC failure as an unhandled
+        // rejection; the control simply keeps its last known value.
+        const call = async (channel, payload) => {
+            try {
+                return await ipc.invoke(channel, payload);
+            } catch (error) {
+                console.error(`[Settings] ${channel} failed:`, error);
+                return null;
+            }
+        };
+
+        const settings = await call('browser-settings:get');
+        if (!settings) return;
+
+        for (const [id, key, read] of fields) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            paint(el, key, settings);
+            // switchTab('settings') re-runs this on every visit; without the guard
+            // each visit would stack another listener on the same control.
+            if (el.dataset.settingsBound === '1') continue;
+            el.dataset.settingsBound = '1';
+            el.addEventListener('change', async () => {
+                const saved = await call('browser-settings:set', { [key]: read(el) });
+                if (saved) paint(el, key, saved);
+            });
+        }
+
+        this._bindBrowserSessions(call);
+    }
+
+    /**
+     * Sign-in and cookie controls. Split out because these are actions against a
+     * live browser rather than stored preferences, and every one of them can take
+     * seconds and fail, so each needs its own pending and error state.
+     */
+    _bindBrowserSessions(call) {
+        const el = (id) => document.getElementById(id);
+        const openUrl = el('settings-browser-open-url');
+        const openBtn = el('settings-browser-open-btn');
+        const openStatus = el('settings-browser-open-status');
+        const list = el('settings-browser-sites');
+        const listStatus = el('settings-browser-sites-status');
+        const refreshBtn = el('settings-browser-sites-refresh');
+        const clearAllBtn = el('settings-browser-cookies-clear');
+        if (!openBtn || !list || !refreshBtn || !clearAllBtn) return;
+
+        const say = (node, message, failed = false) => {
+            node.textContent = message;
+            node.classList.toggle('is-error', failed);
+        };
+
+        // Buttons stay disabled for the whole round trip: these actions launch or
+        // reuse a real browser, and a second click would queue a duplicate.
+        const run = async (buttons, status, pending, payload, onDone) => {
+            buttons.forEach((button) => { button.disabled = true; });
+            say(status, pending);
+            const result = await call('browser-data', payload);
+            buttons.forEach((button) => { button.disabled = false; });
+            if (!result?.success) {
+                say(status, result?.error || 'That did not work.', true);
+                return null;
+            }
+            onDone(result);
+            return result;
+        };
+
+        // Built as nodes, not markup: the domains come from the browser's cookie
+        // store, which is external data and does not belong in innerHTML.
+        const render = (sites) => {
+            list.replaceChildren();
+            for (const site of sites) {
+                const row = document.createElement('li');
+                row.className = 'settings-site-row';
+
+                const domain = document.createElement('span');
+                domain.className = 'settings-site-domain';
+                domain.textContent = site.domain;
+
+                const meta = document.createElement('span');
+                meta.className = 'settings-site-meta';
+                meta.textContent = site.cookies === 1 ? '1 cookie' : `${site.cookies} cookies`;
+
+                const clear = document.createElement('button');
+                clear.type = 'button';
+                clear.className = 'settings-field-btn settings-field-btn-sm';
+                clear.textContent = 'Clear';
+                clear.dataset.domain = site.domain;
+                clear.setAttribute('aria-label', `Clear saved data for ${site.domain}`);
+
+                row.append(domain, meta, clear);
+                list.append(row);
+            }
+        };
+
+        const loadSites = () => run([refreshBtn, clearAllBtn], listStatus, 'Reading the browser…', { action: 'listSites' }, (result) => {
+            render(result.sites);
+            say(listStatus, result.sites.length
+                ? `${result.sites.length} site${result.sites.length === 1 ? '' : 's'} with saved cookies.`
+                : 'No saved cookies. The browser is signed out of everything.');
+        });
+
+        if (openBtn.dataset.settingsBound !== '1') {
+            openBtn.dataset.settingsBound = '1';
+            const open = () => run([openBtn], openStatus, 'Opening the browser…', { action: 'open', url: openUrl.value }, () => {
+                say(openStatus, 'The browser is open. Sign in, then close the window when you are done.');
+            });
+            openBtn.addEventListener('click', open);
+            openUrl.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') open();
+            });
+        }
+
+        if (refreshBtn.dataset.settingsBound !== '1') {
+            refreshBtn.dataset.settingsBound = '1';
+            refreshBtn.addEventListener('click', loadSites);
+
+            clearAllBtn.addEventListener('click', () => run(
+                [refreshBtn, clearAllBtn], listStatus, 'Clearing cookies…', { action: 'clearAllCookies' },
+                (result) => {
+                    list.replaceChildren();
+                    say(listStatus, `Cleared ${result.removed} cookie${result.removed === 1 ? '' : 's'}.`);
+                }
+            ));
+
+            // Delegated so a hundred sites still cost one listener, and rows can be
+            // re-rendered without rebinding anything.
+            list.addEventListener('click', (event) => {
+                const button = event.target.closest('button[data-domain]');
+                if (!button) return;
+                const { domain } = button.dataset;
+                run([button, refreshBtn, clearAllBtn], listStatus, `Clearing ${domain}…`, { action: 'clearSite', domain }, () => {
+                    say(listStatus, `Signed out of ${domain}.`);
+                    loadSites();
+                });
+            });
+        }
+    }
+
     initSettingsListeners() {
         const NK = 'aetheria-notification-settings';
         const GK = 'aetheria-general-settings';
+
+        // Fire-and-forget: hydrating the browser card must not block the
+        // localStorage-backed settings below it.
+        this.initBrowserSettings().catch((error) => console.error('[Settings] Browser card init failed:', error));
 
         // â”€â”€ Notification Settings â”€â”€
         let ns = {};
