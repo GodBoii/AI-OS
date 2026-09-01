@@ -7,6 +7,7 @@ const PythonBridge = require('./python-bridge');
 const http = require('http');
 const { EventEmitter } = require('events');
 const BrowserHandler = require('./browser-handler.js');
+const BrowserSettings = require('./browser-settings.js');
 const ComputerControlHandler = require('./computer-control-handler.js');
 const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
@@ -41,6 +42,7 @@ if (process.defaultApp) {
 
 let pythonBridge;
 let browserHandler;
+let browserSettings;
 let computerControlHandler;
 let localCoderHandler;
 let nativeNotificationService;
@@ -315,7 +317,8 @@ function createWindow() {
     };
 
     const appDataPath = app.getPath('userData');
-    browserHandler = new BrowserHandler(mainProcessEmitter, appDataPath, getAuthToken);
+    browserSettings = new BrowserSettings(appDataPath);
+    browserHandler = new BrowserHandler(mainProcessEmitter, appDataPath, getAuthToken, browserSettings);
 
     browserHandler.initialize();
 
@@ -496,6 +499,41 @@ function createWindow() {
                 error: 'Failed to connect to Python backend: ' + error.message
             });
         });
+    });
+
+    // --- Browser Automation Settings ---
+    // Main owns these because BrowserHandler reads them on every launch. The
+    // renderer only renders and patches them, so a window that never opens
+    // cannot leave the agent running on stale values.
+    ipcMain.handle('browser-settings:get', () => browserSettings.get());
+
+    ipcMain.handle('browser-settings:set', async (event, patch) => {
+        const before = browserSettings.get();
+        const after = browserSettings.update(patch);
+        // Window mode is a Chrome command-line flag, fixed for the life of the
+        // process. Drop the running instance so the next command relaunches with
+        // the new flags rather than silently ignoring the change.
+        if (before.visibility !== after.visibility && browserHandler) {
+            await browserHandler.closeBrowser();
+        }
+        return after;
+    });
+
+    // One channel for every browser profile action. The action travels in the
+    // payload, so adding a session or cookie feature never needs a new channel
+    // (and never needs another preload whitelist entry).
+    ipcMain.handle('browser-data', async (event, payload) => {
+        if (!browserHandler) {
+            return { success: false, error: 'Browser handler not initialized' };
+        }
+        const { action, url, domain } = payload || {};
+        switch (action) {
+            case 'open': return browserHandler.openBrowserWindow(url);
+            case 'listSites': return browserHandler.listSites();
+            case 'clearSite': return browserHandler.clearSite(domain);
+            case 'clearAllCookies': return browserHandler.clearAllCookies();
+            default: return { success: false, error: `Unknown browser action: ${action}` };
+        }
     });
 
     ipcMain.handle('computer-get-access-state', async () => {
