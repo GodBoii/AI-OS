@@ -6,14 +6,56 @@ const fs = require('fs');
 const puppeteer = require('puppeteer-core');
 const net = require('net');
 const axios = require('axios');
+const electron = require('electron');
 const config = require('./config');
 
+// JPEG quality for the page images handed to the model. High enough that small
+// text stays legible, low enough that a view stays well under 100KB on the round
+// trip through storage. Not user-facing: lowering it degrades what the agent can
+// read, and raising it only costs latency.
+const SCREENSHOT_QUALITY = 72;
+
+// Bounds for the headless viewport. The floor keeps desktop layouts from
+// collapsing to a mobile breakpoint; the ceiling stops a 4K display from
+// producing screenshots that cost upload time and tokens for no extra detail.
+const HEADLESS_VIEWPORT = { minWidth: 1280, maxWidth: 1920, minHeight: 720, maxHeight: 1080 };
+
+/**
+ * Collapses raw cookie records into one entry per site.
+ *
+ * A single login scatters cookies across several hosts (`.google.com`,
+ * `accounts.google.com`, `mail.google.com`), which would list the same account
+ * three times. Grouping under the shortest domain that is a suffix of the others
+ * fixes that without a public suffix list: browsers refuse cookies set on a bare
+ * public suffix, so the shortest domain actually present is the real site. Sorting
+ * by length first guarantees a parent is created before any of its children.
+ */
+function groupCookiesBySite(cookies) {
+    const counts = new Map();
+    for (const cookie of cookies) {
+        const host = cookie.domain.replace(/^\./, '').replace(/^www\./, '');
+        if (host) counts.set(host, (counts.get(host) || 0) + 1);
+    }
+
+    const sites = new Map();
+    for (const host of [...counts.keys()].sort((a, b) => a.length - b.length)) {
+        const parent = [...sites.keys()].find((site) => host === site || host.endsWith(`.${site}`));
+        const key = parent || host;
+        sites.set(key, (sites.get(key) || 0) + counts.get(host));
+    }
+
+    return [...sites]
+        .map(([domain, cookies]) => ({ domain, cookies }))
+        .sort((a, b) => a.domain.localeCompare(b.domain));
+}
+
 class BrowserHandler {
-    constructor(eventEmitter, appDataPath, getAuthTokenFunc) {
+    constructor(eventEmitter, appDataPath, getAuthTokenFunc, settings) {
         this.eventEmitter = eventEmitter;
         this.appDataPath = appDataPath;
         this.getAuthToken = getAuthTokenFunc;
-        
+        this.settings = settings;
+
         this.managedBrowserProcess = null;
         this.browser = null;
         this.page = null;
@@ -22,6 +64,10 @@ class BrowserHandler {
         this.connectPromise = null;
         this.commandQueue = Promise.resolve();
         this.isProcessingCommand = false;
+        this.idleTimer = null;
+        // Set while a user-initiated sign-in window is open so the idle reaper
+        // cannot close Chrome out from under someone entering a password.
+        this.signInPending = false;
     }
 
     async _uploadScreenshot(screenshotBase64) {
@@ -32,7 +78,7 @@ class BrowserHandler {
             }
 
             const imageBuffer = Buffer.from(screenshotBase64, 'base64');
-            const fileName = `screenshot-${Date.now()}.png`;
+            const fileName = `screenshot-${Date.now()}.jpg`;
 
             const urlResponse = await axios.post(
                 `${config.backend.url}/api/generate-upload-url`,
@@ -51,7 +97,7 @@ class BrowserHandler {
             }
 
             await axios.put(signedURL, imageBuffer, {
-                headers: { 'Content-Type': 'image/png' }
+                headers: { 'Content-Type': 'image/jpeg' }
             });
 
             console.log(`Screenshot successfully uploaded to Supabase path: ${path}`);
@@ -145,23 +191,41 @@ class BrowserHandler {
         await this.page.waitForNetworkIdle({ idleTime: 500, timeout: timeoutMs }).catch(() => {});
     }
 
+    /**
+     * Runs a task only once everything already queued has finished, so nothing
+     * ever touches the same page or process concurrently. Both agent commands and
+     * user-initiated actions go through here; the sign-in flow closes and
+     * relaunches Chrome, which would corrupt a command running at the same time.
+     */
+    _serialize(task) {
+        // Runs on both settle paths so one failed task cannot stall the queue.
+        const result = this.commandQueue.then(task, task);
+        this.commandQueue = result.then(() => {}, () => {});
+        return result;
+    }
+
     _enqueueCommand(commandPayload) {
-        this.commandQueue = this.commandQueue
-            .then(async () => {
-                this.isProcessingCommand = true;
+        this._clearIdleTimer();
+        // Reporting and bookkeeping live inside the serialized task so the next
+        // queued command cannot start before this one has released the flag.
+        this._serialize(async () => {
+            this.isProcessingCommand = true;
+            try {
                 await this.handleCommand(commandPayload);
-            })
-            .catch((error) => {
+            } catch (error) {
                 const action = commandPayload?.action || 'unknown';
                 const requestId = commandPayload?.request_id;
                 console.error(`BrowserHandler queue error while processing '${action}':`, error?.message || error);
                 if (requestId) {
                     this._emitResult(requestId, { status: 'error', error: `Internal queue error: ${error?.message || String(error)}` });
                 }
-            })
-            .finally(() => {
+            } finally {
                 this.isProcessingCommand = false;
-            });
+                // Armed only after the queue drains, so a long run of commands
+                // never races the reaper.
+                this._touchIdle();
+            }
+        });
     }
 
     initialize() {
@@ -178,17 +242,72 @@ class BrowserHandler {
         }
     }
 
-    async _launchManagedBrowser() {
-        if (this.managedBrowserProcess) return;
-        const paths = this._getBrowserPaths();
-        if (!paths) return;
-        await this._resolveDebugPort();
+    /**
+     * Size for headless runs only. A headful window inherits a real size from the
+     * desktop, but headless Chrome has no window and falls back to 800x600, which
+     * would shrink every screenshot and desync the element bounds the model clicks
+     * by. Matching the user's own screen keeps sites rendering the layout they
+     * would see themselves.
+     */
+    _headlessViewport() {
+        try {
+            const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
+            return {
+                width: Math.min(HEADLESS_VIEWPORT.maxWidth, Math.max(HEADLESS_VIEWPORT.minWidth, width)),
+                height: Math.min(HEADLESS_VIEWPORT.maxHeight, Math.max(HEADLESS_VIEWPORT.minHeight, height))
+            };
+        } catch (error) {
+            console.warn('BrowserHandler: could not read display size, using 1440x900:', error.message);
+            return { width: 1440, height: 900 };
+        }
+    }
+
+    /**
+     * Chrome bakes these flags in at spawn time, so a visibility change only takes
+     * effect on the next launch. main.js closes the running instance when that
+     * setting changes so the next command relaunches here.
+     */
+    _launchArgs(userDataDir, visibility) {
         const args = [
-            `--remote-debugging-port=${this.debugPort}`, `--user-data-dir=${paths.userDataDir}`,
-            `--no-first-run`, `--no-default-browser-check`, `--disable-background-timer-throttling`,
-            `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding`
+            `--remote-debugging-port=${this.debugPort}`,
+            `--user-data-dir=${userDataDir}`,
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding'
         ];
-        console.log(`Launching browser with command: ${paths.executablePath} ${args.join(' ')}`);
+
+        if (visibility === 'headless') {
+            const { width, height } = this._headlessViewport();
+            args.push('--headless=new', `--window-size=${width},${height}`);
+        } else if (visibility === 'background' && process.platform !== 'darwin') {
+            // Real headful Chrome parked outside every display. Keeps the genuine
+            // fingerprint and GPU path that makes this tool work on sites that
+            // reject headless, without a window covering the user's screen.
+            // macOS clamps window positions to the visible desktop, so there it
+            // relies on never being brought to front instead.
+            args.push('--window-position=-32000,-32000');
+        }
+
+        return args;
+    }
+
+    /**
+     * @param {string} [visibilityOverride] Forces a mode for this launch only,
+     *   used by the sign-in flow which always needs a window the user can see.
+     * @returns {Promise<{ok: boolean, error?: string}>}
+     */
+    async _launchManagedBrowser(visibilityOverride) {
+        if (this.managedBrowserProcess) return { ok: true };
+        const paths = this._getBrowserPaths();
+        if (!paths) {
+            return { ok: false, error: 'No Chrome or Edge installation was found on this computer.' };
+        }
+        await this._resolveDebugPort();
+        const visibility = visibilityOverride || this.settings.get().visibility;
+        const args = this._launchArgs(paths.userDataDir, visibility);
+        console.log(`Launching browser (${visibility}): ${paths.executablePath} ${args.join(' ')}`);
         try {
             this.managedBrowserProcess = spawn(paths.executablePath, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
             this.managedBrowserProcess.stdout.on('data', (data) => console.log(`BrowserHandler (stdout): ${data}`));
@@ -200,9 +319,189 @@ class BrowserHandler {
                 this.isConnected = false;
             });
             console.log('Browser process launched successfully');
+            return { ok: true };
         } catch (error) {
             console.error('Error launching browser:', error);
+            return { ok: false, error: `Failed to start the browser: ${error.message}` };
         }
+    }
+
+    /**
+     * Drops the CDP connection and kills Chrome if we own the process. Called by
+     * the idle reaper, by settings changes that need a relaunch, and on quit.
+     * Safe to call when nothing is running.
+     */
+    async closeBrowser() {
+        this._clearIdleTimer();
+        this.signInPending = false;
+        if (this.browser) {
+            // A disconnect during shutdown is not worth failing the caller over.
+            await this.browser.disconnect().catch(() => {});
+        }
+        this.browser = null;
+        this.page = null;
+        this.isConnected = false;
+        if (this.managedBrowserProcess) {
+            this.managedBrowserProcess.kill();
+            this.managedBrowserProcess = null;
+        }
+    }
+
+    _clearIdleTimer() {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
+    }
+
+    /**
+     * Restarts the inactivity countdown. Chrome holds a few hundred MB and, being
+     * spawned detached, survives an Electron crash while still owning the debug
+     * port, so reaping an unused instance is worth the ~4s relaunch it costs.
+     */
+    _touchIdle() {
+        this._clearIdleTimer();
+        this.signInPending = false;
+        const minutes = this.settings.get().idleCloseMinutes;
+        if (!minutes) return;
+        this.idleTimer = setTimeout(() => {
+            this.idleTimer = null;
+            if (this.isProcessingCommand || this.signInPending) return;
+            console.log(`BrowserHandler: closing browser after ${minutes} idle minute(s).`);
+            this.closeBrowser().catch((error) => console.error('Idle close failed:', error.message));
+        }, minutes * 60_000);
+    }
+
+    /** Bringing a window forward is only correct when the user asked to see it. */
+    async _focusPage() {
+        if (!this.page) return;
+        if (this.settings.get().visibility !== 'visible') return;
+        await this.page.bringToFront().catch(() => {});
+    }
+
+    /**
+     * Opens the agent's own Chrome profile in a window the user drives, with no
+     * agent attached. This is how a signed-in browser gets created without asking
+     * the agent to open one first: sign in to Chrome or to any site here, and the
+     * profile directory keeps the session for every later run, including hidden mode.
+     *
+     * @param {string} [url] Optional starting page. Omitted, it just opens the window.
+     */
+    async openBrowserWindow(url) {
+        const target = String(url || '').trim();
+        const normalized = target && !/^https?:\/\//i.test(target) ? `https://${target}` : target;
+        if (normalized && this.settings.isBlocked(normalized)) {
+            return { success: false, error: 'That site is on your blocked list.' };
+        }
+
+        return this._serialize(async () => {
+            try {
+                // The profile directory only supports one Chrome at a time, so a
+                // hidden instance has to go before a visible one can take its place.
+                await this.closeBrowser();
+                const launch = await this._launchManagedBrowser('visible');
+                if (!launch.ok) return { success: false, error: launch.error };
+                if (!(await this._waitForBrowserReady(15000))) {
+                    return { success: false, error: 'The browser did not become ready in time.' };
+                }
+
+                // Suppresses the idle reaper: nothing should kill a window while
+                // someone is halfway through a password or a 2FA code.
+                this.signInPending = true;
+                if (normalized) {
+                    this.page = await this.browser.newPage();
+                    await this.page.goto(normalized, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                }
+                await this.page.bringToFront();
+                return { success: true, url: this.page.url() };
+            } catch (error) {
+                console.error('BrowserHandler: could not open the browser window:', error.message);
+                return { success: false, error: error.message };
+            }
+        });
+    }
+
+    /**
+     * Runs `work` against a browser-attached CDP session.
+     *
+     * Cookies cannot be read from disk: Chrome encrypts the profile's cookie store
+     * with an OS-held key. So inspecting them needs a live browser. If the agent's
+     * browser is already up we borrow it and leave it alone; otherwise we start a
+     * headless one purely for the call and shut it down after, which keeps a window
+     * from appearing just because someone opened the settings panel.
+     *
+     * Only reached when nothing else is running, because a live connection means an
+     * agent may be mid-task, and that case takes the borrow path instead.
+     */
+    async _withCdpSession(work) {
+        const borrowed = this.isConnected || !!this.managedBrowserProcess;
+        if (!this.isConnected) {
+            const launch = await this._launchManagedBrowser(borrowed ? undefined : 'headless');
+            if (!launch.ok) return { success: false, error: launch.error };
+            if (!(await this._waitForBrowserReady(15000))) {
+                return { success: false, error: 'The browser did not start in time.' };
+            }
+        }
+
+        let session;
+        try {
+            session = await this.page.target().createCDPSession();
+            return await work(session);
+        } catch (error) {
+            console.error('BrowserHandler: CDP session failed:', error.message);
+            return { success: false, error: error.message };
+        } finally {
+            if (session) await session.detach().catch(() => {});
+            if (!borrowed) await this.closeBrowser();
+        }
+    }
+
+    /** Every site the agent's browser is holding cookies for, one entry per site. */
+    async listSites() {
+        return this._serialize(() => this._withCdpSession(async (session) => {
+            const { cookies } = await session.send('Storage.getCookies');
+            return { success: true, sites: groupCookiesBySite(cookies) };
+        }));
+    }
+
+    /** Signs the agent out of one site by removing everything that site stored. */
+    async clearSite(domain) {
+        const site = String(domain || '').trim().toLowerCase().replace(/^\./, '');
+        if (!site) return { success: false, error: 'No site was given.' };
+
+        return this._serialize(() => this._withCdpSession(async (session) => {
+            // Network.deleteCookies needs the domain enabled on this session first.
+            await session.send('Network.enable');
+            const { cookies } = await session.send('Storage.getCookies');
+            const owned = cookies.filter((cookie) => {
+                const host = cookie.domain.replace(/^\./, '');
+                return host === site || host.endsWith(`.${site}`);
+            });
+            for (const cookie of owned) {
+                await session.send('Network.deleteCookies', {
+                    name: cookie.name,
+                    domain: cookie.domain,
+                    path: cookie.path
+                });
+            }
+            // Cookies are only half a login. Modern sites also keep tokens in
+            // localStorage, IndexedDB and service workers, so clear the origin too
+            // or the site stays signed in with no cookies to show for it.
+            await session.send('Storage.clearDataForOrigin', {
+                origin: `https://${site}`,
+                storageTypes: 'all'
+            });
+            return { success: true, removed: owned.length };
+        }));
+    }
+
+    /** Drops every cookie in the profile. Logins that use only cookies end here. */
+    async clearAllCookies() {
+        return this._serialize(() => this._withCdpSession(async (session) => {
+            const { cookies } = await session.send('Storage.getCookies');
+            await session.send('Network.clearBrowserCookies');
+            return { success: true, removed: cookies.length };
+        }));
     }
 
     async _connect() {
@@ -215,7 +514,13 @@ class BrowserHandler {
             try {
                 const browserUrl = this._getBrowserUrl();
                 console.log(`Attempting to connect to browser at ${browserUrl}...`);
-                this.browser = await puppeteer.connect({ browserURL: browserUrl, defaultViewport: null });
+                // null means "use the real window size", which is right for both
+                // headful modes. Headless has no window, so it needs an explicit
+                // viewport to match the one requested at launch.
+                const defaultViewport = this.settings.get().visibility === 'headless'
+                    ? this._headlessViewport()
+                    : null;
+                this.browser = await puppeteer.connect({ browserURL: browserUrl, defaultViewport });
                 this.isConnected = true;
                 console.log('Successfully connected to browser via CDP.');
                 const pages = await this.browser.pages();
@@ -247,6 +552,16 @@ class BrowserHandler {
             this._emitResult(request_id, { status: 'error', error: 'Browser is not connected. Use the "get_status" tool first.' });
             return;
         }
+        // Single gate for every action that can reach a new origin. The profile
+        // holds the user's real logged-in sessions, so the blocklist is checked
+        // here rather than trusting each branch below to remember.
+        if (['navigate', 'open_new_tab'].includes(action) && this.settings.isBlocked(commandPayload.url)) {
+            this._emitResult(request_id, {
+                status: 'error',
+                error: `Navigation to ${commandPayload.url} was refused: the user has blocked this site for browser automation.`
+            });
+            return;
+        }
         try {
             let result;
             switch (action) {
@@ -255,7 +570,11 @@ class BrowserHandler {
                     if (isConnected) {
                         result = { status: 'connected', url: await this.page.url() };
                     } else {
-                        await this._launchManagedBrowser();
+                        const launch = await this._launchManagedBrowser();
+                        if (!launch.ok) {
+                            result = { status: 'disconnected', error: launch.error };
+                            break;
+                        }
                         const isNowConnected = await this._waitForBrowserReady(15000);
                         result = isNowConnected ? { status: 'connected', url: await this.page.url() } : { status: 'disconnected', error: 'Connection failed after launch.' };
                     }
@@ -422,14 +741,14 @@ class BrowserHandler {
                     this.page = await this.browser.newPage();
                     await this.page.goto(commandPayload.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
                     await this._stabilizeAfterInteraction(5000);
-                    await this.page.bringToFront();
+                    await this._focusPage();
                     result = await this.getView();
                     break;
                 case 'switch_to_tab':
                     const allPages = await this.browser.pages();
                     if (commandPayload.tab_index >= 0 && commandPayload.tab_index < allPages.length) {
                         this.page = allPages[commandPayload.tab_index];
-                        await this.page.bringToFront();
+                        await this._focusPage();
                         result = await this.getView();
                     } else {
                         result = { status: 'error', error: 'Invalid tab index.' };
@@ -445,7 +764,7 @@ class BrowserHandler {
                         await pagesToClose[commandPayload.tab_index].close();
                         const remainingPages = await this.browser.pages();
                         this.page = remainingPages[0];
-                        await this.page.bringToFront();
+                        await this._focusPage();
                         result = { status: 'success', message: `Tab ${commandPayload.tab_index} closed.` };
                     } else {
                         result = { status: 'error', error: 'Invalid tab index.' };
@@ -747,7 +1066,15 @@ class BrowserHandler {
                 return visibleElements;
             });
 
-            const screenshot_base64 = await this.page.screenshot({ encoding: 'base64' });
+            // Every view costs an upload from the user's machine plus a download on
+            // the backend, so the encoding is the single biggest lever on browser
+            // latency. A full-viewport PNG runs several hundred KB; JPEG at this
+            // quality lands under 100KB with no loss the model notices.
+            const screenshot_base64 = await this.page.screenshot({
+                encoding: 'base64',
+                type: 'jpeg',
+                quality: SCREENSHOT_QUALITY
+            });
             const screenshot_path = await this._uploadScreenshot(screenshot_base64);
             const viewData = {
                 status: 'success',
@@ -776,29 +1103,27 @@ class BrowserHandler {
 
     async cleanup() {
         console.log('Cleaning up BrowserHandler...');
-        
-        // --- MODIFICATION START ---
-        // The block that deletes the browser profile is now commented out to enable persistence.
-        /*
+        await this.closeBrowser();
+
+        // The profile directory is where the agent's logins live. Wiping it is now
+        // the user's explicit choice instead of a build-time decision.
+        if (this.settings.get().keepSignedIn) return;
         try {
+            // Chrome keeps file locks on the profile for a moment after the kill
+            // signal. Deleting too early leaves a half-removed directory that the
+            // next launch reports as a corrupt profile.
+            await this._sleep(500);
             const profilePath = path.join(this.appDataPath, 'aios-browser-profile');
             if (fs.existsSync(profilePath)) {
                 console.log(`Removing browser profile at: ${profilePath}`);
                 fs.rmSync(profilePath, { recursive: true, force: true });
             }
         } catch (error) {
-            console.error('Error removing browser profile directory:', error);
-        }
-        */
-        // --- MODIFICATION END ---
-        
-        if (this.browser) {
-            await this.browser.disconnect();
-        }
-        if (this.managedBrowserProcess) {
-            this.managedBrowserProcess.kill();
+            console.error('Error removing browser profile directory:', error.message);
         }
     }
 }
 
 module.exports = BrowserHandler;
+// Exported for the cookie-grouping check in .ui-check/group.js.
+module.exports.groupCookiesBySite = groupCookiesBySite;
