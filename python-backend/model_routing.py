@@ -5,10 +5,11 @@ from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Optional
 
 
-GLM_MODEL_ID = "z-ai/glm-5.3-flash"
-DEFAULT_MODEL_ID = GLM_MODEL_ID
-ULTRA_MODEL_ID = GLM_MODEL_ID
-VIDEO_MODEL_ID = GLM_MODEL_ID
+DEEPSEEK_MODEL_ID = "deepseek/deepseek-v4.1-flash"
+GLM_VIDEO_MODEL_ID = "z-ai/glm-5.3-flash"
+DEFAULT_MODEL_ID = DEEPSEEK_MODEL_ID
+ULTRA_MODEL_ID = DEEPSEEK_MODEL_ID
+VIDEO_MODEL_ID = GLM_VIDEO_MODEL_ID
 
 STANDARD_THINKING_MODE = "standard"
 ULTRA_THINKING_MODE = "ultra"
@@ -71,8 +72,8 @@ def resolve_primary_model(
     Select the active top-level agent model.
 
     Standard conversations may be promoted by their first special input.
-    The route remains sticky for later turns even though Standard, video, and
-    Ultra currently share the same GLM model.
+    The route remains sticky for later turns. Standard and Ultra use DeepSeek,
+    while video conversations use GLM.
     """
     normalized_mode = normalize_thinking_mode(thinking_mode)
     normalized_route = normalize_sticky_route(sticky_route)
@@ -84,6 +85,12 @@ def resolve_primary_model(
             code="ultra_video_not_supported",
         )
 
+    if normalized_route == ULTRA_ROUTE and has_video:
+        raise ModelRoutingError(
+            "This Ultra Think conversation cannot accept video attachments.",
+            code="conversation_model_locked_to_ultra",
+        )
+
     if normalized_route == VIDEO_ROUTE:
         if normalized_mode == ULTRA_THINKING_MODE:
             raise ModelRoutingError(
@@ -93,11 +100,6 @@ def resolve_primary_model(
         return PrimaryModelSelection(VIDEO_MODEL_ID, VIDEO_ROUTE, has_video, normalized_mode)
 
     if normalized_route == ULTRA_ROUTE:
-        if has_video:
-            raise ModelRoutingError(
-                "This Ultra Think conversation cannot accept video attachments.",
-                code="conversation_model_locked_to_ultra",
-            )
         return PrimaryModelSelection(ULTRA_MODEL_ID, ULTRA_ROUTE, has_video, normalized_mode)
 
     if normalized_mode == ULTRA_THINKING_MODE:
