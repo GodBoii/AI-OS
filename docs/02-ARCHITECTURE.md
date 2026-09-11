@@ -332,7 +332,7 @@ Aetheria_AI (Team)
 Agent(
     name="REASONING AGENT",
     role="Strategic planner and task coordinator",
-    model=OpenRouter(id="z-ai/glm-5.3-flash", reasoning_effort="xhigh"),
+    model=OpenRouter(id="deepseek/deepseek-v4.1-flash", reasoning_effort="xhigh"),
     tools=[
         DuckDuckGoTools(),
         BrowserTools(),
@@ -353,7 +353,7 @@ Agent(
 Agent(
     name="Aetheria_Coder",
     role="Software engineering specialist",
-    model=OpenRouter(id="z-ai/glm-5.3-flash", reasoning_effort="xhigh"),
+    model=OpenRouter(id="deepseek/deepseek-v4.1-flash", reasoning_effort="xhigh"),
     tools=[
         SandboxTools(),
         GitHubTools(),
@@ -374,7 +374,7 @@ Agent(
 Agent(
     name="Aetheria_Computer",
     role="Desktop and browser automation specialist",
-    model=OpenRouter(id="z-ai/glm-5.3-flash", reasoning_effort="xhigh"),
+    model=OpenRouter(id="deepseek/deepseek-v4.1-flash", reasoning_effort="xhigh"),
     tools=[
         ComputerTools(),
         BrowserTools(),
