@@ -144,24 +144,24 @@ Aetheria_AI (Team)
 │
 ├── REASONING AGENT (Leader)
 │   Role: Strategic planning and coordination
-│   Model: OpenRouter (z-ai/glm-5.3-flash, xhigh reasoning)
+│   Model: OpenRouter (deepseek/deepseek-v4.1-flash, xhigh reasoning)
 │   Tools: Web search, browser, file vault, delegation
 │   
 ├── dev_team (Sub-team)
 │   │
 │   ├── Aetheria_Coder
 │   │   Role: Software engineering
-│   │   Model: OpenRouter (z-ai/glm-5.3-flash, xhigh reasoning)
+│   │   Model: OpenRouter (deepseek/deepseek-v4.1-flash, xhigh reasoning)
 │   │   Tools: Sandbox, GitHub, deployments, file vault
 │   │
 │   └── Aetheria_Deployer
 │       Role: Deployment management
-│       Model: OpenRouter (z-ai/glm-5.3-flash, xhigh reasoning)
+│       Model: OpenRouter (deepseek/deepseek-v4.1-flash, xhigh reasoning)
 │       Tools: Vercel, Cloudflare, database provisioning
 │
 └── Computer_Agent (Optional)
     Role: Desktop and browser automation
-    Model: OpenRouter (z-ai/glm-5.3-flash, xhigh reasoning)
+    Model: OpenRouter (deepseek/deepseek-v4.1-flash, xhigh reasoning)
     Tools: Computer control, browser, Google services
 ```
 
