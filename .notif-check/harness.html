@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Notification check</title>
+    <link rel="stylesheet" href="../css/design-system.css" />
+    <link rel="stylesheet" href="../css/notifications.css" />
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(600px 400px at 20% 30%, rgba(99, 102, 241, 0.35), transparent 70%),
+                radial-gradient(500px 500px at 75% 70%, rgba(16, 185, 129, 0.3), transparent 70%),
+                var(--bg-color);
+        }
+
+        .grid {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(127, 127, 127, 0.25) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(127, 127, 127, 0.25) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+
+        .label {
+            position: absolute;
+            top: 16px;
+            left: 20px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--text-color);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="grid"></div>
+    <div class="label" id="label">light</div>
+    <script src="../js/notification-service.js"></script>
+    <script>
+        window.__theme = (name) => {
+            document.body.classList.toggle('dark-mode', name === 'dark');
+            document.getElementById('label').textContent = name;
+        };
+
+        window.__fill = () => {
+            const service = window.notificationService;
+            service.show('Report downloaded', 'success');
+            service.show('Version 2.4.0 is now available. Click to view details.', 'warning');
+            service.show('Error: could not reach the local coder bridge on port 8765.', 'error');
+            service.showConnection('Reconnecting... (attempt 2/5)', true);
+        };
+
+        window.__report = () => {
+            const cards = [...document.querySelectorAll('.unified-notification')];
+            const surface = cards[0] && cards[0].querySelector('.notification-surface');
+            return {
+                count: cards.length,
+                classes: cards.map((el) => el.className),
+                surfaceFilter: surface ? getComputedStyle(surface).filter : null,
+                shellOpacity: cards.map((el) => getComputedStyle(el).opacity),
+                iconSvgCount: document.querySelectorAll('.notification-icon svg').length,
+                timerAnimations: [...document.querySelectorAll('.notification-progress-fill')]
+                    .map((el) => el.getAnimations().map((a) => a.playState)),
+                containerWidth: getComputedStyle(document.querySelector('.unified-notification-container')).width
+            };
+        };
+
+        window.__hover = () => {
+            const card = document.querySelector('.unified-notification');
+            card.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+            return window.notificationService.notifications.map((n) => ({
+                paused: n.element.classList.contains('is-paused'),
+                state: n.timer ? n.timer.playState : 'none'
+            }));
+        };
+
+        window.__dismissFirst = () => {
+            const first = window.notificationService.notifications[0];
+            const tops = window.notificationService.notifications.map((n) => n.element.getBoundingClientRect().top);
+            window.notificationService.remove(first.id);
+            return tops;
+        };
+    </script>
+</body>
+
+</html>
