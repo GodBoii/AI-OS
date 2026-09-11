@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../css/design-system.css" />
+    <link rel="stylesheet" href="../css/chat.css" />
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: #000;
+        }
+    </style>
+</head>
+
+<body class="dark-mode">
+    <div id="floating-input-container" class="floating-input-container centered">
+        <textarea id="floating-input" class="floating-input" placeholder="Ask anything" rows="1"></textarea>
+        <div class="input-toolbar">
+            <div class="toolbar-left">
+                <button class="add-btn">+</button>
+                <button class="attach-btn">@</button>
+            </div>
+            <div class="toolbar-right">
+                <button id="plan-mode-btn" class="plan-mode-btn" aria-pressed="false">
+                    <span class="plan-mode-label">Plan</span>
+                </button>
+                <button class="mic-btn">M</button>
+                <button id="send-message" class="send-btn">S</button>
+            </div>
+        </div>
+    </div>
+    <script src="../js/metal-fx-native.js"></script>
+    <script>
+        const container = document.getElementById('floating-input-container');
+        const fx = new window.NativeMetalFx(container, {
+            mode: 'overlay',
+            className: 'composer-metal-canvas',
+            preset: 'chromatic',
+            strength: 0.9,
+            ringWidth: 2,
+            shaderScale: 1.6,
+            active: false,
+            paused: true,
+        });
+        window.__report = () => {
+            const canvas = container.querySelector('.composer-metal-canvas');
+            const hostBox = container.getBoundingClientRect();
+            const canvasBox = canvas.getBoundingClientRect();
+            const style = getComputedStyle(canvas);
+            return {
+                hostBox: { x: hostBox.x, y: hostBox.y, w: hostBox.width, h: hostBox.height },
+                canvasBox: { x: canvasBox.x, y: canvasBox.y, w: canvasBox.width, h: canvasBox.height },
+                canvasOpacity: style.opacity,
+                canvasZ: style.zIndex,
+                canvasRadius: style.borderRadius,
+                canvasFilter: style.filter,
+                backingStore: { w: canvas.width, h: canvas.height },
+                hasFrame: fx.hasFrame,
+                paused: fx.paused,
+                ringPixelSample: (() => {
+                    // Sample the top edge (should be painted) and the centre
+                    // (should be punched out) of the ring canvas.
+                    const ctx = canvas.getContext('2d');
+                    const edge = ctx.getImageData(Math.round(canvas.width / 2), 1, 1, 1).data;
+                    const middle = ctx.getImageData(
+                        Math.round(canvas.width / 2),
+                        Math.round(canvas.height / 2), 1, 1
+                    ).data;
+                    return { edge: [...edge], middle: [...middle] };
+                })(),
+            };
+        };
+        window.__arm = () => {
+            container.classList.add('plan-mode-active');
+            fx.setPaused(false);
+            fx.setActive(true);
+        };
+    </script>
+</body>
+
+</html>
