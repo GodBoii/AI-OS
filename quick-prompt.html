@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <title>Quick prompt</title>
+    <link rel="stylesheet" href="css/quick-prompt.css" />
+</head>
+<body>
+    <main class="quick-prompt">
+        <form class="quick-prompt-form" id="quick-prompt-form">
+            <label class="visually-hidden" for="quick-prompt-input">Ask Aetheria ai</label>
+            <textarea id="quick-prompt-input" class="quick-prompt-input" rows="2"
+                placeholder="Ask Aetheria ai anything..." maxlength="20000" autofocus></textarea>
+            <div class="quick-prompt-footer">
+                <span class="quick-prompt-hint"><kbd>Enter</kbd> send in a new chat · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Esc</kbd> close</span>
+                <button type="submit" class="quick-prompt-send" id="quick-prompt-send">Send</button>
+            </div>
+        </form>
+    </main>
+    <script src="js/quick-prompt.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+/* Quick prompt box (quick-prompt.html). Self-contained: it does not load the
+   main app's design system, so the window opens instantly. */
+:root {
+    color-scheme: light dark;
+    --qp-bg: rgba(18, 18, 22, 0.94);
+    --qp-border: rgba(255, 255, 255, 0.12);
+    --qp-text: #f1f1f4;
+    --qp-muted: rgba(241, 241, 244, 0.55);
+    --qp-accent: #e6e6eb;
+    --qp-accent-text: #111114;
+    --qp-focus: rgba(255, 255, 255, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --qp-bg: rgba(252, 250, 245, 0.96);
+        --qp-border: rgba(0, 0, 0, 0.1);
+        --qp-text: #1d1d22;
+        --qp-muted: rgba(29, 29, 34, 0.55);
+        --qp-accent: #2d3748;
+        --qp-accent-text: #ffffff;
+        --qp-focus: rgba(45, 55, 72, 0.4);
+    }
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+}
+
+html,
+body {
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.quick-prompt {
+    height: 100%;
+    padding: 6px;
+}
+
+.quick-prompt-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    padding: 12px 14px 10px;
+    background: var(--qp-bg);
+    border: 1px solid var(--qp-border);
+    border-radius: 14px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+    -webkit-app-region: drag;
+}
+
+.quick-prompt-input {
+    flex: 1;
+    width: 100%;
+    resize: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--qp-text);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    -webkit-app-region: no-drag;
+}
+
+.quick-prompt-input::placeholder {
+    color: var(--qp-muted);
+}
+
+.quick-prompt-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.quick-prompt-hint {
+    color: var(--qp-muted);
+    font-size: 12px;
+}
+
+.quick-prompt-hint kbd {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid var(--qp-border);
+    border-radius: 4px;
+}
+
+.quick-prompt-send {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    background: var(--qp-accent);
+    color: var(--qp-accent-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+}
+
+/* The textarea is focused whenever the box is open, so the card border
+   carries the focus state instead of an outline inside the card. */
+.quick-prompt-form:focus-within {
+    border-color: var(--qp-focus);
+}
+
+.quick-prompt-input:focus-visible {
+    outline: none;
+}
+
+.quick-prompt-send:focus-visible {
+    outline: 2px solid var(--qp-focus);
+    outline-offset: 2px;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
