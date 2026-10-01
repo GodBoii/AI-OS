@@ -13,6 +13,14 @@ const LocalCoderHandler = require('./local-coder-handler.js');
 const NativeNotificationService = require('./native-notification-service.js');
 const WindowsNativeSpeechService = require('./windows-native-speech-service.js');
 const { initUpdater } = require('./updater.js');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const {
+    resolveAppIconPath,
+    resolveLinuxLaunchCommand,
+    setLinuxLaunchAtStartup,
+    applyLoginShellPath,
+} = require('./platform-integration.js');
 
 let mainWindow;
 let appTray = null;
@@ -29,6 +37,15 @@ app.setName('Aetheria ai');
 if (process.platform === 'win32' && app.isPackaged) {
     app.setAppUserModelId('com.aetheria-ai.desktop');
 }
+
+// --- macOS: inherit the login shell PATH ---
+// Finder/Dock launches get launchd's minimal PATH, which hides Homebrew, nvm,
+// pyenv, etc. from the terminal, git and run_command tools. The window waits
+// for this (bounded by a timeout inside applyLoginShellPath) so no child
+// process starts with the short PATH.
+const loginShellPathReady = process.platform === 'darwin'
+    ? applyLoginShellPath({ env: process.env, execFile: promisify(execFile) })
+    : Promise.resolve(null);
 
 // --- Protocol Registration ---
 // This tells the OS that our app can handle 'aios://' links.
@@ -49,6 +66,15 @@ let nativeNotificationService;
 let windowsNativeSpeechService;
 let linkWebView = null;
 let isAppQuitting = false;
+// A deep link can arrive before the renderer can receive it: on first launch
+// via a link (argv), and on macOS where 'open-url' may fire before 'ready'.
+// The newest such link is held here and replayed once the page has loaded.
+let pendingDeepLink = null;
+let mainWindowLoaded = false;
+// Set once the app is really quitting so the close handler stops hiding the
+// window. Kept apart from isAppQuitting, which also gates the before-quit
+// cleanup and must keep its current meaning.
+let allowWindowClose = false;
 
 const INTEGRATION_CALLBACK_PROVIDERS = new Set([
     'github',
@@ -126,6 +152,12 @@ function handleDeepLink(url) {
         return;
     }
 
+    if (!mainWindowLoaded || !mainWindow || mainWindow.isDestroyed()) {
+        console.log('[main.js] >>> Window not ready yet; deep link queued until the page loads.');
+        pendingDeepLink = url;
+        return;
+    }
+
     // Bring the app window to the front, this is crucial.
     if (!showMainWindow()) {
         console.error('[main.js] >>> Error: mainWindow is not available. The app might still be launching.');
@@ -187,16 +219,20 @@ if (!gotTheLock) {
 }
 
 
+function getAppIconPath() {
+    return resolveAppIconPath({
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        devAssetsDir: path.join(__dirname, '..', 'assets'),
+    });
+}
+
 function createSystemTray() {
     if (appTray) return;
     try {
         const fs = require('fs');
-        let trayIconPath;
-        if (app.isPackaged) {
-            trayIconPath = path.join(process.resourcesPath, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-        } else {
-            trayIconPath = path.join(__dirname, '..', 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-        }
+        const trayIconPath = getAppIconPath();
         if (!fs.existsSync(trayIconPath)) {
             console.error('[Tray] Icon not found:', trayIconPath);
             return;
@@ -219,6 +255,8 @@ function createSystemTray() {
             }
         ]);
         appTray.setContextMenu(contextMenu);
+        // 'double-click' is emitted on Windows and macOS only. Linux tray hosts
+        // (AppIndicator) only expose the context menu, which has "Show".
         appTray.on('double-click', () => { showMainWindow(); });
         console.log('[Tray] System tray created successfully');
     } catch (error) {
@@ -230,17 +268,12 @@ function createWindow() {
     const mainProcessEmitter = new EventEmitter();
     const fs = require('fs');
 
-    // Resolve icon path correctly for both development and production
-    let iconPath;
-    if (app.isPackaged) {
-        // In production, icon is copied to resources folder via extraResources in package.json
-        iconPath = path.join(process.resourcesPath, 'icon.ico');
-        console.log('[Icon] Production icon path:', iconPath);
-    } else {
-        // In development, use the regular path
-        iconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
-        console.log('[Icon] Development icon path:', iconPath);
-    }
+    // Resolve icon path for both development and production. Packaged builds
+    // copy icon.ico and icon.png into resources/ via extraResources. Windows
+    // keeps the .ico; macOS and Linux use the .png because nativeImage cannot
+    // decode .ico there.
+    const iconPath = getAppIconPath();
+    console.log(`[Icon] ${app.isPackaged ? 'Production' : 'Development'} icon path:`, iconPath);
 
     // Verify icon exists
     const iconExists = fs.existsSync(iconPath);
@@ -282,6 +315,21 @@ function createWindow() {
         // Set overlay icon (shown in taskbar when app is running)
         mainWindow.setOverlayIcon(icon, 'Aetheria ai');
     }
+
+    // Packaged macOS builds take the Dock icon from the app bundle. An
+    // unpackaged run would otherwise show the generic Electron icon.
+    if (process.platform === 'darwin' && !app.isPackaged && app.dock && !icon.isEmpty()) {
+        app.dock.setIcon(icon);
+    }
+
+    mainWindow.webContents.once('did-finish-load', () => {
+        mainWindowLoaded = true;
+        if (pendingDeepLink) {
+            const queuedLink = pendingDeepLink;
+            pendingDeepLink = null;
+            handleDeepLink(queuedLink);
+        }
+    });
 
     mainWindow.maximize();
     mainWindow.loadFile('index.html');
@@ -419,6 +467,24 @@ function createWindow() {
 
     ipcMain.on('set-launch-at-startup', (event, enabled) => {
         console.log('[main.js] Launch at startup toggled:', enabled);
+        if (process.platform === 'linux') {
+            // setLoginItemSettings() does nothing on Linux; use an XDG autostart entry.
+            setLinuxLaunchAtStartup(Boolean(enabled), {
+                fsPromises: require('fs').promises,
+                env: process.env,
+                homeDir: app.getPath('home'),
+                appName: 'Aetheria ai',
+                launchCommand: resolveLinuxLaunchCommand({
+                    env: process.env,
+                    execPath: process.execPath,
+                    isPackaged: app.isPackaged,
+                    appPath: app.getAppPath(),
+                }),
+            })
+                .then((result) => console.log('[main.js] Linux autostart entry updated:', result))
+                .catch((error) => console.error('[main.js] Failed to update Linux autostart entry:', error.message));
+            return;
+        }
         app.setLoginItemSettings({
             openAtLogin: enabled,
             name: 'Aetheria ai'
@@ -444,10 +510,28 @@ function createWindow() {
 
     // --- Close window: minimize to tray if setting is on ---
     mainWindow.on('close', (event) => {
-        if (minimizeToTray && !isAppQuitting) {
+        if (isAppQuitting || allowWindowClose) return;
+
+        if (minimizeToTray) {
+            event.preventDefault();
+            if (!appTray) createSystemTray();
+            // Hiding with no tray icon would leave nothing to click to get the
+            // window back, so fall back to a normal minimize.
+            if (appTray) {
+                mainWindow.hide();
+            } else {
+                mainWindow.minimize();
+            }
+            return;
+        }
+
+        // macOS convention: closing the window keeps the app alive in the Dock,
+        // and clicking the Dock icon brings it back ('activate' below). The
+        // window is hidden rather than destroyed because createWindow() also
+        // registers every IPC handler and cannot run a second time.
+        if (process.platform === 'darwin') {
             event.preventDefault();
             mainWindow.hide();
-            if (!appTray) createSystemTray();
         }
     });
 
@@ -1033,7 +1117,15 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
 
 initUpdater(() => mainWindow);
 
-app.whenReady().then(createWindow);
+app.whenReady()
+    .then(() => loginShellPathReady)
+    .then(createWindow);
+
+// macOS: clicking the Dock icon (or relaunching from Finder) while the app is
+// running with its window hidden brings the window back.
+app.on('activate', () => {
+    showMainWindow();
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -1041,7 +1133,17 @@ app.on('window-all-closed', () => {
     }
 });
 
+// Squirrel.Mac closes every window *before* emitting 'before-quit' when it
+// installs an update, so the macOS hide-on-close behavior has to be lifted here
+// or the update would never get to restart the app.
+if (process.platform === 'darwin') {
+    electron.autoUpdater.on('before-quit-for-update', () => {
+        allowWindowClose = true;
+    });
+}
+
 app.on('before-quit', async () => {
+    allowWindowClose = true;
     if (windowsNativeSpeechService) {
         windowsNativeSpeechService.dispose();
         windowsNativeSpeechService = null;
