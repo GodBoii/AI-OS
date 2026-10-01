@@ -86,6 +86,18 @@ class ComputerTools(Toolkit):
                 self.get_volume,
                 self.set_volume,
                 self.get_system_info,
+
+                # OS Status & Control
+                self.get_battery_status,
+                self.get_brightness,
+                self.set_brightness,
+                self.get_network_status,
+                self.get_bluetooth_status,
+                self.get_focus_status,
+                self.list_processes,
+                self.kill_process,
+                self.open_path,
+                self.reveal_in_folder,
                 
                 # Application Discovery
                 self.list_installed_apps,
@@ -241,6 +253,16 @@ class ComputerTools(Toolkit):
             'list_installed_apps': 'Scanning installed applications',
             'get_screen_elements': 'Reading UI elements from screen',
             'find_element_by_text': f"Searching for element: {payload.get('text', '?')}",
+            'get_battery_status': 'Checked battery status',
+            'get_brightness': 'Checked screen brightness',
+            'set_brightness': f"Set brightness to {payload.get('level', '?')}%",
+            'get_network_status': 'Checked network status',
+            'get_bluetooth_status': 'Checked Bluetooth status',
+            'get_focus_status': 'Checked Do Not Disturb status',
+            'list_processes': 'Listed running processes',
+            'kill_process': f"Stopped process {payload.get('pid', '?')}",
+            'open_path': 'Opened a file',
+            'reveal_in_folder': 'Showed a file in its folder',
         }
         
         message = action_messages.get(action, f"Executed {action.replace('_', ' ')}")
@@ -693,6 +715,111 @@ class ComputerTools(Toolkit):
         Use this to understand the user's system configuration.
         """
         return self._send_command_and_wait({'action': 'get_system_info'})
+
+    # ===== OS STATUS & CONTROL =====
+
+    def get_battery_status(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Get the battery level and charging state of the user's computer.
+
+        Returns has_battery, percent (0-100), state (charging, discharging,
+        plugged-in, full), minutes_remaining when known, and on_battery_power.
+        Desktops without a battery return has_battery=false.
+        """
+        return self._send_command_and_wait({'action': 'get_battery_status'})
+
+    def get_brightness(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Get the built-in display brightness as a percentage (0-100).
+
+        Works for laptop screens. External monitors usually cannot be read.
+        """
+        return self._send_command_and_wait({'action': 'get_brightness'})
+
+    def set_brightness(self, level: int) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Set the built-in display brightness.
+
+        Args:
+            level: Brightness percentage from 0 to 100.
+
+        Works for laptop screens. External monitors usually cannot be changed.
+        """
+        return self._send_command_and_wait({'action': 'set_brightness', 'level': level})
+
+    def get_network_status(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Get internet connectivity and Wi-Fi details.
+
+        Returns online (whether the OS reports an internet connection) and wifi
+        with connected, ssid (network name) and signal_percent when available.
+        This only reads the state; it cannot change Wi-Fi settings.
+        """
+        return self._send_command_and_wait({'action': 'get_network_status'})
+
+    def get_bluetooth_status(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Get whether Bluetooth is available and on, plus connected devices where
+        the OS reports them. This only reads the state.
+        """
+        return self._send_command_and_wait({'action': 'get_bluetooth_status'})
+
+    def get_focus_status(self) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Check whether Do Not Disturb / Focus mode is on.
+
+        Returns do_not_disturb as true, false, or null when the OS does not
+        share it. Use it before sending the user something time-sensitive.
+        """
+        return self._send_command_and_wait({'action': 'get_focus_status'})
+
+    def list_processes(self, name: Optional[str] = None, limit: int = 25) -> Union[Dict[str, Any], ToolResult]:
+        """
+        List running processes, largest memory users first.
+
+        Args:
+            name: Optional part of a process name to filter by (e.g. "chrome").
+            limit: Maximum number of processes to return (1-200, default 25).
+
+        Returns pid, name, memory_mb and CPU usage for each process.
+        """
+        payload: Dict[str, Any] = {'action': 'list_processes', 'limit': limit}
+        if name:
+            payload['name'] = name
+        return self._send_command_and_wait(payload)
+
+    def kill_process(self, pid: int, force: bool = False) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Stop a running process by its pid (from list_processes).
+
+        Args:
+            pid: Process ID to stop.
+            force: False (default) asks the program to close so it can save its
+                work. True kills it immediately and may lose unsaved data; only
+                use it after a normal stop failed and the user agreed.
+
+        Confirm with the user before stopping anything they did not ask about.
+        Aetheria ai itself and core OS processes cannot be stopped.
+        """
+        return self._send_command_and_wait({'action': 'kill_process', 'pid': pid, 'force': bool(force)})
+
+    def open_path(self, path: str) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Open a file or folder with its default application (like double-clicking it).
+
+        Args:
+            path: Absolute path inside the user's allowed computer scope.
+        """
+        return self._send_command_and_wait({'action': 'open_path', 'path': path})
+
+    def reveal_in_folder(self, path: str) -> Union[Dict[str, Any], ToolResult]:
+        """
+        Show a file selected in Explorer, Finder or the Linux file manager.
+
+        Args:
+            path: Absolute path inside the user's allowed computer scope.
+        """
+        return self._send_command_and_wait({'action': 'reveal_in_folder', 'path': path})
 
     # ===== APPLICATION DISCOVERY =====
 

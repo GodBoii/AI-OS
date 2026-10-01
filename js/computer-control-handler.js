@@ -1,7 +1,7 @@
 // js/computer-control-handler.js
 // Computer Control Handler for AI Agent Desktop Automation
 
-const { screen, clipboard, desktopCapturer, powerMonitor, systemPreferences, shell } = require('electron');
+const { screen, clipboard, desktopCapturer, powerMonitor, systemPreferences, shell, net } = require('electron');
 // nut-js is loaded on first use (see _nut()). Its Linux binary links against
 // libXtst; a missing system library must not stop the whole app from starting.
 const { activeWindow } = require('active-win');
@@ -16,6 +16,7 @@ const { promisify } = require('util');
 const chokidar = require('chokidar');
 const linuxDesktop = require('./linux-desktop');
 const macosDesktop = require('./macos-desktop');
+const { SystemStatus } = require('./system-status');
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -38,6 +39,8 @@ class ComputerControlHandler {
         this.platform = process.platform; // 'win32', 'darwin', 'linux'
         this.env = process.env;
         this._nutModule = null;
+        this._systemStatusService = null;
+        this.systemLocked = false;
         // Each macOS privacy prompt / settings pane is shown once per session.
         this._macPermissionPrompted = new Set();
         
@@ -283,6 +286,53 @@ class ComputerControlHandler {
                     result = await this._stopWatching(commandPayload);
                     break;
 
+                // ===== OS STATUS & CONTROL =====
+                case 'get_battery_status':
+                    result = await this._systemStatus().getBatteryStatus();
+                    break;
+
+                case 'get_brightness':
+                    result = await this._systemStatus().getBrightness();
+                    break;
+
+                case 'set_brightness':
+                    result = await this._systemStatus().setBrightness(commandPayload.level);
+                    break;
+
+                case 'get_network_status':
+                    result = await this._systemStatus().getNetworkStatus();
+                    break;
+
+                case 'get_bluetooth_status':
+                    result = await this._systemStatus().getBluetoothStatus();
+                    break;
+
+                case 'get_focus_status':
+                    result = await this._systemStatus().getFocusStatus();
+                    break;
+
+                case 'list_processes':
+                    result = await this._systemStatus().listProcesses({
+                        name: commandPayload.name,
+                        limit: commandPayload.limit,
+                    });
+                    break;
+
+                case 'kill_process':
+                    result = await this._systemStatus().killProcess({
+                        pid: commandPayload.pid,
+                        force: commandPayload.force === true,
+                    });
+                    break;
+
+                case 'open_path':
+                    result = await this._openPath(commandPayload);
+                    break;
+
+                case 'reveal_in_folder':
+                    result = await this._revealInFolder(commandPayload);
+                    break;
+
                 default:
                     result = {
                         status: 'error',
@@ -308,6 +358,59 @@ class ComputerControlHandler {
         }
     }
 
+    // ===== OS STATUS, FILES AND LOCK STATE =====
+
+    _systemStatus() {
+        if (!this._systemStatusService) {
+            this._systemStatusService = new SystemStatus({
+                platform: this.platform,
+                execFile: execFileAsync,
+                runPowerShell: (script, options) => this._runPowerShell(script, options),
+                fsPromises: fs,
+                powerMonitor,
+                net,
+                homeDir: os.homedir(),
+            });
+        }
+        return this._systemStatusService;
+    }
+
+    /** Opens a file or folder with its default app. Restricted to the scope. */
+    async _openPath(commandPayload) {
+        const scopeCheck = await this._ensurePathInScope(commandPayload.path, 'open_path');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
+        try {
+            await fs.access(scopeCheck.path);
+        } catch {
+            return { status: 'error', error: `Path does not exist: ${scopeCheck.path}` };
+        }
+        const failure = await shell.openPath(scopeCheck.path);
+        if (failure) return { status: 'error', error: failure };
+        return { status: 'success', message: `Opened ${scopeCheck.path}`, path: scopeCheck.path };
+    }
+
+    /** Shows a file selected in Explorer / Finder / the file manager. */
+    async _revealInFolder(commandPayload) {
+        const scopeCheck = await this._ensurePathInScope(commandPayload.path, 'reveal_in_folder');
+        if (!scopeCheck.ok) return { status: 'error', error: scopeCheck.error };
+        try {
+            await fs.access(scopeCheck.path);
+        } catch {
+            return { status: 'error', error: `Path does not exist: ${scopeCheck.path}` };
+        }
+        shell.showItemInFolder(scopeCheck.path);
+        return { status: 'success', message: `Showed ${scopeCheck.path} in its folder`, path: scopeCheck.path };
+    }
+
+    /**
+     * While the screen is locked (or the machine is asleep) the agent must
+     * not click, type, move windows or capture the screen: nobody is
+     * watching, and on some systems it would act on the lock screen itself.
+     */
+    setSystemLocked(locked) {
+        this.systemLocked = Boolean(locked);
+    }
+
     // ===== PLATFORM READINESS =====
 
     /**
@@ -315,6 +418,10 @@ class ComputerControlHandler {
      * or null. Windows needs nothing extra, so it always returns null there.
      */
     _getPlatformBlocker(action) {
+        if (this.systemLocked && (INPUT_ACTIONS.has(action) || WINDOW_ACTIONS.has(action) || SCREEN_CAPTURE_ACTIONS.has(action))) {
+            return 'The computer is locked or asleep, so the agent has paused screen, mouse, keyboard and window actions. '
+                + 'They resume automatically when the user unlocks the computer.';
+        }
         if (this.platform === 'linux') {
             if ((INPUT_ACTIONS.has(action) || WINDOW_ACTIONS.has(action)) && linuxDesktop.isWaylandSession(this.env)) {
                 return 'This action needs an X11 session. Wayland does not allow one app to control the mouse, keyboard '
