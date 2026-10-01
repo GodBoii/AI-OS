@@ -3120,6 +3120,36 @@ class AIOS {
                                 <span class="aios-toggle-slider"></span>
                             </label>
                         </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Follow System Theme</span>
+                                <span class="settings-toggle-hint">Switch between dark and light automatically when your operating system does. Using the theme button turns this off.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-appearance-follow-system">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Use System Accent Color</span>
+                                <span class="settings-toggle-hint">Tint buttons and highlights with the accent color chosen in Windows or macOS settings.</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-appearance-system-accent">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <span class="settings-toggle-label">Translucent Window Background</span>
+                                <span class="settings-toggle-hint" id="settings-appearance-native-material-hint">Let the desktop show through the window background (Mica on Windows 11, vibrancy on macOS).</span>
+                            </div>
+                            <label class="aios-toggle">
+                                <input type="checkbox" id="settings-appearance-native-material">
+                                <span class="aios-toggle-slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </section>
 
@@ -3308,6 +3338,23 @@ class AIOS {
                         <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Launch at Startup</span><span class="settings-toggle-hint">Automatically start Aetheria ai when you log in to your computer.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-startup"><span class="aios-toggle-slider"></span></label></div>
                         <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Always on Top</span><span class="settings-toggle-hint">Keep the application window above all other windows.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-always-on-top"><span class="aios-toggle-slider"></span></label></div>
                         <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Auto-check for Updates</span><span class="settings-toggle-hint">Automatically check for new versions when the app starts.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-general-auto-update" checked><span class="aios-toggle-slider"></span></label></div>
+                    </div>
+                </section>
+
+                <!-- Desktop Integration Section -->
+                <section class="settings-card" aria-labelledby="settings-desktop-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon" data-settings-icon="desktop"><i class="fas fa-desktop"></i></div>
+                        <div>
+                            <h4 id="settings-desktop-title" class="settings-card-title">Desktop Integration</h4>
+                            <p class="settings-card-desc">How Aetheria ai works with your taskbar, Dock and operating system.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Taskbar &amp; Dock Activity</span><span class="settings-toggle-hint">Show agent progress on the app icon, count tasks that finished while you were away, flash or bounce the icon, and add Pause/Stop buttons to the Windows taskbar preview.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-desktop-taskbar-activity" checked><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Keep Computer Awake During Tasks</span><span class="settings-toggle-hint">Stop the computer from going to sleep while the agent is working. The screen can still turn off.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-desktop-keep-awake" checked><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Pause Computer Agent When Locked</span><span class="settings-toggle-hint">Block screen, mouse, keyboard and window actions while the computer is locked or asleep. They continue after you unlock.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-desktop-pause-on-lock" checked><span class="aios-toggle-slider"></span></label></div>
+                        <div class="settings-toggle-row"><div class="settings-toggle-info"><span class="settings-toggle-label">Quick Prompt Shortcut</span><span class="settings-toggle-hint" id="settings-desktop-quick-prompt-hint">Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> from any app to open a small prompt box. Enter sends it to a new chat.</span></div><label class="aios-toggle"><input type="checkbox" id="settings-desktop-quick-prompt" checked><span class="aios-toggle-slider"></span></label></div>
                     </div>
                 </section>
             `;
@@ -3539,14 +3586,35 @@ class AIOS {
         // â”€â”€ General Settings â”€â”€
         let gs = {};
         try { const r = localStorage.getItem(GK); if (r) gs = JSON.parse(r); } catch(_e){}
-        const gS = { minimizeToTray: false, launchAtStartup: false, alwaysOnTop: false, autoCheckUpdates: true, animatedIcons: false, ...gs };
+        const gS = {
+            minimizeToTray: false, launchAtStartup: false, alwaysOnTop: false, autoCheckUpdates: true, animatedIcons: false,
+            followSystemTheme: false, useSystemAccent: false, nativeWindowMaterial: false,
+            taskbarActivity: true, keepAwakeDuringRuns: true, pauseAgentOnLock: true, quickPromptHotkey: true,
+            ...gs,
+        };
+        // desktop-bridge.js reads the appearance keys from the same storage.
+        const applyAppearance = () => window.desktopBridge?.applyAppearanceSettings();
         const gM = {
             'settings-general-tray': { key: 'minimizeToTray', ipc: 'set-minimize-to-tray' },
             'settings-general-startup': { key: 'launchAtStartup', ipc: 'set-launch-at-startup' },
             'settings-general-always-on-top': { key: 'alwaysOnTop', ipc: 'set-always-on-top' },
             'settings-general-auto-update': { key: 'autoCheckUpdates', ipc: null },
             'settings-appearance-animated-icons': { key: 'animatedIcons', ipc: null },
+            'settings-appearance-follow-system': { key: 'followSystemTheme', ipc: null, onChange: applyAppearance },
+            'settings-appearance-system-accent': { key: 'useSystemAccent', ipc: null, onChange: applyAppearance },
+            'settings-appearance-native-material': { key: 'nativeWindowMaterial', ipc: 'set-native-window-material' },
+            'settings-desktop-taskbar-activity': { key: 'taskbarActivity', ipc: 'set-taskbar-activity' },
+            'settings-desktop-keep-awake': { key: 'keepAwakeDuringRuns', ipc: 'set-keep-awake-during-runs' },
+            'settings-desktop-pause-on-lock': { key: 'pauseAgentOnLock', ipc: 'set-pause-agent-on-lock' },
+            // The object form tells main this came from the user, so a taken
+            // shortcut is reported instead of only logged.
+            'settings-desktop-quick-prompt': {
+                key: 'quickPromptHotkey',
+                ipc: 'set-quick-prompt-hotkey',
+                userPayload: (checked) => ({ enabled: checked, userInitiated: true }),
+            },
         };
+        window.desktopBridge?.syncSettingsControls?.();
         for (const [id, cfg] of Object.entries(gM)) {
             const c = document.getElementById(id);
             if (!c) continue;
@@ -3556,12 +3624,14 @@ class AIOS {
             c.addEventListener('change', () => {
                 gS[cfg.key] = c.checked;
                 try { localStorage.setItem(GK, JSON.stringify(gS)); } catch(_e){}
-                if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, c.checked);
+                if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, cfg.userPayload ? cfg.userPayload(c.checked) : c.checked);
                 if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = c.checked;
                 if (cfg.key === 'animatedIcons') window.animatedIcons?.setEnabled(c.checked);
+                cfg.onChange?.(c.checked);
             });
             // Apply initial state on load
             if (cfg.ipc) window.electron?.ipcRenderer?.send(cfg.ipc, gS[cfg.key]);
+            if (cfg.onChange) cfg.onChange(gS[cfg.key]);
             if (cfg.key === 'autoCheckUpdates' && window.updateChecker) window.updateChecker.autoCheckEnabled = gS[cfg.key];
             // animatedIcons is deliberately not applied here: animated-icons.js
             // already read the stored value before first paint, and re-applying

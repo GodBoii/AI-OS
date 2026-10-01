@@ -815,7 +815,10 @@ class UIManager {
         addClickHandler(this.elements.minimizeBtn, () => ipcRenderer.send('minimize-window'));
         addClickHandler(this.elements.resizeBtn, () => ipcRenderer.send('toggle-maximize-window'));
         addClickHandler(this.elements.closeBtn, () => ipcRenderer.send('close-window'));
-        addClickHandler(this.elements.themeToggle, () => this.state.setState({ isDarkMode: !this.state.getState().isDarkMode }));
+        addClickHandler(this.elements.themeToggle, () => {
+            window.desktopBridge?.stopFollowingSystemTheme();
+            this.state.setState({ isDarkMode: !this.state.getState().isDarkMode });
+        });
         ipcRenderer.on('window-state-changed', (isMaximized) => this.state.setState({ isWindowMaximized: isMaximized }));
         document.addEventListener('click', (event) => {
             if (event.target.tagName === 'A' && event.target.href && event.target.href.startsWith('http')) {
@@ -857,6 +860,7 @@ class UIManager {
             // --- Ctrl+Shift+T: Toggle Theme ---
             if (ctrl && shift && key === 't') {
                 e.preventDefault();
+                window.desktopBridge?.stopFollowingSystemTheme();
                 this.state.setState({ isDarkMode: !this.state.getState().isDarkMode });
                 return;
             }

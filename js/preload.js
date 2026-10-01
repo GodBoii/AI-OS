@@ -51,7 +51,13 @@ const validSendChannels = [
     'set-minimize-to-tray',
     'set-always-on-top',
     'set-launch-at-startup',
-    'toggle-devtools'
+    'toggle-devtools',
+    // Desktop integration settings (native-features.js)
+    'set-taskbar-activity',
+    'set-keep-awake-during-runs',
+    'set-pause-agent-on-lock',
+    'set-quick-prompt-hotkey',
+    'set-native-window-material'
 ];
 
 const validReceiveChannels = [
@@ -107,7 +113,12 @@ const validReceiveChannels = [
     // Settings responses
     'setting-changed',
     // Update download/install progress
-    'updater-event'
+    'updater-event',
+    // OS-native integration (native-features.js)
+    'app-action',
+    'open-files',
+    'system-appearance',
+    'agent-run-control'
 ];
 
 const validInvokeChannels = [
@@ -136,12 +147,19 @@ const validInvokeChannels = [
     'project-local-terminal-send',
     'project-local-terminal-resize',
     'project-local-terminal-stop',
-    'updater-action'
+    'updater-action',
+    'system-appearance:get'
 ];
+
+// Lets CSS adapt per OS (for example macOS traffic lights in css/style.css).
+window.addEventListener('DOMContentLoaded', () => {
+    document.documentElement.classList.add(`platform-${process.platform}`);
+});
 
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld(
     "electron", {
+    platform: process.platform,
     // IPC functions
     ipcRenderer: {
         send: (channel, data) => {

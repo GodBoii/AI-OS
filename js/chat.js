@@ -4481,11 +4481,58 @@ function init() {
     startNewConversation();
 }
 
+// --- Desktop integration hooks (js/desktop-bridge.js) ---
+// Notification buttons and the quick prompt reach the chat through these.
+
+function hasConversation(conversationId) {
+    return Boolean(conversationId)
+        && (conversationId === currentConversationId || conversationThreads.has(conversationId));
+}
+
+// Only conversations from this app session have a thread to show; older
+// ones live in History and are not reopened from here.
+function openConversation(conversationId) {
+    if (!hasConversation(conversationId)) return false;
+    if (conversationId !== currentConversationId) switchConversation(conversationId);
+    window.stateManager?.setState({ isChatOpen: true });
+    return true;
+}
+
+function focusComposer() {
+    const input = document.getElementById('floating-input');
+    if (!input) return false;
+    input.focus();
+    const end = input.value?.length || 0;
+    if (typeof input.setSelectionRange === 'function') input.setSelectionRange(end, end);
+    return true;
+}
+
+async function sendPromptFromDesktop(text, { conversationId = null, newConversation = false } = {}) {
+    const prompt = String(text || '').trim();
+    if (!prompt) return false;
+    if (newConversation) {
+        await startNewConversation();
+    } else if (conversationId && !openConversation(conversationId)) {
+        return false;
+    }
+    const input = document.getElementById('floating-input');
+    if (!input) return false;
+    window.stateManager?.setState({ isChatOpen: true });
+    input.value = prompt;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await handleSendMessage();
+    return true;
+}
+
 window.chatModule = {
     init,
     startNewConversation,
     switchConversation,
-    exportConversation: exportActiveConversationPdf
+    exportConversation: exportActiveConversationPdf,
+    hasConversation,
+    openConversation,
+    focusComposer,
+    sendPromptFromDesktop,
 };
 
 // --- Workspace "Know Me" Modal Global bindings ---

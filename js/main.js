@@ -21,6 +21,10 @@ const {
     setLinuxLaunchAtStartup,
     applyLoginShellPath,
 } = require('./platform-integration.js');
+const { installNativeFeatures } = require('./native-features.js');
+const { parseLaunchAction } = require('./app-actions.js');
+const { extractFilePaths } = require('./file-open.js');
+const { parseNotificationLink } = require('./run-notification.js');
 
 let mainWindow;
 let appTray = null;
@@ -75,6 +79,67 @@ let mainWindowLoaded = false;
 // window. Kept apart from isAppQuitting, which also gates the before-quit
 // cleanup and must keep its current meaning.
 let allowWindowClose = false;
+// OS-native features (taskbar, quick prompt, open-with, ...). Created in
+// createWindow(); null until then.
+let nativeFeatures = null;
+// Launch actions and opened files that arrive before nativeFeatures exists
+// (first launch from a jump-list item, or macOS 'open-file' before 'ready').
+let pendingLaunchAction = null;
+const pendingOpenedFiles = [];
+// Messages for the renderer that must wait until the page has loaded.
+const pendingRendererMessages = [];
+
+function sendToRendererWhenReady(channel, payload) {
+    if (mainWindowLoaded && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(channel, payload);
+    } else {
+        pendingRendererMessages.push({ channel, payload });
+    }
+}
+
+function flushPendingRendererMessages() {
+    while (pendingRendererMessages.length && mainWindow && !mainWindow.isDestroyed()) {
+        const { channel, payload } = pendingRendererMessages.shift();
+        mainWindow.webContents.send(channel, payload);
+    }
+}
+
+function handleLaunchAction(action) {
+    if (!action) return;
+    if (nativeFeatures) nativeFeatures.handleLaunchAction(action);
+    else pendingLaunchAction = action;
+}
+
+function handleOpenedFiles(filePaths) {
+    if (!filePaths.length) return;
+    if (nativeFeatures) {
+        nativeFeatures.openFiles(filePaths).catch((error) => console.error('[main.js] Opening files failed:', error.message));
+    } else {
+        pendingOpenedFiles.push(...filePaths);
+    }
+}
+
+function filePathsFromArgv(argv, cwd) {
+    const fsSync = require('fs');
+    return extractFilePaths(argv, {
+        cwd,
+        isFile: (candidate) => {
+            try {
+                return fsSync.statSync(candidate).isFile();
+            } catch {
+                return false;
+            }
+        },
+        ignore: [process.execPath, app.getAppPath()],
+    });
+}
+
+// macOS delivers "Open with", Dock drops and recent documents through this
+// event, possibly before 'ready'.
+app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    handleOpenedFiles([filePath]);
+});
 
 const INTEGRATION_CALLBACK_PROVIDERS = new Set([
     'github',
@@ -129,6 +194,16 @@ function parseTrustedDeepLink(rawUrl) {
         };
     }
 
+    // Buttons on the Windows "task finished" toast (run-notification.js).
+    const notificationAction = parseNotificationLink(parsed);
+    if (notificationAction) {
+        return {
+            type: 'notification-action',
+            parsed,
+            ...notificationAction,
+        };
+    }
+
     return null;
 }
 
@@ -161,6 +236,14 @@ function handleDeepLink(url) {
     // Bring the app window to the front, this is crucial.
     if (!showMainWindow()) {
         console.error('[main.js] >>> Error: mainWindow is not available. The app might still be launching.');
+        return;
+    }
+
+    if (trustedLink.type === 'notification-action') {
+        mainWindow.webContents.send('app-action', {
+            action: trustedLink.action,
+            conversationId: trustedLink.conversationId,
+        });
         return;
     }
 
@@ -202,9 +285,18 @@ if (!gotTheLock) {
         console.log('[main.js] >>> "second-instance" event fired.');
         const deepLinkUrl = commandLine.find(arg => arg.startsWith('aios://'));
 
+        const launchAction = parseLaunchAction(commandLine);
+        const openedFiles = filePathsFromArgv(commandLine, workingDirectory);
+
         if (deepLinkUrl) {
             console.log('[main.js] >>> Deep link found in second instance arguments.');
             handleDeepLink(deepLinkUrl);
+        } else if (launchAction) {
+            // Jump list / Linux desktop action while the app is running.
+            handleLaunchAction(launchAction);
+        } else if (openedFiles.length) {
+            // "Open with Aetheria ai" or a file dropped on the shortcut.
+            handleOpenedFiles(openedFiles);
         } else {
             // If it wasn't a deep link, just surface the existing window.
             showMainWindow();
@@ -215,6 +307,17 @@ if (!gotTheLock) {
     const deepLinkArg = process.argv.find(arg => arg.startsWith('aios://'));
     if (deepLinkArg) {
         app.whenReady().then(() => handleDeepLink(deepLinkArg));
+    }
+
+    // First launch from a jump-list task / desktop action, or "Open with".
+    // Both are held until createWindow() has set up nativeFeatures.
+    const firstLaunchAction = parseLaunchAction(process.argv);
+    if (firstLaunchAction) pendingLaunchAction = firstLaunchAction;
+    if (!deepLinkArg && !firstLaunchAction) {
+        app.whenReady().then(() => {
+            const files = filePathsFromArgv(process.argv);
+            if (files.length) handleOpenedFiles(files);
+        });
     }
 }
 
@@ -303,7 +406,12 @@ function createWindow() {
             webSecurity: false,
             webviewTag: true  // Enable <webview> tag support
         },
-        frame: false,
+        // macOS keeps the real traffic-light buttons over the custom chrome
+        // (the renderer hides its own min/max/close there). Windows and Linux
+        // stay frameless with the app's own controls.
+        ...(process.platform === 'darwin'
+            ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 12 } }
+            : { frame: false }),
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });
@@ -324,12 +432,45 @@ function createWindow() {
 
     mainWindow.webContents.once('did-finish-load', () => {
         mainWindowLoaded = true;
+        flushPendingRendererMessages();
         if (pendingDeepLink) {
             const queuedLink = pendingDeepLink;
             pendingDeepLink = null;
             handleDeepLink(queuedLink);
         }
     });
+
+    nativeFeatures = installNativeFeatures({
+        electron,
+        getWindow: () => mainWindow,
+        getPythonBridge: () => pythonBridge,
+        getComputerHandler: () => computerControlHandler,
+        emitter: mainProcessEmitter,
+        sendToRenderer: sendToRendererWhenReady,
+        showMainWindow,
+        getAuthToken: async () => {
+            try {
+                const session = await mainWindow.webContents.executeJavaScript('window.electron.auth.getSession()', true);
+                return session ? session.access_token : null;
+            } catch (error) {
+                console.error('[main.js] Could not read the session for run control:', error.message);
+                return null;
+            }
+        },
+        appRoot: path.join(__dirname, '..'),
+    });
+    if (process.platform === 'win32' && !icon.isEmpty()) {
+        // The badge replaces this overlay while unread runs exist.
+        nativeFeatures.setDefaultOverlay?.(icon, 'Aetheria ai');
+    }
+    if (pendingLaunchAction) {
+        const action = pendingLaunchAction;
+        pendingLaunchAction = null;
+        handleLaunchAction(action);
+    }
+    if (pendingOpenedFiles.length) {
+        handleOpenedFiles(pendingOpenedFiles.splice(0));
+    }
 
     mainWindow.maximize();
     mainWindow.loadFile('index.html');
@@ -407,6 +548,8 @@ function createWindow() {
     mainProcessEmitter.on('run-completed', (data) => {
         // Only show native notification when user is NOT actively using the app
         const isBackgrounded = !mainWindow.isFocused() || mainWindow.isMinimized();
+        // Taskbar badge + flash / Dock bounce (also counts a hidden window).
+        nativeFeatures?.onRunCompleted();
         console.log('[main.js] Agent run completed:', {
             conversationId: data?.conversationId || null,
             title: data?.title || null,
@@ -433,6 +576,12 @@ function createWindow() {
                     tag: `run-completed-${data?.conversationId || 'unknown'}`,
                     urgency: 'normal',
                     silent: false,
+                    // Open chat / Reply buttons where the OS supports them.
+                    ...(nativeFeatures?.runCompletedNotificationOptions({
+                        conversationId: data?.conversationId,
+                        title: 'Aetheria ai',
+                        body,
+                    }) || {}),
                 }
             );
         }
@@ -1013,6 +1162,7 @@ ipcMain.handle('save-file', async (event, { filePath, content, encoding = 'utf8'
         } else {
             await fs.writeFile(filePath, content, 'utf8');
         }
+        nativeFeatures?.addRecentDocument(filePath);
         return true;
     } catch (error) {
         console.error('Error saving file:', error);
@@ -1059,6 +1209,7 @@ ipcMain.handle('export-conversation-pdf', async (event, payload) => {
         });
 
         await fs.writeFile(saveResult.filePath, pdfBuffer);
+        nativeFeatures?.addRecentDocument(saveResult.filePath);
         return { success: true, filePath: saveResult.filePath };
     } catch (error) {
         console.error('Error exporting conversation PDF:', error);
@@ -1105,6 +1256,7 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
 
         if (!result.canceled && result.filePath) {
             await fs.writeFile(result.filePath, content, 'utf8');
+            nativeFeatures?.addRecentDocument(result.filePath);
             event.reply('save-file-result', { success: true, filePath: result.filePath });
         } else {
             event.reply('save-file-result', { canceled: true });
@@ -1117,9 +1269,14 @@ ipcMain.on('save-file-dialog', async (event, { content, defaultPath, filters }) 
 
 initUpdater(() => mainWindow);
 
-app.whenReady()
-    .then(() => loginShellPathReady)
-    .then(createWindow);
+// Only the instance holding the single-instance lock builds a window. A
+// second launch (jump list, "Open with", deep link) hands its argv to the
+// running app via 'second-instance' and quits without touching the backend.
+if (gotTheLock) {
+    app.whenReady()
+        .then(() => loginShellPathReady)
+        .then(createWindow);
+}
 
 // macOS: clicking the Dock icon (or relaunching from Finder) while the app is
 // running with its window hidden brings the window back.
@@ -1144,6 +1301,14 @@ if (process.platform === 'darwin') {
 
 app.on('before-quit', async () => {
     allowWindowClose = true;
+    if (nativeFeatures) {
+        try {
+            nativeFeatures.dispose();
+        } catch (error) {
+            console.error('Error cleaning up native features:', error.message);
+        }
+        nativeFeatures = null;
+    }
     if (windowsNativeSpeechService) {
         windowsNativeSpeechService.dispose();
         windowsNativeSpeechService = null;
