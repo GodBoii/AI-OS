@@ -1,8 +1,9 @@
 // js/computer-control-handler.js
 // Computer Control Handler for AI Agent Desktop Automation
 
-const { screen, clipboard, desktopCapturer, powerMonitor } = require('electron');
-const { keyboard, Key, mouse, Button, straightTo, Point, Region, screen: nutScreen } = require('@nut-tree-fork/nut-js');
+const { screen, clipboard, desktopCapturer, powerMonitor, systemPreferences, shell } = require('electron');
+// nut-js is loaded on first use (see _nut()). Its Linux binary links against
+// libXtst; a missing system library must not stop the whole app from starting.
 const { activeWindow } = require('active-win');
 const { windowManager } = require('node-window-manager');
 const loudness = require('loudness');
@@ -13,9 +14,16 @@ const crypto = require('crypto');
 const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const chokidar = require('chokidar');
+const linuxDesktop = require('./linux-desktop');
+const macosDesktop = require('./macos-desktop');
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+// Capabilities that need extra OS support outside Windows.
+const INPUT_ACTIONS = new Set(['move_mouse', 'click_mouse', 'type_text', 'press_hotkey', 'scroll', 'drag_drop']);
+const WINDOW_ACTIONS = new Set(['list_windows', 'focus_window', 'resize_window', 'minimize_window', 'maximize_window', 'close_window']);
+const SCREEN_CAPTURE_ACTIONS = new Set(['take_screenshot', 'ocr_screen']);
 
 class ComputerControlHandler {
     constructor(eventEmitter, appDataPath, getAuthTokenFunc) {
@@ -28,6 +36,10 @@ class ComputerControlHandler {
         this.defaultScope = this._normalizePath(os.homedir());
         this.fileWatchers = new Map();
         this.platform = process.platform; // 'win32', 'darwin', 'linux'
+        this.env = process.env;
+        this._nutModule = null;
+        // Each macOS privacy prompt / settings pane is shown once per session.
+        this._macPermissionPrompted = new Set();
         
         console.log(`ComputerControlHandler: Initialized for platform: ${this.platform}`);
     }
@@ -102,6 +114,12 @@ class ComputerControlHandler {
         }
 
         try {
+            const platformBlocker = this._getPlatformBlocker(action);
+            if (platformBlocker) {
+                this._emitResult(request_id, { status: 'error', error: platformBlocker });
+                return;
+            }
+
             let result;
 
             switch (action) {
@@ -288,6 +306,63 @@ class ComputerControlHandler {
                 stack: error.stack
             });
         }
+    }
+
+    // ===== PLATFORM READINESS =====
+
+    /**
+     * Returns an error message when this OS cannot run the action right now,
+     * or null. Windows needs nothing extra, so it always returns null there.
+     */
+    _getPlatformBlocker(action) {
+        if (this.platform === 'linux') {
+            if ((INPUT_ACTIONS.has(action) || WINDOW_ACTIONS.has(action)) && linuxDesktop.isWaylandSession(this.env)) {
+                return 'This action needs an X11 session. Wayland does not allow one app to control the mouse, keyboard '
+                    + 'or windows of other apps. Log in with an "Xorg"/"X11" session to use it.';
+            }
+            return null;
+        }
+
+        if (this.platform === 'darwin') {
+            let kind = null;
+            if (INPUT_ACTIONS.has(action) || WINDOW_ACTIONS.has(action)) kind = 'accessibility';
+            else if (SCREEN_CAPTURE_ACTIONS.has(action)) kind = 'screen';
+            if (!kind) return null;
+
+            const firstTime = !this._macPermissionPrompted.has(kind);
+            const missing = macosDesktop.checkMacPermission(kind, {
+                systemPreferences,
+                // Apple's Accessibility prompt has its own "Open System Settings" button.
+                prompt: firstTime && kind === 'accessibility',
+            });
+            if (!missing) return null;
+
+            if (firstTime) {
+                this._macPermissionPrompted.add(kind);
+                if (kind === 'screen') {
+                    shell.openExternal(missing.settingsUrl).catch((error) => {
+                        console.warn('ComputerControlHandler: Could not open Screen Recording settings:', error.message);
+                    });
+                }
+            }
+            return missing.error;
+        }
+
+        return null;
+    }
+
+    _nut() {
+        if (!this._nutModule) {
+            try {
+                this._nutModule = require('@nut-tree-fork/nut-js');
+            } catch (error) {
+                const hint = this.platform === 'linux'
+                    ? ' On Linux this usually means libxtst is missing (for example: sudo apt install libxtst6).'
+                    : '';
+                throw new Error(`Mouse and keyboard control is unavailable: ${error.message}.${hint}`);
+            }
+        }
+        return this._nutModule;
     }
 
     // ===== PERCEPTION METHODS =====
@@ -837,6 +912,7 @@ class ComputerControlHandler {
 
     async _moveMouse(commandPayload) {
         const { x, y, smooth } = commandPayload;
+        const { mouse, Point } = this._nut();
 
         if (smooth) {
             // Use Bezier curve path for natural movement
@@ -869,6 +945,7 @@ class ComputerControlHandler {
 
     async _clickMouse(commandPayload) {
         const { button = 'left', double = false, x, y } = commandPayload;
+        const { mouse, Point, Button } = this._nut();
 
         if (x !== undefined && y !== undefined) {
             // Apply minor random offset to target (±3px human targeting tolerance)
@@ -915,6 +992,7 @@ class ComputerControlHandler {
 
     async _typeText(commandPayload) {
         const { text } = commandPayload;
+        const { keyboard } = this._nut();
 
         // Humanized typing: variable inter-key delay (40ms-180ms per character)
         for (let i = 0; i < text.length; i++) {
@@ -934,6 +1012,7 @@ class ComputerControlHandler {
 
     async _pressHotkey(commandPayload) {
         const { keys } = commandPayload;
+        const { keyboard, Key } = this._nut();
         
         // Map string keys to nut.js Key enum
         const keyMap = {
@@ -995,6 +1074,7 @@ class ComputerControlHandler {
 
     async _scroll(commandPayload) {
         const { direction, amount = 3 } = commandPayload;
+        const { mouse } = this._nut();
         
         // Humanized scrolling: variable delays between scroll ticks
         for (let i = 0; i < amount; i++) {
@@ -1015,6 +1095,7 @@ class ComputerControlHandler {
 
     async _dragDrop(commandPayload) {
         const { from_x, from_y, to_x, to_y } = commandPayload;
+        const { mouse, Point, Button } = this._nut();
 
         // Move to start with Bezier curve
         const currentPos = await mouse.getPosition();
@@ -1055,8 +1136,17 @@ class ComputerControlHandler {
 
     // ===== WINDOW MANAGEMENT METHODS =====
 
+    // May return an array or a promise of one; callers always await it.
     _getManagedWindows() {
+        if (this.platform === 'linux') {
+            return linuxDesktop.listLinuxWindows();
+        }
         return windowManager.getWindows();
+    }
+
+    async _findManagedWindow(windowId) {
+        const windows = await this._getManagedWindows();
+        return windows.find(w => Number(w.id) === Number(windowId));
     }
 
     async _runPowerShell(script, options = {}) {
@@ -1117,7 +1207,7 @@ if (-not $closePosted) {
     }
 
     async _listWindows() {
-        const windows = this._getManagedWindows();
+        const windows = await this._getManagedWindows();
         
         const windowList = windows.map(win => ({
             id: win.id,
@@ -1138,9 +1228,9 @@ if (-not $closePosted) {
 
         let targetWindow;
         if (window_id) {
-            targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
+            targetWindow = await this._findManagedWindow(window_id);
         } else if (title) {
-            targetWindow = this._getManagedWindows().find(w =>
+            targetWindow = (await this._getManagedWindows()).find(w =>
                 w.getTitle().toLowerCase().includes(title.toLowerCase())
             );
         }
@@ -1149,7 +1239,7 @@ if (-not $closePosted) {
             return { status: 'error', error: 'Window not found' };
         }
 
-        targetWindow.bringToTop();
+        await targetWindow.bringToTop();
         return {
             status: 'success',
             message: `Focused window: ${targetWindow.getTitle()}`
@@ -1159,13 +1249,13 @@ if (-not $closePosted) {
     async _resizeWindow(commandPayload) {
         const { window_id, width, height } = commandPayload;
 
-        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
+        const targetWindow = await this._findManagedWindow(window_id);
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
 
         const bounds = targetWindow.getBounds();
-        targetWindow.setBounds({ ...bounds, width, height });
+        await targetWindow.setBounds({ ...bounds, width, height });
 
         return {
             status: 'success',
@@ -1176,12 +1266,12 @@ if (-not $closePosted) {
     async _minimizeWindow(commandPayload) {
         const { window_id } = commandPayload;
 
-        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
+        const targetWindow = await this._findManagedWindow(window_id);
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
 
-        targetWindow.minimize();
+        await targetWindow.minimize();
         return {
             status: 'success',
             message: 'Window minimized'
@@ -1191,12 +1281,12 @@ if (-not $closePosted) {
     async _maximizeWindow(commandPayload) {
         const { window_id } = commandPayload;
 
-        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === Number(window_id));
+        const targetWindow = await this._findManagedWindow(window_id);
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
 
-        targetWindow.maximize();
+        await targetWindow.maximize();
         return {
             status: 'success',
             message: 'Window maximized'
@@ -1211,15 +1301,22 @@ if (-not $closePosted) {
             return { status: 'error', error: 'A valid window ID is required' };
         }
 
-        const targetWindow = this._getManagedWindows().find(w => Number(w.id) === numericWindowId);
+        const targetWindow = await this._findManagedWindow(numericWindowId);
         if (!targetWindow) {
             return { status: 'error', error: 'Window not found' };
         }
 
+        // Every platform asks the window to close (the app may still prompt
+        // to save) instead of killing the process behind it.
         if (this.platform === 'win32') {
             await this._requestWindowClose(targetWindow.id);
+        } else if (this.platform === 'darwin') {
+            await macosDesktop.requestMacWindowClose({
+                processId: targetWindow.processId,
+                title: targetWindow.getTitle(),
+            });
         } else {
-            await execAsync(`kill ${targetWindow.processId}`);
+            await targetWindow.close();
         }
 
         return {
@@ -1469,9 +1566,10 @@ $shell.ShellExecute($target, '', '', 'open', 1)
                     : null;
                 await this._launchWindowsApplication(resolvedApp || { name: appName });
             } else if (this.platform === 'darwin') {
-                await execAsync(`open -a "${appName}"`);
+                // Argument array, no shell: the name cannot inject commands.
+                await execFileAsync('open', ['-a', appName], { timeout: 15000 });
             } else {
-                await execAsync(appName);
+                await this._launchLinuxApplication(appName);
             }
 
             return {
@@ -1495,7 +1593,7 @@ $shell.ShellExecute($target, '', '', 'open', 1)
                 const resolvedApp = discoveryResult.status === 'success'
                     ? this._resolveWindowsApplication(appName, discoveryResult.apps)
                     : null;
-                const matchingWindows = this._getManagedWindows().filter(window =>
+                const matchingWindows = (await this._getManagedWindows()).filter(window =>
                     this._windowMatchesApplication(window, appName, resolvedApp)
                 );
 
@@ -1517,17 +1615,105 @@ $shell.ShellExecute($target, '', '', 'open', 1)
                 };
             }
 
-            const command = this.platform === 'darwin'
-                ? `pkill -f "${appName}"`
-                : `pkill ${appName}`;
-            await execAsync(command);
-            return {
-                status: 'success',
-                message: `Closed application: ${appName}`
-            };
+            if (this.platform === 'darwin') {
+                // A normal Quit, like Cmd+Q: the app can still ask to save.
+                const quit = await macosDesktop.quitMacApplication(appName);
+                if (!quit) {
+                    return { status: 'error', error: `No running application named: ${appName}` };
+                }
+                return {
+                    status: 'success',
+                    message: `Quit requested for application: ${appName}`
+                };
+            }
+
+            return await this._closeLinuxApplication(appName);
         } catch (error) {
             return { status: 'error', error: error.message };
         }
+    }
+
+    /**
+     * Linux launch. Installed apps are started from their .desktop entry
+     * (gio launch, or the entry's Exec line). Anything else is treated as a
+     * program name plus arguments. Either way the program is spawned detached
+     * with no shell, so the tool returns as soon as it has started.
+     */
+    async _launchLinuxApplication(appName) {
+        const discoveryResult = await this._listInstalledApplications();
+        const resolvedApp = discoveryResult.status === 'success'
+            ? this._resolveWindowsApplication(appName, discoveryResult.apps)
+            : null;
+
+        if (resolvedApp && resolvedApp.desktop_file) {
+            try {
+                await this._launchDesktopEntry(resolvedApp.desktop_file);
+                return;
+            } catch (error) {
+                if (!resolvedApp.exec) throw error;
+                console.warn('ComputerControlHandler: gio launch failed, using the Exec line instead:', error.message);
+            }
+        }
+
+        if (resolvedApp && resolvedApp.exec) {
+            const { command, args } = linuxDesktop.parseDesktopExec(resolvedApp.exec);
+            await linuxDesktop.spawnDetached(command, args);
+            return;
+        }
+
+        const [command, ...args] = appName.split(/\s+/).filter(Boolean);
+        await linuxDesktop.spawnDetached(command, args);
+    }
+
+    // `gio launch` honors the entry's Path=, Terminal= and DBusActivatable= keys,
+    // which a hand-built Exec command would miss.
+    async _launchDesktopEntry(desktopFile) {
+        await execFileAsync('gio', ['launch', desktopFile], { timeout: 15000 });
+    }
+
+    /**
+     * Linux close: ask each of the app's windows to close (like clicking X).
+     * When no window matches, or window listing is unavailable (no wmctrl,
+     * Wayland), fall back to SIGTERM by exact process name.
+     */
+    async _closeLinuxApplication(appName) {
+        let matchingWindows = [];
+        if (!linuxDesktop.isWaylandSession(this.env)) {
+            try {
+                const windows = await this._getManagedWindows();
+                matchingWindows = windows.filter(window => this._windowMatchesApplication(window, appName));
+            } catch (error) {
+                console.warn('ComputerControlHandler: Window listing failed, falling back to pkill:', error.message);
+            }
+        }
+
+        if (matchingWindows.length > 0) {
+            for (const window of matchingWindows) {
+                await window.close();
+            }
+            return {
+                status: 'success',
+                message: `Close requested for application: ${appName}`,
+                closed_windows: matchingWindows.length
+            };
+        }
+
+        if (appName.startsWith('-')) {
+            return { status: 'error', error: `Invalid application name: ${appName}` };
+        }
+        try {
+            await execFileAsync('pkill', ['-x', appName], { timeout: 10000 });
+        } catch (error) {
+            // pkill exits 1 when nothing matched.
+            if (error.code === 1) {
+                return { status: 'error', error: `No running application named: ${appName}` };
+            }
+            throw error;
+        }
+        return {
+            status: 'success',
+            message: `Closed application: ${appName}`
+        };
     }
 
     async _getVolume() {
@@ -1857,6 +2043,7 @@ $results | ConvertTo-Json -Compress
                                         exec: execMatch ? execMatch[1].trim() : null,
                                         icon: iconMatch ? iconMatch[1].trim() : null,
                                         categories: catMatch ? catMatch[1].trim() : null,
+                                        desktop_file: path.join(dir, file),
                                         type: 'desktop_entry',
                                         source: dir
                                     });
