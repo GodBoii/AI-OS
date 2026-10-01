@@ -9,6 +9,7 @@
     "build": "electron-builder",
     "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
     "test:cross-platform": "node --test js/tests/cross-platform.test.js",
+    "test:native-features": "node --test js/tests/native-features.test.js",
     "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
@@ -81,7 +82,28 @@
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Aetheria ai uses the microphone for voice input and voice conversations.",
-        "NSAppleEventsUsageDescription": "Aetheria ai asks apps to close windows or quit when the computer agent manages them for you."
+        "NSAppleEventsUsageDescription": "Aetheria ai asks apps to close windows or quit when the computer agent manages them for you.",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Aetheria ai attachment",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "com.adobe.pdf",
+              "public.png",
+              "public.jpeg",
+              "com.compuserve.gif",
+              "org.webmproject.webp",
+              "public.plain-text",
+              "net.daringfireball.markdown",
+              "public.comma-separated-values-text",
+              "public.json",
+              "org.openxmlformats.wordprocessingml.document",
+              "org.openxmlformats.spreadsheetml.sheet",
+              "org.openxmlformats.presentationml.presentation"
+            ]
+          }
+        ]
       },
       "protocols": [
         {
@@ -96,6 +118,43 @@
       "target": "AppImage",
       "icon": "assets/icons",
       "category": "Utility",
+      "mimeTypes": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "application/json",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ],
+      "desktop": {
+        "entry": {
+          "Actions": "NewChat;NewTask;VoiceInput;QuickPrompt;"
+        },
+        "desktopActions": {
+          "NewChat": {
+            "Name": "New chat",
+            "Exec": "AppRun --aetheria-action=new-chat"
+          },
+          "NewTask": {
+            "Name": "New task",
+            "Exec": "AppRun --aetheria-action=new-task"
+          },
+          "VoiceInput": {
+            "Name": "Voice input",
+            "Exec": "AppRun --aetheria-action=voice-input"
+          },
+          "QuickPrompt": {
+            "Name": "Quick prompt",
+            "Exec": "AppRun --aetheria-action=quick-prompt"
+          }
+        }
+      },
       "protocols": [
         {
           "name": "Aetheria ai",
