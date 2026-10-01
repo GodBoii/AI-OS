@@ -10,6 +10,7 @@ class NativeNotificationService {
         this.iconPath = this.getIconPath();
         this.notificationQueue = [];
         this.activeNotifications = new Map();
+        this.retainedNotifications = new Map();
         this.maxActiveNotifications = 3;
         this.enabled = true; // Can be toggled by user preference
         
@@ -132,12 +133,36 @@ class NativeNotificationService {
             urgency: options.urgency || 'normal',
             tag: options.tag || `notification-${Date.now()}`,
         };
+        // Optional extras (see buildRunCompletedNotification). Each is only
+        // honored by the platform that supports it.
+        if (Array.isArray(options.actions) && options.actions.length) notificationConfig.actions = options.actions;
+        if (options.hasReply) {
+            notificationConfig.hasReply = true;
+            if (options.replyPlaceholder) notificationConfig.replyPlaceholder = options.replyPlaceholder;
+        }
+        if (options.toastXml) notificationConfig.toastXml = options.toastXml;
 
         try {
             const notification = new Notification(notificationConfig);
 
             notification.on('click', () => {
                 this.revealMainWindow();
+                if (typeof options.onClick === 'function') options.onClick();
+            });
+            if (typeof options.onAction === 'function') {
+                notification.on('action', (event, index) => options.onAction(index));
+            }
+            if (typeof options.onReply === 'function') {
+                notification.on('reply', (event, reply) => options.onReply(reply));
+            }
+            // Keep a reference until it closes; a garbage-collected
+            // Notification stops delivering click/action events on macOS.
+            // Kept apart from activeNotifications, which throttles only the
+            // computer-tool notifications.
+            const key = notificationConfig.tag;
+            this.retainedNotifications.set(key, notification);
+            notification.on('close', () => {
+                if (this.retainedNotifications.get(key) === notification) this.retainedNotifications.delete(key);
             });
 
             notification.show();
