@@ -8,6 +8,8 @@ const net = require('net');
 const axios = require('axios');
 const electron = require('electron');
 const config = require('./config');
+const os = require('os');
+const { findBrowserExecutable } = require('./browser-locations');
 
 // JPEG quality for the page images handed to the model. High enough that small
 // text stays legible, low enough that a view stays well under 100KB on the round
@@ -113,21 +115,13 @@ class BrowserHandler {
     _getBrowserPaths() {
         let executablePath;
         try {
-            if (process.platform === 'win32') {
-                const programFiles = process.env.ProgramW6432;
-                const chromePath = path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe');
-                const edgePath = path.join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe');
-                if (fs.existsSync(chromePath)) executablePath = chromePath;
-                else if (fs.existsSync(edgePath)) executablePath = edgePath;
-            } else if (process.platform === 'darwin') {
-                const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-                const edgePath = '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge';
-                if (fs.existsSync(chromePath)) executablePath = chromePath;
-                else if (fs.existsSync(edgePath)) executablePath = edgePath;
-            } else {
-                executablePath = '/usr/bin/google-chrome';
-            }
-            if (!executablePath || !fs.existsSync(executablePath)) return null;
+            executablePath = findBrowserExecutable({
+                platform: process.platform,
+                env: process.env,
+                homeDir: os.homedir(),
+                exists: (candidate) => fs.existsSync(candidate),
+            });
+            if (!executablePath) return null;
         } catch (error) {
             console.error('Error getting browser executable path:', error);
             return null;
@@ -302,7 +296,7 @@ class BrowserHandler {
         if (this.managedBrowserProcess) return { ok: true };
         const paths = this._getBrowserPaths();
         if (!paths) {
-            return { ok: false, error: 'No Chrome or Edge installation was found on this computer.' };
+            return { ok: false, error: 'No Chrome, Edge, Brave or Chromium installation was found on this computer.' };
         }
         await this._resolveDebugPort();
         const visibility = visibilityOverride || this.settings.get().visibility;
