@@ -32,6 +32,7 @@ from deploy_platform import (
     resolve_site_ref,
 )
 import config
+from run_control import RunControlGate, clear_control as clear_run_control
 
 # --- Agno Framework Imports ---
 from agno.media import Image, Audio, Video, File
@@ -701,6 +702,30 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
     return images, audio, videos, other_files
 
 
+def _build_run_control_gate(
+    redis_client: Redis,
+    conversation_id: str,
+    message_id: str,
+    room_name: str,
+):
+    """Pause/stop checks for the streaming loop, or None without Redis."""
+    if redis_client is None:
+        return None
+
+    def emit(event_name: str) -> None:
+        socketio.emit(event_name, {
+            "conversationId": conversation_id,
+            "messageId": message_id,
+        }, room=room_name)
+
+    return RunControlGate(
+        redis_client=redis_client,
+        conversation_id=conversation_id,
+        on_paused=lambda: emit("run_paused"),
+        on_resumed=lambda: emit("run_resumed"),
+    )
+
+
 def run_agent_and_stream(
     sid: str,
     conversation_id: str,
@@ -1013,7 +1038,9 @@ def run_agent_and_stream(
         content_chunk_count = 0
         reasoning_event_count = 0
         tool_call_count = 0
-        for chunk in agent.run(
+        control_gate = _build_run_control_gate(redis_client, conversation_id, message_id, room_name)
+        stop_requested = False
+        run_stream = agent.run(
             input=final_user_message,
             images=images or None,
             audio=audio or None,
@@ -1024,7 +1051,17 @@ def run_agent_and_stream(
             stream=True,
             stream_intermediate_steps=True,
             add_history_to_context=True
-        ):
+        )
+        for chunk in run_stream:
+            # Pause blocks here; stop ends the turn with what was produced so far.
+            if control_gate is not None and control_gate.checkpoint():
+                stop_requested = True
+                logger.info("[AGENT_RUNNER] Stop requested for message_id=%s", message_id)
+                try:
+                    run_stream.close()
+                except Exception as close_error:
+                    logger.warning("Closing the stopped agent stream failed: %s", close_error)
+                break
             if isinstance(chunk, (RunOutput, TeamRunOutput)):
                 run_output = chunk
                 metrics_preview = _extract_metrics_from_run_output(run_output)
@@ -1192,7 +1229,15 @@ def run_agent_and_stream(
                     "is_log": False,
                 }, room=room_name)
 
-        socketio.emit("response", {"done": True, "id": message_id}, room=room_name)
+        done_payload = {"done": True, "id": message_id}
+        if stop_requested:
+            done_payload["stopped"] = True
+        socketio.emit("response", done_payload, room=room_name)
+        if redis_client is not None:
+            try:
+                clear_run_control(redis_client, conversation_id)
+            except Exception as control_error:
+                logger.warning("Could not clear run control for %s: %s", conversation_id, control_error)
 
         # --- Mark run as COMPLETED and store result for catch-up ---
         for owner_name in log_owner_order:
@@ -1234,7 +1279,9 @@ def run_agent_and_stream(
             _preview_clean = re.sub(r"^[#*_`>~\-\s]+", "", _preview_raw, flags=re.MULTILINE)
             _preview_clean = re.sub(r"\n+", " ", _preview_clean).strip()
             _preview = _preview_clean[:400] if _preview_clean else ""
-            socketio.emit("run_completed", {
+            # A stopped run is not "completed"; the client shows no
+            # completion notification for it.
+            socketio.emit("run_stopped" if stop_requested else "run_completed", {
                 "conversationId": conversation_id,
                 "messageId": message_id,
                 "title": conversation_title,

@@ -35,6 +35,11 @@ from model_routing import ModelRoutingError, normalize_thinking_mode, resolve_pr
 from cache_manager import CacheManager
 from socket_security import can_access_conversation, safe_socket_message_metadata
 from utils import get_user_from_jwt
+from run_control import (
+    MESSAGE_TYPES as RUN_CONTROL_MESSAGE_TYPES,
+    clear_control as clear_run_control,
+    request_control as request_run_control,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -749,6 +754,16 @@ def on_send_message(data: str):
                 run_state_manager_instance.clear(conversation_id)
             return socketio.emit("status", {"message": f"Session {conversation_id} terminated"}, room=sid)
 
+        # Pause / resume / stop for a running turn (desktop taskbar buttons).
+        if data.get("type") in RUN_CONTROL_MESSAGE_TYPES:
+            state = request_run_control(redis_client_instance, conversation_id, data["type"])
+            logger.info("[send_message] Run control %s for %s -> %s", data["type"], conversation_id, state)
+            return socketio.emit(
+                "status",
+                {"message": f"Run control {data['type']} accepted", "conversationId": conversation_id},
+                room=sid,
+            )
+
         requested_agent_mode = _normalize_agent_mode(
             data.get("agent_mode") or (data.get("config", {}) or {}).get("agent_mode")
         )
@@ -891,6 +906,12 @@ def on_send_message(data: str):
                 logger.warning(f"Failed to register user uploads: {e}")
 
         browser_tools_config = {'sid': sid, 'socketio': socketio, 'redis_client': redis_client_instance}
+
+        # A stop/pause left over from an earlier turn must not hit this one.
+        try:
+            clear_run_control(redis_client_instance, conversation_id)
+        except Exception as control_error:
+            logger.warning("Could not clear stale run control for %s: %s", conversation_id, control_error)
 
         eventlet.spawn(
             run_agent_and_stream,
