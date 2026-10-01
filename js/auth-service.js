@@ -9,6 +9,19 @@ class AuthService {
         this.user = null;
         this.listeners = [];
         this.initPromise = null;
+        this.storage = null;
+    }
+
+    /**
+     * Session storage for the Supabase client (see secure-store.js). Must be
+     * set before init(); without it Supabase uses localStorage as before.
+     */
+    setStorage(storage) {
+        if (this.supabase) {
+            console.warn('AuthService: storage must be set before init(); ignoring.');
+            return;
+        }
+        this.storage = storage || null;
     }
 
     async init() {
@@ -31,7 +44,8 @@ class AuthService {
         try {
             this.supabase = createClient(
                 config.supabase.url,
-                config.supabase.anonKey
+                config.supabase.anonKey,
+                this.storage ? { auth: { storage: this.storage } } : undefined
             );
 
             const { data } = await this.supabase.auth.getSession();

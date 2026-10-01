@@ -3,6 +3,15 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const authService = require('./auth-service');
+const { createSecureAuthStorage } = require('./secure-store');
+
+// Keep the Supabase session in the OS credential vault (DPAPI / Keychain /
+// libsecret) instead of plain localStorage. Falls back to localStorage when
+// the vault is unavailable, and migrates an existing session on first read.
+authService.setStorage(createSecureAuthStorage({
+    invoke: (payload) => ipcRenderer.invoke('secure-store', payload),
+    localStorage: window.localStorage,
+}));
 
 // Define allowed IPC channels for security
 const validSendChannels = [
