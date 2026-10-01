@@ -757,3 +757,31 @@ body.project-panel-open .window-drag-region {
     font-size: 0.8em;
     font-weight: bold;
 }
+
+/* --- OS-native integration ------------------------------------------------
+   html.platform-<os> is set by preload.js. body.native-material is set by
+   desktop-bridge.js when Settings > Appearance > Translucent Window Background
+   is on and the OS applied Mica (Windows 11) or vibrancy (macOS). */
+
+/* macOS shows its real traffic-light buttons in the top-left corner, so the
+   app's own minimize/maximize/close buttons are hidden there and the sidebar
+   icons start below the lights. */
+html.platform-darwin #minimize-window,
+html.platform-darwin #resize-window,
+html.platform-darwin #close-window {
+    display: none;
+}
+
+html.platform-darwin .sidebar {
+    padding-top: 2.5rem;
+}
+
+/* Keep the drag strip clear of the traffic lights. */
+html.platform-darwin .window-drag-region {
+    left: 80px;
+}
+
+body.native-material {
+    background-color: transparent;
+    background-image: none;
+}
