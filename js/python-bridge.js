@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const io = require('socket.io-client');
 const config = require('./config');
+const { isRunStartMessage } = require('./agent-activity');
 
 class PythonBridge {
     constructor(mainWindow, eventEmitter) {
@@ -17,6 +18,7 @@ class PythonBridge {
         this.ongoingStreams = {};
         this.serverUrl = config.backend.url;
         this.isShuttingDown = false;
+        this.reconnectExhausted = false;
     }
 
     _canSendToRenderer() {
@@ -176,6 +178,12 @@ class PythonBridge {
         // This method is mostly unchanged, but the 'browser-command' handler is now functional.
         this.socket.on('response', (data) => {
             this._sendToRenderer('chat-response', data);
+            if (data && data.done) {
+                this.eventEmitter.emit('agent-run-ended', {
+                    messageId: data.id || null,
+                    outcome: data.stopped ? 'stopped' : 'completed',
+                });
+            }
         });
         this.socket.on('agent_step', (data) => {
             this._sendToRenderer('agent-step', data);
@@ -186,6 +194,9 @@ class PythonBridge {
         this.socket.on('error', (error) => {
             console.error('Socket.IO error:', error.message || error);
             this._sendToRenderer('socket-error', error);
+            // Backend errors carry no message id; every run this client
+            // started is treated as finished so the taskbar never sticks.
+            this.eventEmitter.emit('agent-runs-aborted', { reason: 'error' });
         });
         this.socket.on('status', (data) => {
             this._sendToRenderer('socket-status', data);
@@ -200,8 +211,17 @@ class PythonBridge {
             }
             this.initialized = false;
             this._sendToRenderer('socket-connection-status', { connected: false });
+            this.eventEmitter.emit('agent-runs-aborted', { reason: 'disconnect' });
             this.handleReconnection();
         });
+
+        // Run control acknowledgements (pause / resume / stop from the taskbar).
+        for (const eventName of ['run_paused', 'run_resumed', 'run_stopped']) {
+            this.socket.on(eventName, (data) => {
+                this._sendToRenderer('agent-run-control', { event: eventName, ...(data || {}) });
+                this.eventEmitter.emit('agent-run-control', { event: eventName, ...(data || {}) });
+            });
+        }
 
         this.socket.on('image_generated', (data) => {
             this._sendToRenderer('image_generated', data);
@@ -356,6 +376,7 @@ class PythonBridge {
         if (this.isShuttingDown) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this.reconnectExhausted = true;
             this._sendToRenderer('socket-connection-status', {
                 connected: false,
                 error: 'Max reconnection attempts reached'
@@ -399,6 +420,12 @@ class PythonBridge {
                 message.deviceType = 'desktop';
             }
             this.socket.emit('send_message', JSON.stringify(message));
+            if (isRunStartMessage(message)) {
+                this.eventEmitter.emit('agent-run-started', {
+                    conversationId: message.conversationId,
+                    messageId: message.id ? String(message.id) : null,
+                });
+            }
         } catch (error) {
             console.error('Error sending message:', error);
             this._sendToRenderer('socket-error', {
@@ -450,7 +477,34 @@ class PythonBridge {
 
     stop() {
         this.isShuttingDown = true;
+        this.reconnectExhausted = false;
         this.cleanup();
+    }
+
+    get isConnected() {
+        return Boolean(this.socket && this.socket.connected);
+    }
+
+    /**
+     * Called after the computer wakes from sleep. The socket usually dropped
+     * during sleep and the reconnect loop may have given up while the network
+     * was down. An intentionally stopped bridge (stop()) is left alone.
+     */
+    reviveAfterResume() {
+        if (this.isConnected) return 'connected';
+        if (this.reconnectExhausted) {
+            this.reconnectExhausted = false;
+            this.isShuttingDown = false;
+            this.reconnectAttempts = 0;
+            this.connectWebSocket().catch(() => this.handleReconnection());
+            return 'restarted';
+        }
+        if (this.socket && !this.isShuttingDown) {
+            this.reconnectAttempts = 0;
+            this.socket.connect();
+            return 'reconnecting';
+        }
+        return 'stopped';
     }
 }
 
