@@ -8,6 +8,7 @@
     "start": "electron .",
     "build": "electron-builder",
     "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
+    "test:cross-platform": "node --test js/tests/cross-platform.test.js",
     "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
@@ -68,14 +69,41 @@
       "shortcutName": "Aetheria ai"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.productivity"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Aetheria ai uses the microphone for voice input and voice conversations.",
+        "NSAppleEventsUsageDescription": "Aetheria ai asks apps to close windows or quit when the computer agent manages them for you."
+      },
+      "protocols": [
+        {
+          "name": "Aetheria ai",
+          "schemes": [
+            "aios"
+          ]
+        }
+      ]
     },
     "linux": {
       "target": "AppImage",
       "icon": "assets/icons",
-      "category": "Utility"
+      "category": "Utility",
+      "protocols": [
+        {
+          "name": "Aetheria ai",
+          "schemes": [
+            "aios"
+          ]
+        }
+      ]
     }
   },
   "dependencies": {
