@@ -1077,6 +1077,7 @@ class UIManager {
             { keys: `${mod} + Shift + D`, label: 'Toggle DevTools' },
             { keys: `${mod} + E`, label: 'Export Conversation' },
             { keys: `${mod} + M`, label: 'Minimize Window' },
+            { keys: `${mod} + Shift + Space`, label: 'Quick Prompt (any app)' },
         ];
 
         const overlay = document.createElement('div');

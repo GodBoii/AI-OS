@@ -3321,6 +3321,7 @@ class AIOS {
                         <div class="settings-shortcut-row"><span class="settings-shortcut-label">Toggle DevTools</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>D</kbd></div></div>
                         <div class="settings-shortcut-row"><span class="settings-shortcut-label">Export Conversation</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>E</kbd></div></div>
                         <div class="settings-shortcut-row"><span class="settings-shortcut-label">Minimize Window</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>M</kbd></div></div>
+                        <div class="settings-shortcut-row"><span class="settings-shortcut-label">Quick Prompt (from any app)</span><div class="settings-shortcut-keys"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>Space</kbd></div></div>
                     </div>
                 </section>
 
