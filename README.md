@@ -107,6 +107,23 @@ When a user submits a request (e.g., *"Clone this repo and analyze the README"*)
 *   `js/`: Client-side logic for socket handling, UI updates, and Supabase interaction.
 *   `css/`: Custom styling (Neo-Brutalist theme).
 
+### Desktop integration (`js/native-features.js`)
+`main.js` calls `installNativeFeatures()` once. Each OS feature lives in its own module:
+
+| Module | What it does |
+| :--- | :--- |
+| `desktop-integration.js` | Taskbar/Dock progress, unread badge, flash/bounce, Windows thumbnail Pause/Stop, keep-awake, jump list and Dock menu |
+| `agent-activity.js` | Tracks which agent runs are in flight (from `python-bridge.js` events) |
+| `quick-prompt-window.js` | `Ctrl/Cmd+Shift+Space` prompt box from any app (`quick-prompt.html`) |
+| `system-appearance.js` | OS theme and accent color, Mica (Windows 11) and vibrancy (macOS) |
+| `secure-store.js` | Auth session in DPAPI / Keychain / libsecret, migrated from localStorage |
+| `file-open.js` | "Open with" and files dropped on the app icon, attached to the composer |
+| `run-notification.js` | Open chat / Reply buttons on task-finished notifications |
+| `system-status.js` | Battery, brightness, Wi-Fi, Bluetooth, Do Not Disturb and process tools for the computer agent |
+| `platform-integration.js`, `linux-desktop.js`, `macos-desktop.js` | Per-OS icons, Linux autostart, macOS login-shell PATH, wmctrl/AppleScript window control |
+
+The renderer side is `js/desktop-bridge.js`. Pause and Stop need the backend's `run_control.py`. Run the tests with `npm run test:native-features` and `npm run test:cross-platform`.
+
 ### Infrastructure (`/`)
 *   `docker-compose.yml`: Orchestrates Redis, Sandbox, and other services.
 *   `Dockerfile`: Builds the production backend image.
