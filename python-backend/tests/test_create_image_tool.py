@@ -19,6 +19,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from openrouter_image_client import GeneratedImage, ImageGenerationError, TEXT_IMAGE_MODEL  # noqa: E402
 from primary_model_factory import get_primary_model  # noqa: E402
+from model_routing import DEFAULT_MODEL_ID  # noqa: E402
 from tool_event_payload import serialize_tool_event  # noqa: E402
 
 
@@ -75,7 +76,7 @@ def test_tool_returns_same_image_to_model_and_conversation(toolkit, png):
 
 def test_generated_media_reaches_real_primary_model_formatter(toolkit, png):
     result = toolkit.create_image("a red square")
-    model = get_primary_model("deepseek/deepseek-v4.1-flash")
+    model = get_primary_model(DEFAULT_MODEL_ID)
     tool_message = Message(role="tool", content=result.content, tool_call_id="image-call", images=result.images)
     messages = [tool_message]
     model._handle_function_call_media(messages, [tool_message])
@@ -104,6 +105,14 @@ def test_attached_image_is_forwarded_to_provider(toolkit, module, png):
     toolkit.create_image("make it blue", images=[Image(content=png)])
     reference = module.generate_openrouter_image.call_args.args[2]
     assert reference == "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+@pytest.mark.parametrize("format,mime_type", [("JPEG", "image/jpeg"), ("WEBP", "image/webp")])
+def test_attachment_mime_type_is_preserved(toolkit, module, format, mime_type):
+    buffer = io.BytesIO()
+    PillowImage.new("RGB", (8, 8), "blue").save(buffer, format=format)
+    toolkit.create_image("a blue square", images=[Image(content=buffer.getvalue())])
+    assert module.generate_openrouter_image.call_args.args[2].startswith(f"data:{mime_type};base64,")
 
 
 def test_agno_injects_media_during_actual_tool_call(toolkit, module, png):
@@ -184,3 +193,17 @@ def test_persistence_records_actual_model_and_mime(module, png):
     assert registration["reference_id"] == artifact
     assert registration["metadata"]["model"] == TEXT_IMAGE_MODEL
     assert registration["metadata"]["is_generated"] is True
+
+
+def test_existing_video_tool_still_uses_direct_video_api(toolkit, module, monkeypatch):
+    post = Mock(return_value=Mock(json=lambda: {"polling_url": "/api/v1/videos/job"}))
+    monkeypatch.setattr(module.requests, "post", post)
+    monkeypatch.setattr(module.requests, "get", Mock(return_value=Mock(content=b"video-bytes")))
+    toolkit._poll_video_job = Mock(return_value={"status": "completed", "unsigned_urls": ["https://example.com/video.mp4"]})
+    result = toolkit.generate_video("a moving bicycle")
+    assert "```video\nartifact\n```" in result
+    assert post.call_args.args[0] == module.OPENROUTER_VIDEO_URL
+    assert post.call_args.kwargs["json"]["model"] == "google/veo-3.1-lite"
+    assert toolkit._persist_generated_media.call_args.kwargs["media_bytes"] == b"video-bytes"
+    assert toolkit.socketio.emit.call_args.args[1]["mediaType"] == "video"
+    module.generate_openrouter_image.assert_not_called()

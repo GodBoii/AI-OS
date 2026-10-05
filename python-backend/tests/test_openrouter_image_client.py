@@ -87,6 +87,26 @@ def test_reference_limits_are_checked_before_submission(provider):
     post.assert_not_called()
 
 
+@pytest.mark.parametrize("parameters", ["invalid", {"input_references": "invalid"}])
+def test_malformed_endpoint_capabilities_never_submit(provider, parameters):
+    get, post = provider
+    payload = catalog()
+    payload["endpoints"][0]["supported_parameters"] = parameters
+    get.return_value.json = lambda: payload
+    with pytest.raises(ImageGenerationError, match="No free image endpoint"):
+        generate_openrouter_image("test-key", "a tree")
+    post.assert_not_called()
+
+
+def test_account_credit_error_is_clear_even_for_free_models(provider):
+    _, post = provider
+    response = requests.Response()
+    response.status_code = 402
+    post.side_effect = requests.HTTPError("provider body", response=response)
+    with pytest.raises(ImageGenerationError, match="credits and key limits"):
+        generate_openrouter_image("test-key", "a tree")
+
+
 @pytest.mark.parametrize("value", ["", "file:///etc/passwd", "C:/image.png", "javascript:alert(1)",
                                    "https://user:pass@example.com/a.png", "data:image/png;base64,bad",
                                    "data:image/svg+xml;base64,PHN2Zy8+", "https://example.com:bad/a.png"])

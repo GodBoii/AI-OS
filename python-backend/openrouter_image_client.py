@@ -100,7 +100,11 @@ def _free_provider(payload: Any, reference_count: int) -> str:
         except (KeyError, TypeError, ValueError):
             continue
         parameters = endpoint.get("supported_parameters") or {}
+        if not isinstance(parameters, dict):
+            continue
         limits = parameters.get("input_references") or {}
+        if not isinstance(limits, dict):
+            continue
         minimum, maximum = limits.get("min", 0), limits.get("max", 0)
         if not isinstance(minimum, int) or not isinstance(maximum, int):
             continue
