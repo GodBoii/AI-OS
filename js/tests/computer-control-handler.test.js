@@ -51,22 +51,24 @@ test('screen-element detection executes its UI Automation script through the saf
     assert.equal(typeof handler._runPowerShell, 'function');
 
     let receivedScript = '';
-    handler._runPowerShell = async (script) => {
+    handler._resolveObservationWindow = async () => ({ id: 42, getTitle: () => 'Test' });
+    handler._runAccessibilityScript = async (script) => {
         receivedScript = script;
         return {
-            stdout: JSON.stringify({
+            stdout: JSON.stringify({ status: 'success', elements: [{
                 Name: 'Save',
                 ControlType: 'ControlType.Button',
                 X: 100,
                 Y: 200
-            })
+            }] })
         };
     };
 
     const result = await handler._getScreenElements({ element_type: 'button' });
 
     assert.match(receivedScript, /UIAutomationClient/);
-    assert.match(receivedScript, /\$results \+= @\{/);
+    assert.match(receivedScript, /FromHandle\(\[IntPtr\]42\)/);
+    assert.doesNotMatch(receivedScript, /RootElement/);
     assert.equal(result.status, 'success');
     assert.equal(result.count, 1);
     assert.equal(result.elements[0].Name, 'Save');
