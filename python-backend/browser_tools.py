@@ -78,6 +78,8 @@ class BrowserTools(Toolkit):
         response_channel = f"browser-response:{request_id}"
         pubsub = self.redis_client.pubsub()
         timeout_seconds = BROWSER_COMMAND_TIMEOUT_SECONDS
+        if command_payload.get('action') == 'type' and isinstance(command_payload.get('text'), str):
+            timeout_seconds = max(timeout_seconds, 30 + len(command_payload['text']) * 0.22)
         if action == 'wait_for_element':
             timeout_seconds = max(timeout_seconds, int(command_payload.get('timeout', 10)) + 20)
 
@@ -173,10 +175,10 @@ class BrowserTools(Toolkit):
         Type text into an element. Handles both standard inputs AND contenteditable 
         elements (like reply/compose boxes in Slack, Gmail, Discord, Teams, etc.).
         
-        The tool automatically detects the element type and uses the appropriate strategy:
-        - For <input>/<textarea>: clears via value reset + types via DOM
-        - For contenteditable/[role="textbox"]: clicks to focus, Ctrl+A to select, 
-          then types character-by-character with real key events
+        The desktop app's saved typing speed applies to inputs and contenteditable
+        controls. Instant inserts the complete text, Fast types with short pauses,
+        and Slow uses a normal typing pace. Clear existing text before replacement;
+        with clear_existing=False, append to the current content.
         
         Args:
             element_id: The element ID from get_current_view()
