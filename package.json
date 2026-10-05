@@ -7,7 +7,9 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "test:computer-control": "node --test js/tests/computer-control-handler.test.js",
+    "test:computer-control": "node --test js/tests/computer-control-handler.test.js js/tests/computer-control-reliability.test.js js/tests/windows-accessibility-worker.test.js",
+    "test:computer-live": "electron js/tests/computer-control-live.js",
+    "test:typing": "node --test js/tests/typing-input.test.js js/tests/typing-browser.test.js js/tests/typing-settings-browser.test.js",
     "test:cross-platform": "node --test js/tests/cross-platform.test.js",
     "test:native-features": "node --test js/tests/native-features.test.js",
     "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
