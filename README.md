@@ -169,7 +169,7 @@ SUPABASE_KEY=...
 
 The `create_image(text, image=None)` tool uses the server's `OPENROUTER_API_KEY`
 and returns images to both the chat viewer and the calling model. See
-[image generation setup and tests](docs/create-image.md) for its free test models
+[image generation setup and tests](docs/create-image.md) for its tested low-cost model
 and OpenRouter account requirements.
 
 ### 3. Backend Setup

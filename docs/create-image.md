@@ -53,31 +53,45 @@ the runner privately, rather than appearing in the model's tool arguments.
   API. The saved-files panel continues to use the existing content registry.
 - Returns structured errors and shows image-generation failures in the tool log.
 
-## Free provider verification
+## Model choice and measured cost
 
-On October 6, 2026, OpenRouter's model and image endpoint APIs list
-`inclusionai/ming-image-0.1-design` as free text-to-image and
-`inclusionai/ming-image-0.1-design-layer` as free with exactly one reference image.
-Both are served by Novita. The client checks current endpoint pricing and
-reference limits before submitting, pins the free provider, and disables
-provider fallback. It refuses paid or unknown-price endpoints.
+The default for both text and reference inputs is `openai/gpt-image-1-mini`.
+The client requests one square image at `quality: low` when those parameters
+are supported. It validates endpoint prices and reference limits, pins the
+provider, and disables provider fallback. Negative, missing, and non-finite
+prices are refused; known paid prices are supported.
 
-The free reference model is specialized for decomposing designs into RGBA
-layers. Its reference input support does not establish that it can perform
-arbitrary photographic edits. Generation quality and editing behavior remain
-unverified because the configured account rejected both live smoke tests.
+On October 6, 2026, the same short bicycle prompt produced these actual charges
+using the deployed server's credential. These are measured request costs, not
+fixed per-image quotes; token-based cost changes with the input.
+
+| Model | Settings | Actual charge | Result |
+| --- | --- | --- | --- |
+| GPT Image 1 Mini | low, 1:1 | $0.002218 | 1024x1024 PNG |
+| GPT Image 2 | low, 1:1 | $0.005985 | 1024x1024 PNG |
+| Recraft V4.1 Flash | 1:1 | $0.007 | 1024x1024 WebP |
+
+Mini was the cheapest of these candidates. The client smoke test then generated
+a new image for $0.00222 and changed its red bicycle to blue for $0.00477. The
+full tool test edited it to green for $0.004772 and verified that uploaded and
+model-visible bytes were identical. Actual cost is included in the tool result
+metadata and saved content metadata when OpenRouter reports it.
+
+The previous free defaults were `inclusionai/ming-image-0.1-design` and its
+design-layer variant. The latter specializes in design-layer extraction, so
+they have been replaced with a model verified for both generation and editing.
 
 ## Server configuration
 
 `OPENROUTER_API_KEY` supplies the existing server-side credential. Optional
 `OPENROUTER_IMAGE_MODEL` and `OPENROUTER_IMAGE_EDIT_MODEL` replace the text and
-reference model IDs. Overrides must also have a zero-price endpoint with the
+reference model IDs. Overrides need an endpoint with known pricing and the
 required reference count. No new browser-side credential is needed.
 
-Live tests on October 6, 2026 returned HTTP 402. OpenRouter reported that the
-configured account had never purchased credits, despite both endpoints having
-zero prices. Use a key from an eligible account before rerunning the smoke test.
-The script does not purchase credits or upload to Supabase.
+The local credential still returns HTTP 402 because its account has never
+purchased credits. The deployed Ubuntu server's credential successfully
+generated images. Keep credentials server-side; changing the model does not
+resolve an account-level credit error.
 
 ## Verification
 
@@ -96,18 +110,29 @@ To run the reference smoke test independently:
 python python-backend/tests/verify_create_image_live.py --output-dir .ui-check/create-image-live --reference js/tests/fixtures/generated-image.png
 ```
 
-The 44 image tests pass with Agno 2.0.5 and 2.8.7. They exercise real Agno tool
+The 47 image tests pass with Agno 2.0.5 and 2.8.7. They exercise real Agno tool
 invocation, media injection, the primary model serializer, external provider
-contracts, and mocked storage/persistence. A broader relevant run passed 59
-backend tests and 35 JavaScript tests, including existing video behavior,
-presentation rendering, computer control, and typing behavior. Browser checks
+contracts, and mocked storage/persistence. The latest broader relevant run
+passed 78 backend tests and four browser/presentation tests. Previous checks
+also passed existing computer-control and typing tests. Browser checks
 use the production viewer and chat handlers in a local fixture at desktop and
 mobile widths; they do not require a logged-in production account.
 
 An additional existing streaming test could not pass because this checkout
 lacks `android/app/src/main/java/com/aetheria/ai/AssistantMobileBridgeManager.java`.
-That file was also absent before this change. Live provider output and live
-Supabase persistence remain unverified; the API and storage tests mock them.
+That file was also absent before this change.
+
+For a full live check from the backend container:
+
+```sh
+python tests/verify_create_image_tool_live.py --output-dir /tmp/aios-image-tool-check
+```
+
+This paid, opt-in script creates a temporary Supabase test identity, calls the
+real tool, verifies the storage roundtrip, saved content row, and event room,
+and asks the configured primary model to identify the generated bicycle color.
+It removes the test's storage objects, registry rows, and identity afterward.
+It sends no signup email and makes no credit purchases.
 
 Sources: [image API documentation](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
-[free image model filter](https://openrouter.ai/models?output_modalities=image&max_price=0).
+[model cost comparison](https://openrouter.ai/blog/insights/image-generation-models-compared/).
