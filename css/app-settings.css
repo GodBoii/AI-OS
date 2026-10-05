@@ -474,3 +474,23 @@ body:not(.dark-mode) .settings-site-row + .settings-site-row {
 body:not(.dark-mode) .settings-toggle-hint code {
     background: rgba(0,0,0,0.05);
 }
+
+#settings-typing-speed-status {
+    display: block;
+    margin: 0 24px 12px;
+}
+
+#settings-typing-speed-status:empty {
+    display: none;
+}
+
+@media (max-width: 480px) {
+    #settings-tab section[aria-labelledby="settings-typing-title"] .settings-toggle-row {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
+    }
+    #settings-typing-speed {
+        width: 100%;
+    }
+}
