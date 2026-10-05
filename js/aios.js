@@ -3216,6 +3216,31 @@ class AIOS {
                     </div>
                 </section>
 
+                <!-- Agent typing -->
+                <section class="settings-card" aria-labelledby="settings-typing-title">
+                    <div class="settings-card-header">
+                        <div class="settings-card-icon" data-settings-icon="typing"><i class="fas fa-keyboard"></i></div>
+                        <div>
+                            <h4 id="settings-typing-title" class="settings-card-title">Agent typing</h4>
+                            <p class="settings-card-desc">Typing speed for computer and browser tools.</p>
+                        </div>
+                    </div>
+                    <div class="settings-items">
+                        <div class="settings-toggle-row">
+                            <div class="settings-toggle-info">
+                                <label class="settings-toggle-label" for="settings-typing-speed">Typing speed</label>
+                                <span class="settings-toggle-hint" id="settings-typing-speed-hint">Instant pastes text at once. Fast types like a very fast typist. Slow uses a normal human pace. Applies to the next text entry.</span>
+                            </div>
+                            <select class="settings-field-select" id="settings-typing-speed" aria-describedby="settings-typing-speed-hint settings-typing-speed-status" disabled>
+                                <option value="instant">Instant</option>
+                                <option value="fast">Fast</option>
+                                <option value="slow">Slow</option>
+                            </select>
+                        </div>
+                        <span class="settings-field-status" id="settings-typing-speed-status" role="status" aria-live="polite">Loading typing preference...</span>
+                    </div>
+                </section>
+
                 <!-- Browser Automation Section -->
                 <section class="settings-card" aria-labelledby="settings-browser-title">
                     <div class="settings-card-header">
@@ -3385,9 +3410,14 @@ class AIOS {
      */
     async initBrowserSettings() {
         const ipc = window.electron?.ipcRenderer;
-        if (!ipc?.invoke) return;
+        const typingStatus = document.getElementById('settings-typing-speed-status');
+        if (!ipc?.invoke) {
+            if (typingStatus) typingStatus.textContent = 'Available in the desktop app.';
+            return;
+        }
 
         const fields = [
+            ['settings-typing-speed', 'typingSpeed', el => el.value],
             ['settings-browser-visibility', 'visibility', el => el.value],
             ['settings-browser-idle', 'idleCloseMinutes', el => Number(el.value)],
             ['settings-browser-keep-signed-in', 'keepSignedIn', el => el.checked],
@@ -3412,19 +3442,40 @@ class AIOS {
         };
 
         const settings = await call('browser-settings:get');
-        if (!settings) return;
+        if (!settings) {
+            if (typingStatus) typingStatus.textContent = 'Could not load typing speed. Reopen Settings to retry.';
+            return;
+        }
 
         for (const [id, key, read] of fields) {
             const el = document.getElementById(id);
             if (!el) continue;
             paint(el, key, settings);
+            if (key === 'typingSpeed') {
+                el.disabled = false;
+                if (typingStatus) typingStatus.textContent = '';
+            }
+            el.dataset.savedValue = JSON.stringify(settings[key]);
             // switchTab('settings') re-runs this on every visit; without the guard
             // each visit would stack another listener on the same control.
             if (el.dataset.settingsBound === '1') continue;
             el.dataset.settingsBound = '1';
             el.addEventListener('change', async () => {
+                if (key === 'typingSpeed') {
+                    el.disabled = true;
+                    if (typingStatus) typingStatus.textContent = 'Saving typing speed...';
+                }
                 const saved = await call('browser-settings:set', { [key]: read(el) });
-                if (saved) paint(el, key, saved);
+                if (saved) {
+                    paint(el, key, saved);
+                    el.dataset.savedValue = JSON.stringify(saved[key]);
+                } else {
+                    paint(el, key, { [key]: JSON.parse(el.dataset.savedValue) });
+                }
+                if (key === 'typingSpeed') {
+                    el.disabled = false;
+                    if (typingStatus) typingStatus.textContent = saved ? 'Typing speed saved.' : 'Could not save typing speed. Your previous choice is still active.';
+                }
             });
         }
 
