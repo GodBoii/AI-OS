@@ -172,7 +172,7 @@ def get_task_agent(
     task_agent = Agent(
         name="Task_Manager",
         role="Unified task management and execution specialist with Aetheria AI delegation",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         tools=[task_tools, user_context_tools, aetheria_bridge],
         instructions=instructions,
         markdown=True,
