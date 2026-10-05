@@ -224,6 +224,18 @@ class ArtifactHandler {
                 break;
 
             case 'image':
+                if (typeof data === 'string' && !/^(data:image\/|https?:\/\/)/i.test(data)) {
+                    data = `data:${options.mimeType || 'image/png'};base64,${data}`;
+                }
+                currentArtifactId = currentArtifactId || `image-artifact-${++this.currentId}`;
+                this.artifacts.set(currentArtifactId, {
+                    content: data,
+                    type: 'image',
+                    title: options.title || 'Generated image',
+                    mimeType: options.mimeType || 'image/png',
+                    isPending: data === null
+                });
+                if (data !== null) this.pendingMedia.delete(currentArtifactId);
                 titleEl.textContent = options.title || 'Image Viewer';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
@@ -429,7 +441,7 @@ class ArtifactHandler {
         container.innerHTML = '';
         const img = document.createElement('img');
         img.className = 'generated-image-artifact';
-        img.src = typeof base64Data === 'string' && base64Data.startsWith('data:')
+        img.src = typeof base64Data === 'string' && /^(data:image\/|https?:\/\/)/i.test(base64Data)
             ? base64Data
             : `data:image/png;base64,${base64Data}`;
         img.alt = 'Generated Image';
@@ -1081,7 +1093,7 @@ class ArtifactHandler {
             if (dataUri.startsWith('data:')) {
                 content = dataUri.split(',')[1];
                 suggestedName = 'generated-image';
-                extension = '.png';
+                extension = this.extensionFromMimeType(dataUri.slice(5, dataUri.indexOf(';')));
                 encoding = 'base64';
             }
         } else if (videoEl && videoEl.currentSrc) {

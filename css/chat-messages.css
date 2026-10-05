@@ -989,6 +989,10 @@
     background-color: #34d399;
 }
 
+.tool-log-status.failed {
+    background-color: var(--error-color, #ef4444);
+}
+
 /* ================================================================= */
 /* DELEGATED AGENT FRAMES                                           */
 /* ================================================================= */

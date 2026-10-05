@@ -713,7 +713,8 @@ function getComputerToolMetadata(tool) {
     const metadataKind = metadata?.kind || null;
     const isSupportedKind = metadataKind === 'computer_tool_output'
         || metadataKind === 'google_sheets_tool_output'
-        || metadataKind === 'presentation_tool_output';
+        || metadataKind === 'presentation_tool_output'
+        || metadataKind === 'generated_image_tool_output';
     if (!metadata || !isSupportedKind) {
         console.log('[ToolPreview] No usable metadata found', {
             metadataKind: metadata?.kind || null,
@@ -1046,6 +1047,34 @@ function bufferToBase64(buffer) {
     return btoa(binary);
 }
 
+async function resolveGeneratedImagePreviewUrl(metadata) {
+    const expiresAt = Number(metadata.media_url_expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt * 1000 > Date.now()) {
+        return getSafeToolPreviewUrl(metadata.media_url);
+    }
+    const conversationId = metadata.conversation_id;
+    if (!conversationId || !metadata.artifact_id) return '';
+    try {
+        let content = window.sessionContentViewer?.getCachedContent(conversationId);
+        if (!content) {
+            const session = await window.electron?.auth?.getSession();
+            if (!session?.access_token) return '';
+            const response = await fetch(`https://api.aetheriaai.website/api/sessions/${encodeURIComponent(conversationId)}/content`, {
+                headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (!response.ok) return '';
+            const payload = await response.json();
+            content = Array.isArray(payload.content) ? payload.content : [];
+            window.sessionContentViewer?.cacheContent(conversationId, content);
+        }
+        const item = content.find(entry => entry.reference_id === metadata.artifact_id);
+        return getSafeToolPreviewUrl(item?.signed_url);
+    } catch (error) {
+        console.warn('[Chat] Could not refresh generated image preview:', error);
+        return '';
+    }
+}
+
 async function buildToolPreviewMarkup(metadata) {
     if (!metadata) return '';
 
@@ -1058,6 +1087,19 @@ async function buildToolPreviewMarkup(metadata) {
         relativePath: metadata.relativePath || null,
         hasInline: !!metadata.inline
     });
+
+    if (metadata.kind === 'generated_image_tool_output') {
+        const url = await resolveGeneratedImagePreviewUrl(metadata);
+        if (!url) return '';
+        return `
+            <div class="tool-preview-card tool-preview-image">
+                <a href="${url}" target="_blank" rel="noopener noreferrer" aria-label="Open generated image">
+                    <img src="${url}" alt="${escapeToolPreviewHtml(metadata.title || 'Generated image')}" class="tool-preview-image-thumb" loading="lazy" />
+                </a>
+                <div class="tool-preview-caption">${escapeToolPreviewHtml(metadata.filename || 'Generated image')}</div>
+            </div>
+        `;
+    }
 
     if (metadata.kind === 'google_sheets_tool_output') {
         if (previewType === 'sheet_table') {
@@ -1890,6 +1932,21 @@ function setupIpcListeners() {
             }
         }
 
+        const conversationId = data?.conversationId || getStreamConversationId(messageId);
+        if (conversationId) {
+            invalidateContentForConversation(conversationId);
+            document.dispatchEvent(new CustomEvent('session-content:updated', {
+                detail: { conversationId, type: 'upload' }
+            }));
+        }
+
+        if (mediaType === 'image' && mediaUrl && artifactId && artifactHandler
+            && isConversationActive(conversationId) && !isProjectWorkspaceMode()) {
+            artifactHandler.showArtifact('image', mediaUrl, artifactId, {
+                title: data?.fileName || 'Generated image', mimeType
+            });
+        }
+
         if (messageId && messageDiv) {
             const logsContainer = messageDiv.querySelector('.detailed-logs');
             if (logsContainer) {
@@ -2083,12 +2140,22 @@ function setupIpcListeners() {
                 updateReasoningSummary(messageId);
             }
         } else if (type === 'tool_end') {
+            const output = parseMaybeJson(tool?.tool_output);
+            const imageFailed = ['create_image', 'generate_image'].includes(name) && output?.ok === false;
             if (logEntry) {
                 const statusEl = logEntry.querySelector('.tool-log-status');
                 if (statusEl) {
                     statusEl.textContent = '';
                     statusEl.classList.remove('in-progress');
-                    statusEl.classList.add('completed');
+                    statusEl.classList.add(imageFailed ? 'failed' : 'completed');
+                    if (imageFailed) statusEl.title = 'Image generation failed';
+                }
+                if (imageFailed) {
+                    const errorMessage = document.createElement('div');
+                    errorMessage.className = 'tool-preview-caption';
+                    errorMessage.setAttribute('role', 'status');
+                    errorMessage.textContent = output.error || 'Image generation failed.';
+                    logEntry.querySelector('.tool-log-details')?.appendChild(errorMessage);
                 }
             }
 
@@ -2104,6 +2171,22 @@ function setupIpcListeners() {
                     toolName: name || null,
                     hasLogEntry: !!logEntry
                 });
+            }
+
+            if (metadata?.kind === 'generated_image_tool_output' && artifactHandler) {
+                const mediaUrl = getSafeToolPreviewUrl(metadata.media_url);
+                const artifactId = metadata.artifact_id;
+                if (mediaUrl && artifactId) {
+                    // Keep the original URL for the viewer; the helper above escapes HTML.
+                    artifactHandler.cachePendingMedia(artifactId, {
+                        type: 'image', url: metadata.media_url, mimeType: metadata.mime_type
+                    });
+                    if (isConversationActive(streamConversationId) && !isProjectWorkspaceMode()) {
+                        artifactHandler.showArtifact('image', metadata.media_url, artifactId, {
+                            title: metadata.filename || 'Generated image', mimeType: metadata.mime_type
+                        });
+                    }
+                }
             }
 
             if (
