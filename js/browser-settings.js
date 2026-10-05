@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { TYPING_SPEEDS, DEFAULT_TYPING_SPEED } = require('./typing-input');
 
 const VISIBILITY_MODES = ['visible', 'background', 'headless'];
 
@@ -23,6 +24,8 @@ const DEFAULTS = Object.freeze({
     // 'background' - real headful Chrome that never takes focus
     // 'headless'   - --headless=new, fastest but easier for sites to detect
     visibility: 'visible',
+    // Shared by managed browser typing and native computer input.
+    typingSpeed: DEFAULT_TYPING_SPEED,
     // Minutes of agent inactivity before the managed Chrome is closed. 0 = never.
     idleCloseMinutes: 15,
     // Keep the automation profile (and therefore its logins) on disk between runs.
@@ -58,6 +61,7 @@ function sanitize(input) {
     const out = {};
 
     if (VISIBILITY_MODES.includes(patch.visibility)) out.visibility = patch.visibility;
+    if (TYPING_SPEEDS.includes(patch.typingSpeed)) out.typingSpeed = patch.typingSpeed;
     if (patch.idleCloseMinutes !== undefined) out.idleCloseMinutes = clampInt(patch.idleCloseMinutes, 0, 600, DEFAULTS.idleCloseMinutes);
     if (patch.keepSignedIn !== undefined) out.keepSignedIn = Boolean(patch.keepSignedIn);
     if (Array.isArray(patch.blockedDomains)) {
@@ -90,12 +94,9 @@ class BrowserSettings {
 
     /** Applies a partial patch and returns the resulting sanitized settings. */
     update(patch) {
-        this.values = { ...this.values, ...sanitize(patch) };
-        try {
-            fs.writeFileSync(this.filePath, JSON.stringify(this.values, null, 2));
-        } catch (error) {
-            console.error('[BrowserSettings] Failed to persist settings:', error.message);
-        }
+        const next = { ...this.values, ...sanitize(patch) };
+        fs.writeFileSync(this.filePath, JSON.stringify(next, null, 2));
+        this.values = next;
         return this.get();
     }
 
