@@ -50,3 +50,13 @@ The tests cover atomic quota limits, parallel uploads, idempotent accounting, ow
 Generated Convex bindings were refreshed with the CLI's codegen command. Production deployment is a separate step.
 
 All 22 focused tests passed. An isolated process in the Ubuntu container imported the changed backend, verified preservation of 45 existing routes, read both existing sites and all four deployments, and passed the deployment preflight. The running backend files and containers were not replaced or restarted.
+
+## Production deployment, 6 October 2026
+
+Code commits `7159670` and `7aca74f` were pushed to `master` and pulled into `/home/arun/apps/ai-os` on `ubuntu-server`. Convex schema and functions were deployed to the deployment configured on that server. The web and Flower images were rebuilt and both containers restarted successfully.
+
+The persistent mount is also configured in the existing `docker-compose.server.yml`, so the server's normal two-file Compose command preserves it. `/srv/aetheria/vault` is mounted at `/data/vault`. Obsolete provider environment entries were removed. Redis, sandbox services, Cloudflare Tunnel, and other applications were not restarted.
+
+Live verification used temporary authenticated accounts and exercised the running backend against actual Convex metadata and persistent disk storage. Upload, private range download, cross-user read/delete rejection, usage accounting, file-limit rejection, internal-function access protection, and permanent deletion passed. Deleting the last file also removes its empty Convex storage entry. Temporary accounts, auth cache entries, files, and test directories were removed afterward.
+
+The public health endpoint returned 200; the public vault endpoint returned 401 without credentials. Both backend containers were running with zero restarts after deployment.
