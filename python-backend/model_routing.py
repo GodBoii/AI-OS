@@ -5,8 +5,8 @@ from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Optional
 
 
-DEEPSEEK_MODEL_ID = "deepseek/deepseek-v4.1-flash"
-GLM_VIDEO_MODEL_ID = "z-ai/glm-5.3-flash"
+DEEPSEEK_MODEL_ID = "xiaomi/mimo-v2.6-pro"
+GLM_VIDEO_MODEL_ID = "xiaomi/mimo-v2.6-pro"
 DEFAULT_MODEL_ID = DEEPSEEK_MODEL_ID
 ULTRA_MODEL_ID = DEEPSEEK_MODEL_ID
 VIDEO_MODEL_ID = GLM_VIDEO_MODEL_ID
