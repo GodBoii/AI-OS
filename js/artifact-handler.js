@@ -1,5 +1,7 @@
 // artifact-handler.js (Final, Race-Condition-Proof Version)
 
+import { mergePresentationMetadata } from './presentation-metadata.mjs';
+
 class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
@@ -246,12 +248,13 @@ class ArtifactHandler {
                 break;
 
             case 'presentation':
+                currentArtifactId = currentArtifactId || data?.artifact_id || data?.output_id || `presentation-${Date.now()}`;
+                data = mergePresentationMetadata(this.artifacts.get(currentArtifactId)?.content, data);
                 titleEl.textContent = options.title || data?.title || data?.filename || 'PowerPoint Deck';
                 copyBtn.style.display = 'none';
                 downloadBtn.style.display = 'inline-flex';
                 if (deployBtn) deployBtn.style.display = 'none';
                 this.renderPresentation(data, contentDiv);
-                currentArtifactId = currentArtifactId || data?.artifact_id || data?.output_id || `presentation-${Date.now()}`;
                 this.artifacts.set(currentArtifactId, {
                     content: data,
                     type: 'presentation',

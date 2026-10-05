@@ -47,6 +47,10 @@
 .project-file-tree > .project-file-node:nth-child(5) > .project-file-row { animation-delay: 160ms; }
 .project-file-tree > .project-file-node:nth-child(n+6) > .project-file-row { animation-delay: 200ms; }
 
+@media (prefers-reduced-motion: reduce) {
+    .project-file-tree > .project-file-node > .project-file-row { animation: none; }
+}
+
 /* Button ripple effect */
 @keyframes ripple {
     0% {

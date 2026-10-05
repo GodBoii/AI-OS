@@ -186,7 +186,7 @@ export function buildPresentationTemplateInstruction(template) {
     return [
         '',
         '',
-        `In order to create ppt, the user has specifically asked you to create the ppt using this "${template.name}" template.`,
-        `Use create_presentation with template="${template.id}". Do not choose a different presentation template unless the user explicitly changes it.`
+        `Create the PowerPoint using the selected "${template.name}" template.`,
+        `Use template="${template.id}" with create_presentation_from_outline or create_presentation. Keep the selected template unless the user changes it. Submit the deck in one compact call.`
     ].join('\n');
 }

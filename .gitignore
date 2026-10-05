@@ -33,6 +33,18 @@ __pycache__/
 *.coverage
 htmlcov/
 .tox/
+.ruff_cache/
+
+# Local UI diagnostics (keep the reusable browser and cookie checks)
+/.ui-check/*
+!/.ui-check/check.js
+!/.ui-check/group.js
+/.metalfx-check/
+/.notif-check/
+
+# Unused local source copies
+/python-backend/sockets_orig.py
+/team.py
 
 # Logs, Temporary Files & Ad-hoc Scripts
 *.log
@@ -53,6 +65,7 @@ fix_sockets.py
 *.rar
 
 # Presentations
+presentation-toolkit-output/
 *.pptx
 *.ppt
 

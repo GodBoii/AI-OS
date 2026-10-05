@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const PptxGenJS = require('pptxgenjs');
+const { buildProfessionalSlide } = require('./presentation_layouts');
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const CANVAS_W = 1920;
@@ -10,9 +11,9 @@ const CANVAS_H = 1080;
 const SLIDE_W_IN = 13.333333;
 const SLIDE_H_IN = 7.5;
 const PX_TO_IN = SLIDE_W_IN / CANVAS_W;
-const BODY_FONT = 'Segoe UI';
-const HEADING_FONT = 'Segoe UI Semibold';
-const SERIF_HEADING_FONT = 'Georgia';
+const BODY_FONT = 'Arial';
+const HEADING_FONT = 'Arial';
+const SERIF_HEADING_FONT = 'Times New Roman';
 
 let currentPptx = null;
 
@@ -232,10 +233,8 @@ function contrastRatio(a, b) {
 
 function readableColor(template, color, background) {
   const bg = background || template.surface || template.background;
-  if (contrastRatio(color, bg) >= 4.2) return color;
-  return isDarkTemplate(template)
-    ? mixColor(color, 'FFFFFF', 0.48)
-    : mixColor(color, '000000', 0.32);
+  if (contrastRatio(color, bg) >= 4.5) return color;
+  return contrastRatio('FFFFFF', bg) > contrastRatio('000000', bg) ? 'FFFFFF' : '000000';
 }
 
 function px(value) {
@@ -247,7 +246,8 @@ function toIn(value) {
 }
 
 function fontPx(pt) {
-  return Number(pt || 10) * 96 / 72;
+  // The preview canvas has 144 pixels per inch. Match exported point sizes.
+  return Number(pt || 10) / 72 / PX_TO_IN;
 }
 
 function decodeHtml(value) {
@@ -310,7 +310,9 @@ function cssStyleToObject(styleMap, objectType, template) {
   const borderColor = cssColorToHex(styleMap['border-color'], null) || cssColorToHex((border.match(/#[0-9a-f]{3,6}|rgba?\([^)]+\)/i) || [])[0], null);
   if (objectType === 'textbox') {
     style.fontFace = fontFamily || BODY_FONT;
-    style.fontSizePt = cssNumber(styleMap['font-size'], 16) * 72 / 96;
+    const fontSize = cssNumber(styleMap['font-size'], 16);
+    const cssPixels = /pt$/i.test(styleMap['font-size'] || '') ? fontSize * 96 / 72 : fontSize;
+    style.fontSizePt = cssPixels * PX_TO_IN * 72;
     style.lineHeight = cssNumber(styleMap['line-height'], 1.12);
     style.bold = /bold|[6-9]00/.test(String(styleMap['font-weight'] || ''));
     style.italic = String(styleMap['font-style'] || '').includes('italic');
@@ -388,6 +390,7 @@ function slideType(slideData) {
   if (raw === 'comparison') return 'two_column';
   if (raw === 'visual') return 'image';
   if (raw === 'process') return 'diagram';
+  if (raw === 'evidence') return 'chart';
   return raw || 'content';
 }
 
@@ -441,653 +444,6 @@ function addObject(spec, object) {
   return normalized;
 }
 
-function addBackground(spec, template) {
-  addObject(spec, {
-    id: 'background',
-    type: 'shape',
-    role: 'slide background',
-    x: 0,
-    y: 0,
-    w: CANVAS_W,
-    h: CANVAS_H,
-    z: 0,
-    decorative: true,
-    protected: false,
-    style: { fill: template.background, line: template.background, shape: 'rect' },
-  });
-  addObject(spec, {
-    id: 'brand-rail',
-    type: 'shape',
-    role: 'brand rail',
-    x: 0,
-    y: 0,
-    w: 48,
-    h: CANVAS_H,
-    z: 1,
-    decorative: true,
-    protected: false,
-    style: { fill: template.accent, line: template.accent, shape: 'rect' },
-  });
-  for (let i = 0; i < 9; i += 1) {
-    addObject(spec, {
-      id: `grid-line-${i}`,
-      type: 'shape',
-      role: 'layout grid line',
-      x: 160 + i * 180,
-      y: 0,
-      w: 1,
-      h: CANVAS_H,
-      z: 1,
-      decorative: true,
-      protected: false,
-      style: { fill: template.grid, opacity: isDarkTemplate(template) ? 0.12 : 0.2, shape: 'rect' },
-    });
-  }
-}
-
-function addBrand(spec, template, label = 'AETHERIA / PRESENTATION') {
-  addObject(spec, {
-    id: 'brand-label',
-    type: 'textbox',
-    role: 'brand label',
-    x: 112,
-    y: 58,
-    w: 430,
-    h: 28,
-    z: 4,
-    protected: false,
-    text: label.toUpperCase(),
-    style: { fontFace: template.fontFace, fontSizePt: 8, bold: true, color: template.muted, letterSpacing: 1.2 },
-  });
-  addObject(spec, {
-    id: 'brand-rule',
-    type: 'shape',
-    role: 'brand rule',
-    x: 112,
-    y: 95,
-    w: 240,
-    h: 6,
-    z: 4,
-    decorative: true,
-    protected: false,
-    style: { fill: template.accent2, shape: 'rect' },
-  });
-}
-
-function addFooter(spec, template, index, totalSlides, topic) {
-  addObject(spec, {
-    id: 'footer-rule',
-    type: 'shape',
-    role: 'footer rule',
-    x: 112,
-    y: 1000,
-    w: 1690,
-    h: 1,
-    z: 4,
-    decorative: true,
-    protected: false,
-    style: { fill: mixColor(template.ink, template.background, 0.82), opacity: 0.55, shape: 'rect' },
-  });
-  addObject(spec, {
-    id: 'footer-topic',
-    type: 'textbox',
-    role: 'footer topic',
-    x: 112,
-    y: 1018,
-    w: 900,
-    h: 22,
-    z: 5,
-    protected: false,
-    text: normalizeText(topic).slice(0, 78),
-    style: { fontFace: template.fontFace, fontSizePt: 7, color: template.muted },
-  });
-  addObject(spec, {
-    id: 'footer-page',
-    type: 'textbox',
-    role: 'footer page',
-    x: 1690,
-    y: 1018,
-    w: 110,
-    h: 22,
-    z: 5,
-    protected: false,
-    text: `${index}/${totalSlides}`,
-    style: { fontFace: template.fontFace, fontSizePt: 7, color: template.muted, align: 'right' },
-  });
-}
-
-function addMetricChips(spec, metrics, template, opts = {}) {
-  const items = Array.isArray(metrics) ? metrics.slice(0, opts.maxItems || 3) : [];
-  if (!items.length) return;
-  const x0 = opts.x ?? 112;
-  const y = opts.y ?? 820;
-  const totalW = opts.w ?? 900;
-  const gap = opts.gap ?? 28;
-  const w = Math.floor((totalW - gap * (items.length - 1)) / items.length);
-  items.forEach((metric, idx) => {
-    const x = x0 + idx * (w + gap);
-    const accent = idx === 1 ? template.accent2 : idx === 2 ? template.accent3 : template.accent;
-    addObject(spec, {
-      id: `metric-${idx + 1}-card`,
-      type: 'shape',
-      role: `metric ${idx + 1} card`,
-      x,
-      y,
-      w,
-      h: opts.h ?? 104,
-      z: 8,
-      protected: false,
-      style: { fill: template.surface, line: accent, lineWidth: 1.6, radius: 10, shape: 'roundRect' },
-    });
-    addObject(spec, {
-      id: `metric-${idx + 1}-value`,
-      type: 'textbox',
-      role: `metric ${idx + 1} value`,
-      x: x + 28,
-      y: y + 24,
-      w: w - 56,
-      h: 38,
-      z: 9,
-      text: normalizeText(metric.value || metric.metric || ''),
-      style: { fontFace: template.headingFace, fontSizePt: opts.valueSizePt ?? 19, bold: true, color: readableColor(template, accent, template.surface) },
-    });
-    addObject(spec, {
-      id: `metric-${idx + 1}-label`,
-      type: 'textbox',
-      role: `metric ${idx + 1} label`,
-      x: x + 30,
-      y: y + 68,
-      w: w - 60,
-      h: 24,
-      z: 9,
-      text: normalizeText(metric.label || metric.name || ''),
-      style: { fontFace: template.fontFace, fontSizePt: opts.labelSizePt ?? 8, bold: true, color: template.muted },
-    });
-  });
-}
-
-function addAiNetworkVisual(spec, template, opts = {}) {
-  const x = opts.x ?? 1120;
-  const y = opts.y ?? 120;
-  const w = opts.w ?? 650;
-  const h = opts.h ?? 760;
-  const dark = isDarkTemplate(template);
-  const softAccent = mixColor(template.accent, template.surface, dark ? 0.74 : 0.86);
-  const softAccent2 = mixColor(template.accent2, template.surface, dark ? 0.78 : 0.88);
-  const scale = Math.min(w / 620, h / 780);
-  const nodeSize = (size) => Math.max(18, Math.round(size * scale));
-  addObject(spec, {
-    id: 'visual-panel',
-    type: 'shape',
-    role: 'visual panel frame',
-    x,
-    y,
-    w,
-    h,
-    z: 5,
-    protected: false,
-    style: { fill: template.surface, line: template.accent, lineWidth: 1.8, radius: 18, shape: 'roundRect' },
-  });
-  addObject(spec, {
-    id: 'visual-wash-1',
-    type: 'shape',
-    role: 'visual ambient field',
-    x: x + w * 0.09,
-    y: y + h * 0.08,
-    w: w * 0.82,
-    h: h * 0.78,
-    z: 5.2,
-    decorative: true,
-    protected: false,
-    style: { fill: softAccent, line: softAccent, shape: 'roundRect', radius: 28, opacity: 0.28 },
-  });
-  addObject(spec, {
-    id: 'visual-wash-2',
-    type: 'shape',
-    role: 'visual accent field',
-    x: x + w * 0.36,
-    y: y + h * 0.22,
-    w: w * 0.5,
-    h: h * 0.42,
-    z: 5.3,
-    decorative: true,
-    protected: false,
-    style: { fill: softAccent2, line: softAccent2, shape: 'roundRect', radius: 22, opacity: 0.24 },
-  });
-
-  const nodes = [
-    [x + w * 0.2, y + h * 0.21, template.accent, nodeSize(68)],
-    [x + w * 0.56, y + h * 0.15, template.accent2, nodeSize(56)],
-    [x + w * 0.82, y + h * 0.34, template.accent3, nodeSize(62)],
-    [x + w * 0.35, y + h * 0.49, template.accent2, nodeSize(58)],
-    [x + w * 0.69, y + h * 0.6, template.accent, nodeSize(78)],
-    [x + w * 0.25, y + h * 0.77, template.accent3, nodeSize(60)],
-    [x + w * 0.81, y + h * 0.82, template.accent2, nodeSize(54)],
-  ];
-  const links = [[0, 1], [1, 2], [0, 3], [3, 4], [2, 4], [3, 5], [4, 6], [5, 6], [1, 4]];
-  links.forEach(([a, b], idx) => {
-    const from = nodes[a];
-    const to = nodes[b];
-    const lx = Math.min(from[0], to[0]);
-    const ly = Math.min(from[1], to[1]);
-    const lw = Math.max(1, Math.abs(to[0] - from[0]));
-    const lh = Math.max(1, Math.abs(to[1] - from[1]));
-    addObject(spec, {
-      id: `network-link-${idx}`,
-      type: 'shape',
-      role: 'network link',
-      x: lx,
-      y: ly,
-      w: lw,
-      h: lh,
-      z: 6,
-      decorative: true,
-      protected: false,
-      style: { shape: 'line', line: mixColor(template.muted, template.surface, dark ? 0.25 : 0.5), lineWidth: Math.max(0.8, 1.4 * scale), flipH: (to[0] - from[0]) * (to[1] - from[1]) < 0 },
-    });
-  });
-  nodes.forEach(([cx, cy, color, size], idx) => {
-    addObject(spec, {
-      id: `network-node-${idx}`,
-      type: 'shape',
-      role: 'network node',
-      x: cx - size / 2,
-      y: cy - size / 2,
-      w: size,
-      h: size,
-      z: 8,
-      decorative: true,
-      protected: false,
-      style: { fill: color, line: mixColor(color, template.surface, 0.35), lineWidth: 2, shape: 'ellipse', opacity: idx === 4 ? 0.96 : 0.82 },
-    });
-  });
-  addObject(spec, {
-    id: 'visual-core-label',
-    type: 'textbox',
-    role: 'visual AI core label',
-    x: x + w * 0.69 - Math.max(36, 90 * scale) / 2,
-    y: y + h * 0.6 - Math.max(24, 50 * scale) / 2,
-    w: Math.max(36, 90 * scale),
-    h: Math.max(24, 50 * scale),
-    z: 9,
-    text: 'AI',
-    decorative: true,
-    protected: false,
-    style: { fontFace: template.headingFace, fontSizePt: Math.max(10, 20 * scale), bold: true, color: template.surface, align: 'center', lineHeight: 1 },
-  });
-  const caption = opts.caption === '' ? '' : (opts.caption || 'Signals, models, and automation linked into one operating layer');
-  if (caption) {
-    addObject(spec, {
-      id: 'visual-caption',
-      type: 'textbox',
-      role: 'visual caption',
-      x: x + 72,
-      y: y + h - 108,
-      w: w - 144,
-      h: 56,
-      z: 9,
-      text: caption,
-      style: { fontFace: template.fontFace, fontSizePt: 11, bold: true, color: template.accent, align: 'center', lineHeight: 1.1 },
-    });
-  }
-}
-
-function buildTitleSpec(slideData, index, ctx) {
-  const { template, topic, totalSlides } = ctx;
-  const spec = createSlideSpec(slideData, index, ctx);
-  addBackground(spec, template);
-  addBrand(spec, template, template.name === 'Venture Blueprint' ? 'AETHERIA / VENTURE BLUEPRINT' : `AETHERIA / ${template.name}`);
-  addObject(spec, {
-    id: 'kicker',
-    type: 'textbox',
-    role: 'cover kicker',
-    x: 112,
-    y: 164,
-    w: 520,
-    h: 34,
-    z: 7,
-    text: normalizeText(slideData.kicker || 'Presentation narrative'),
-    style: { fontFace: template.fontFace, fontSizePt: 12.5, bold: true, color: readableColor(template, template.accent2, template.background) },
-  });
-  addObject(spec, {
-    id: 'headline',
-    type: 'textbox',
-    role: 'cover headline',
-    x: 112,
-    y: 262,
-    w: 910,
-    h: 285,
-    z: 7,
-    text: normalizeText(slideData.title || topic),
-    style: { fontFace: template.headingFace, fontSizePt: 51, bold: true, color: template.ink, lineHeight: 1.02 },
-  });
-  addObject(spec, {
-    id: 'subtitle',
-    type: 'textbox',
-    role: 'cover subtitle',
-    x: 118,
-    y: 616,
-    w: 820,
-    h: 66,
-    z: 7,
-    text: normalizeText(slideData.subtitle || slideData.content || 'A concise, evidence-backed story built for decision making.'),
-    style: { fontFace: template.fontFace, fontSizePt: 17.5, color: template.muted, lineHeight: 1.22 },
-  });
-  const fallbackMetrics = cleanBullets(slideData.bullets || slideData.points).slice(0, 3).map((item, i) => ({ value: `0${i + 1}`, label: item }));
-  addMetricChips(spec, slideData.metrics || fallbackMetrics, template, { x: 112, y: 788, w: 960, h: 124, valueSizePt: 21, labelSizePt: 8.5 });
-  addAiNetworkVisual(spec, template, {
-    x: 1160,
-    y: 126,
-    w: 620,
-    h: 780,
-    caption: normalizeText(slideData.visual_summary || slideData.summary || 'A visual system for the story behind the deck'),
-  });
-  addFooter(spec, template, index, totalSlides, topic);
-  return spec;
-}
-
-function buildContentSpec(slideData, index, ctx) {
-  const { template, topic, totalSlides } = ctx;
-  const spec = createSlideSpec(slideData, index, ctx);
-  addBackground(spec, template);
-  addBrand(spec, template, normalizeText(slideData.kicker || slideData.section || 'Strategic insight'));
-  addObject(spec, {
-    id: 'headline',
-    type: 'textbox',
-    role: 'slide headline',
-    x: 112,
-    y: 140,
-    w: 1120,
-    h: 108,
-    z: 7,
-    text: normalizeText(slideData.title),
-    style: { fontFace: template.headingFace, fontSizePt: 31, bold: true, color: template.ink, lineHeight: 1.08 },
-  });
-
-  const hasChart = Boolean(slideData.chart);
-  const hasTable = Boolean(slideData.table);
-  const hasDiagram = Boolean(slideData.nodes || slideData.steps);
-  const hasMetrics = Array.isArray(slideData.metrics) && slideData.metrics.length > 0;
-  if (hasChart) {
-    addObject(spec, {
-      id: 'evidence-chart',
-      type: 'chart',
-      role: 'evidence chart',
-      x: 150,
-      y: 310,
-      w: 1180,
-      h: hasMetrics ? 430 : 520,
-      z: 8,
-      data: slideData.chart,
-      style: { fill: template.surface, line: template.grid, radius: 14 },
-    });
-  } else if (hasTable) {
-    addObject(spec, {
-      id: 'structured-table',
-      type: 'table',
-      role: 'structured table',
-      x: 145,
-      y: 305,
-      w: 1210,
-      h: hasMetrics ? 430 : 545,
-      z: 8,
-      data: { rows: slideData.table },
-      style: { fill: template.surface, line: template.grid, headerFill: template.accent, headerColor: 'FFFFFF' },
-    });
-  } else if (hasDiagram) {
-    addObject(spec, {
-      id: 'process-diagram',
-      type: 'diagram',
-      role: 'process diagram',
-      x: 135,
-      y: 360,
-      w: 1250,
-      h: 280,
-      z: 8,
-      data: { nodes: slideData.nodes || slideData.steps },
-      style: { fill: template.surface, line: template.grid },
-    });
-  } else {
-    const items = cleanBullets(slideData.bullets || slideData.content || slideData.points).slice(0, hasMetrics ? 3 : 4);
-    items.forEach((item, i) => {
-      const y = 318 + i * (hasMetrics ? 122 : 134);
-      const accent = i === 1 ? template.accent2 : i === 2 ? template.accent3 : template.accent;
-      addObject(spec, {
-        id: `insight-card-${i + 1}`,
-        type: 'shape',
-        role: `insight card ${i + 1}`,
-        x: 128,
-        y,
-        w: 940,
-        h: hasMetrics ? 96 : 108,
-        z: 8,
-        protected: false,
-        style: { fill: template.surface, line: accent, lineWidth: 1.4, radius: 12, shape: 'roundRect' },
-      });
-      addObject(spec, {
-        id: `insight-number-${i + 1}`,
-        type: 'textbox',
-        role: `insight number ${i + 1}`,
-        x: 165,
-        y: y + 28,
-        w: 58,
-        h: 32,
-        z: 9,
-        text: String(i + 1).padStart(2, '0'),
-        style: { fontFace: template.headingFace, fontSizePt: 14, bold: true, color: readableColor(template, accent, template.surface) },
-      });
-      addObject(spec, {
-        id: `insight-text-${i + 1}`,
-        type: 'textbox',
-        role: `insight text ${i + 1}`,
-        x: 245,
-        y: y + 22,
-        w: 760,
-        h: hasMetrics ? 56 : 66,
-        z: 9,
-        text: item,
-        style: { fontFace: template.fontFace, fontSizePt: hasMetrics ? 12 : 13, color: template.ink, lineHeight: 1.15 },
-      });
-    });
-  }
-
-  addObject(spec, {
-    id: 'side-callout-card',
-    type: 'shape',
-    role: 'side callout card',
-    x: 1430,
-    y: 275,
-    w: 350,
-    h: 450,
-    z: 7,
-    protected: false,
-    style: { fill: mixColor(template.surface, template.accent, isDarkTemplate(template) ? 0.08 : 0.04), line: template.accent, lineWidth: 1.2, radius: 16, shape: 'roundRect' },
-  });
-  addAiNetworkVisual(spec, template, { x: 1475, y: 318, w: 260, h: 280, caption: '' });
-  addObject(spec, {
-    id: 'side-callout',
-    type: 'textbox',
-    role: 'side callout',
-    x: 1478,
-    y: 618,
-    w: 252,
-    h: 70,
-    z: 9,
-    text: normalizeText(slideData.callout || slideData.summary || cleanBullets(slideData.bullets || slideData.content || slideData.points)[0] || 'The key idea should be visible at a glance.'),
-    style: { fontFace: template.headingFace, fontSizePt: 14, bold: true, color: template.accent, align: 'center', lineHeight: 1.15 },
-  });
-  if (hasMetrics) {
-    addMetricChips(spec, slideData.metrics, template, { x: 128, y: 800, w: 1230, h: 92, maxItems: 4, valueSizePt: 17, labelSizePt: 7.5 });
-  }
-  addFooter(spec, template, index, totalSlides, topic);
-  return spec;
-}
-
-function buildTwoColumnSpec(slideData, index, ctx) {
-  const { template, topic, totalSlides } = ctx;
-  const spec = createSlideSpec(slideData, index, ctx);
-  addBackground(spec, template);
-  addBrand(spec, template, normalizeText(slideData.kicker || 'Comparison'));
-  addObject(spec, {
-    id: 'headline',
-    type: 'textbox',
-    role: 'comparison headline',
-    x: 112,
-    y: 140,
-    w: 1440,
-    h: 100,
-    z: 7,
-    text: normalizeText(slideData.title),
-    style: { fontFace: template.headingFace, fontSizePt: 31, bold: true, color: template.ink },
-  });
-  const fallbackItems = cleanBullets(slideData.bullets || slideData.content || slideData.points);
-  const midpoint = Math.ceil(fallbackItems.length / 2);
-  const cols = [
-    {
-      id: 'left',
-      x: 128,
-      color: template.accent2,
-      title: slideData.left_title || slideData.left?.title || 'Current state',
-      content: slideData.left_content || slideData.left_bullets || slideData.left?.content || slideData.left?.bullets || fallbackItems.slice(0, midpoint),
-    },
-    {
-      id: 'right',
-      x: 988,
-      color: template.accent3,
-      title: slideData.right_title || slideData.right?.title || 'Target state',
-      content: slideData.right_content || slideData.right_bullets || slideData.right?.content || slideData.right?.bullets || fallbackItems.slice(midpoint),
-    },
-  ];
-  cols.forEach((col, colIndex) => {
-    addObject(spec, {
-      id: `${col.id}-panel`,
-      type: 'shape',
-      role: `${col.title} panel`,
-      x: col.x,
-      y: 310,
-      w: 750,
-      h: 520,
-      z: 8,
-      protected: false,
-      style: { fill: template.surface, line: col.color, lineWidth: 1.7, radius: 16, shape: 'roundRect' },
-    });
-    addObject(spec, {
-      id: `${col.id}-title`,
-      type: 'textbox',
-      role: `${col.title} title`,
-      x: col.x + 48,
-      y: 360,
-      w: 610,
-      h: 44,
-      z: 9,
-      text: normalizeText(col.title),
-      style: { fontFace: template.headingFace, fontSizePt: 20, bold: true, color: readableColor(template, col.color, template.surface) },
-    });
-    cleanBullets(col.content).slice(0, 4).forEach((item, i) => {
-      const y = 452 + i * 78;
-      addObject(spec, {
-        id: `${col.id}-bullet-dot-${i + 1}`,
-        type: 'shape',
-        role: `${col.title} bullet marker`,
-        x: col.x + 56,
-        y: y + 10,
-        w: 13,
-        h: 13,
-        z: 9,
-        decorative: true,
-        protected: false,
-        style: { fill: col.color, shape: 'ellipse' },
-      });
-      addObject(spec, {
-        id: `${col.id}-bullet-${i + 1}`,
-        type: 'textbox',
-        role: `${col.title} bullet ${i + 1}`,
-        x: col.x + 92,
-        y,
-        w: 585,
-        h: 48,
-        z: 9,
-        text: item,
-        style: { fontFace: template.fontFace, fontSizePt: 12, color: template.ink, lineHeight: 1.18 },
-      });
-    });
-    addObject(spec, {
-      id: `${col.id}-index`,
-      type: 'textbox',
-      role: `${col.title} index`,
-      x: col.x + 622,
-      y: 740,
-      w: 62,
-      h: 36,
-      z: 9,
-      protected: false,
-      text: String(colIndex + 1).padStart(2, '0'),
-      style: { fontFace: template.headingFace, fontSizePt: 14, bold: true, color: readableColor(template, col.color, template.surface), align: 'right' },
-    });
-  });
-  addFooter(spec, template, index, totalSlides, topic);
-  return spec;
-}
-
-function buildImageSpec(slideData, index, ctx) {
-  const { template, topic, totalSlides } = ctx;
-  const spec = createSlideSpec(slideData, index, ctx);
-  addBackground(spec, template);
-  addBrand(spec, template, normalizeText(slideData.kicker || 'Visual explanation'));
-  addObject(spec, {
-    id: 'headline',
-    type: 'textbox',
-    role: 'visual headline',
-    x: 112,
-    y: 142,
-    w: 710,
-    h: 128,
-    z: 7,
-    text: normalizeText(slideData.title),
-    style: { fontFace: template.headingFace, fontSizePt: 33, bold: true, color: template.ink, lineHeight: 1.05 },
-  });
-  const imagePath = slideData.image_path || slideData.imagePath;
-  if (imagePath && fs.existsSync(imagePath)) {
-    addObject(spec, {
-      id: 'main-image',
-      type: 'image',
-      role: 'main visual image',
-      x: 860,
-      y: 128,
-      w: 900,
-      h: 710,
-      z: 8,
-      data: { imagePath },
-      style: { line: template.accent, radius: 18 },
-    });
-  } else {
-    addAiNetworkVisual(spec, template, {
-      x: 860,
-      y: 128,
-      w: 900,
-      h: 710,
-      caption: normalizeText(slideData.visual_summary || slideData.summary || 'A generated explanatory visual tuned to the slide topic'),
-    });
-  }
-  const points = cleanBullets(slideData.bullets || slideData.points || slideData.content).slice(0, 4);
-  points.forEach((item, i) => {
-    addObject(spec, {
-      id: `support-point-${i + 1}`,
-      type: 'textbox',
-      role: `support point ${i + 1}`,
-      x: 132,
-      y: 340 + i * 90,
-      w: 600,
-      h: 56,
-      z: 8,
-      text: item,
-      style: { fontFace: template.fontFace, fontSizePt: 13, color: template.muted, lineHeight: 1.2 },
-    });
-  });
-  addFooter(spec, template, index, totalSlides, topic);
-  return spec;
-}
-
 function buildHtmlSpec(slideData, index, ctx) {
   const spec = createSlideSpec(slideData, index, ctx);
   spec.type = 'html';
@@ -1099,11 +455,8 @@ function buildHtmlSpec(slideData, index, ctx) {
 
 function buildSlideSpec(slideData, index, ctx) {
   const type = slideType(slideData);
-  if (type === 'html') return buildHtmlSpec(slideData, index, ctx);
-  if (type === 'title') return buildTitleSpec(slideData, index, ctx);
-  if (type === 'two_column') return buildTwoColumnSpec(slideData, index, ctx);
-  if (type === 'image') return buildImageSpec(slideData, index, ctx);
-  return buildContentSpec(slideData, index, ctx);
+  if (type === 'html' || slideData.html || slideData.contract_html) return buildHtmlSpec(slideData, index, ctx);
+  return buildProfessionalSlide(slideData, index, ctx, { createSlideSpec, addObject, readableColor, mixColor });
 }
 
 function boxesOverlap(a, b) {
@@ -1122,7 +475,7 @@ function estimateTextCapacity(object) {
   const lineHeight = sizePx * (style.lineHeight || 1.16);
   const charWidth = sizePx * (style.bold ? 0.54 : 0.49);
   const lines = Math.max(1, Math.floor(object.h / Math.max(lineHeight, 1)));
-  const charsPerLine = Math.max(5, Math.floor(object.w / Math.max(charWidth, 1)));
+  const charsPerLine = Math.max(5, Math.floor((object.w - sizePx * 0.3) / Math.max(charWidth, 1)));
   return Math.floor(lines * charsPerLine * 1.08);
 }
 
@@ -1140,6 +493,13 @@ function validateDeck(deck) {
     const warnings = Array.isArray(slide.contract_warnings) ? slide.contract_warnings.slice() : [];
     const objects = slide.objects.slice().sort((a, b) => a.z - b.z);
     objects.forEach((object) => {
+      if (['chart', 'table', 'diagram'].includes(object.type) && !object.data) {
+        warnings.push({ type: 'missing_data', severity: 'error', object_id: object.id,
+          message: `${object.role} needs structured data. Use the corresponding slide layout instead of a bare HTML object.` });
+      }
+      if (![object.x, object.y, object.w, object.h].every(Number.isFinite) || object.w < 0 || object.h < 0) {
+        warnings.push({ type: 'invalid_geometry', severity: 'error', object_id: object.id, message: `${object.role} needs finite non-negative dimensions.` });
+      }
       if (object.x < 0 || object.y < 0 || object.x + object.w > CANVAS_W || object.y + object.h > CANVAS_H) {
         warnings.push({
           type: 'out_of_bounds',
@@ -1155,7 +515,7 @@ function validateDeck(deck) {
         if (chars > capacity) {
           warnings.push({
             type: 'text_overflow',
-            severity: chars > capacity * 1.25 ? 'error' : 'warning',
+            severity: 'error',
             object_id: object.id,
             role: object.role,
             chars,
@@ -1166,10 +526,10 @@ function validateDeck(deck) {
         const bg = findBackgroundForText(object, objects, slide.template);
         const color = object.style?.color || slide.template.ink;
         const ratio = contrastRatio(color, bg);
-        if (ratio < 3.8) {
+        if (ratio < 4.5) {
           warnings.push({
             type: 'low_contrast',
-            severity: 'warning',
+            severity: 'error',
             object_id: object.id,
             role: object.role,
             contrast: Number(ratio.toFixed(2)),
@@ -1223,7 +583,8 @@ function repairDeck(deck, validation) {
       if (warning.severity !== 'error') return;
       if (warning.type === 'text_overflow' && object.type === 'textbox') {
         const current = Number(object.style.fontSizePt || 12);
-        const next = Math.max(7.5, Math.round(current * 0.9 * 10) / 10);
+        const isUtility = /footer|page|source|caption|kicker/.test(object.id);
+        const next = Math.max(isUtility ? 9 : 18, Math.round(current * 0.9 * 10) / 10);
         if (next < current) {
           object.style.fontSizePt = next;
           object.style.lineHeight = Math.max(1.02, Number(object.style.lineHeight || 1.15) * 0.97);
@@ -1265,10 +626,12 @@ function objectStyle(object) {
   ];
   if (object.type === 'textbox') {
     const fontFace = style.fontFace || BODY_FONT;
-    rules.push(`font-family:'${fontFace}','Segoe UI',Arial,sans-serif`);
+    const fallbacks = fontFace === SERIF_HEADING_FONT ? "'Liberation Serif',serif" : "'Liberation Sans',Arial,sans-serif";
+    rules.push(`font-family:'${fontFace}',${fallbacks}`);
     rules.push(`font-size:${fontPx(style.fontSizePt || 12)}px`);
+    rules.push(`padding-right:${fontPx(style.fontSizePt || 12) * 0.3}px`);
     rules.push(`line-height:${style.lineHeight || 1.12}`);
-    rules.push(`font-weight:${style.bold ? 800 : 400}`);
+    rules.push(`font-weight:${style.bold ? 700 : 400}`);
     rules.push(`color:${cssColor(style.color || '000000')}`);
     rules.push(`text-align:${style.align || 'left'}`);
     rules.push('overflow:visible');
@@ -1312,9 +675,11 @@ function renderHtmlObject(object) {
     return `<img ${attrs} src="${src}" style="${objectStyle(object)};object-fit:cover" />`;
   }
   if (object.style?.shape === 'line') {
-    const transform = object.style.flipH ? 'scaleX(-1)' : 'none';
-    return `<div ${attrs} style="${objectStyle(object)};background:transparent;border:0;border-top:${object.style.lineWidth || 1}px solid ${cssColor(object.style.line || '000000')};transform:${transform};transform-origin:left top"></div>`;
+    const y1 = object.style.flipH ? object.h : 0;
+    const y2 = object.style.flipH ? 0 : object.h;
+    return `<div ${attrs} style="${objectStyle(object)};background:transparent;border:0"><svg width="${object.w}" height="${Math.max(object.h, 1)}" style="overflow:visible"><line x1="0" y1="${y1}" x2="${object.w}" y2="${y2}" stroke="${cssColor(object.style.line)}" stroke-width="${(object.style.lineWidth || 1) / 72 / PX_TO_IN}"/></svg></div>`;
   }
+  if (object.style?.shape === 'ellipse') return `<div ${attrs} style="${objectStyle(object)};border-radius:50%"></div>`;
   return `<div ${attrs} style="${objectStyle(object)}"></div>`;
 }
 
@@ -1391,7 +756,19 @@ function findBrowserExecutable() {
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ].filter(Boolean);
+  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || '/ms-playwright';
+  if (fs.existsSync(cache)) {
+    for (const folder of fs.readdirSync(cache).filter((name) => /^chromium-/.test(name)).sort().reverse()) {
+      for (const executable of ['chrome-linux/chrome', 'chrome-linux64/chrome', 'chrome-win/chrome.exe']) {
+        candidates.push(path.join(cache, folder, executable));
+      }
+    }
+  }
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
@@ -1429,14 +806,17 @@ async function renderHtmlPreviews(deck, htmlDeck) {
   try {
     for (const slide of deck.slides) {
       const page = await browser.newPage();
-      await page.setViewport({ width: CANVAS_W, height: CANVAS_H, deviceScaleFactor: 1 });
+      await page.setViewport({ width: CANVAS_W, height: CANVAS_H, deviceScaleFactor: 0.5 });
       const htmlPath = path.join(htmlDeck.slidesDir, `slide-${String(slide.index).padStart(2, '0')}.html`);
-      await page.goto(pathToFileUrl(htmlPath), { waitUntil: 'networkidle0', timeout: 15000 });
+      await page.goto(pathToFileUrl(htmlPath), { waitUntil: 'load', timeout: 15000 });
       await page.evaluateHandle('document.fonts ? document.fonts.ready : Promise.resolve()');
       const renderAudit = await page.evaluate(() => {
         const container = document.querySelector('.slide-container');
         const canvas = container.getBoundingClientRect();
         const warnings = [];
+        for (const img of document.images) {
+          if (!img.complete || !img.naturalWidth) warnings.push({ type: 'broken_image', severity: 'error', object_id: img.getAttribute('data-object-id'), message: 'Image failed to load.' });
+        }
         const objects = Array.from(document.querySelectorAll('[data-object="true"]')).map((node) => {
           const rect = node.getBoundingClientRect();
           const type = node.getAttribute('data-object-type');
@@ -1563,9 +943,10 @@ function renderText(slide, object) {
     color: pptColor(style.color || '000000'),
     align: style.align || 'left',
     valign: style.valign || 'top',
-    margin: 0.02,
+    // Reserve font overhang measured in native PowerPoint, also used in HTML.
+    margin: [0, (style.fontSizePt || 12) * 0.3, 0, 0],
     breakLine: false,
-    fit: 'shrink',
+    lineSpacingMultiple: style.lineHeight || 1.12,
     charSpace: style.letterSpacing || 0,
     paraSpaceAfterPt: style.paraSpaceAfterPt || 0,
   });
@@ -1749,11 +1130,8 @@ function renderImage(slide, object, template) {
   if (imagePath && fs.existsSync(imagePath)) {
     slide.addImage({
       path: imagePath,
-      x: toIn(object.x + 12),
-      y: toIn(object.y + 12),
-      w: toIn(object.w - 24),
-      h: toIn(object.h - 24),
-      sizingCrop: true,
+      x: toIn(object.x), y: toIn(object.y), w: toIn(object.w), h: toIn(object.h),
+      sizing: { type: 'cover', w: toIn(object.w), h: toIn(object.h) },
     });
   }
 }
@@ -1850,7 +1228,7 @@ async function main() {
   }
 
   const htmlDeck = writeHtmlDeck(deck, harnessDir);
-  const renderValidation = await renderHtmlPreviews(deck, htmlDeck);
+  let renderValidation = await renderHtmlPreviews(deck, htmlDeck);
   if (!renderValidation.ok && renderValidation.audits.length) {
     const renderedAsLayout = {
       audits: renderValidation.audits.map((audit) => ({
@@ -1861,10 +1239,21 @@ async function main() {
         })),
       })),
     };
-    repairCount += repairDeck(deck, renderedAsLayout);
-    if (repairCount > 0) {
+    const changed = repairDeck(deck, renderedAsLayout);
+    repairCount += changed;
+    if (changed > 0) {
+      layoutValidation = validateDeck(deck);
       writeHtmlDeck(deck, harnessDir);
+      renderValidation = await renderHtmlPreviews(deck, htmlDeck);
     }
+  }
+
+  // Never publish a known defective deck. Keep diagnostics available for repair.
+  if (!layoutValidation.ok || (!renderValidation.ok && renderValidation.audits.length)) {
+    writeJson({ ok: false, error: 'Presentation failed quality checks. Shorten the reported text or choose a less dense layout.', layout_validation: layoutValidation,
+      screenshot_validation: { ok: renderValidation.ok, audits: renderValidation.audits }, output_path: null });
+    process.exitCode = 1;
+    return;
   }
 
   const pptx = renderDeckToPptx(deck, payload);
@@ -1878,7 +1267,9 @@ async function main() {
     mime_type: PPTX_MIME,
     size: stat.size,
     harness: {
-      version: 1,
+      version: 2,
+      verification_scope: 'Browser render of the same editable objects. Native PowerPoint rendering is not checked here.',
+      status: renderValidation.ok ? 'verified' : 'unverified',
       canvas: { width: CANVAS_W, height: CANVAS_H },
       pptx_size_inches: { width: SLIDE_W_IN, height: SLIDE_H_IN },
       html_deck_dir: htmlDeck.deckDir,
@@ -1927,10 +1318,12 @@ async function main() {
   });
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   writeJson({ ok: false, error: error.message, stack: error.stack });
   process.exitCode = 1;
 });
+
+module.exports = { buildDeck, validateDeck, renderSlideHtml, renderDeckToPptx };
 
 
 

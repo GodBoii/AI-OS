@@ -1108,7 +1108,11 @@ class ProjectWorkspace {
     }
 
     renderTreeFromPaths(paths) {
-        const root = {};
+        const previousTree = this.el.tree.querySelector('.project-file-tree');
+        const folderStates = new Map(Array.from(previousTree?.querySelectorAll('.project-file-row.dir') || [],
+            (row) => [row.dataset.path, row.getAttribute('aria-expanded') === 'true']));
+        const focusedPath = previousTree?.contains(document.activeElement) ? document.activeElement.dataset.path : null;
+        const root = Object.create(null);
         for (const rawPath of paths) {
             const path = String(rawPath || '').trim().replace(/\\/g, '/');
             if (!path) continue;
@@ -1117,7 +1121,7 @@ class ProjectWorkspace {
             for (let i = 0; i < parts.length; i += 1) {
                 const part = parts[i];
                 if (!node[part]) {
-                    node[part] = { dir: i < parts.length - 1, children: {} };
+                    node[part] = { dir: i < parts.length - 1, children: Object.create(null) };
                 }
                 node = node[part].children;
             }
@@ -1125,6 +1129,43 @@ class ProjectWorkspace {
 
         const ul = document.createElement('ul');
         ul.className = 'project-file-tree';
+        ul.setAttribute('role', 'tree');
+        ul.setAttribute('aria-label', 'Workspace files');
+        let groupIndex = 0;
+        const hover = document.createElement('li');
+        hover.className = 'project-tree-hover';
+        hover.setAttribute('aria-hidden', 'true');
+        const moveHighlight = (row) => {
+            const bounds = row.getBoundingClientRect();
+            const treeBounds = ul.getBoundingClientRect();
+            hover.style.transform = `translateY(${bounds.top - treeBounds.top}px)`;
+            hover.style.height = `${bounds.height}px`;
+            hover.classList.add('visible');
+        };
+        const focusRow = (row) => {
+            if (!row) return;
+            ul.querySelectorAll('.project-file-row').forEach((item) => { item.tabIndex = item === row ? 0 : -1; });
+            row.focus();
+        };
+        const svg = (content, className = 'file-icon') => `<svg class="${className}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${content}</svg>`;
+        const folderClosed = '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>';
+        const folderOpen = '<path d="M3 9V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1"/><path d="M3 9h19l-3 11H2L3 9Z"/>';
+        const fileIcon = (name) => {
+            const extension = name.split('.').pop().toLowerCase();
+            let detail = '';
+            if (/^(tsx?|jsx?|py|go|rs|java|cs|html?|css|scss|sh|ps1|sql)$/.test(extension)) {
+                detail = '<path d="m10 12-3 3 3 3m4-6 3 3-3 3"/>';
+            } else if (extension === 'json') {
+                detail = '<path d="M10 11H9v3l-1 1 1 1v3h1m4-8h1v3l1 1-1 1v3h-1"/>';
+            } else if (/^(png|jpe?g|svg|webp|gif|ico|avif)$/.test(extension)) {
+                detail = '<circle cx="9" cy="12" r="1"/><path d="m6 19 4-4 2 2 3-4 3 6"/>';
+            } else if (/^(env|config|toml|ya?ml|ini)$/.test(extension)) {
+                detail = '<path d="M7 13h10M7 17h10"/><circle cx="10" cy="13" r="1"/><circle cx="14" cy="17" r="1"/>';
+            } else if (/^(mdx?|txt|log|csv)$/.test(extension)) {
+                detail = '<path d="M7 12h10M7 16h10M7 20h6"/>';
+            }
+            return svg(`<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>${detail}`);
+        };
 
         const renderNode = (nodeObj, container, depth = 0, parentPath = '') => {
             const keys = Object.keys(nodeObj).sort((a, b) => {
@@ -1137,27 +1178,60 @@ class ProjectWorkspace {
                 const item = nodeObj[key];
                 const fullPath = parentPath ? `${parentPath}/${key}` : key;
                 const li = document.createElement('li');
-                const row = document.createElement('div');
+                li.className = 'project-file-node';
+                li.setAttribute('role', 'none');
+                const row = document.createElement('button');
+                row.type = 'button';
                 row.className = `project-file-row ${item.dir ? 'dir' : 'file'}`;
-                row.style.paddingLeft = `${6 + depth * 14}px`;
+                row.style.setProperty('--tree-depth', depth);
                 row.dataset.path = fullPath;
+                row.title = fullPath;
+                row.tabIndex = -1;
+                row.setAttribute('role', 'treeitem');
+                row.setAttribute('aria-level', depth + 1);
                 const isDir = item.dir;
                 const pathSvg = isDir
-                    ? '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-1.2-1.8A2 2 0 0 0 7.55 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>'
-                    : '<svg class="file-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+                    ? `<span class="project-folder-icons">${svg(folderClosed, 'file-icon folder-closed')}${svg(folderOpen, 'file-icon folder-open')}</span>`
+                    : fileIcon(key);
 
                 row.innerHTML = `
-                    ${pathSvg}
+                    ${isDir ? svg('<path d="m9 6 6 6-6 6"/>', 'project-tree-caret') : '<span class="project-tree-caret-spacer" aria-hidden="true"></span>'}${pathSvg}
                     <span class="file-name">${this.escapeHtml(key)}</span>
                 `;
                 if (!item.dir) {
+                    row.setAttribute('aria-selected', String(fullPath === this.selectedFilePath));
+                    row.classList.toggle('selected', fullPath === this.selectedFilePath);
                     row.addEventListener('click', () => this.openFilePreview(fullPath, row));
                 }
+                row.addEventListener('pointerenter', (event) => { if (event.pointerType !== 'touch') moveHighlight(row); });
+                row.addEventListener('focus', () => {
+                    ul.querySelectorAll('.project-file-row').forEach((item) => { item.tabIndex = item === row ? 0 : -1; });
+                    moveHighlight(row);
+                });
                 li.appendChild(row);
                 container.appendChild(li);
 
                 if (item.dir && Object.keys(item.children).length > 0) {
-                    renderNode(item.children, container, depth + 1, fullPath);
+                    const panel = document.createElement('div');
+                    panel.className = 'project-tree-panel';
+                    const children = document.createElement('ul');
+                    children.className = 'project-tree-children';
+                    children.setAttribute('role', 'group');
+                    children.id = `project-tree-group-${++groupIndex}`;
+                    row.setAttribute('aria-controls', children.id);
+                    row.setAttribute('aria-owns', children.id);
+                    children.style.setProperty('--tree-depth', depth + 1);
+                    panel.appendChild(children);
+                    li.appendChild(panel);
+                    renderNode(item.children, children, depth + 1, fullPath);
+                    const setOpen = (open) => {
+                        row.setAttribute('aria-expanded', String(open));
+                        li.dataset.open = String(open);
+                        children.inert = !open;
+                        hover.classList.remove('visible');
+                    };
+                    setOpen(folderStates.get(fullPath) ?? depth === 0);
+                    row.addEventListener('click', () => setOpen(row.getAttribute('aria-expanded') !== 'true'));
                 }
             }
         };
@@ -1165,6 +1239,35 @@ class ProjectWorkspace {
         renderNode(root, ul, 0, '');
         this.el.tree.innerHTML = '';
         this.el.tree.appendChild(ul);
+        ul.appendChild(hover);
+        ul.addEventListener('pointerleave', () => hover.classList.remove('visible'));
+        ul.addEventListener('focusout', (event) => { if (!ul.contains(event.relatedTarget)) hover.classList.remove('visible'); });
+        ul.addEventListener('keydown', (event) => {
+            const row = event.target.closest('.project-file-row');
+            if (!row) return;
+            const visibleRows = Array.from(ul.querySelectorAll('.project-file-row')).filter((item) => !item.closest('[inert]'));
+            const index = visibleRows.indexOf(row);
+            let next;
+            if (event.key === 'ArrowDown') next = visibleRows[Math.min(index + 1, visibleRows.length - 1)];
+            else if (event.key === 'ArrowUp') next = visibleRows[Math.max(index - 1, 0)];
+            else if (event.key === 'Home') next = visibleRows[0];
+            else if (event.key === 'End') next = visibleRows[visibleRows.length - 1];
+            else if (event.key === 'ArrowRight') {
+                if (row.getAttribute('aria-expanded') === 'false') row.click();
+                else if (row.classList.contains('dir')) next = visibleRows[index + 1];
+            } else if (event.key === 'ArrowLeft') {
+                if (row.getAttribute('aria-expanded') === 'true') row.click();
+                else next = row.closest('.project-tree-children')?.parentElement.parentElement.querySelector(':scope > .project-file-row');
+            } else return;
+            event.preventDefault();
+            if (next) focusRow(next);
+        });
+        const initialRow = Array.from(ul.querySelectorAll('.project-file-row')).find((row) => row.dataset.path === focusedPath)
+            || ul.querySelector('.project-file-row');
+        if (initialRow) {
+            initialRow.tabIndex = 0;
+            if (focusedPath) focusRow(initialRow);
+        }
     }
 
     escapeHtml(text) {
@@ -1315,6 +1418,7 @@ class ProjectWorkspace {
     clearSelectedRows() {
         this.el.tree.querySelectorAll('.project-file-row.selected').forEach((row) => {
             row.classList.remove('selected');
+            row.setAttribute('aria-selected', 'false');
         });
     }
 
@@ -1901,6 +2005,7 @@ class ProjectWorkspace {
         this.clearSelectedRows();
         if (rowEl) {
             rowEl.classList.add('selected');
+            rowEl.setAttribute('aria-selected', 'true');
         }
 
         this.selectedFilePath = path;
