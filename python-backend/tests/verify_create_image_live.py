@@ -1,4 +1,4 @@
-"""Opt-in free OpenRouter smoke test; writes local images without cloud storage."""
+"""Opt-in OpenRouter smoke test; writes local images and reports actual cost."""
 
 import argparse
 import base64
@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-from openrouter_image_client import ImageGenerationError, generate_openrouter_image  # noqa: E402
+from openrouter_image_client import ImageGenerationError, generate_openrouter_image, validate_image_bytes  # noqa: E402
 
 
 def main() -> int:
@@ -28,14 +28,14 @@ def main() -> int:
             content = args.reference.read_bytes()
         else:
             result = generate_openrouter_image(key, "A simple flat illustration of a red bicycle on a cream background. No text.")
-            destination = args.output_dir / "text-to-image.png"
+            destination = args.output_dir / f"text-to-image.{result.mime_type.split('/')[1]}"
             destination.write_bytes(result.content)
             content = result.content
-            print(f"Text generation passed: model={result.model}, mime={result.mime_type}, bytes={len(content)}")
-        reference = "data:image/png;base64," + base64.b64encode(content).decode("ascii")
+            print(f"Text generation passed: model={result.model}, mime={result.mime_type}, bytes={len(content)}, cost_usd={result.cost_usd}", flush=True)
+        reference = f"data:{validate_image_bytes(content)};base64," + base64.b64encode(content).decode("ascii")
         edited = generate_openrouter_image(key, "Change the bicycle to blue and keep the cream background.", reference)
-        (args.output_dir / "image-to-image.png").write_bytes(edited.content)
-        print(f"Reference generation passed: model={edited.model}, mime={edited.mime_type}, bytes={len(edited.content)}")
+        (args.output_dir / f"image-to-image.{edited.mime_type.split('/')[1]}").write_bytes(edited.content)
+        print(f"Reference generation passed: model={edited.model}, mime={edited.mime_type}, bytes={len(edited.content)}, cost_usd={edited.cost_usd}", flush=True)
         return 0
     except ImageGenerationError as exc:
         print(f"Image generation check failed: {exc}", file=sys.stderr)

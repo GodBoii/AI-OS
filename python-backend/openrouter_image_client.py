@@ -1,9 +1,10 @@
-"""Generate raster images through OpenRouter without paid-provider fallbacks."""
+"""Generate raster images through a verified OpenRouter image endpoint."""
 
 import base64
 import binascii
 import io
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -15,8 +16,8 @@ from PIL import Image as PillowImage, UnidentifiedImageError
 logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
-TEXT_IMAGE_MODEL = "inclusionai/ming-image-0.1-design"
-REFERENCE_IMAGE_MODEL = "inclusionai/ming-image-0.1-design-layer"
+TEXT_IMAGE_MODEL = "openai/gpt-image-1-mini"
+REFERENCE_IMAGE_MODEL = TEXT_IMAGE_MODEL
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 RASTER_MIME_TYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
 
@@ -30,6 +31,7 @@ class GeneratedImage:
     content: bytes
     mime_type: str
     model: str
+    cost_usd: Optional[float] = None
 
 
 def validate_image_bytes(content: bytes) -> str:
@@ -83,8 +85,8 @@ def _decode_base64(encoded: Any) -> bytes:
         raise ImageGenerationError("Image data is not valid base64.") from exc
 
 
-def _free_provider(payload: Any, reference_count: int) -> str:
-    """Pin a zero-price endpoint whose reference limits match this request."""
+def _select_provider(payload: Any, reference_count: int) -> dict[str, Any]:
+    """Pin an endpoint with known prices and matching reference limits."""
     endpoints = payload.get("endpoints") if isinstance(payload, dict) else None
     if not isinstance(endpoints, list):
         raise ImageGenerationError("OpenRouter returned an invalid image endpoint catalog.")
@@ -95,7 +97,8 @@ def _free_provider(payload: Any, reference_count: int) -> str:
         if not isinstance(pricing, list) or not pricing:
             continue
         try:
-            if any(float(line["cost_usd"]) != 0 for line in pricing):
+            prices = [float(line["cost_usd"]) for line in pricing]
+            if any(not math.isfinite(price) or price < 0 for price in prices):
                 continue
         except (KeyError, TypeError, ValueError):
             continue
@@ -111,14 +114,14 @@ def _free_provider(payload: Any, reference_count: int) -> str:
         if minimum <= reference_count <= maximum:
             provider = endpoint.get("provider_tag")
             if isinstance(provider, str) and provider:
-                return provider
+                return endpoint
     raise ImageGenerationError(
-        "No free image endpoint supports this input. Check the configured model and its reference limits."
+        "No image endpoint with known pricing supports this input. Check the configured model and its reference limits."
     )
 
 
 def generate_openrouter_image(api_key: str, text: str, reference: Optional[str] = None) -> GeneratedImage:
-    """Submit one text or image-guided request, with a current zero-price check."""
+    """Submit one text or image-guided request at low quality and square size."""
     if not api_key:
         raise ImageGenerationError("Image generation requires OPENROUTER_API_KEY on the server.")
     if not isinstance(text, str) or not text.strip() or len(text) > 20_000:
@@ -135,13 +138,18 @@ def generate_openrouter_image(api_key: str, text: str, reference: Optional[str] 
     try:
         catalog = requests.get(f"{OPENROUTER_URL}/images/models/{model}/endpoints", headers=headers, timeout=30)
         catalog.raise_for_status()
-        provider = _free_provider(catalog.json(), int(reference is not None))
+        endpoint = _select_provider(catalog.json(), int(reference is not None))
         payload: dict[str, Any] = {
             "model": model,
             "prompt": text.strip(),
             "n": 1,
-            "provider": {"only": [provider], "allow_fallbacks": False},
+            "provider": {"only": [endpoint["provider_tag"]], "allow_fallbacks": False},
         }
+        parameters = endpoint.get("supported_parameters") or {}
+        for field, value in (("quality", "low"), ("aspect_ratio", "1:1")):
+            capability = parameters.get(field)
+            if isinstance(capability, dict) and value in (capability.get("values") or []):
+                payload[field] = value
         if reference:
             payload["input_references"] = [{"type": "image_url", "image_url": {"url": reference}}]
         response = requests.post(f"{OPENROUTER_URL}/images", headers=headers, json=payload, timeout=(30, 300))
@@ -165,4 +173,8 @@ def generate_openrouter_image(api_key: str, text: str, reference: Optional[str] 
         raise ImageGenerationError("OpenRouter completed the request without returning an image.")
     content = _decode_base64(data[0].get("b64_json"))
     mime_type = validate_image_bytes(content)
-    return GeneratedImage(content=content, mime_type=mime_type, model=model)
+    usage = result.get("usage") or {}
+    cost = usage.get("cost") if isinstance(usage, dict) else None
+    if not isinstance(cost, (int, float)) or isinstance(cost, bool) or not math.isfinite(cost) or cost < 0:
+        cost = None
+    return GeneratedImage(content=content, mime_type=mime_type, model=model, cost_usd=cost)

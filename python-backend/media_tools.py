@@ -72,7 +72,7 @@ class MediaTools(Toolkit):
                 media_kind="image",
                 prompt=text,
                 source_urls=[reference] if reference and not reference.startswith("data:") else [],
-                provider_response={"model": generated.model},
+                provider_response={"model": generated.model, "cost_usd": generated.cost_usd},
             )
             metadata = {
                 "kind": "generated_image_tool_output",
@@ -85,6 +85,7 @@ class MediaTools(Toolkit):
                 "mime_type": generated.mime_type,
                 "filename": file_name,
                 "model": generated.model,
+                "cost_usd": generated.cost_usd,
                 "conversation_id": self.conversation_id,
                 "title": "Generated image",
             }
@@ -383,6 +384,7 @@ class MediaTools(Toolkit):
                         "status": provider_response.get("status"),
                         "generation_id": provider_response.get("generation_id"),
                         "model": provider_response.get("model"),
+                        "cost_usd": provider_response.get("cost_usd"),
                     },
                 },
             )

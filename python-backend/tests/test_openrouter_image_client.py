@@ -31,7 +31,11 @@ def catalog(minimum=0, maximum=0, cost=0):
     return {"endpoints": [{
         "provider_tag": "novita",
         "pricing": [{"cost_usd": cost}],
-        "supported_parameters": {"input_references": {"min": minimum, "max": maximum}},
+        "supported_parameters": {
+            "input_references": {"min": minimum, "max": maximum},
+            "quality": {"type": "enum", "values": ["low", "medium", "high"]},
+            "aspect_ratio": {"type": "enum", "values": ["1:1", "auto"]},
+        },
     }]}
 
 
@@ -46,7 +50,7 @@ def provider(monkeypatch, png):
     return get, post
 
 
-def test_text_request_uses_free_image_api(provider, png):
+def test_text_request_uses_low_quality_image_api(provider, png):
     get, post = provider
     result = generate_openrouter_image("test-key", "  a red square  ")
     assert result.content == png
@@ -57,6 +61,7 @@ def test_text_request_uses_free_image_api(provider, png):
     assert post.call_args.kwargs["json"] == {
         "model": TEXT_IMAGE_MODEL, "prompt": "a red square", "n": 1,
         "provider": {"only": ["novita"], "allow_fallbacks": False},
+        "quality": "low", "aspect_ratio": "1:1",
     }
 
 
@@ -71,11 +76,11 @@ def test_reference_request_uses_one_image_endpoint(provider, png):
     ]
 
 
-@pytest.mark.parametrize("cost", [0.01, -1, "unknown", None])
-def test_never_submits_to_paid_or_unknown_price_endpoint(provider, cost):
+@pytest.mark.parametrize("cost", [-1, "unknown", None, "NaN", "Infinity"])
+def test_never_submits_to_unknown_or_invalid_price_endpoint(provider, cost):
     get, post = provider
     get.return_value.json = lambda: catalog(cost=cost)
-    with pytest.raises(ImageGenerationError, match="No free image endpoint"):
+    with pytest.raises(ImageGenerationError, match="No image endpoint with known pricing"):
         generate_openrouter_image("test-key", "a tree")
     post.assert_not_called()
 
@@ -93,9 +98,29 @@ def test_malformed_endpoint_capabilities_never_submit(provider, parameters):
     payload = catalog()
     payload["endpoints"][0]["supported_parameters"] = parameters
     get.return_value.json = lambda: payload
-    with pytest.raises(ImageGenerationError, match="No free image endpoint"):
+    with pytest.raises(ImageGenerationError, match="No image endpoint with known pricing"):
         generate_openrouter_image("test-key", "a tree")
     post.assert_not_called()
+
+
+def test_paid_endpoint_and_actual_cost_are_supported(provider, png):
+    get, post = provider
+    get.return_value.json = lambda: catalog(cost=0.000008)
+    post.return_value.json = lambda: {
+        "data": [{"b64_json": base64.b64encode(png).decode()}], "usage": {"cost": 0.002218}
+    }
+    result = generate_openrouter_image("test-key", "a bicycle")
+    assert result.cost_usd == 0.002218
+    assert result.model == "openai/gpt-image-1-mini"
+
+
+def test_unsupported_quality_parameter_is_not_sent(provider):
+    get, post = provider
+    payload = catalog()
+    del payload["endpoints"][0]["supported_parameters"]["quality"]
+    get.return_value.json = lambda: payload
+    generate_openrouter_image("test-key", "a bicycle")
+    assert "quality" not in post.call_args.kwargs["json"]
 
 
 def test_account_credit_error_is_clear_even_for_free_models(provider):
