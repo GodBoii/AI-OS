@@ -52,8 +52,10 @@ test('create_image displays tool results, socket media, saved previews, and down
         await page.waitForFunction(() => Boolean(window.viewer));
         const source = fs.readFileSync(path.join(root, 'js/chat.js'), 'utf8');
         const helpers = excerpt(source, 'function escapeToolPreviewHtml(', 'function encodeToolMetadata(')
-            + excerpt(source, 'async function resolveGeneratedImagePreviewUrl(', 'async function hydrateComputerToolPreviews(');
+            + excerpt(source, 'function encodeToolMetadata(', 'function formatToolPreviewValue(')
+            + excerpt(source, 'async function resolveGeneratedImagePreviewUrl(', 'function normalizeDelegatedAgent(');
         const event = excerpt(source, '    const handleGeneratedMediaEvent =', "    ipcRenderer.on('image_generated'");
+        const agentEvent = excerpt(source, "    ipcRenderer.on('agent-step'", "    ipcRenderer.on('reasoning-step'");
         await page.addScriptTag({ content: `
             const artifactHandler = window.viewer;
             window.activeConversation = 'conversation';
@@ -64,8 +66,11 @@ test('create_image displays tool results, socket media, saved previews, and down
             function isConversationActive(id) { return id === window.activeConversation; }
             function isProjectWorkspaceMode() { return false; }
             function updateReasoningSummary() {}
+            function getDelegationLogContainer(message) { return message.querySelector('.detailed-logs'); }
+            const ipcRenderer = { on: (channel, callback) => { window[channel] = callback; } };
             ${helpers}
             ${event}
+            ${agentEvent}
             window.receiveMedia = handleGeneratedMediaEvent;
         ` });
         for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
@@ -95,6 +100,27 @@ test('create_image displays tool results, socket media, saved previews, and down
             assert.equal(result.injectedImages, 1);
             assert.equal(result.fits, true);
         }
+        const toolResult = await page.evaluate(async base => {
+            const event = { id: 'message', name: 'create_image', agent_name: 'Assistant' };
+            await window['agent-step']({ ...event, type: 'tool_start' });
+            await window['agent-step']({ ...event, type: 'tool_end', tool: { tool_output: { ok: false, error: 'OpenRouter HTTP 402' } } });
+            const failed = document.querySelector('.tool-log-status.failed') !== null;
+            const error = document.querySelector('[role="status"]').textContent;
+            document.querySelector('.detailed-logs').innerHTML = '';
+            await window['agent-step']({ ...event, type: 'tool_start' });
+            await window['agent-step']({ ...event, type: 'tool_end', tool: { tool_output: JSON.stringify({ ok: true,
+                metadata: { kind: 'generated_image_tool_output', artifact_id: 'tool-image',
+                    media_url: `${base}/image.png`, mime_type: 'image/png', filename: 'image.png', title: 'Generated image' } }) } });
+            document.querySelector('.tool-log-header').click();
+            return { failed, error, expanded: document.querySelector('.tool-log-entry').classList.contains('preview-expanded'),
+                artifact: window.viewer.getActiveArtifact().content,
+                preview: document.querySelector('.tool-preview-image-thumb').getAttribute('src') };
+        }, base);
+        assert.equal(toolResult.failed, true);
+        assert.equal(toolResult.error, 'OpenRouter HTTP 402');
+        assert.equal(toolResult.expanded, true);
+        assert.equal(toolResult.artifact, `${base}/image.png`);
+        assert.equal(toolResult.preview, `${base}/image.png`);
         const replay = await page.evaluate(async base => {
             window.sessionContentViewer = {
                 getCachedContent: () => [{ reference_id: 'old-image', signed_url: `${base}/image.png?fresh=1` }]
@@ -113,6 +139,30 @@ test('create_image displays tool results, socket media, saved previews, and down
         assert.notEqual(replay.active, 'background');
         assert.equal(replay.cached, true);
         assert.equal(replay.invalidations, 3);
+        const refreshed = await page.evaluate(async base => {
+            const originalFetch = window.fetch;
+            let requestedUrl;
+            let cached;
+            window.electron = { auth: { getSession: async () => ({ access_token: 'test-token' }) } };
+            window.sessionContentViewer = {
+                getCachedContent: () => null,
+                cacheContent: (_id, content) => { cached = content; }
+            };
+            window.fetch = async url => {
+                requestedUrl = url;
+                return { ok: true, json: async () => ({ content: [{ reference_id: 'old-image', signed_url: `${base}/image.png` }] }) };
+            };
+            try {
+                const url = await resolveGeneratedImagePreviewUrl({ conversation_id: 'conversation',
+                    artifact_id: 'old-image', media_url_expires_at: 1 });
+                return { url, requestedUrl, cached: cached.length };
+            } finally {
+                window.fetch = originalFetch;
+            }
+        }, base);
+        assert.equal(refreshed.url, `${base}/image.png`);
+        assert.equal(refreshed.requestedUrl, 'https://api.aetheriaai.website/api/sessions/conversation/content');
+        assert.equal(refreshed.cached, 1);
         const download = await page.evaluate(async () => {
             window.electron = {
                 ipcRenderer: { invoke: async (channel, payload) => {
