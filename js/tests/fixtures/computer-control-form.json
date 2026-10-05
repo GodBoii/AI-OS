@@ -1,0 +1,13 @@
+{
+  "title": "Computer control test form",
+  "output": ".ui-check/computer-form.json",
+  "commands": [
+    { "action": "get_screen_elements" },
+    { "action": "perform_element_action", "element_name": "Test text", "element_action": "set_value", "value": "Hello 😀 नमस्ते\nSecond line", "expect_value": "Hello 😀 नमस्ते\nSecond line" },
+    { "action": "perform_element_action", "element_name": "Test option", "element_action": "toggle", "expect_toggle": "On" },
+    { "action": "perform_element_action", "element_name": "Apply test", "element_action": "invoke", "expect_text": "Clicks: 1" },
+    { "action": "get_window_state" },
+    { "action": "click_mouse", "element_name": "Apply test" },
+    { "action": "get_screen_elements", "expect_text": "Clicks: 2" }
+  ]
+}
