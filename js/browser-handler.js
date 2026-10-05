@@ -10,6 +10,7 @@ const electron = require('electron');
 const config = require('./config');
 const os = require('os');
 const { findBrowserExecutable } = require('./browser-locations');
+const { getTypingSpeed, typeWithSpeed } = require('./typing-input');
 
 // JPEG quality for the page images handed to the model. High enough that small
 // text stays legible, low enough that a view stays well under 100KB on the round
@@ -539,6 +540,54 @@ class BrowserHandler {
         return this.connectPromise;
     }
 
+    async _typeText(commandPayload) {
+        const { element_id, text } = commandPayload;
+        if (!Number.isSafeInteger(element_id) || element_id < 0) throw new Error('Invalid element ID');
+        if (typeof text !== 'string' || text.length > 100000) throw new Error('text must be a string of at most 100000 characters');
+        const selector = `[data-aios-id="${element_id}"]`;
+        const elementInfo = await this.page.$eval(selector, el => ({
+            editable: el.isContentEditable || ['input', 'textarea'].includes(el.tagName.toLowerCase()) || el.getAttribute('role') === 'textbox',
+            disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
+            readOnly: el.readOnly === true,
+            nonText: el.tagName.toLowerCase() === 'input' && ['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'hidden', 'range', 'color'].includes(el.type),
+        }));
+        if (!elementInfo.editable || elementInfo.disabled || elementInfo.readOnly || elementInfo.nonText) throw new Error('Target is not an editable control');
+        await this.page.click(selector);
+        await this.page.focus(selector);
+        const focused = await this.page.$eval(selector, el => el === document.activeElement || el.contains(document.activeElement));
+        if (!focused) throw new Error('Target could not receive focus. Text was not sent.');
+        if (commandPayload.clear_existing !== false) {
+            const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+            try {
+                await this.page.keyboard.down(modifier);
+                await this.page.keyboard.press('a');
+            } finally {
+                await this.page.keyboard.up(modifier);
+            }
+            await this.page.keyboard.press('Backspace');
+        } else {
+            await this.page.$eval(selector, el => {
+                if (typeof el.setSelectionRange === 'function') {
+                    try { el.setSelectionRange(el.value.length, el.value.length); return; } catch { /* Some input types have no text selection. */ }
+                }
+                if (el.isContentEditable) {
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    range.collapse(false);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+            });
+        }
+        const speed = getTypingSpeed(this.settings);
+        await typeWithSpeed(text, speed, {
+            insertText: value => this.page.keyboard.sendCharacter(value),
+            typeCharacter: character => this.page.keyboard.type(character),
+        });
+        return speed;
+    }
+
     async handleCommand(commandPayload) {
         const { action, request_id } = commandPayload;
         console.log(`BrowserHandler: Processing command '${action}' with request_id: ${request_id}`);
@@ -621,86 +670,13 @@ class BrowserHandler {
                     await this._stabilizeAfterInteraction(5000);
                     result = await this.getView();
                     break;
-                case 'type':
-                    {
-                        const selector = `[data-aios-id="${commandPayload.element_id}"]`;
-                        const clearExisting = commandPayload.clear_existing !== false;
-                        const text = commandPayload.text;
-
-                        // Determine element type for appropriate input strategy
-                        const elementInfo = await this.page.$eval(selector, (el) => {
-                            return {
-                                tag: el.tagName.toLowerCase(),
-                                isContentEditable: el.isContentEditable,
-                                type: el.getAttribute('type') || '',
-                                role: el.getAttribute('role') || ''
-                            };
-                        }).catch(() => null);
-
-                        if (!elementInfo) {
-                            result = { status: 'error', error: `Element with id ${commandPayload.element_id} not found.` };
-                            break;
-                        }
-
-                        // Click the element first to ensure it's focused (critical for reply boxes)
-                        await this.page.click(selector).catch(() => {});
-                        await new Promise(resolve => setTimeout(resolve, 200));
-
-                        // Focus the element explicitly
-                        await this.page.focus(selector).catch(() => {});
-                        await new Promise(resolve => setTimeout(resolve, 100));
-
-                        if (elementInfo.isContentEditable || elementInfo.role === 'textbox') {
-                            // ContentEditable strategy (Slack, Gmail, Teams reply boxes, etc.)
-                            if (clearExisting) {
-                                // Select all and delete for contenteditable
-                                await this.page.keyboard.down('Control');
-                                await this.page.keyboard.press('a');
-                                await this.page.keyboard.up('Control');
-                                await new Promise(resolve => setTimeout(resolve, 50));
-                                await this.page.keyboard.press('Backspace');
-                                await new Promise(resolve => setTimeout(resolve, 100));
-                            }
-
-                            // Type character by character for contenteditable (more reliable than bulk)
-                            // Some apps (Slack, Discord) intercept programmatic input events
-                            // Using keyboard.type() with delay simulates real key presses
-                            await this.page.keyboard.type(text, { delay: 30 });
-
-                        } else if (elementInfo.tag === 'input' || elementInfo.tag === 'textarea') {
-                            // Standard form field strategy
-                            if (clearExisting) {
-                                await this.page.$eval(selector, (el) => {
-                                    el.value = '';
-                                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                                }).catch(() => {});
-
-                                // Also use keyboard select-all + delete as fallback
-                                await this.page.keyboard.down('Control');
-                                await this.page.keyboard.press('a');
-                                await this.page.keyboard.up('Control');
-                                await this.page.keyboard.press('Backspace');
-                                await new Promise(resolve => setTimeout(resolve, 50));
-                            }
-
-                            // Type using Puppeteer's type method (dispatches proper keydown/keyup)
-                            await this.page.type(selector, text, { delay: 20 });
-
-                        } else {
-                            // Fallback: try focus + keyboard.type
-                            if (clearExisting) {
-                                await this.page.keyboard.down('Control');
-                                await this.page.keyboard.press('a');
-                                await this.page.keyboard.up('Control');
-                                await this.page.keyboard.press('Backspace');
-                            }
-                            await this.page.keyboard.type(text, { delay: 30 });
-                        }
-                    }
+                case 'type': {
+                    const typingSpeed = await this._typeText(commandPayload);
                     await this._stabilizeAfterInteraction(3000);
                     result = await this.getView();
+                    result.typing_speed = typingSpeed;
                     break;
+                }
                 case 'scroll':
                     await this.page.evaluate(direction => window.scrollBy(0, direction === 'down' ? window.innerHeight * 0.8 : -window.innerHeight * 0.8), commandPayload.direction);
                     await this._stabilizeAfterInteraction(2000);
