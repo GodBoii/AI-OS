@@ -1,5 +1,6 @@
 import base64
 import binascii
+import json
 import logging
 import os
 import time
@@ -9,11 +10,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import requests
 
-from agno.agent import Agent
 from agno.media import Image, Video
-from agno.models.openrouter import OpenRouter
-from agno.run.agent import RunOutput
 from agno.tools import Toolkit
+from agno.tools.function import ToolResult
+
+from openrouter_image_client import (
+    ImageGenerationError,
+    TEXT_IMAGE_MODEL,
+    generate_openrouter_image,
+    validate_image_bytes,
+)
 
 from sandbox_persistence import get_persistence_service
 from supabase_client import supabase_client
@@ -21,7 +27,6 @@ from supabase_client import supabase_client
 logger = logging.getLogger(__name__)
 
 OPENROUTER_VIDEO_URL = "https://openrouter.ai/api/v1/videos"
-IMAGE_MODEL_ID = "sourceful/riverflow-v2-fast"
 VIDEO_MODEL_ID = "google/veo-3.1-lite"
 
 
@@ -31,7 +36,7 @@ class MediaTools(Toolkit):
     def __init__(self, custom_tool_config: Dict[str, Any]):
         super().__init__(
             name="media_tools",
-            tools=[self.generate_image, self.generate_video],
+            tools=[self.create_image, self.generate_image, self.generate_video],
         )
 
         self.socketio = custom_tool_config.get("socketio")
@@ -44,73 +49,110 @@ class MediaTools(Toolkit):
         if not self.openrouter_api_key:
             logger.error("MediaTools: OPENROUTER_API_KEY is not configured")
 
+    def create_image(
+        self,
+        text: str,
+        image: Optional[str] = None,
+        images: Optional[Sequence[Image]] = None,
+        session_state: Optional[Dict[str, Any]] = None,
+    ) -> ToolResult:
+        """Create or edit an image and return it to both the user and the model.
+
+        Args:
+            text: Description of the image to create, or changes to a reference image.
+            image: Optional HTTP(S) or base64 image data URL. When omitted, use the
+                current turn's attached image. Attach at most one reference image.
+        """
+        try:
+            reference = self._create_image_reference(image, images, session_state)
+            generated = generate_openrouter_image(self.openrouter_api_key, text, reference)
+            artifact_id, signed_url, file_name = self._persist_generated_media(
+                media_bytes=generated.content,
+                mime_type=generated.mime_type,
+                media_kind="image",
+                prompt=text,
+                source_urls=[reference] if reference and not reference.startswith("data:") else [],
+                provider_response={"model": generated.model},
+            )
+            metadata = {
+                "kind": "generated_image_tool_output",
+                "action": "create_image",
+                "preview_type": "image",
+                "artifact_id": artifact_id,
+                "output_id": artifact_id,
+                "media_url": signed_url,
+                "mime_type": generated.mime_type,
+                "filename": file_name,
+                "model": generated.model,
+                "title": "Generated image",
+            }
+            result = ToolResult(
+                content=json.dumps({
+                    "ok": True,
+                    "message": f"Image generated.\n\n```image\n{artifact_id}\n```",
+                    "metadata": metadata,
+                }),
+                images=[Image(content=generated.content, mime_type=generated.mime_type, name=file_name)],
+            )
+        except ImageGenerationError as exc:
+            return ToolResult(content=json.dumps({"ok": False, "error": str(exc)}))
+        except Exception:
+            logger.exception("MediaTools.create_image failed during attachment loading or persistence")
+            return ToolResult(content=json.dumps({
+                "ok": False, "error": "Could not load the reference image or save the generated image. Try again."
+            }))
+
+        # A disconnected frontend must not discard an image already saved for the model.
+        try:
+            self._emit_media_generated(
+                artifact_id=artifact_id,
+                media_type="image",
+                media_url=signed_url,
+                mime_type=generated.mime_type,
+                file_name=file_name,
+            )
+        except Exception:
+            logger.exception("MediaTools: image saved, but live notification failed")
+        return result
+
+    def _create_image_reference(
+        self, image: Optional[str], images: Optional[Sequence[Image]], session_state: Optional[Dict[str, Any]]
+    ) -> Optional[str]:
+        if image is not None:
+            return image
+        if images:
+            if len(images) != 1:
+                raise ImageGenerationError("Attach one reference image or select one with the image URL argument.")
+            attachment = images[0]
+            content = getattr(attachment, "content", None)
+            if isinstance(content, (bytes, bytearray)):
+                mime_type = validate_image_bytes(bytes(content))
+                return f"data:{mime_type};base64,{base64.b64encode(content).decode('ascii')}"
+            reference = self._image_to_data_url(attachment)
+            if not reference:
+                raise ImageGenerationError("Could not read the attached reference image.")
+            return reference
+        files = ((session_state or {}).get("turn_context") or {}).get("files") or []
+        attachments = [f for f in files if isinstance(f, dict) and str(f.get("type", "")).startswith("image/")]
+        if len(attachments) > 1:
+            raise ImageGenerationError("Attach one reference image or select one with the image URL argument.")
+        if attachments:
+            path = attachments[0].get("path")
+            reference = self._create_signed_media_url(path, expires_in=7200) if path else None
+            if not reference:
+                raise ImageGenerationError("Could not access the attached reference image.")
+            return reference
+        return None
+
     def generate_image(
         self,
         prompt: str,
         images: Optional[Sequence[Image]] = None,
         videos: Optional[Sequence[Video]] = None,
         session_state: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        """Generate an image from a prompt and optional attached reference media."""
-        if not self.openrouter_api_key:
-            return "Image generation is unavailable because OPENROUTER_API_KEY is not configured."
-
-        try:
-            reference_image_urls, reference_video_urls = self._collect_attachment_urls(
-                session_state=session_state,
-                images=images,
-                videos=videos,
-            )
-            prompt_for_generation = self._build_prompt_with_reference_urls(
-                prompt=prompt,
-                image_urls=[],
-                video_urls=reference_video_urls,
-            )
-
-            # Use an internal Agno agent so we receive the generated image back as
-            # RunOutput media, then persist it ourselves for the frontend.
-            artist_agent = Agent(
-                name="media_image_generator",
-                model=OpenRouter(
-                    id=IMAGE_MODEL_ID,
-                    modalities=["image"],
-                ),
-                send_media_to_model=True,
-                store_media=True,
-                debug_mode=False,
-            )
-
-            run_output: RunOutput = artist_agent.run(
-                prompt_for_generation,
-                images=list(images) if images else None,
-            )
-
-            image_bytes, mime_type = self._extract_generated_image(run_output)
-            artifact_id, signed_url, file_name = self._persist_generated_media(
-                media_bytes=image_bytes,
-                mime_type=mime_type,
-                media_kind="image",
-                prompt=prompt,
-                source_urls=reference_image_urls + reference_video_urls,
-                provider_response={
-                    "content": getattr(run_output, "content", None),
-                    "model": IMAGE_MODEL_ID,
-                },
-            )
-
-            provider_text = str(getattr(run_output, "content", "") or "").strip()
-            summary_text = provider_text or "Image generated. The user can view it in the frontend."
-            self._emit_media_generated(
-                artifact_id=artifact_id,
-                media_type="image",
-                media_url=signed_url,
-                mime_type=mime_type,
-                file_name=file_name,
-            )
-            return f"{summary_text}\n\n```image\n{artifact_id}\n```"
-        except Exception as exc:
-            logger.error("MediaTools.generate_image failed: %s\n%s", exc, traceback.format_exc())
-            return f"Image generation failed: {exc}"
+    ) -> ToolResult:
+        """Compatibility alias for create_image. Use create_image for new requests."""
+        return self.create_image(text=prompt, images=images, session_state=session_state)
 
     def generate_video(
         self,
@@ -277,55 +319,6 @@ class MediaTools(Toolkit):
 
         return None
 
-    def _extract_generated_image(self, run_output: RunOutput) -> Tuple[bytes, str]:
-        images = getattr(run_output, "images", None) or []
-        if not images:
-            raise RuntimeError("Image generation completed without an image in the Agno RunOutput.")
-
-        for image in images:
-            image_bytes, mime_type = self._extract_image_bytes(image)
-            if image_bytes:
-                return image_bytes, mime_type or "image/png"
-
-        raise RuntimeError("Image generation completed, but the generated image could not be decoded.")
-
-    def _extract_image_bytes(self, image: Image) -> Tuple[bytes, Optional[str]]:
-        mime_type = str(
-            getattr(image, "mime_type", None)
-            or getattr(image, "media_type", None)
-            or "image/png"
-        )
-        content = getattr(image, "content", None)
-
-        if isinstance(content, (bytes, bytearray)):
-            return bytes(content), mime_type
-
-        if isinstance(content, str):
-            stripped = content.strip()
-            if stripped.startswith("data:"):
-                return self._decode_data_url(stripped)
-            try:
-                return base64.b64decode(stripped), mime_type
-            except (ValueError, binascii.Error):
-                pass
-
-        url = getattr(image, "url", None)
-        if isinstance(url, str) and url.strip():
-            if url.startswith("data:"):
-                return self._decode_data_url(url)
-            downloaded = requests.get(url, timeout=180)
-            downloaded.raise_for_status()
-            return downloaded.content, downloaded.headers.get("content-type") or mime_type
-
-        return b"", None
-
-    def _decode_data_url(self, data_url: str) -> Tuple[bytes, Optional[str]]:
-        if not data_url.startswith("data:"):
-            return b"", None
-        header, _, payload = data_url.partition(",")
-        mime_type = header[5:].split(";")[0] if ";" in header else header[5:]
-        return base64.b64decode(payload), mime_type or None
-
     def _persist_generated_media(
         self,
         *,
@@ -371,7 +364,7 @@ class MediaTools(Toolkit):
                     "is_generated": True,
                     "artifact_type": media_kind,
                     "provider": "openrouter",
-                    "model": IMAGE_MODEL_ID if media_kind == "image" else VIDEO_MODEL_ID,
+                    "model": provider_response.get("model") or (TEXT_IMAGE_MODEL if media_kind == "image" else VIDEO_MODEL_ID),
                     "prompt": prompt,
                     "source_urls": source_urls,
                     "provider_response": {
