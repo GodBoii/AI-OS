@@ -1,0 +1,14 @@
+{
+  "title": "Calculator",
+  "output": ".ui-check/computer-calculator-final.json",
+  "commands": [
+    { "action": "get_screen_elements" },
+    { "action": "perform_element_action", "element_name": "Clear", "element_action": "invoke", "expect_text": "Display is 0" },
+    { "action": "perform_element_action", "element_name": "Seven", "element_action": "invoke", "expect_text": "Display is 7" },
+    { "action": "get_window_state" },
+    { "action": "click_mouse", "element_name": "Eight" },
+    { "action": "get_screen_elements", "expect_text": "Display is 78" },
+    { "action": "press_hotkey", "keys": ["escape"] },
+    { "action": "get_screen_elements", "expect_text": "Display is 0" }
+  ]
+}
