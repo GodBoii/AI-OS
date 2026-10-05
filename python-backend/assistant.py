@@ -150,7 +150,7 @@ def get_llm_os(
         members.append(
             Agent(
                 name="assistant",
-                model=get_openrouter_model("xiaomi/mimo-v2.5"),
+                model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
                 role=(
                     "Platform operations assistant for GitHub, Vercel, and Supabase. "
                     "Handles repository, deployment, and backend platform tasks delegated by Aetheria AI."
