@@ -81,7 +81,7 @@ def get_system_assistant(
 
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         instructions=system_instructions,
         tools=tools,
         user_id=user_id,
