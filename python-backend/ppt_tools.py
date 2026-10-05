@@ -1513,7 +1513,7 @@ def build_presentation_agent(
 
     return Agent(
         name="presentation_agent",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         role=(
             "Native PowerPoint specialist. Plans concise decks and creates editable "
             ".pptx files using presentation_tools."
