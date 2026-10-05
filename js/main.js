@@ -514,7 +514,7 @@ function createWindow() {
     pythonBridge.setBrowserController(browserHandler);
 
     // Initialize Computer Control Handler
-    computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken);
+    computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken, browserSettings);
     computerControlHandler.initialize();
     pythonBridge.setComputerController(computerControlHandler);
 
