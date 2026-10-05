@@ -4,6 +4,7 @@ dist/
 aios/
 venv/
 .venv/
+.venv-vault/
 env/
 ENV/
 

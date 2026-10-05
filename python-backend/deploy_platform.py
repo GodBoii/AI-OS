@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-import requests
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import create_engine, text
 
 import config
@@ -20,7 +18,6 @@ from r2_client import get_r2_client
 
 
 _TENANT_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$")
-_DB_NAME_RE = re.compile(r"^[a-z0-9-]{3,64}$")
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
 )
@@ -65,56 +62,10 @@ def _require_env(name: str) -> str:
     return val
 
 
-def get_runtime_query_endpoint() -> str:
-    """
-    Public endpoint that deployed websites should call for runtime database queries.
-    If DEPLOY_RUNTIME_API_BASE_URL is unset, returns a relative path.
-    """
-    base = ""
-    for key in (
-        "DEPLOY_RUNTIME_API_BASE_URL",
-        "BACKEND_PUBLIC_URL",
-        "PUBLIC_API_BASE_URL",
-        "API_BASE_URL",
-    ):
-        val = (os.getenv(key) or "").strip()
-        if val:
-            base = val.rstrip("/")
-            break
-    path = "/api/deploy/runtime/query"
-    return f"{base}{path}" if base else path
-
-
-def _fernet() -> Fernet:
-    key = _require_env("DEPLOY_SECRET_KEY")
-    try:
-        return Fernet(key.encode("utf-8"))
-    except Exception as exc:
-        raise ValueError(
-            "DEPLOY_SECRET_KEY must be a valid Fernet key. "
-            "Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-        ) from exc
-
-
-def encrypt_secret(plain: str) -> str:
-    return _fernet().encrypt(plain.encode("utf-8")).decode("utf-8")
-
-
-def decrypt_secret(cipher: str) -> str:
-    try:
-        return _fernet().decrypt(cipher.encode("utf-8")).decode("utf-8")
-    except InvalidToken as exc:
-        raise ValueError("Unable to decrypt secret with DEPLOY_SECRET_KEY") from exc
-
-
 def preflight_check() -> dict[str, Any]:
     required = [
         "DEPLOY_DOMAIN",
         "R2_SITES_BUCKET",
-        "TURSO_ORG_SLUG",
-        "TURSO_GROUP",
-        "TURSO_API_TOKEN",
-        "DEPLOY_SECRET_KEY",
         "R2_ENDPOINT",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
@@ -126,7 +77,6 @@ def preflight_check() -> dict[str, Any]:
         "missing_env": missing,
         "database": False,
         "r2": False,
-        "turso_token": False,
     }
 
     if missing:
@@ -143,15 +93,7 @@ def preflight_check() -> dict[str, Any]:
     except Exception:
         checks["r2"] = False
 
-    turso_base = "https://api.turso.tech/v1/auth/validate"
-    resp = requests.get(
-        turso_base,
-        headers={"Authorization": f"Bearer {os.getenv('TURSO_API_TOKEN')}"},
-        timeout=15,
-    )
-    checks["turso_token"] = resp.status_code == 200
-
-    return {"ok": all([checks["database"], checks["r2"], checks["turso_token"]]), "checks": checks}
+    return {"ok": checks["database"] and checks["r2"], "checks": checks}
 
 
 def ensure_deploy_tables() -> None:
@@ -192,21 +134,6 @@ def ensure_deploy_tables() -> None:
         """
         create unique index if not exists uniq_site_version
           on platform_deployments(site_id, version);
-        """,
-        """
-        create table if not exists platform_site_databases (
-          id uuid primary key,
-          site_id uuid not null unique references platform_sites(id) on delete cascade,
-          turso_org_slug text not null,
-          turso_group text not null,
-          turso_db_name text not null unique,
-          turso_db_hostname text not null,
-          encrypted_admin_token text not null,
-          encrypted_rw_token text not null,
-          encrypted_ro_token text,
-          created_at timestamptz not null default now(),
-          rotated_at timestamptz
-        );
         """,
     ]
     with _engine.begin() as conn:
@@ -497,130 +424,6 @@ def prune_site_deployments(site_id: str, user_id: str, keep_count: int = 2) -> d
     }
 
 
-def _safe_db_name(site_id: str) -> str:
-    raw = f"site-{site_id}".lower().replace("_", "-")
-    cleaned = re.sub(r"[^a-z0-9-]", "-", raw)
-    compact = re.sub(r"-{2,}", "-", cleaned).strip("-")
-    if len(compact) > 52:
-        compact = compact[:52].rstrip("-")
-    suffix = uuid.uuid4().hex[:8]
-    name = f"{compact}-{suffix}"
-    if not _DB_NAME_RE.fullmatch(name):
-        raise ValueError("Generated Turso database name is invalid")
-    return name
-
-
-def provision_turso_database(site_id: str, user_id: str) -> dict[str, Any]:
-    _ensure_site_owned(site_id=site_id, user_id=user_id)
-    org_slug = _require_env("TURSO_ORG_SLUG")
-    group = _require_env("TURSO_GROUP")
-    api_token = _require_env("TURSO_API_TOKEN")
-
-    with _engine.connect() as conn:
-        existing = conn.execute(
-            text(
-                """
-                select turso_db_name, turso_db_hostname
-                from platform_site_databases
-                where site_id = :site_id
-                """
-            ),
-            {"site_id": site_id},
-        ).mappings().first()
-    if existing:
-        return {
-            "site_id": site_id,
-            "database_name": existing["turso_db_name"],
-            "hostname": existing["turso_db_hostname"],
-            "already_exists": True,
-        }
-
-    db_name = _safe_db_name(site_id)
-    base = f"https://api.turso.tech/v1/organizations/{org_slug}/databases"
-    headers = {"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"}
-
-    create_resp = requests.post(base, headers=headers, json={"name": db_name, "group": group}, timeout=30)
-    if create_resp.status_code not in (200, 201):
-        raise RuntimeError(f"Turso create database failed: {create_resp.status_code} {create_resp.text}")
-
-    db_obj = (create_resp.json() or {}).get("database") or {}
-    hostname = db_obj.get("Hostname") or f"{db_name}-{org_slug}.turso.io"
-
-    rw_url = f"{base}/{db_name}/auth/tokens?authorization=full-access&expiration=90d"
-    ro_url = f"{base}/{db_name}/auth/tokens?authorization=read-only&expiration=90d"
-    admin_url = f"{base}/{db_name}/auth/tokens?authorization=full-access&expiration=365d"
-
-    rw_resp = requests.post(rw_url, headers=headers, timeout=30)
-    ro_resp = requests.post(ro_url, headers=headers, timeout=30)
-    admin_resp = requests.post(admin_url, headers=headers, timeout=30)
-    for resp, label in [(rw_resp, "rw"), (ro_resp, "ro"), (admin_resp, "admin")]:
-        if resp.status_code not in (200, 201):
-            raise RuntimeError(f"Turso create {label} token failed: {resp.status_code} {resp.text}")
-
-    rw_token = rw_resp.json().get("jwt")
-    ro_token = ro_resp.json().get("jwt")
-    admin_token = admin_resp.json().get("jwt")
-    if not rw_token or not ro_token or not admin_token:
-        raise RuntimeError("Turso token generation returned an empty token")
-
-    with _engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                insert into platform_site_databases (
-                  id, site_id, turso_org_slug, turso_group, turso_db_name, turso_db_hostname,
-                  encrypted_admin_token, encrypted_rw_token, encrypted_ro_token
-                )
-                values (
-                  :id, :site_id, :org_slug, :group, :db_name, :db_hostname,
-                  :admin_token, :rw_token, :ro_token
-                )
-                """
-            ),
-            {
-                "id": str(uuid.uuid4()),
-                "site_id": site_id,
-                "org_slug": org_slug,
-                "group": group,
-                "db_name": db_name,
-                "db_hostname": hostname,
-                "admin_token": encrypt_secret(admin_token),
-                "rw_token": encrypt_secret(rw_token),
-                "ro_token": encrypt_secret(ro_token),
-            },
-        )
-
-    return {"site_id": site_id, "database_name": db_name, "hostname": hostname, "already_exists": False}
-
-
-def get_site_db_credentials(site_id: str, user_id: str, include_admin: bool = False) -> dict[str, Any]:
-    _ensure_site_owned(site_id=site_id, user_id=user_id)
-    with _engine.connect() as conn:
-        row = conn.execute(
-            text(
-                """
-                select turso_db_name, turso_db_hostname, encrypted_rw_token, encrypted_ro_token, encrypted_admin_token
-                from platform_site_databases
-                where site_id = :site_id
-                """
-            ),
-            {"site_id": site_id},
-        ).mappings().first()
-    if not row:
-        raise ValueError("No database provisioned for this site")
-
-    out = {
-        "database_name": row["turso_db_name"],
-        "hostname": row["turso_db_hostname"],
-        "url": f"libsql://{row['turso_db_hostname']}",
-        "rw_token": decrypt_secret(row["encrypted_rw_token"]),
-        "ro_token": decrypt_secret(row["encrypted_ro_token"]) if row.get("encrypted_ro_token") else None,
-    }
-    if include_admin:
-        out["admin_token"] = decrypt_secret(row["encrypted_admin_token"])
-    return out
-
-
 def resolve_public_site_hostname(hostname: str) -> dict[str, Any]:
     """
     Resolve a deployed site by hostname without requiring a platform user token.
@@ -677,42 +480,6 @@ def resolve_public_site_hostname(hostname: str) -> dict[str, Any]:
         "status": row["status"],
         "hostname": row["hostname"],
         "active_deployment_id": str(active_dep["id"]),
-    }
-
-
-def get_site_runtime_db_credentials(site_id: str) -> dict[str, Any]:
-    """
-    Fetch decrypted runtime DB credentials for an active site.
-    This is intended for server-side runtime routing only.
-    """
-    with _engine.connect() as conn:
-        row = conn.execute(
-            text(
-                """
-                select
-                  s.status,
-                  db.turso_db_name,
-                  db.turso_db_hostname,
-                  db.encrypted_rw_token,
-                  db.encrypted_ro_token
-                from platform_sites s
-                join platform_site_databases db on db.site_id = s.id
-                where s.id = :site_id
-                """
-            ),
-            {"site_id": site_id},
-        ).mappings().first()
-    if not row:
-        raise ValueError("No database provisioned for this site")
-    if str(row["status"]) != "active":
-        raise ValueError("Site is not active")
-
-    return {
-        "database_name": row["turso_db_name"],
-        "hostname": row["turso_db_hostname"],
-        "url": f"libsql://{row['turso_db_hostname']}",
-        "rw_token": decrypt_secret(row["encrypted_rw_token"]),
-        "ro_token": decrypt_secret(row["encrypted_ro_token"]) if row.get("encrypted_ro_token") else None,
     }
 
 
@@ -779,12 +546,6 @@ def activate_deployment(site_id: str, user_id: str, deployment_id: str) -> dict[
 
 def upsert_site_manifest(site_id: str, user_id: str, deployment_id: str) -> dict[str, Any]:
     site = _ensure_site_owned(site_id=site_id, user_id=user_id)
-    creds: Optional[dict[str, Any]] = None
-    try:
-        creds = get_site_db_credentials(site_id=site_id, user_id=user_id, include_admin=False)
-    except ValueError:
-        # Phase-gated deploy: allow static-only deploys without a provisioned DB.
-        creds = None
     with _engine.connect() as conn:
         dep = conn.execute(
             text("select r2_prefix from platform_deployments where id = :id and site_id = :site_id"),
@@ -798,16 +559,7 @@ def upsert_site_manifest(site_id: str, user_id: str, deployment_id: str) -> dict
         "slug": site["slug"],
         "deployment_id": deployment_id,
         "r2_prefix": dep["r2_prefix"],
-        "db": (
-            {
-                "url": creds["url"],
-                "hostname": creds["hostname"],
-                "database_name": creds["database_name"],
-                "runtime_query_endpoint": get_runtime_query_endpoint(),
-            }
-            if creds
-            else None
-        ),
+        "db": None,
         "updated_at": _utc_now_iso(),
     }
 
@@ -962,14 +714,12 @@ def list_user_sites(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
                   d.hostname,
                   dep.id as active_deployment_id,
                   dep.activated_at as active_deployment_activated_at,
-                  db.turso_db_name as database_name
+                  null as database_name
                 from platform_sites s
                 left join platform_domains d
                   on d.site_id = s.id and d.is_primary = true
                 left join platform_deployments dep
                   on dep.site_id = s.id and dep.status = 'active'
-                left join platform_site_databases db
-                  on db.site_id = s.id
                 where s.user_id = :user_id
                 order by s.updated_at desc
                 limit :lim
@@ -1072,58 +822,6 @@ def list_deployed_projects(user_id: str, limit: int = 20) -> list[dict[str, Any]
         )
 
     return normalized
-
-
-def list_user_databases(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
-    """
-    List provisioned per-site databases owned by a user.
-    Returns one row per site database with deployment/domain context when available.
-    """
-    lim = max(1, min(int(limit or 50), 200))
-    with _engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                """
-                with latest_dep as (
-                  select
-                    d.site_id,
-                    d.id as deployment_id,
-                    d.status as deployment_status,
-                    d.version,
-                    d.r2_prefix,
-                    row_number() over (
-                      partition by d.site_id
-                      order by (d.status = 'active') desc, d.version desc
-                    ) as rn
-                  from platform_deployments d
-                )
-                select
-                  s.id as site_id,
-                  s.project_name,
-                  s.slug,
-                  dm.hostname,
-                  db.turso_db_name as database_name,
-                  db.turso_db_hostname as database_hostname,
-                  db.created_at as database_created_at,
-                  dep.deployment_id,
-                  dep.deployment_status,
-                  dep.version,
-                  dep.r2_prefix
-                from platform_sites s
-                join platform_site_databases db
-                  on db.site_id = s.id
-                left join platform_domains dm
-                  on dm.site_id = s.id and dm.is_primary = true
-                left join latest_dep dep
-                  on dep.site_id = s.id and dep.rn = 1
-                where s.user_id = :user_id
-                order by db.created_at desc
-                limit :lim
-                """
-            ),
-            {"user_id": str(user_id), "lim": lim},
-        ).mappings().all()
-    return [dict(r) for r in rows]
 
 
 def get_site_summary(site_id: str, user_id: str) -> dict[str, Any]:

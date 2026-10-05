@@ -2,6 +2,26 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  vault_files: defineTable({
+    file_id: v.string(),
+    user_id: v.string(),
+    storage_path: v.string(),
+    file_name: v.string(),
+    mime_type: v.string(),
+    size_bytes: v.number(),
+    sha256: v.string(),
+    tags: v.array(v.string()),
+    created_at: v.string(),
+  })
+    .index("by_user_file", ["user_id", "file_id"])
+    .index("by_user_created", ["user_id", "created_at"]),
+
+  vault_storage: defineTable({
+    user_id: v.string(),
+    used_bytes: v.number(),
+    file_count: v.number(),
+  }).index("by_user", ["user_id"]),
+
   usage_events: defineTable({
     user_id: v.string(),
     event_key: v.string(),

@@ -9,6 +9,7 @@
  */
 
 import type * as usage from "../usage.js";
+import type * as vault from "../vault.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   usage: typeof usage;
+  vault: typeof vault;
 }>;
 
 /**

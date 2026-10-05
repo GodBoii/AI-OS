@@ -1,0 +1,6 @@
+services:
+  web:
+    environment:
+      USER_FILE_STORAGE_ROOT: /data/vault
+    volumes:
+      - /srv/aetheria/vault:/data/vault

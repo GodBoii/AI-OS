@@ -15,6 +15,11 @@ class AIOS {
         this.deploymentsFreshnessMs = 15000;
         this.userFilesCache = [];
         this.userFilesLoadPromise = null;
+        this.userFilesLoadedAt = 0;
+        this.userFilesVersion = 0;
+        this.userFilesAccountId = null;
+        this.vaultAbortController = new AbortController();
+        this.userFilesStorage = null;
         this.memoriesCache = [];
         this.memoriesLoadPromise = null;
         this.usageLoadPromise = null;
@@ -34,7 +39,6 @@ class AIOS {
         this.subscriptionSummary = null;
         this.activeCheckoutPlan = null;
         this.userFilesUploadInProgress = false;
-        this.userFilesUploadFingerprints = new Set();
         this.pricingModalContext = null;
         this.pricingModalCloseTimer = null;
         this.pricingModalOpenFrame = null;
@@ -88,24 +92,52 @@ class AIOS {
             }
         }
 
+    }
+
+    _setVaultAccount(userId) {
+        const accountId = userId || null;
+        if (this.userFilesAccountId === accountId) return;
+        this.vaultAbortController.abort();
+        this.vaultAbortController = new AbortController();
+        this.userFilesAccountId = accountId;
+        this.userFilesVersion += 1;
+        this.userFilesCache = [];
+        this.userFilesLoadedAt = 0;
+        this.userFilesLoadPromise = null;
+        this.userFilesStorage = null;
+        this.userFilesUploadInProgress = false;
+        const uploadButton = document.getElementById('trigger-file-select-btn');
+        if (uploadButton) uploadButton.disabled = false;
+        this.backgroundDownloadQueue = [];
+        this.localFileManifest = {};
+        this.userFilesLocalDir = null;
+        this.userFilesManifestPath = null;
+        this._releaseLocalPreviewUrls();
+        this._renderVaultStorage();
+        if (!accountId || !this.userDataPath) return;
         try {
-            this.userFilesLocalDir = window.electron.path.join(this.userDataPath, 'file-vault-cache');
-            if (!window.electron.fs.existsSync(this.userFilesLocalDir)) {
-                window.electron.fs.mkdirSync(this.userFilesLocalDir, { recursive: true });
-            }
-            this.userFilesManifestPath = window.electron.path.join(this.userFilesLocalDir, 'manifest.json');
+            const directory = window.electron.path.join(this.userDataPath, 'file-vault-cache', accountId);
+            window.electron.fs.mkdirSync(directory, { recursive: true });
+            this.userFilesLocalDir = directory;
+            this.userFilesManifestPath = window.electron.path.join(directory, 'manifest.json');
             if (window.electron.fs.existsSync(this.userFilesManifestPath)) {
-                const raw = window.electron.fs.readFileSync(this.userFilesManifestPath, 'utf8');
-                const parsed = JSON.parse(raw);
-                this.localFileManifest = parsed && typeof parsed === 'object' ? parsed : {};
-            } else {
-                this.localFileManifest = {};
-                window.electron.fs.writeFileSync(this.userFilesManifestPath, JSON.stringify({}, null, 2), 'utf8');
+                const manifest = JSON.parse(window.electron.fs.readFileSync(this.userFilesManifestPath, 'utf8'));
+                if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) {
+                    this.localFileManifest = manifest;
+                }
             }
         } catch (error) {
-            console.error('Failed to initialize local file vault cache:', error);
-            this.localFileManifest = {};
+            console.error('Could not initialize the file cache:', error);
         }
+    }
+
+    _renderVaultStorage() {
+        const label = document.getElementById('user-files-storage');
+        if (!label) return;
+        const storage = this.userFilesStorage;
+        label.textContent = storage
+            ? `${(storage.used_bytes / 1_000_000).toFixed(1)} MB of 500 MB used · 50 MB per file`
+            : '500 MB per account · 50 MB per file';
     }
 
     cacheElements() {
@@ -1506,22 +1538,28 @@ class AIOS {
     }
 
     async _downloadAndCacheFile(file) {
+        const accountId = this.userFilesAccountId;
+        const signal = this.vaultAbortController.signal;
         const fileId = this._safeText(file?.id, '');
         if (!fileId || !this.userFilesLocalDir) return false;
         if (this._localFileExists(file)) return true;
 
         const token = await this._getAccessToken();
+        if (accountId !== this.userFilesAccountId) return false;
         if (!token) return false;
         const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}/download`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` }, signal,
         });
         if (!response.ok) return false;
 
         const arrayBuffer = await response.arrayBuffer();
+        if (accountId !== this.userFilesAccountId) return false;
+        if (!this.userFilesCache.some(item => item.id === fileId)) return false;
         const bytes = new Uint8Array(arrayBuffer);
         const localPath = this._getLocalFilePath(file);
         if (!localPath) return false;
         await window.electron.fs.promises.writeFile(localPath, bytes);
+        if (accountId !== this.userFilesAccountId) return false;
         this._recordLocalFile(file, localPath);
         return true;
     }
@@ -1574,6 +1612,7 @@ class AIOS {
 
     async _applyLocalPreviewToElement(el, file) {
         if (!el || !file || !this._localFileExists(file)) return;
+        const accountId = this.userFilesAccountId;
         const fileId = this._safeText(file?.id, '');
         const record = this.localFileManifest?.[fileId];
         if (!record?.local_path) return;
@@ -1581,6 +1620,7 @@ class AIOS {
         try {
             if (this._isImageFile(file)) {
                 const imgBytes = await window.electron.fs.promises.readFile(record.local_path);
+                if (accountId !== this.userFilesAccountId) return;
                 const blob = new Blob([imgBytes], { type: file.mime_type || 'image/png' });
                 const blobUrl = URL.createObjectURL(blob);
                 const imageReady = await new Promise((resolve) => {
@@ -1589,7 +1629,7 @@ class AIOS {
                     img.onerror = () => resolve(false);
                     img.src = blobUrl;
                 });
-                if (!imageReady) {
+                if (!imageReady || accountId !== this.userFilesAccountId) {
                     try { URL.revokeObjectURL(blobUrl); } catch (e) {}
                     return;
                 }
@@ -1606,6 +1646,7 @@ class AIOS {
 
             if (this._isTextPreviewFile(file)) {
                 const textBytes = await window.electron.fs.promises.readFile(record.local_path);
+                if (accountId !== this.userFilesAccountId) return;
                 const text = new TextDecoder('utf-8').decode(textBytes);
                 const textContainer = el.querySelector('.file-preview-text');
                 if (textContainer) {
@@ -1858,72 +1899,52 @@ class AIOS {
         if (this.elements.userFilesUploadInput) this.elements.userFilesUploadInput.value = '';
     }
 
-    async loadUserFiles(showNotification = false) {
-        if (!showNotification && this.userFilesLoadPromise) {
-            return this.userFilesLoadPromise;
-        }
-
+    async loadUserFiles(showNotification = false, force = false) {
+        if (!force && !showNotification && this.userFilesLoadPromise) return this.userFilesLoadPromise;
+        const accountId = this.userFilesAccountId;
+        if (!accountId) return [];
         if (this._isOffline()) {
-            if (Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
-                this.renderUserFiles(this.userFilesCache);
-            }
-            this._notifyNetworkUnavailable(showNotification);
-            return this.userFilesCache || [];
-        }
-
-        this.userFilesLoadPromise = (async () => {
-        try {
-            if (!showNotification && Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
-                this.renderUserFiles(this.userFilesCache);
-                for (const file of this.userFilesCache) {
-                    this._enqueueBackgroundDownload(file);
-                }
-                return;
-            }
-
-            const token = await this._getAccessToken();
-            if (!token) {
-                this.userFilesCache = [];
-                this.resetUserFilesUI();
-                this.renderUserFiles([]);
-                return;
-            }
-
-            const response = await fetch(`${this.backendBaseUrl}/api/user-files?limit=200`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-                throw new Error(payload.error || 'Failed to load files');
-            }
-
-            this.userFilesCache = Array.isArray(payload.files) ? payload.files : [];
-            for (const file of this.userFilesCache) {
-                this._enqueueBackgroundDownload(file);
-            }
             this.renderUserFiles(this.userFilesCache);
-            if (showNotification) this.showNotification('Files refreshed', 'success');
+            this._notifyNetworkUnavailable(showNotification);
             return this.userFilesCache;
-        } catch (error) {
-            console.error('Error loading user files:', error);
-            if (this._isNetworkUnavailableError(error)) {
-                if (Array.isArray(this.userFilesCache) && this.userFilesCache.length > 0) {
-                    this.renderUserFiles(this.userFilesCache);
-                } else {
-                    this.renderUserFiles([]);
-                }
-                this._notifyNetworkUnavailable(showNotification);
-                return this.userFilesCache || [];
-            }
-            this.renderUserFiles([]);
-            if (showNotification) this.showNotification(error.message || 'Failed to load files', 'error');
-            return [];
-        } finally {
-            this.userFilesLoadPromise = null;
         }
+        if (!force && !showNotification && Date.now() - this.userFilesLoadedAt < 15000) {
+            this.renderUserFiles(this.userFilesCache);
+            return this.userFilesCache;
+        }
+        const version = ++this.userFilesVersion;
+        const signal = this.vaultAbortController.signal;
+        let loadPromise;
+        loadPromise = (async () => {
+            try {
+                const token = await this._getAccessToken();
+                if (!token || accountId !== this.userFilesAccountId) return [];
+                const response = await fetch(`${this.backendBaseUrl}/api/user-files?limit=200`, {
+                    headers: { 'Authorization': `Bearer ${token}` }, signal,
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Failed to load files');
+                if (accountId !== this.userFilesAccountId || version !== this.userFilesVersion) return [];
+                this.userFilesCache = Array.isArray(payload.files) ? payload.files : [];
+                this.userFilesStorage = payload.storage || null;
+                this.userFilesLoadedAt = Date.now();
+                this._renderVaultStorage();
+                for (const file of this.userFilesCache) this._enqueueBackgroundDownload(file);
+                this.renderUserFiles(this.userFilesCache);
+                if (showNotification) this.showNotification('Files refreshed', 'success');
+                return this.userFilesCache;
+            } catch (error) {
+                if (signal.aborted || accountId !== this.userFilesAccountId || version !== this.userFilesVersion) return [];
+                console.error('Error loading user files:', error);
+                this.renderUserFiles(this.userFilesCache);
+                if (showNotification) this.showNotification(error.message || 'Failed to load files', 'error');
+                return this.userFilesCache;
+            } finally {
+                if (this.userFilesLoadPromise === loadPromise) this.userFilesLoadPromise = null;
+            }
         })();
-
-        return this.userFilesLoadPromise;
+        this.userFilesLoadPromise = loadPromise;
+        return loadPromise;
     }
 
     async loadUsage(showNotification = false) {
@@ -2407,112 +2428,68 @@ class AIOS {
 
     async handleUserFilesUpload() {
         if (!this._ensureOnlineForAction('upload files')) return;
-        if (this.userFilesUploadInProgress) {
-            this.showNotification('Upload already in progress', 'info');
-            return;
-        }
-
+        if (this.userFilesUploadInProgress) return;
+        this.userFilesUploadInProgress = true;
+        const accountId = this.userFilesAccountId;
+        const signal = this.vaultAbortController.signal;
+        const uploadButton = document.getElementById('trigger-file-select-btn');
+        if (uploadButton) uploadButton.disabled = true;
+        let uploaded = 0;
         try {
-            const input = this.elements.userFilesUploadInput;
-            const selectedFiles = Array.from(input?.files || []);
-            const files = selectedFiles.filter((file) => {
-                const fingerprint = `${file.name}::${file.size}::${file.lastModified || 0}`;
-                if (this.userFilesUploadFingerprints.has(fingerprint)) return false;
-                this.userFilesUploadFingerprints.add(fingerprint);
-                return true;
-            });
-            if (!files.length) {
-                this.showNotification(selectedFiles.length ? 'Selected file(s) are already uploading' : 'Select one or more files first', 'error');
-                return;
-            }
-
+            const files = Array.from(this.elements.userFilesUploadInput?.files || []);
+            if (!files.length) return;
+            const oversized = files.find(file => file.size > 50_000_000);
+            if (oversized) throw new Error(`${oversized.name} exceeds the 50 MB file limit`);
             const token = await this._getAccessToken();
-            if (!token) {
-                this.showNotification('Please log in to upload files', 'error');
-                return;
-            }
-
+            if (accountId !== this.userFilesAccountId) return;
+            if (!token) throw new Error('Please log in to upload files');
             this.userFilesUploadInProgress = true;
-            if (this.elements.userFilesUploadBtn) {
-                this.elements.userFilesUploadBtn.disabled = true;
-                this.elements.userFilesUploadBtn.classList.add('is-loading');
-            }
-
+            this.elements.userFilesUploadBtn?.classList.add('is-loading');
+            if (this.elements.userFilesUploadBtn) this.elements.userFilesUploadBtn.disabled = true;
             for (const file of files) {
-                const contentBase64 = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        try {
-                            const dataUrl = String(reader.result || '');
-                            const b64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
-                            resolve(b64);
-                        } catch (err) {
-                            reject(err);
-                        }
-                    };
-                    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-                    reader.readAsDataURL(file);
+                const body = new FormData();
+                body.append('file', file, file.name);
+                const response = await fetch(`${this.backendBaseUrl}/api/user-files/upload`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body, signal,
                 });
-
-                const uploadRes = await fetch(`${this.backendBaseUrl}/api/user-files/upload`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        fileName: file.name,
-                        mimeType: file.type || 'application/octet-stream',
-                        sizeBytes: file.size || 0,
-                        contentBase64,
-                    }),
-                });
-                const uploadPayload = await uploadRes.json();
-                if (!uploadRes.ok || !uploadPayload.ok) {
-                    throw new Error(uploadPayload.error || `Failed to upload ${file.name}`);
-                }
-
-                const uploadedFileMeta = uploadPayload.file || {};
-                const localPath = this._getLocalFilePath({
-                    id: uploadedFileMeta.id,
-                    file_name: uploadedFileMeta.file_name || file.name,
-                });
+                const payload = await response.json();
+                if (accountId !== this.userFilesAccountId) return;
+                if (!response.ok || !payload.ok) throw new Error(payload.error || `Failed to upload ${file.name}`);
+                uploaded += 1;
+                const metadata = payload.file;
+                const localPath = this._getLocalFilePath(metadata);
                 if (localPath) {
                     try {
-                        const localBytes = new Uint8Array(await file.arrayBuffer());
-                        await window.electron.fs.promises.writeFile(localPath, localBytes);
-                        this._recordLocalFile(
-                            {
-                                id: uploadedFileMeta.id,
-                                file_name: uploadedFileMeta.file_name || file.name,
-                                mime_type: uploadedFileMeta.mime_type || file.type || 'application/octet-stream',
-                                size_bytes: uploadedFileMeta.size_bytes || file.size || 0,
-                            },
-                            localPath
-                        );
-                    } catch (localWriteError) {
-                        console.warn('Local cache write after upload failed:', localWriteError);
+                        const bytes = new Uint8Array(await file.arrayBuffer());
+                        if (accountId !== this.userFilesAccountId) return;
+                        await window.electron.fs.promises.writeFile(localPath, bytes);
+                        if (accountId !== this.userFilesAccountId) return;
+                        this._recordLocalFile(metadata, localPath);
+                    } catch (error) {
+                        console.warn('Could not cache the uploaded file:', error);
                     }
                 }
             }
-
-            this.showNotification(`Uploaded ${files.length} file(s)`, 'success');
-            if (this.elements.userFilesUploadInput) this.elements.userFilesUploadInput.value = '';
-            await this.loadUserFiles();
+            this.showNotification(`Uploaded ${uploaded} file(s)`, 'success');
         } catch (error) {
-            console.error('Error uploading user files:', error);
-            this.showNotification(error.message || 'Failed to upload files', 'error');
+            if (!signal.aborted && accountId === this.userFilesAccountId) {
+                this.showNotification(error.message || 'Failed to upload files', 'error');
+            }
         } finally {
-            this.userFilesUploadInProgress = false;
-            this.userFilesUploadFingerprints.clear();
-            if (this.elements.userFilesUploadBtn) {
-                this.elements.userFilesUploadBtn.disabled = false;
-                this.elements.userFilesUploadBtn.classList.remove('is-loading');
+            if (accountId === this.userFilesAccountId) {
+                this.userFilesUploadInProgress = false;
+                if (uploadButton) uploadButton.disabled = false;
+                this.elements.userFilesUploadBtn?.classList.remove('is-loading');
+                if (this.elements.userFilesUploadBtn) this.elements.userFilesUploadBtn.disabled = false;
+                if (this.elements.userFilesUploadInput) this.elements.userFilesUploadInput.value = '';
+                if (uploaded) await this.loadUserFiles(false, true);
             }
         }
     }
 
     async openUserFile(fileId) {
+        const accountId = this.userFilesAccountId;
+        const signal = this.vaultAbortController.signal;
         if (!fileId) return;
         try {
             const file = (this.userFilesCache || []).find((item) => String(item.id) === String(fileId));
@@ -2532,12 +2509,13 @@ class AIOS {
             }
 
             const token = await this._getAccessToken();
+            if (accountId !== this.userFilesAccountId) return;
             if (!token) {
                 this.showNotification('Please log in to open files', 'error');
                 return;
             }
             const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}/download`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` }, signal,
             });
             if (!response.ok) {
                 let message = 'Failed to open file';
@@ -2551,11 +2529,13 @@ class AIOS {
             }
 
             const arrayBuffer = await response.arrayBuffer();
+            if (accountId !== this.userFilesAccountId) return;
             const bytes = new Uint8Array(arrayBuffer);
             const resolved = file || { id: fileId, file_name: `file-${fileId}`, mime_type: 'application/octet-stream', size_bytes: bytes.length };
             const localPath = this._getLocalFilePath(resolved);
             if (localPath) {
                 await window.electron.fs.promises.writeFile(localPath, bytes);
+            if (accountId !== this.userFilesAccountId) return;
                 this._recordLocalFile(
                     {
                         id: resolved.id,
@@ -2579,30 +2559,41 @@ class AIOS {
 
             const blob = new Blob([bytes], { type: resolved.mime_type || 'application/octet-stream' });
             const blobUrl = URL.createObjectURL(blob);
-            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+            const download = document.createElement('a');
+            download.href = blobUrl;
+            download.download = resolved.file_name;
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60 * 1000);
         } catch (error) {
+            if (signal.aborted || accountId !== this.userFilesAccountId) return;
             console.error('Error opening file:', error);
             this.showNotification(error.message || 'Failed to open file', 'error');
         }
     }
 
     async deleteUserFile(fileId) {
+        const accountId = this.userFilesAccountId;
+        const signal = this.vaultAbortController.signal;
         if (!fileId) return;
         try {
             const token = await this._getAccessToken();
+            if (accountId !== this.userFilesAccountId) return;
             if (!token) {
                 this.showNotification('Please log in to delete files', 'error');
                 return;
             }
             const response = await fetch(`${this.backendBaseUrl}/api/user-files/${encodeURIComponent(fileId)}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` }, signal,
             });
             const payload = await response.json();
+            if (accountId !== this.userFilesAccountId) return;
             if (!response.ok || !payload.ok) {
                 throw new Error(payload.error || 'Failed to delete file');
             }
+            this.userFilesCache = this.userFilesCache.filter(file => String(file.id) !== String(fileId));
 
             const record = this.localFileManifest?.[String(fileId)];
             if (record?.local_path) {
@@ -2614,11 +2605,13 @@ class AIOS {
                     // no-op
                 }
             }
+            if (accountId !== this.userFilesAccountId) return;
             delete this.localFileManifest[String(fileId)];
             this._persistLocalFileManifest();
             this.showNotification('File deleted', 'success');
-            await this.loadUserFiles();
+            await this.loadUserFiles(false, true);
         } catch (error) {
+            if (signal.aborted || accountId !== this.userFilesAccountId) return;
             console.error('Error deleting file:', error);
             this.showNotification(error.message || 'Failed to delete file', 'error');
         }
@@ -2661,6 +2654,7 @@ class AIOS {
         }
 
         items.forEach((row) => {
+            const fileName = this._escapeHtml(this._safeText(row.file_name, 'Untitled'));
             const mimeType = this._safeText(row.mime_type, 'application/octet-stream');
             const primaryType = String(mimeType).split('/')[0] || 'file';
             const badgeClass = primaryType === 'image' ? 'status-active' : primaryType === 'text' ? 'status-draft' : '';
@@ -2702,7 +2696,7 @@ class AIOS {
                     <div style="padding: 12px; display: flex; align-items: center; justify-content: space-between; background: var(--elevated-bg);">
                         <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
                             <i class="fas fa-file" style="color: var(--text-secondary); font-size: 14px; flex-shrink: 0;"></i>
-                            <h4 style="margin: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this._safeText(row.file_name)}">${this._safeText(row.file_name, 'Untitled')}</h4>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${fileName}">${fileName}</h4>
                         </div>
                         <div style="display: flex; gap: 4px; flex-shrink: 0;">
                             <button class="icon-btn user-file-open-btn" data-file-id="${fileId}" style="padding: 4px; width: 26px; height: 26px; color: var(--text-secondary);" title="Open"><i class="fas fa-external-link-alt" style="font-size: 12px;"></i></button>
@@ -2720,7 +2714,7 @@ class AIOS {
                                     <i class="fas ${primaryType === 'image' ? 'fa-image' : 'fa-file-alt'}"></i>
                                 </div>
                                 <h4 style="margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                    ${this._safeText(row.file_name, 'Untitled')}
+                                    ${fileName}
                                     <span class="settings-badge ${badgeClass}" style="font-size: 9px; padding: 2px 6px;">${this._safeText(primaryType, 'file')}</span>
                                 </h4>
                             </div>
@@ -3725,6 +3719,7 @@ class AIOS {
 
     updateAuthUI() {
         const isAuthenticated = this.authService?.isAuthenticated() || false;
+        this._setVaultAccount(isAuthenticated ? this.authService.getCurrentUser()?.id : null);
         if (this.elements.accountLoggedIn && this.elements.accountLoggedOut) {
             this.elements.accountLoggedIn.classList.toggle('hidden', !isAuthenticated);
             this.elements.accountLoggedOut.classList.toggle('hidden', isAuthenticated);

@@ -110,10 +110,6 @@ COMPOSIO_ENABLE_YOUTUBE = os.getenv("COMPOSIO_ENABLE_YOUTUBE", "false").lower() 
 # --- Deploy Platform Configuration (AI app hosting) ---
 DEPLOY_DOMAIN = os.getenv("DEPLOY_DOMAIN")
 R2_SITES_BUCKET = os.getenv("R2_SITES_BUCKET")
-TURSO_API_TOKEN = os.getenv("TURSO_API_TOKEN")
-TURSO_ORG_SLUG = os.getenv("TURSO_ORG_SLUG")
-TURSO_GROUP = os.getenv("TURSO_GROUP")
-DEPLOY_SECRET_KEY = os.getenv("DEPLOY_SECRET_KEY")
 
 # --- Convex Usage Logging Configuration ---
 # Prefer backend-specific key, but support common frontend/public key names too.
@@ -125,6 +121,7 @@ CONVEX_URL = (
 CONVEX_ADMIN_KEY = os.getenv("CONVEX_ADMIN_KEY")
 CONVEX_USAGE_ENABLED = os.getenv("CONVEX_USAGE_ENABLED", "true").lower() == "true"
 USAGE_ADMIN_API_KEY = os.getenv("USAGE_ADMIN_API_KEY")
+USER_FILE_STORAGE_ROOT = os.getenv("USER_FILE_STORAGE_ROOT", "/data/vault")
 
 # --- Razorpay Subscription Configuration ---
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")

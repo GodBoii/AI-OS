@@ -5,6 +5,7 @@
   "author": "Aetheria ai aetheriaai1@gmail.com",
   "main": "js/main.js",
   "scripts": {
+    "test:vault": "vitest run convex/vault.test.ts && node --test js/tests/user-file-vault-browser.test.js",
     "start": "electron .",
     "build": "electron-builder",
     "test:computer-control": "node --test js/tests/computer-control-handler.test.js js/tests/computer-control-reliability.test.js js/tests/windows-accessibility-worker.test.js",
@@ -203,7 +204,10 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "convex-test": "^0.0.38",
     "electron": "^37.2.6",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }
