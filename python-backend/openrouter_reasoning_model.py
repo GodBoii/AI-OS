@@ -175,7 +175,7 @@ class OpenRouterReasoning(OpenRouter):
         return model_response
 
 
-def get_openrouter_model(model: str = "xiaomi/mimo-v2.5", **kwargs: Any) -> OpenRouterReasoning:
+def get_openrouter_model(model: str = "xiaomi/mimo-v2.6-pro", **kwargs: Any) -> OpenRouterReasoning:
     return OpenRouterReasoning(id=model, **kwargs)
 
 
