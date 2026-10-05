@@ -31,7 +31,7 @@ from plan_agent import stream_plan
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
-from model_routing import ModelRoutingError, normalize_thinking_mode, resolve_primary_model
+from model_routing import DEFAULT_MODEL_ID, ModelRoutingError, normalize_thinking_mode, resolve_primary_model
 from cache_manager import CacheManager
 from socket_security import can_access_conversation, safe_socket_message_metadata
 from utils import get_user_from_jwt
@@ -624,7 +624,7 @@ def on_plan_request(data: str):
             "requestId": request_id,
             "messageId": message_id,
             "conversationId": conversation_id,
-            "model": "mimo-v2.5-pro",
+            "model": DEFAULT_MODEL_ID,
         }
         for event in stream_plan(
             message=raw_message,
