@@ -2,7 +2,7 @@
 import logging
 from agno.agent import Agent
 from agno.models.google import Gemini
-from agno.models.groq import Groq
+from openrouter_reasoning_model import get_openrouter_model
 from supabase_client import supabase_client
 from extensions import socketio
 import uuid
@@ -33,7 +33,7 @@ def generate_and_save_title(conversation_id: str, user_id: str, first_message: s
         # Initialize a lightweight agent for this specific task
         # Using gemini-2.0-flash-exp as it is generally faster/cheaper, or fallback to what is used in the project
         agent = Agent(
-            model=Groq(id="openai/gpt-oss-20b"), 
+            model=get_openrouter_model("xiaomi/mimo-v2.6-pro"), 
             instructions=(
                 "You are a helpful assistant that generates a short, concise title (max 4 words) "
                 "for a conversation based on the user's first message. "
