@@ -10,7 +10,7 @@ const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH,
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     '/usr/bin/chromium', '/usr/bin/google-chrome'].find(file => file && fs.existsSync(file));
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVz0AAAAASUVORK5CYII=', 'base64');
+const png = fs.readFileSync(path.join(__dirname, 'fixtures/generated-image.png'));
 
 function excerpt(source, start, end) {
     const from = source.indexOf(start);
@@ -139,6 +139,12 @@ test('create_image displays tool results, socket media, saved previews, and down
         if (process.env.CREATE_IMAGE_SCREENSHOTS) {
             const destination = path.resolve(process.env.CREATE_IMAGE_SCREENSHOTS);
             fs.mkdirSync(destination, { recursive: true });
+            await page.evaluate(async base => {
+                document.querySelectorAll('.tool-log-entry, .artifact-notification').forEach(node => node.remove());
+                document.getElementById('preview').innerHTML = await buildToolPreviewMarkup({
+                    kind: 'generated_image_tool_output', media_url: `${base}/image.png`, filename: 'generated-image.png'
+                });
+            }, base);
             for (const width of [1440, 390]) {
                 await page.setViewport({ width, height: width === 390 ? 844 : 1000 });
                 await page.screenshot({ path: path.join(destination, `create-image-${width}.png`) });

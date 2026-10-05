@@ -94,7 +94,12 @@ class MediaTools(Toolkit):
                     "message": f"Image generated.\n\n```image\n{artifact_id}\n```",
                     "metadata": metadata,
                 }),
-                images=[Image(content=generated.content, mime_type=generated.mime_type, name=file_name)],
+                images=[Image(
+                    content=generated.content,
+                    mime_type=generated.mime_type,
+                    format=generated.mime_type.split("/", 1)[1],
+                    name=file_name,
+                )],
             )
         except ImageGenerationError as exc:
             return ToolResult(content=json.dumps({"ok": False, "error": str(exc)}))

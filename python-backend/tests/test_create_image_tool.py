@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 from agno.media import Image
 from agno.models.message import Message
-from agno.tools.function import ToolResult
+from agno.tools.function import FunctionCall, ToolResult
 from PIL import Image as PillowImage
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -104,6 +104,17 @@ def test_attached_image_is_forwarded_to_provider(toolkit, module, png):
     toolkit.create_image("make it blue", images=[Image(content=png)])
     reference = module.generate_openrouter_image.call_args.args[2]
     assert reference == "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+def test_agno_injects_media_during_actual_tool_call(toolkit, module, png):
+    function = toolkit.functions["create_image"]
+    function.process_entrypoint()
+    function._images = [Image(content=png)]
+    call = FunctionCall(function=function, arguments={"text": "make it blue"})
+    call.execute()
+    assert isinstance(call.result, ToolResult)
+    assert call.result.images[0].content == png
+    assert module.generate_openrouter_image.call_args.args[2].startswith("data:image/png;base64,")
 
 
 def test_explicit_reference_selects_image_among_attachments(toolkit, module, png):
