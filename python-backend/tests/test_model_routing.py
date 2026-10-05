@@ -48,7 +48,7 @@ def test_video_promotes_conversation_to_sticky_glm_video_route():
     )
 
     assert selection.model_id == VIDEO_MODEL_ID
-    assert selection.model_id == "z-ai/glm-5.3-flash"
+    assert selection.model_id == "xiaomi/mimo-v2.6-pro"
     assert selection.sticky_route == VIDEO_ROUTE
 
     later_selection = resolve_primary_model(
