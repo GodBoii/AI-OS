@@ -17,20 +17,25 @@ const chokidar = require('chokidar');
 const linuxDesktop = require('./linux-desktop');
 const macosDesktop = require('./macos-desktop');
 const { SystemStatus } = require('./system-status');
+const windowsAccessibility = require('./windows-accessibility');
+const { WindowsAccessibilityWorker } = require('./windows-accessibility-worker');
+const { getTypingSpeed, typeWithSpeed, pasteWithClipboard } = require('./typing-input');
+const { unicodeTypingScript } = require('./windows-keyboard');
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // Capabilities that need extra OS support outside Windows.
-const INPUT_ACTIONS = new Set(['move_mouse', 'click_mouse', 'type_text', 'press_hotkey', 'scroll', 'drag_drop']);
+const INPUT_ACTIONS = new Set(['move_mouse', 'click_mouse', 'type_text', 'press_hotkey', 'scroll', 'drag_drop', 'perform_element_action']);
 const WINDOW_ACTIONS = new Set(['list_windows', 'focus_window', 'resize_window', 'minimize_window', 'maximize_window', 'close_window']);
-const SCREEN_CAPTURE_ACTIONS = new Set(['take_screenshot', 'ocr_screen']);
+const SCREEN_CAPTURE_ACTIONS = new Set(['take_screenshot', 'ocr_screen', 'get_window_state', 'get_screen_elements', 'find_element_by_text']);
 
 class ComputerControlHandler {
-    constructor(eventEmitter, appDataPath, getAuthTokenFunc) {
+    constructor(eventEmitter, appDataPath, getAuthTokenFunc, settings = null) {
         this.eventEmitter = eventEmitter;
         this.appDataPath = appDataPath;
         this.getAuthToken = getAuthTokenFunc;
+        this.settings = settings;
         this.isEnabled = false;
         this.permissionSource = null;
         this.allowedScopes = [];
@@ -43,6 +48,15 @@ class ComputerControlHandler {
         this.systemLocked = false;
         // Each macOS privacy prompt / settings pane is shown once per session.
         this._macPermissionPrompted = new Set();
+        this._commandQueue = Promise.resolve();
+        this._pendingCommands = new Map();
+        this._completedResults = new Map();
+        this._completedResultSizes = new Map();
+        this._completedResultBytes = 0;
+        this._observations = new Map();
+        this._screenshots = new Map();
+        this._ocrWorkerPromise = null;
+        this._accessibilityWorker = null;
         
         console.log(`ComputerControlHandler: Initialized for platform: ${this.platform}`);
     }
@@ -79,7 +93,8 @@ class ComputerControlHandler {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    timeout: 15000
                 }
             );
 
@@ -91,7 +106,8 @@ class ComputerControlHandler {
 
             // Upload to Supabase using signed URL
             await axios.put(signedURL, imageBuffer, {
-                headers: { 'Content-Type': 'image/png' }
+                headers: { 'Content-Type': 'image/png' },
+                timeout: 15000
             });
 
             console.log(`ComputerControlHandler: Screenshot successfully uploaded to Supabase path: ${path}`);
@@ -105,6 +121,37 @@ class ComputerControlHandler {
     }
 
     async handleCommand(commandPayload) {
+        if (!commandPayload || typeof commandPayload.action !== 'string' || typeof commandPayload.request_id !== 'string') {
+            this._emitResult(commandPayload?.request_id, { status: 'error', error: 'action and request_id are required strings' });
+            return;
+        }
+        const id = commandPayload.request_id;
+        if (this._completedResults.has(id)) {
+            this._emitResult(id, this._completedResults.get(id));
+            return;
+        }
+        if (this._pendingCommands.has(id)) {
+            const result = await this._pendingCommands.get(id);
+            this._emitResult(id, result);
+            return;
+        }
+        const job = this._commandQueue.then(async () => {
+            let result;
+            const capture = response => { if (response.request_id === id) result = response.result; };
+            this.eventEmitter.on('computer-command-result', capture);
+            try {
+                await this._executeCommand(commandPayload);
+                return result;
+            } finally {
+                this.eventEmitter.off('computer-command-result', capture);
+            }
+        });
+        this._pendingCommands.set(id, job);
+        this._commandQueue = job.catch(() => {});
+        try { await job; } finally { this._pendingCommands.delete(id); }
+    }
+
+    async _executeCommand(commandPayload) {
         const { action, request_id } = commandPayload;
         console.log(`ComputerControlHandler: Processing '${action}' with request_id: ${request_id}`);
 
@@ -117,11 +164,27 @@ class ComputerControlHandler {
         }
 
         try {
+            if (commandPayload.expires_at_ms !== undefined &&
+                (!Number.isFinite(commandPayload.expires_at_ms) || Date.now() >= commandPayload.expires_at_ms)) {
+                this._emitResult(request_id, { status: 'error', error: 'Command expired before execution. No action was taken.', outcome: 'not_executed' });
+                return;
+            }
             const platformBlocker = this._getPlatformBlocker(action);
             if (platformBlocker) {
                 this._emitResult(request_id, { status: 'error', error: platformBlocker });
                 return;
             }
+
+            if (INPUT_ACTIONS.has(action) && action !== 'perform_element_action' && commandPayload.window_id !== undefined) {
+                await this._prepareInputWindow(commandPayload.window_id);
+            }
+            if (INPUT_ACTIONS.has(action) && commandPayload.screenshot_id) {
+                commandPayload = await this._mapScreenshotInput(commandPayload);
+            }
+            if ((INPUT_ACTIONS.has(action) && action !== 'perform_element_action') || (WINDOW_ACTIONS.has(action) && action !== 'list_windows')) {
+                this._observations.clear();
+            }
+            if (INPUT_ACTIONS.has(action) || (WINDOW_ACTIONS.has(action) && action !== 'list_windows')) this._screenshots.clear();
 
             let result;
 
@@ -135,7 +198,21 @@ class ComputerControlHandler {
                         scopes: [...this.allowedScopes],
                         default_scope: this.defaultScope,
                         platform: this.platform,
-                        screen_size: screen.getPrimaryDisplay().size
+                        screen_size: screen.getPrimaryDisplay().size,
+                        locked: this.systemLocked,
+                        capabilities: {
+                            accessibility: this.platform === 'win32',
+                            accessibility_actions: this.platform === 'win32',
+                            window_targeting: true,
+                            screenshot_mapping: true,
+                            horizontal_scroll: true,
+                            capture_source: 'visible_desktop',
+                            window_capture_requires_foreground: true,
+                        },
+                        displays: screen.getAllDisplays().map(display => ({
+                            id: String(display.id), bounds: display.bounds, scale_factor: display.scaleFactor,
+                            coordinate_space: 'screen_logical',
+                        }))
                     };
                     break;
 
@@ -278,6 +355,14 @@ class ComputerControlHandler {
                     result = await this._findElementByText(commandPayload);
                     break;
 
+                case 'get_window_state':
+                    result = await this._getWindowState(commandPayload);
+                    break;
+
+                case 'perform_element_action':
+                    result = await this._performElementAction(commandPayload);
+                    break;
+
                 case 'watch_directory':
                     result = await this._watchDirectory(commandPayload);
                     break;
@@ -408,7 +493,12 @@ class ComputerControlHandler {
      * watching, and on some systems it would act on the lock screen itself.
      */
     setSystemLocked(locked) {
-        this.systemLocked = Boolean(locked);
+        const next = Boolean(locked);
+        if (this.systemLocked !== next) {
+            this._observations.clear();
+            this._screenshots.clear();
+        }
+        this.systemLocked = next;
     }
 
     // ===== PLATFORM READINESS =====
@@ -462,6 +552,8 @@ class ComputerControlHandler {
         if (!this._nutModule) {
             try {
                 this._nutModule = require('@nut-tree-fork/nut-js');
+                this._nutModule.keyboard.config.autoDelayMs = 0;
+                this._nutModule.mouse.config.autoDelayMs = 0;
             } catch (error) {
                 const hint = this.platform === 'linux'
                     ? ' On Linux this usually means libxtst is missing (for example: sudo apt install libxtst6).'
@@ -837,26 +929,28 @@ class ComputerControlHandler {
     }
 
     async _takeScreenshot(commandPayload) {
-        const sources = await desktopCapturer.getSources({
-            types: ['screen'],
-            thumbnailSize: screen.getPrimaryDisplay().size
-        });
-
-        if (sources.length === 0) {
-            return { status: 'error', error: 'No screen sources available' };
-        }
-
-        const screenshot = sources[0].thumbnail.toPNG();
+        const capture = await this._captureScreen(commandPayload);
+        const screenshot = capture.image.toPNG();
         const screenshotBase64 = screenshot.toString('base64');
         const localSave = await this._saveComputerOutputBuffer(screenshot, commandPayload, `screenshot-${Date.now()}.png`);
         
         const screenshotPath = await this._uploadScreenshot(screenshotBase64);
+        const screenshotId = crypto.randomUUID();
+        this._screenshots.set(screenshotId, { ...capture, image: undefined, created: Date.now() });
+        if (this._screenshots.size > 16) this._screenshots.delete(this._screenshots.keys().next().value);
 
         return {
             status: 'success',
             screenshot_path: screenshotPath,
-            width: sources[0].thumbnail.getSize().width,
-            height: sources[0].thumbnail.getSize().height,
+            ...(screenshotPath ? {} : { screenshot_base64: screenshotBase64 }),
+            screenshot_id: screenshotId,
+            width: capture.width,
+            height: capture.height,
+            coordinate_space: capture.coordinateSpace,
+            image_origin: capture.origin,
+            display_id: capture.displayId,
+            window_id: capture.windowId,
+            capture_source: 'visible_desktop',
             metadata: {
                 kind: 'computer_tool_output',
                 output_id: localSave.outputId,
@@ -876,8 +970,8 @@ class ComputerControlHandler {
                 isText: false,
                 inline_safe: true,
                 inline: {
-                    width: sources[0].thumbnail.getSize().width,
-                    height: sources[0].thumbnail.getSize().height
+                    width: capture.width,
+                    height: capture.height
                 }
             }
         };
@@ -892,6 +986,7 @@ class ComputerControlHandler {
 
             return {
                 status: 'success',
+                id: window.id,
                 title: window.title,
                 owner: window.owner.name,
                 bounds: window.bounds,
@@ -903,11 +998,13 @@ class ComputerControlHandler {
     }
 
     async _getCursorPosition() {
-        const point = screen.getCursorScreenPoint();
+        const dipPoint = screen.getCursorScreenPoint();
+        const point = this.platform === 'win32' ? screen.dipToScreenPoint(dipPoint) : dipPoint;
         return {
             status: 'success',
             x: point.x,
-            y: point.y
+            y: point.y,
+            coordinate_space: this.platform === 'win32' ? 'screen_physical' : 'screen_logical'
         };
     }
 
@@ -924,35 +1021,106 @@ class ComputerControlHandler {
     }
 
     async _ocrScreen(commandPayload) {
-        const Tesseract = require('tesseract.js');
-        
-        // Take screenshot first
-        const screenshotResult = await this._takeScreenshot({});
-        if (screenshotResult.status !== 'success') {
-            return screenshotResult;
+        const capture = await this._captureScreen(commandPayload);
+        if (!this._ocrWorkerPromise) {
+            this._ocrWorkerPromise = (async () => {
+                const cachePath = path.join(this.appDataPath, 'ocr-cache');
+                await fs.mkdir(cachePath, { recursive: true });
+                return require('tesseract.js').createWorker('eng', undefined, { cachePath });
+            })().catch(error => {
+                this._ocrWorkerPromise = null;
+                throw error;
+            });
         }
+        const worker = await this._ocrWorkerPromise;
+        await worker.setParameters({ tessedit_pageseg_mode: require('tesseract.js').PSM.SPARSE_TEXT });
+        const png = capture.image.toPNG();
+        const localCapture = await this._saveComputerOutputBuffer(png, commandPayload, 'ocr-capture.png');
+        const { data } = await worker.recognize(png, {}, { text: true, blocks: true });
+        const words = (data.blocks || []).flatMap(block => block.paragraphs || [])
+            .flatMap(paragraph => paragraph.lines || []).flatMap(line => line.words || []).slice(0, 1000)
+            .map(word => ({ text: word.text, confidence: word.confidence,
+                x: Math.round(capture.origin.x + (word.bbox.x0 + word.bbox.x1) / 2),
+                y: Math.round(capture.origin.y + (word.bbox.y0 + word.bbox.y1) / 2),
+                bounds: word.bbox }));
+        return { status: 'success', text: data.text, confidence: data.confidence,
+            words, capture_relative_path: localCapture.relativePath,
+            coordinate_space: capture.coordinateSpace, image_origin: capture.origin, window_id: capture.windowId };
+    }
 
-        // Get screenshot from Supabase
-        const { createClient } = require('@supabase/supabase-js');
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_ANON_KEY
-        );
+    async _physicalWindowBounds(window) {
+        if (this.platform !== 'win32') return window.getBounds();
+        // GetWindowRect in the Electron addon can return DPI-virtualized values.
+        // UIA returns physical pixels, matching nut-js input and the captured image.
+        const { stdout } = await this._runAccessibilityScript(windowsAccessibility.buildScript({ windowId: Number(window.id), limit: 1 }));
+        const result = JSON.parse(stdout);
+        if (result.status !== 'success' || !result.bounds) throw new Error(result.error || 'Window bounds unavailable');
+        return Object.fromEntries(Object.entries(result.bounds).map(([key, value]) => [key, Math.round(value)]));
+    }
 
-        const { data: imageData } = await supabase.storage
-            .from('media-uploads')
-            .download(screenshotResult.screenshot_path);
+    async _captureScreen(commandPayload) {
+        let window = null;
+        let windowBounds = null;
+        if (commandPayload.window_id !== undefined) {
+            window = await this._prepareInputWindow(commandPayload.window_id);
+            windowBounds = await this._physicalWindowBounds(window);
+        }
+        const displays = screen.getAllDisplays();
+        let display;
+        if (commandPayload.display_id !== undefined) {
+            display = displays.find(item => String(item.id) === String(commandPayload.display_id));
+            if (!display) throw new Error('Requested display not found');
+        } else if (windowBounds) {
+            const physicalCenter = { x: Math.round(windowBounds.x + windowBounds.width / 2), y: Math.round(windowBounds.y + windowBounds.height / 2) };
+            const center = this.platform === 'win32' ? screen.screenToDipPoint(physicalCenter) : physicalCenter;
+            display = screen.getDisplayNearestPoint(center);
+        } else {
+            display = screen.getPrimaryDisplay();
+        }
+        const bounds = this.platform === 'win32' ? screen.dipToScreenRect(null, display.bounds) : display.bounds;
+        const sources = await desktopCapturer.getSources({ types: ['screen'],
+            thumbnailSize: { width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor) } });
+        const source = sources.find(item => String(item.display_id) === String(display.id));
+        if (!source || source.thumbnail.isEmpty()) throw new Error('Requested display has no screen capture source');
+        // Normalize image pixels to the input coordinate system, including Retina displays.
+        let image = source.thumbnail.resize({ width: bounds.width, height: bounds.height });
+        let origin = { x: bounds.x, y: bounds.y };
+        if (windowBounds) {
+            const rect = { x: windowBounds.x - bounds.x, y: windowBounds.y - bounds.y, width: windowBounds.width, height: windowBounds.height };
+            if (rect.x < 0 || rect.y < 0 || rect.x + rect.width > bounds.width || rect.y + rect.height > bounds.height) {
+                throw new Error('Window extends outside the selected display. Move it onto one display before capturing.');
+            }
+            image = image.crop(rect);
+            origin = { x: windowBounds.x, y: windowBounds.y };
+        }
+        const size = image.getSize();
+        return { image, width: size.width, height: size.height, origin, displayId: display.id,
+            windowId: window ? Number(window.id) : null, windowBounds,
+            coordinateSpace: this.platform === 'win32' ? 'screen_physical' : 'screen_logical' };
+    }
 
-        const buffer = Buffer.from(await imageData.arrayBuffer());
-
-        // Run OCR
-        const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
-
-        return {
-            status: 'success',
-            text: text,
-            screenshot_path: screenshotResult.screenshot_path
-        };
+    async _mapScreenshotInput(payload) {
+        const snapshot = this._screenshots.get(payload.screenshot_id);
+        if (!snapshot || Date.now() - snapshot.created > 30000) throw new Error('Screenshot expired or invalidated. Capture again.');
+        if (snapshot.windowId !== null) {
+            if (payload.window_id !== snapshot.windowId) throw new Error('Supply the screenshot target window_id');
+            const window = await this._findManagedWindow(snapshot.windowId);
+            const bounds = window && await this._physicalWindowBounds(window);
+            if (!bounds || ['x', 'y', 'width', 'height'].some(key => bounds[key] !== snapshot.windowBounds[key])) {
+                throw new Error('Window moved or resized since the screenshot. Capture again.');
+            }
+        }
+        const mapped = { ...payload };
+        for (const [xKey, yKey] of [['x', 'y'], ['from_x', 'from_y'], ['to_x', 'to_y']]) {
+            if (payload[xKey] === undefined && payload[yKey] === undefined) continue;
+            this._validatePoint(payload[xKey], payload[yKey]);
+            if (payload[xKey] < 0 || payload[yKey] < 0 || payload[xKey] >= snapshot.width || payload[yKey] >= snapshot.height) {
+                throw new Error('Point is outside the screenshot');
+            }
+            mapped[xKey] += snapshot.origin.x;
+            mapped[yKey] += snapshot.origin.y;
+        }
+        return mapped;
     }
 
     // ===== INTERACTION METHODS (Humanized Physics) =====
@@ -1009,16 +1177,9 @@ class ComputerControlHandler {
         return new Promise(resolve => setTimeout(resolve, min + Math.random() * (max - min)));
     }
 
-    /**
-     * Apply a small random offset to a target coordinate (±pixels).
-     * Simulates human targeting tolerance.
-     */
-    _applyClickOffset(value, maxOffset = 3) {
-        return value + Math.round((Math.random() - 0.5) * 2 * maxOffset);
-    }
-
     async _moveMouse(commandPayload) {
         const { x, y, smooth } = commandPayload;
+        this._validatePoint(x, y);
         const { mouse, Point } = this._nut();
 
         if (smooth) {
@@ -1050,195 +1211,156 @@ class ComputerControlHandler {
         };
     }
 
+    _validatePoint(x, y) {
+        if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) throw new Error('Coordinates must be finite integer pixels');
+    }
+
+    async _prepareInputWindow(windowId) {
+        if (!Number.isSafeInteger(windowId) || windowId <= 0) throw new Error('Invalid window_id');
+        const target = await this._findManagedWindow(windowId);
+        if (!target) throw new Error('Target window is no longer available');
+        if (this.platform === 'win32' && Number(windowManager.getActiveWindow()?.id) === windowId) return target;
+        await target.bringToTop();
+        const deadline = Date.now() + 1000;
+        let foregroundId;
+        do {
+            const current = this.platform === 'win32' ? windowManager.getActiveWindow() : await activeWindow();
+            foregroundId = current?.id;
+            if (Number(current?.id) === windowId) return target;
+            await new Promise(resolve => setTimeout(resolve, 25));
+        } while (Date.now() < deadline);
+        if (this.platform === 'win32') {
+            // Some apps reject the addon's foreground request. Ask their UIA provider
+            // to focus the window, then verify the actual foreground HWND again.
+            try { await this._runAccessibilityScript(`
+Add-Type -AssemblyName UIAutomationClient
+$root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]${windowId})
+$root.SetFocus()
+`, { timeout: 3000 }); } catch { /* Keep the foreground check as the final authority. */ }
+            if (Number(windowManager.getActiveWindow()?.id) === windowId) return target;
+        }
+        throw new Error(`Target window ${windowId} could not receive focus. Foreground window is ${foregroundId ?? 'unknown'}. Input was not sent.`);
+    }
+
     async _clickMouse(commandPayload) {
         const { button = 'left', double = false, x, y } = commandPayload;
+        if (!['left', 'right', 'middle'].includes(button)) throw new Error('Invalid mouse button');
+        if (typeof double !== 'boolean') throw new Error('double must be boolean');
+        if ((x === undefined) !== (y === undefined)) throw new Error('Provide both x and y');
+        if (x !== undefined) this._validatePoint(x, y);
         const { mouse, Point, Button } = this._nut();
-
-        if (x !== undefined && y !== undefined) {
-            // Apply minor random offset to target (±3px human targeting tolerance)
-            const offsetX = this._applyClickOffset(x, 3);
-            const offsetY = this._applyClickOffset(y, 3);
-
-            // Use Bezier movement to reach the click target
-            const currentPos = await mouse.getPosition();
-            const start = { x: currentPos.x, y: currentPos.y };
-            const end = { x: offsetX, y: offsetY };
-            const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
-            const pointsCount = Math.max(10, Math.min(40, Math.round(distance / 20)));
-            const bezierPath = this._generateBezierPath(start, end, pointsCount);
-
-            for (let i = 1; i < bezierPath.length; i++) {
-                await mouse.setPosition(new Point(bezierPath[i].x, bezierPath[i].y));
-                await this._randomDelay(2, 6);
+        if (x !== undefined) await mouse.setPosition(new Point(x, y));
+        const mouseButton = { left: Button.LEFT, right: Button.RIGHT, middle: Button.MIDDLE }[button];
+        for (let i = 0; i < (double ? 2 : 1); i++) {
+            try {
+                await mouse.pressButton(mouseButton);
+            } finally {
+                await mouse.releaseButton(mouseButton);
             }
+            if (double && i === 0) await new Promise(resolve => setTimeout(resolve, 75));
         }
-
-        const mouseButton = button === 'right' ? Button.RIGHT :
-                           button === 'middle' ? Button.MIDDLE : Button.LEFT;
-
-        // Humanized click: press, hold for 50-150ms, then release
-        if (double) {
-            await mouse.pressButton(mouseButton);
-            await this._randomDelay(50, 120);
-            await mouse.releaseButton(mouseButton);
-            await this._randomDelay(80, 160); // Inter-click delay for double-click
-            await mouse.pressButton(mouseButton);
-            await this._randomDelay(50, 120);
-            await mouse.releaseButton(mouseButton);
-        } else {
-            await mouse.pressButton(mouseButton);
-            await this._randomDelay(50, 150);
-            await mouse.releaseButton(mouseButton);
-        }
-
-        return {
-            status: 'success',
-            message: `${button} mouse ${double ? 'double-' : ''}clicked`
-        };
+        return { status: 'success', input_sent: true, message: `${button} mouse ${double ? 'double-' : ''}clicked` };
     }
 
     async _typeText(commandPayload) {
         const { text } = commandPayload;
-        const { keyboard } = this._nut();
+        if (typeof text !== 'string' || text.length > 100000) throw new Error('text must be a string of at most 100000 characters');
+        const speed = getTypingSpeed(this.settings);
+        await typeWithSpeed(text, speed, {
+            typeCharacter: character => this._typeCharacter(character, commandPayload.window_id),
+            insertText: value => this._pasteText(value),
+        });
+        return { status: 'success', input_sent: true, typing_speed: speed, characters: [...text].length,
+            message: 'Text input sent. Observe the target to verify its value.' };
+    }
 
-        // Humanized typing: variable inter-key delay (40ms-180ms per character)
-        for (let i = 0; i < text.length; i++) {
-            await keyboard.type(text[i]);
-            // Variable delay: faster for common letter sequences, slower for shifts
-            const baseDelay = 40;
-            const variance = 140; // max additional delay
-            const delay = baseDelay + Math.random() * variance;
-            await new Promise(resolve => setTimeout(resolve, delay));
+    async _pasteText(text) {
+        await pasteWithClipboard(text, { clipboard,
+            pressPaste: () => this._pressHotkey({ keys: [this.platform === 'darwin' ? 'cmd' : 'ctrl', 'v'] }),
+        });
+    }
+
+    async _typeCharacter(character, windowId) {
+        if (this.systemLocked || !this.isEnabled) throw new Error('Computer input stopped because control is unavailable.');
+        if (this.platform === 'win32' && windowId !== undefined && Number(windowManager.getActiveWindow()?.id) !== windowId) {
+            throw new Error('Target lost focus while typing. Input stopped. Observe before retrying.');
         }
-
-        return {
-            status: 'success',
-            message: `Typed: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`
-        };
+        // Paste control characters literally. Enter can submit a chat message.
+        if (character === '\n' || character === '\r' || character === '\t') {
+            await this._pasteText(character);
+            return;
+        }
+        if (this.platform === 'win32') {
+            await this._runAccessibilityScript(unicodeTypingScript(character));
+        } else {
+            await this._nut().keyboard.type(character);
+        }
     }
 
     async _pressHotkey(commandPayload) {
         const { keys } = commandPayload;
+        if (!Array.isArray(keys) || keys.length < 1 || keys.length > 8 || keys.some(k => typeof k !== 'string')) {
+            throw new Error('keys must contain between one and eight key names');
+        }
         const { keyboard, Key } = this._nut();
-        
-        // Map string keys to nut.js Key enum
-        const keyMap = {
-            'ctrl': Key.LeftControl,
-            'control': Key.LeftControl,
-            'alt': Key.LeftAlt,
-            'shift': Key.LeftShift,
-            'cmd': Key.LeftCmd,
-            'super': Key.LeftSuper,
-            'win': Key.LeftWin,
-            'enter': Key.Enter,
-            'tab': Key.Tab,
-            'escape': Key.Escape,
-            'space': Key.Space,
-            'backspace': Key.Backspace,
-            'delete': Key.Delete,
-            'up': Key.Up,
-            'down': Key.Down,
-            'left': Key.Left,
-            'right': Key.Right,
-            'home': Key.Home,
-            'end': Key.End,
-            'pageup': Key.PageUp,
-            'pagedown': Key.PageDown,
-            'f1': Key.F1, 'f2': Key.F2, 'f3': Key.F3, 'f4': Key.F4,
-            'f5': Key.F5, 'f6': Key.F6, 'f7': Key.F7, 'f8': Key.F8,
-            'f9': Key.F9, 'f10': Key.F10, 'f11': Key.F11, 'f12': Key.F12
+        const aliases = {
+            ctrl: 'LeftControl', control: 'LeftControl', control_l: 'LeftControl',
+            alt: 'LeftAlt', alt_l: 'LeftAlt', shift: 'LeftShift', shift_l: 'LeftShift',
+            cmd: 'LeftCmd', command: 'LeftCmd', super: 'LeftSuper', win: 'LeftWin',
+            return: 'Enter', enter: 'Enter', esc: 'Escape', escape: 'Escape',
+            space: 'Space', pageup: 'PageUp', pagedown: 'PageDown',
+            '+': 'Add', '-': 'Minus', '.': 'Period', ',': 'Comma', '/': 'Slash',
         };
-
-        const nutKeys = keys.map(k => {
-            const lower = k.toLowerCase();
-            if (keyMap[lower]) return keyMap[lower];
-            // Single character keys
-            return Key[k.toUpperCase()] || k;
+        const names = new Map(Object.keys(Key).filter(k => Number.isNaN(Number(k))).map(k => [k.toLowerCase(), k]));
+        const nutKeys = keys.map(key => {
+            const lower = key.toLowerCase();
+            const name = aliases[lower] || (/^[0-9]$/.test(key) ? `Num${key}` :
+                /^kp_[0-9]$/.test(lower) ? `NumPad${lower.slice(-1)}` : names.get(lower));
+            if (!name || typeof Key[name] !== 'number') throw new Error(`Unknown key: ${key}`);
+            return Key[name];
         });
-
-        // Humanized key chord: slight delay (10-30ms) between pressing each modifier
-        for (let i = 0; i < nutKeys.length; i++) {
-            await keyboard.pressKey(nutKeys[i]);
-            if (i < nutKeys.length - 1) {
-                await this._randomDelay(10, 30);
-            }
+        // Validate the entire chord before pressing anything; always release on failure.
+        try {
+            await keyboard.pressKey(...nutKeys);
+        } finally {
+            await keyboard.releaseKey(...[...nutKeys].reverse());
         }
-        // Brief hold at the end
-        await this._randomDelay(30, 80);
-        // Release in reverse order (natural human behavior)
-        for (let i = nutKeys.length - 1; i >= 0; i--) {
-            await keyboard.releaseKey(nutKeys[i]);
-            if (i > 0) {
-                await this._randomDelay(5, 15);
-            }
-        }
-
-        return {
-            status: 'success',
-            message: `Pressed hotkey: ${keys.join('+')}`
-        };
+        return { status: 'success', input_sent: true, message: `Pressed hotkey: ${keys.join('+')}` };
     }
 
     async _scroll(commandPayload) {
-        const { direction, amount = 3 } = commandPayload;
-        const { mouse } = this._nut();
-        
-        // Humanized scrolling: variable delays between scroll ticks
-        for (let i = 0; i < amount; i++) {
-            if (direction === 'down') {
-                await mouse.scrollDown(1);
-            } else {
-                await mouse.scrollUp(1);
-            }
-            // Variable delay between scroll steps (humans don't scroll at constant speed)
-            await this._randomDelay(30, 100);
-        }
-
-        return {
-            status: 'success',
-            message: `Scrolled ${direction} by ${amount}`
-        };
+        const { direction, amount = 3, x, y } = commandPayload;
+        const methods = { down: 'scrollDown', up: 'scrollUp', left: 'scrollLeft', right: 'scrollRight' };
+        if (!methods[direction]) throw new Error('Invalid scroll direction');
+        if (!Number.isInteger(amount) || amount < 1 || amount > 1000) throw new Error('amount must be between 1 and 1000');
+        if ((x === undefined) !== (y === undefined)) throw new Error('Provide both x and y');
+        if (x !== undefined) this._validatePoint(x, y);
+        const { mouse, Point } = this._nut();
+        if (x !== undefined) await mouse.setPosition(new Point(x, y));
+        await mouse[methods[direction]](amount);
+        return { status: 'success', input_sent: true, message: `Scrolled ${direction} by ${amount}` };
     }
 
     async _dragDrop(commandPayload) {
         const { from_x, from_y, to_x, to_y } = commandPayload;
+        this._validatePoint(from_x, from_y);
+        this._validatePoint(to_x, to_y);
         const { mouse, Point, Button } = this._nut();
-
-        // Move to start with Bezier curve
-        const currentPos = await mouse.getPosition();
-        const startPath = this._generateBezierPath(
-            { x: currentPos.x, y: currentPos.y },
-            { x: from_x, y: from_y },
-            15
-        );
-        for (let i = 1; i < startPath.length; i++) {
-            await mouse.setPosition(new Point(startPath[i].x, startPath[i].y));
-            await this._randomDelay(3, 7);
+        await mouse.setPosition(new Point(from_x, from_y));
+        try {
+            await mouse.pressButton(Button.LEFT);
+            // Cross drag thresholds in a straight line with deterministic timing.
+            for (let step = 1; step <= 20; step++) {
+                await mouse.setPosition(new Point(
+                    Math.round(from_x + (to_x - from_x) * step / 20),
+                    Math.round(from_y + (to_y - from_y) * step / 20)
+                ));
+                await new Promise(resolve => setTimeout(resolve, 8));
+            }
+        } finally {
+            await mouse.releaseButton(Button.LEFT);
         }
-
-        // Press and hold
-        await mouse.pressButton(Button.LEFT);
-        await this._randomDelay(80, 150);
-
-        // Drag along Bezier curve to destination
-        const dragPath = this._generateBezierPath(
-            { x: from_x, y: from_y },
-            { x: to_x, y: to_y },
-            25
-        );
-        for (let i = 1; i < dragPath.length; i++) {
-            await mouse.setPosition(new Point(dragPath[i].x, dragPath[i].y));
-            await this._randomDelay(5, 12);
-        }
-
-        // Brief pause before release (human hesitation at target)
-        await this._randomDelay(50, 120);
-        await mouse.releaseButton(Button.LEFT);
-
-        return {
-            status: 'success',
-            message: `Dragged from (${from_x}, ${from_y}) to (${to_x}, ${to_y})`
-        };
+        return { status: 'success', input_sent: true, message: `Dragged from (${from_x}, ${from_y}) to (${to_x}, ${to_y})` };
     }
 
     // ===== WINDOW MANAGEMENT METHODS =====
@@ -1260,18 +1382,30 @@ class ComputerControlHandler {
         const powershellExecutable = process.env.SystemRoot
             ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
             : 'powershell.exe';
-        const encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+        const utf8Script = "$ProgressPreference = 'SilentlyContinue'\n$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)\n" + script;
+        const encodedCommand = Buffer.from(utf8Script, 'utf16le').toString('base64');
 
-        return execFileAsync(
-            powershellExecutable,
-            ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand],
-            {
-                timeout: 15000,
-                windowsHide: true,
-                maxBuffer: 10 * 1024 * 1024,
-                ...options
-            }
-        );
+        try {
+            return await execFileAsync(
+                powershellExecutable,
+                ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand],
+                {
+                    timeout: 15000,
+                    windowsHide: true,
+                    maxBuffer: 10 * 1024 * 1024,
+                    ...options
+                }
+            );
+        } catch (error) {
+            const detail = error.killed ? 'timed out' : `failed with code ${error.code ?? 'unknown'}`;
+            // child_process error.message contains the complete encoded script, including input text.
+            throw new Error(`Windows helper ${detail}. ${String(error.stderr || '').slice(0, 1000)}`);
+        }
+    }
+
+    async _runAccessibilityScript(script, options = {}) {
+        if (!this._accessibilityWorker) this._accessibilityWorker = new WindowsAccessibilityWorker();
+        return this._accessibilityWorker.run(script, options);
     }
 
     async _requestWindowClose(windowId) {
@@ -1331,26 +1465,25 @@ if (-not $closePosted) {
     }
 
     async _focusWindow(commandPayload) {
-        const { window_id, title } = commandPayload;
-
-        let targetWindow;
-        if (window_id) {
-            targetWindow = await this._findManagedWindow(window_id);
-        } else if (title) {
-            targetWindow = (await this._getManagedWindows()).find(w =>
-                w.getTitle().toLowerCase().includes(title.toLowerCase())
-            );
+        try {
+            let target;
+            if (commandPayload.window_id !== undefined) {
+                target = await this._resolveObservationWindow({ window_id: commandPayload.window_id });
+            } else if (typeof commandPayload.title === 'string' && commandPayload.title) {
+                const title = commandPayload.title.toLowerCase();
+                const windows = await this._getManagedWindows();
+                const exact = windows.filter(window => window.getTitle().toLowerCase() === title);
+                const matches = exact.length ? exact : windows.filter(window => window.getTitle().toLowerCase().includes(title));
+                if (matches.length !== 1) throw new Error(`Expected one matching window, found ${matches.length}. Supply window_id.`);
+                target = matches[0];
+            } else {
+                throw new Error('Supply window_id or title');
+            }
+            await this._prepareInputWindow(Number(target.id));
+            return { status: 'success', window_id: Number(target.id), message: `Focused window: ${target.getTitle()}` };
+        } catch (error) {
+            return { status: 'error', error: error.message };
         }
-
-        if (!targetWindow) {
-            return { status: 'error', error: 'Window not found' };
-        }
-
-        await targetWindow.bringToTop();
-        return {
-            status: 'success',
-            message: `Focused window: ${targetWindow.getTitle()}`
-        };
     }
 
     async _resizeWindow(commandPayload) {
@@ -1611,16 +1744,9 @@ if (-not $closePosted) {
     }
 
     async _launchWindowsApplication(app) {
-        if (app && app.id) {
-            await execFileAsync(
-                'explorer.exe',
-                [`shell:AppsFolder\\${app.id}`],
-                { windowsHide: true, timeout: 15000 }
-            );
-            return;
-        }
-
-        const target = String(app && app.name || '').trim();
+        // Explorer may exit nonzero after successfully handing off an AppsFolder
+        // launch. ShellExecute dispatches the item without using that exit code.
+        const target = app?.id ? `shell:AppsFolder\\${app.id}` : String(app?.name || '').trim();
         if (!target) throw new Error('Application name is required');
 
         const encodedTarget = Buffer.from(target, 'utf8').toString('base64');
@@ -1681,7 +1807,8 @@ $shell.ShellExecute($target, '', '', 'open', 1)
 
             return {
                 status: 'success',
-                message: `Opened application: ${appName}`
+                launch_requested: true,
+                message: `Launch requested for application: ${appName}. Use list_windows to verify readiness.`
             };
         } catch (error) {
             return { status: 'error', error: error.message };
@@ -1887,159 +2014,112 @@ $shell.ShellExecute($target, '', '', 'open', 1)
      * Get interactive screen elements using Windows UI Automation (PowerShell).
      * Returns buttons, links, text fields with their coordinates for precise targeting.
      */
+    async _resolveObservationWindow(commandPayload) {
+        const { window_id, window_title } = commandPayload;
+        if (window_id !== undefined) {
+            if (!Number.isSafeInteger(window_id) || window_id <= 0) throw new Error('Invalid window_id');
+            const window = await this._findManagedWindow(window_id);
+            if (!window) throw new Error('Target window not found');
+            return window;
+        }
+        if (window_title) {
+            if (typeof window_title !== 'string') throw new Error('window_title must be text');
+            const matches = (await this._getManagedWindows()).filter(w => w.getTitle() === window_title);
+            if (matches.length !== 1) throw new Error(`Expected one window with this exact title, found ${matches.length}. Use list_windows and window_id.`);
+            return matches[0];
+        }
+        const current = await activeWindow();
+        const window = current && await this._findManagedWindow(Number(current.id));
+        if (!window) throw new Error('No target window. Use list_windows and supply window_id.');
+        return window;
+    }
+
     async _getScreenElements(commandPayload) {
-        const { window_title, element_type } = commandPayload;
-
-        if (this.platform !== 'win32') {
-            return { status: 'error', error: 'Screen element detection is currently only supported on Windows.' };
-        }
-
+        if (this.platform !== 'win32') return { status: 'error', error: 'Accessibility is currently supported on Windows only; use screenshots and keyboard input on this platform.' };
         try {
-            // Use UI Automation via PowerShell to get interactive elements
-            let psFilter = '';
-            if (element_type) {
-                const typeMap = {
-                    'button': 'Button',
-                    'edit': 'Edit',
-                    'text': 'Text',
-                    'link': 'Hyperlink',
-                    'checkbox': 'CheckBox',
-                    'radio': 'RadioButton',
-                    'combobox': 'ComboBox',
-                    'list': 'List',
-                    'menu': 'MenuItem',
-                    'tab': 'TabItem',
-                };
-                psFilter = typeMap[element_type] ? `| Where-Object { $_.Current.ControlType.ProgrammaticName -eq 'ControlType.${typeMap[element_type]}' }` : '';
-            }
-
-            let windowFilter = '';
-            if (window_title) {
-                windowFilter = `$window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${window_title.replace(/'/g, "''")}')));\nif (-not $window) { $window = [System.Windows.Automation.AutomationElement]::RootElement }`;
-            } else {
-                windowFilter = '$window = [System.Windows.Automation.AutomationElement]::RootElement';
-            }
-
-            const psScript = `
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-${windowFilter}
-$elements = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) ${psFilter}
-$results = @()
-$count = 0
-foreach ($el in $elements) {
-    if ($count -ge 50) { break }
-    try {
-        $rect = $el.Current.BoundingRectangle
-        if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
-            $results += @{
-                Name = $el.Current.Name
-                ControlType = $el.Current.ControlType.ProgrammaticName
-                X = [int]($rect.X + $rect.Width / 2)
-                Y = [int]($rect.Y + $rect.Height / 2)
-                Width = [int]$rect.Width
-                Height = [int]$rect.Height
-                IsEnabled = $el.Current.IsEnabled
-                AutomationId = $el.Current.AutomationId
-            }
-            $count++
-        }
-    } catch {}
-}
-$results | ConvertTo-Json -Compress
-`.trim();
-
-            const { stdout } = await this._runPowerShell(psScript, { timeout: 15000 });
-
-            let elements = [];
-            if (stdout && stdout.trim()) {
-                const parsed = JSON.parse(stdout);
-                elements = Array.isArray(parsed) ? parsed : [parsed];
-            }
-
-            return {
-                status: 'success',
-                elements: elements,
-                count: elements.length
-            };
+            const window = await this._resolveObservationWindow(commandPayload);
+            const script = windowsAccessibility.buildScript({
+                windowId: Number(window.id), elementType: commandPayload.element_type,
+                text: commandPayload.text, limit: commandPayload.limit ?? 200,
+            });
+            const { stdout } = await this._runAccessibilityScript(script, { timeout: 15000 });
+            const result = JSON.parse(stdout);
+            if (result.status !== 'success') return result;
+            const observationId = crypto.randomUUID();
+            result.elements = result.elements.map((el, index) => ({ ...el, element_id: String(index + 1) }));
+            const snapshot = { windowId: Number(window.id), created: Date.now(), elements: result.elements };
+            this._observations.set(observationId, snapshot);
+            if (this._observations.size > 16) this._observations.delete(this._observations.keys().next().value);
+            return { ...result, count: result.elements.length, observation_id: observationId, window_title: window.getTitle() };
         } catch (error) {
             return { status: 'error', error: `Element detection failed: ${error.message}` };
         }
     }
 
-    /**
-     * Find a specific UI element by its visible text/label and return its click coordinates.
-     * Useful for "click the Save button" type commands — gives exact coordinates.
-     */
     async _findElementByText(commandPayload) {
-        const { text, window_title } = commandPayload;
+        if (typeof commandPayload.text !== 'string' || !commandPayload.text.trim()) return { status: 'error', error: 'Text parameter is required.' };
+        const result = await this._getScreenElements(commandPayload);
+        if (result.status !== 'success') return result;
+        const candidates = result.elements.filter(el => el.IsEnabled && !el.IsOffscreen);
+        if (candidates.length === 0) return { ...result, status: 'error', error: 'No enabled visible matching element found.' };
+        // Never recommend an arbitrary first match for an ambiguous label.
+        return { ...result, ambiguous: candidates.length > 1,
+            recommended_click: candidates.length === 1 ? { x: candidates[0].X, y: candidates[0].Y } : null };
+    }
 
-        if (this.platform !== 'win32') {
-            return { status: 'error', error: 'Element finder is currently only supported on Windows.' };
-        }
-
-        if (!text) {
-            return { status: 'error', error: 'Text parameter is required.' };
-        }
-
+    async _performElementAction(commandPayload) {
+        if (this.platform !== 'win32') return { status: 'error', error: 'Accessibility actions are supported on Windows only.' };
+        const { observation_id, element_id, element_action, value } = commandPayload;
+        const snapshot = this._observations.get(observation_id);
+        this._observations.clear();
+        if (!snapshot || Date.now() - snapshot.created > 30000) return { status: 'error', error: 'Observation expired or invalidated. Observe again.' };
+        if (commandPayload.window_id !== undefined && commandPayload.window_id !== snapshot.windowId) return { status: 'error', error: 'Element belongs to a different window.' };
+        const el = snapshot.elements.find(element => element.element_id === String(element_id));
+        if (!el || !el.IsEnabled || el.IsOffscreen) return { status: 'error', error: 'Element is missing, offscreen or disabled.' };
         try {
-            const searchText = text.replace(/'/g, "''");
-            let windowScope = '$root = [System.Windows.Automation.AutomationElement]::RootElement';
-            if (window_title) {
-                const safeTitle = window_title.replace(/'/g, "''");
-                windowScope = `$root = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${safeTitle}'))); if (-not $root) { $root = [System.Windows.Automation.AutomationElement]::RootElement }`;
+            if (element_action === 'set_value') {
+                if (typeof value !== 'string' || value.length > 100000) throw new Error('value must be text of at most 100000 characters');
+                if (el.IsReadOnly || el.IsPassword || !el.Patterns?.includes('Value')) throw new Error('Control does not support editable text');
+                const focusScript = windowsAccessibility.buildScript({ windowId: snapshot.windowId, runtimeId: el.RuntimeId, action: 'focus' });
+                const focused = JSON.parse((await this._runAccessibilityScript(focusScript)).stdout);
+                if (focused.status !== 'success') return focused;
+                await this._prepareInputWindow(snapshot.windowId);
+                await this._pressHotkey({ keys: ['ctrl', 'a'] });
+                await this._pressHotkey({ keys: ['backspace'] });
+                const typed = await this._typeText({ text: value, window_id: snapshot.windowId });
+                const state = await this._getScreenElements({ window_id: snapshot.windowId });
+                const current = state.elements?.find(element => element.RuntimeId === el.RuntimeId);
+                const verified = state.status === 'success' && current && !current.ValueTruncated && current.Value === value;
+                return { ...typed, state, verified,
+                    ...(verified ? {} : { status: 'error', outcome: 'unknown', error: 'Field value could not be verified. Inspect the state before retrying.' }) };
             }
-
-            const psScript = `
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-${windowScope}
-$condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, '${searchText}')
-$elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
-$results = @()
-foreach ($el in $elements) {
-    try {
-        $rect = $el.Current.BoundingRectangle
-        if ($rect.Width -gt 0 -and $rect.Height -gt 0) {
-            $results += @{
-                Name = $el.Current.Name
-                ControlType = $el.Current.ControlType.ProgrammaticName
-                CenterX = [int]($rect.X + $rect.Width / 2)
-                CenterY = [int]($rect.Y + $rect.Height / 2)
-                Width = [int]$rect.Width
-                Height = [int]$rect.Height
-            }
-        }
-    } catch {}
-}
-$results | ConvertTo-Json -Compress
-`.trim();
-
-            const { stdout } = await this._runPowerShell(psScript, { timeout: 10000 });
-
-            let elements = [];
-            if (stdout && stdout.trim()) {
-                const parsed = JSON.parse(stdout);
-                elements = Array.isArray(parsed) ? parsed : [parsed];
-            }
-
-            if (elements.length === 0) {
-                return { status: 'error', error: `No element found with text: "${text}"` };
-            }
-
-            return {
-                status: 'success',
-                elements: elements,
-                count: elements.length,
-                // Provide the first match's center as the recommended click target
-                recommended_click: {
-                    x: elements[0].CenterX,
-                    y: elements[0].CenterY
-                }
-            };
+            const script = windowsAccessibility.buildScript({ windowId: snapshot.windowId, runtimeId: el.RuntimeId, action: element_action, value });
+            if (!windowsAccessibility.ACTIONS.has(element_action)) throw new Error('Unsupported accessibility action');
+            const { stdout } = await this._runAccessibilityScript(script, { timeout: 15000 });
+            const result = JSON.parse(stdout);
+            const state = await this._getScreenElements({ window_id: snapshot.windowId });
+            if (result.status !== 'success') return { ...result, state };
+            return { ...result, state, message: 'Accessibility action sent. Inspect the returned state to verify the outcome.' };
         } catch (error) {
-            return { status: 'error', error: `Element search failed: ${error.message}` };
+            return { status: 'error', error: `Accessibility action failed: ${error.message}` };
         }
+    }
+
+    async _getWindowState(commandPayload) {
+        const window = await this._resolveObservationWindow(commandPayload);
+        const state = await this._getScreenElements({ ...commandPayload, window_id: Number(window.id) });
+        if (commandPayload.include_screenshot === false) return state;
+        let screenshot;
+        try {
+            screenshot = await this._takeScreenshot({ ...commandPayload, window_id: Number(window.id) });
+        } catch (error) {
+            if (state.status !== 'success') throw error;
+            return { status: 'success', state, window_id: Number(window.id), window_title: window.getTitle(),
+                screenshot_available: false, screenshot_error: error.message, accessibility_available: state.elements.length > 0 };
+        }
+        if (screenshot.status !== 'success') return screenshot;
+        return { ...screenshot, state, screenshot_available: true, window_id: Number(window.id), window_title: window.getTitle(),
+            accessibility_available: state.status === 'success' && state.elements.length > 0 };
     }
 
     // ===== APPLICATION DISCOVERY =====
@@ -2221,6 +2301,23 @@ $results | ConvertTo-Json -Compress
     }
 
     _emitResult(request_id, result) {
+        if (typeof request_id === 'string') {
+            this._completedResultBytes -= this._completedResultSizes.get(request_id) || 0;
+            const maxBytes = 16 * 1024 * 1024;
+            const cached = Buffer.byteLength(JSON.stringify(result)) > maxBytes
+                ? { status: 'error', outcome: 'unknown', error: 'This request already executed, but its large result was not cached. Observe again before repeating an action.' }
+                : result;
+            const size = Buffer.byteLength(JSON.stringify(cached));
+            this._completedResults.set(request_id, cached);
+            this._completedResultSizes.set(request_id, size);
+            this._completedResultBytes += size;
+            while (this._completedResults.size > 1 && (this._completedResults.size > 128 || this._completedResultBytes > maxBytes)) {
+                const oldest = this._completedResults.keys().next().value;
+                this._completedResultBytes -= this._completedResultSizes.get(oldest);
+                this._completedResultSizes.delete(oldest);
+                this._completedResults.delete(oldest);
+            }
+        }
         console.log(`ComputerControlHandler: Emitting result for request_id: ${request_id}`);
         this.eventEmitter.emit('computer-command-result', {
             request_id,
@@ -2231,6 +2328,20 @@ $results | ConvertTo-Json -Compress
     async cleanup() {
         console.log('ComputerControlHandler: Cleaning up...');
         
+        this.isEnabled = false;
+        await this._commandQueue;
+        this._accessibilityWorker?.close();
+        this._accessibilityWorker = null;
+        if (this._ocrWorkerPromise) {
+            const worker = await this._ocrWorkerPromise;
+            await worker.terminate();
+            this._ocrWorkerPromise = null;
+        }
+        this._observations.clear();
+        this._screenshots.clear();
+        this._completedResults.clear();
+        this._completedResultSizes.clear();
+        this._completedResultBytes = 0;
         // Close all file watchers
         for (const [id, watcher] of this.fileWatchers) {
             await watcher.close();
