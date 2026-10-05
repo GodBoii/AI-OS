@@ -83,7 +83,7 @@ def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = Tr
     from openrouter_reasoning_model import get_openrouter_model
     return Agent(
         name="plan_agent",
-        model=get_openrouter_model("xiaomi/mimo-v2.5"),
+        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         tools=[DuckDuckGoTools()] if enable_read_only_tools else [],
         instructions=[
             "<system_instructions>",
