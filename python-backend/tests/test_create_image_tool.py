@@ -95,6 +95,7 @@ def test_tool_schema_exposes_text_and_optional_image(toolkit):
     assert "images" not in function.parameters["properties"]
     assert "text" in function.parameters["required"]
     assert "image" not in function.parameters["required"]
+    assert set(function.parameters["properties"]) == {"text", "image"}
     assert "generate_image" in toolkit.functions
     assert "generate_video" in toolkit.functions
 
@@ -119,9 +120,10 @@ def test_multiple_attachments_require_selection(toolkit, module, png):
 
 def test_inaccessible_attachment_does_not_silently_generate_without_reference(toolkit, module):
     toolkit._create_signed_media_url = Mock(return_value=None)
-    result = toolkit.create_image("edit", session_state={"turn_context": {"files": [
+    toolkit.files = [
         {"type": "image/png", "path": "user/conversation/photo.png"}
-    ]}})
+    ]
+    result = toolkit.create_image("edit")
     assert json.loads(result.content)["ok"] is False
     module.generate_openrouter_image.assert_not_called()
 

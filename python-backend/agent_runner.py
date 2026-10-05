@@ -858,6 +858,7 @@ def run_agent_and_stream(
         incoming_files = turn_data.get("files", []) or []
         if not isinstance(incoming_files, list):
             incoming_files = []
+        realtime_tool_config["files"] = incoming_files
         model_selection = resolve_primary_model(
             thinking_mode=turn_data.get("thinking_mode"),
             files=incoming_files,

@@ -148,6 +148,11 @@ def generate_openrouter_image(api_key: str, text: str, reference: Optional[str] 
     except requests.RequestException as exc:
         status = getattr(exc.response, "status_code", None)
         logger.warning("OpenRouter image request failed, status=%s", status)
+        if status == 402:
+            raise ImageGenerationError(
+                "OpenRouter refused image generation (HTTP 402). Check the account's credits and key limits, "
+                "even when the selected image model is free."
+            ) from exc
         raise ImageGenerationError(f"OpenRouter image request failed{f' (HTTP {status})' if status else ''}. Try again.") from exc
     except ValueError as exc:
         raise ImageGenerationError("OpenRouter returned invalid JSON for image generation.") from exc

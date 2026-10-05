@@ -44,6 +44,7 @@ class MediaTools(Toolkit):
         self.message_id = custom_tool_config.get("message_id")
         self.conversation_id = custom_tool_config.get("conversation_id")
         self.user_id = custom_tool_config.get("user_id")
+        self.files = custom_tool_config.get("files") or []
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
         if not self.openrouter_api_key:
@@ -54,7 +55,6 @@ class MediaTools(Toolkit):
         text: str,
         image: Optional[str] = None,
         images: Optional[Sequence[Image]] = None,
-        session_state: Optional[Dict[str, Any]] = None,
     ) -> ToolResult:
         """Create or edit an image and return it to both the user and the model.
 
@@ -64,7 +64,7 @@ class MediaTools(Toolkit):
                 current turn's attached image. Attach at most one reference image.
         """
         try:
-            reference = self._create_image_reference(image, images, session_state)
+            reference = self._create_image_reference(image, images, {"turn_context": {"files": self.files}})
             generated = generate_openrouter_image(self.openrouter_api_key, text, reference)
             artifact_id, signed_url, file_name = self._persist_generated_media(
                 media_bytes=generated.content,
@@ -81,9 +81,11 @@ class MediaTools(Toolkit):
                 "artifact_id": artifact_id,
                 "output_id": artifact_id,
                 "media_url": signed_url,
+                "media_url_expires_at": int(time.time()) + 3600,
                 "mime_type": generated.mime_type,
                 "filename": file_name,
                 "model": generated.model,
+                "conversation_id": self.conversation_id,
                 "title": "Generated image",
             }
             result = ToolResult(
@@ -152,7 +154,11 @@ class MediaTools(Toolkit):
         session_state: Optional[Dict[str, Any]] = None,
     ) -> ToolResult:
         """Compatibility alias for create_image. Use create_image for new requests."""
-        return self.create_image(text=prompt, images=images, session_state=session_state)
+        try:
+            reference = self._create_image_reference(None, images, session_state)
+        except ImageGenerationError as exc:
+            return ToolResult(content=json.dumps({"ok": False, "error": str(exc)}))
+        return self.create_image(text=prompt, image=reference)
 
     def generate_video(
         self,
