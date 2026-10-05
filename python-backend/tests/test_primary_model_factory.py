@@ -14,11 +14,11 @@ def test_primary_route_uses_deepseek_through_openrouter():
     model = get_primary_model(DEEPSEEK_MODEL_ID)
 
     assert isinstance(model, OpenRouterReasoning)
-    assert model.id == "deepseek/deepseek-v4.1-flash"
+    assert model.id == "xiaomi/mimo-v2.6-pro"
 
 
 def test_video_route_uses_glm_through_openrouter():
     model = get_primary_model(GLM_VIDEO_MODEL_ID)
 
     assert isinstance(model, OpenRouterReasoning)
-    assert model.id == "z-ai/glm-5.3-flash"
+    assert model.id == "xiaomi/mimo-v2.6-pro"
