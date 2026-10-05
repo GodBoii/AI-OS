@@ -74,6 +74,13 @@ def test_tool_returns_same_image_to_model_and_conversation(toolkit, png):
     assert serialized["metadata"] == payload["metadata"]
 
 
+def test_actual_cost_is_returned_and_sent_to_persistence(toolkit, module, png):
+    module.generate_openrouter_image.return_value = GeneratedImage(png, "image/png", TEXT_IMAGE_MODEL, 0.002218)
+    result = toolkit.create_image("a green bicycle")
+    assert json.loads(result.content)["metadata"]["cost_usd"] == 0.002218
+    assert toolkit._persist_generated_media.call_args.kwargs["provider_response"]["cost_usd"] == 0.002218
+
+
 def test_generated_media_reaches_real_primary_model_formatter(toolkit, png):
     result = toolkit.create_image("a red square")
     model = get_primary_model(DEFAULT_MODEL_ID)

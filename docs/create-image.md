@@ -110,10 +110,10 @@ To run the reference smoke test independently:
 python python-backend/tests/verify_create_image_live.py --output-dir .ui-check/create-image-live --reference js/tests/fixtures/generated-image.png
 ```
 
-The 47 image tests pass with Agno 2.0.5 and 2.8.7. They exercise real Agno tool
+The 48 image tests pass with Agno 2.0.5 and 2.8.7. They exercise real Agno tool
 invocation, media injection, the primary model serializer, external provider
 contracts, and mocked storage/persistence. The latest broader relevant run
-passed 78 backend tests and four browser/presentation tests. Previous checks
+passed 79 backend tests and four browser/presentation tests. Previous checks
 also passed existing computer-control and typing tests. Browser checks
 use the production viewer and chat handlers in a local fixture at desktop and
 mobile widths; they do not require a logged-in production account.
@@ -133,6 +133,27 @@ real tool, verifies the storage roundtrip, saved content row, and event room,
 and asks the configured primary model to identify the generated bicycle color.
 It removes the test's storage objects, registry rows, and identity afterward.
 It sends no signup email and makes no credit purchases.
+
+## Ubuntu deployment verification
+
+The backend was pulled, rebuilt, and restarted in `/home/arun/apps/ai-os` on
+October 6, 2026. An existing full backend/Flower build was resolving unpinned
+dependencies, so this deployment rebuilt the application layer from the
+already-working backend image without replacing its tested dependencies.
+The prior image is retained as `ai-os-web:before-create-image-mini`.
+
+The temporary Compose build override is `/tmp/aios-backend-refresh.yml`, with
+Dockerfile `/tmp/aios-backend-refresh.Dockerfile`. Both contain build settings
+only; the original Compose files continue to provide runtime configuration.
+Redis, the sandbox manager, Flower, and Cloudflared stayed running.
+
+Both `http://127.0.0.1:8765/api/healthz` and the public
+`https://api.aetheriaai.website/api/healthz` returned successfully after restart.
+The detailed health endpoint returned HTTP 200 with `status: ok`.
+The deployed container reports Agno 2.0.5 and Mini for both image input modes.
+The post-restart live tool test generated a PNG for $0.002218, verified storage
+and history, and received `Green` from the primary model's vision check.
+Its temporary account, registry row, and storage objects were removed.
 
 Sources: [image API documentation](https://openrouter.ai/docs/guides/overview/multimodal/image-generation),
 [model cost comparison](https://openrouter.ai/blog/insights/image-generation-models-compared/).
