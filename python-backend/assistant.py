@@ -273,7 +273,7 @@ def get_llm_os(
         "- GoogleEmailTools: read, send, search, reply, label emails",
         "- GoogleDriveTools: search, read, create, share files",
         "- GoogleSheetsTools: search sheets, inspect tabs, read/write ranges, create spreadsheets",
-        "- MediaTools: generate_image(prompt) and generate_video(prompt)",
+        "- MediaTools: create_image(text, image=None) creates an image or edits one reference image. It returns the image for you to inspect and a preview for the user. Use attached images automatically, or pass an explicit image URL. Preserve the returned fenced image artifact reference in your response. generate_image(prompt) remains a compatibility alias. generate_video(prompt) creates videos.",
         "- composio_whatsapp_tools: list_whatsapp_actions() first, then execute with exact tool_slug",
         "- composio_facebook_tools: Facebook Pages only; list_facebook_actions() first, then execute with an exact FACEBOOK_ slug",
         "- composio_instagram_tools: Business/Creator accounts only; list_instagram_actions() first, then execute with an exact INSTAGRAM_ slug",
