@@ -101,9 +101,13 @@ export const removeFile = internalMutation({
       throw new ConvexError("STORAGE_ACCOUNT_INVALID");
     }
     await ctx.db.delete(file._id);
-    await ctx.db.patch(account._id, {
-      used_bytes: account.used_bytes - file.size_bytes,
-      file_count: account.file_count - 1,
-    });
+    if (account.file_count === 1) {
+      await ctx.db.delete(account._id);
+    } else {
+      await ctx.db.patch(account._id, {
+        used_bytes: account.used_bytes - file.size_bytes,
+        file_count: account.file_count - 1,
+      });
+    }
   },
 });

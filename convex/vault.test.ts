@@ -51,6 +51,7 @@ describe("vault metadata", () => {
     await t.mutation(remove, { user_id: "user-a", file_id: "same" });
     await t.mutation(remove, { user_id: "user-a", file_id: "same" });
     expect(await t.query(storage, { user_id: "user-a" })).toMatchObject({ used_bytes: 0, file_count: 0 });
+    expect(await t.run(ctx => ctx.db.query("vault_storage").collect())).toEqual([]);
   });
 
   test("list/read/delete remain scoped to the owner", async () => {
