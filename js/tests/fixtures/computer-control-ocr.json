@@ -1,0 +1,11 @@
+{
+  "title": "Computer control test form",
+  "output": ".ui-check/computer-ocr.json",
+  "commands": [
+    { "action": "get_screen_elements" },
+    { "action": "perform_element_action", "element_name": "Test text", "element_action": "set_value", "value": "Local OCR test", "expect_value": "Local OCR test" },
+    { "action": "perform_element_action", "element_name": "Test option", "element_action": "toggle", "expect_toggle": "On" },
+    { "action": "ocr_screen", "expect_ocr": "Computer control test form" },
+    { "action": "ocr_screen", "expect_ocr": "Local OCR test" }
+  ]
+}
