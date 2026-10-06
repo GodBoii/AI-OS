@@ -104,13 +104,13 @@ class ComputerControlHandler {
                 return null;
             }
 
-            // Upload to Supabase using signed URL
+            // Upload to server storage using signed URL
             await axios.put(signedURL, imageBuffer, {
                 headers: { 'Content-Type': 'image/png' },
                 timeout: 15000
             });
 
-            console.log(`ComputerControlHandler: Screenshot successfully uploaded to Supabase path: ${path}`);
+            console.log(`ComputerControlHandler: Screenshot successfully uploaded to server storage path: ${path}`);
             return path;
 
         } catch (error) {
