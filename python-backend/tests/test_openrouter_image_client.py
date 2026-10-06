@@ -11,10 +11,10 @@ import requests
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from openrouter_image_client import (  # noqa: E402
-    ImageGenerationError,
+from openrouter_image_client import (
     REFERENCE_IMAGE_MODEL,
     TEXT_IMAGE_MODEL,
+    ImageGenerationError,
     generate_openrouter_image,
     validate_reference_url,
 )
@@ -28,15 +28,19 @@ def png():
 
 
 def catalog(minimum=0, maximum=0, cost=0):
-    return {"endpoints": [{
-        "provider_tag": "novita",
-        "pricing": [{"cost_usd": cost}],
-        "supported_parameters": {
-            "input_references": {"min": minimum, "max": maximum},
-            "quality": {"type": "enum", "values": ["low", "medium", "high"]},
-            "aspect_ratio": {"type": "enum", "values": ["1:1", "auto"]},
-        },
-    }]}
+    return {
+        "endpoints": [
+            {
+                "provider_tag": "novita",
+                "pricing": [{"cost_usd": cost}],
+                "supported_parameters": {
+                    "input_references": {"min": minimum, "max": maximum},
+                    "quality": {"type": "enum", "values": ["low", "medium", "high"]},
+                    "aspect_ratio": {"type": "enum", "values": ["1:1", "auto"]},
+                },
+            }
+        ]
+    }
 
 
 @pytest.fixture
@@ -44,7 +48,11 @@ def provider(monkeypatch, png):
     monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_IMAGE_EDIT_MODEL", raising=False)
     get = Mock(return_value=Mock(json=lambda: catalog()))
-    post = Mock(return_value=Mock(json=lambda: {"data": [{"b64_json": base64.b64encode(png).decode()}]}))
+    post = Mock(
+        return_value=Mock(
+            json=lambda: {"data": [{"b64_json": base64.b64encode(png).decode()}]}
+        )
+    )
     monkeypatch.setattr(requests, "get", get)
     monkeypatch.setattr(requests, "post", post)
     return get, post
@@ -59,9 +67,12 @@ def test_text_request_uses_low_quality_image_api(provider, png):
     assert get.call_args.args[0].endswith(f"/{TEXT_IMAGE_MODEL}/endpoints")
     assert post.call_args.args[0].endswith("/api/v1/images")
     assert post.call_args.kwargs["json"] == {
-        "model": TEXT_IMAGE_MODEL, "prompt": "a red square", "n": 1,
+        "model": TEXT_IMAGE_MODEL,
+        "prompt": "a red square",
+        "n": 1,
         "provider": {"only": ["novita"], "allow_fallbacks": False},
-        "quality": "low", "aspect_ratio": "1:1",
+        "quality": "low",
+        "aspect_ratio": "1:1",
     }
 
 
@@ -76,11 +87,34 @@ def test_reference_request_uses_one_image_endpoint(provider, png):
     ]
 
 
+def test_presentation_can_request_medium_landscape(provider):
+    get, post = provider
+    payload = catalog()
+    payload["endpoints"][0]["supported_parameters"]["aspect_ratio"]["values"].append(
+        "3:2"
+    )
+    get.return_value.json = lambda: payload
+    generate_openrouter_image(
+        "test-key", "A desk", quality="medium", aspect_ratio="3:2"
+    )
+    assert post.call_args.kwargs["json"]["quality"] == "medium"
+    assert post.call_args.kwargs["json"]["aspect_ratio"] == "3:2"
+
+
+def test_unsupported_landscape_never_silently_becomes_square(provider):
+    _, post = provider
+    with pytest.raises(ImageGenerationError, match="aspect_ratio"):
+        generate_openrouter_image("test-key", "A desk", aspect_ratio="3:2")
+    post.assert_not_called()
+
+
 @pytest.mark.parametrize("cost", [-1, "unknown", None, "NaN", "Infinity"])
 def test_never_submits_to_unknown_or_invalid_price_endpoint(provider, cost):
     get, post = provider
     get.return_value.json = lambda: catalog(cost=cost)
-    with pytest.raises(ImageGenerationError, match="No image endpoint with known pricing"):
+    with pytest.raises(
+        ImageGenerationError, match="No image endpoint with known pricing"
+    ):
         generate_openrouter_image("test-key", "a tree")
     post.assert_not_called()
 
@@ -98,7 +132,9 @@ def test_malformed_endpoint_capabilities_never_submit(provider, parameters):
     payload = catalog()
     payload["endpoints"][0]["supported_parameters"] = parameters
     get.return_value.json = lambda: payload
-    with pytest.raises(ImageGenerationError, match="No image endpoint with known pricing"):
+    with pytest.raises(
+        ImageGenerationError, match="No image endpoint with known pricing"
+    ):
         generate_openrouter_image("test-key", "a tree")
     post.assert_not_called()
 
@@ -107,7 +143,8 @@ def test_paid_endpoint_and_actual_cost_are_supported(provider, png):
     get, post = provider
     get.return_value.json = lambda: catalog(cost=0.000008)
     post.return_value.json = lambda: {
-        "data": [{"b64_json": base64.b64encode(png).decode()}], "usage": {"cost": 0.002218}
+        "data": [{"b64_json": base64.b64encode(png).decode()}],
+        "usage": {"cost": 0.002218},
     }
     result = generate_openrouter_image("test-key", "a bicycle")
     assert result.cost_usd == 0.002218
@@ -132,17 +169,34 @@ def test_account_credit_error_is_clear_even_for_free_models(provider):
         generate_openrouter_image("test-key", "a tree")
 
 
-@pytest.mark.parametrize("value", ["", "file:///etc/passwd", "C:/image.png", "javascript:alert(1)",
-                                   "https://user:pass@example.com/a.png", "data:image/png;base64,bad",
-                                   "data:image/svg+xml;base64,PHN2Zy8+", "https://example.com:bad/a.png"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "file:///etc/passwd",
+        "C:/image.png",
+        "javascript:alert(1)",
+        "https://user:pass@example.com/a.png",
+        "data:image/png;base64,bad",
+        "data:image/svg+xml;base64,PHN2Zy8+",
+        "https://example.com:bad/a.png",
+    ],
+)
 def test_rejects_bad_reference_inputs(value):
     with pytest.raises(ImageGenerationError):
         validate_reference_url(value)
 
 
-@pytest.mark.parametrize("payload", [{}, {"data": []}, {"data": [{}]},
-                                      {"data": [{"b64_json": "bad"}]},
-                                      {"data": [{"b64_json": "bm90LWFuLWltYWdl"}]}])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"data": []},
+        {"data": [{}]},
+        {"data": [{"b64_json": "bad"}]},
+        {"data": [{"b64_json": "bm90LWFuLWltYWdl"}]},
+    ],
+)
 def test_rejects_missing_or_invalid_provider_images(provider, payload):
     _, post = provider
     post.return_value.json = lambda: payload
@@ -154,7 +208,9 @@ def test_error_does_not_expose_provider_body_or_key(provider):
     _, post = provider
     response = requests.Response()
     response.status_code = 429
-    post.side_effect = requests.HTTPError("secret provider body and test-key", response=response)
+    post.side_effect = requests.HTTPError(
+        "secret provider body and test-key", response=response
+    )
     with pytest.raises(ImageGenerationError) as error:
         generate_openrouter_image("test-key", "a tree")
     assert "429" in str(error.value)
