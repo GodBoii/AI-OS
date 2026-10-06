@@ -137,7 +137,7 @@ smmap==5.0.2
 sniffio==1.3.1
 snowballstemmer==2.2.0
 soupsieve==2.6
-SQLAlchemy==2.0.37
+SQLAlchemy>=2.0.41,<2.1
 starlette==0.41.3
 tf-playwright-stealth==1.1.0
 tiktoken==0.8.0
@@ -161,7 +161,7 @@ yfinance==0.2.51
 zipp==3.21.0
 zstandard==0.23.0
 google-genai==1.32.0
-agno==2.0.5
+agno==3.1.1
 Flask
 Flask-SocketIO
 eventlet
