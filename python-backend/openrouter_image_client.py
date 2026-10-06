@@ -222,7 +222,7 @@ def generate_openrouter_image(
         if status == 402:
             raise ImageGenerationError(
                 "OpenRouter refused image generation (HTTP 402). Check the account's credits and key limits, "
-                "even when the selected image model is free."
+                "and keep the account balance above the Image API's $1 minimum."
             ) from exc
         raise ImageGenerationError(
             f"OpenRouter image request failed{f' (HTTP {status})' if status else ''}. Try again."

@@ -47,8 +47,11 @@ functions, accounts in the new Supabase project, and local agent storage remain.
 ## Remaining external checks
 
 Live image generation returned HTTP 402 from OpenRouter with the configured key.
-It needs available provider credit, then a live retest. The image verification
-script now cleans generated images from Ubuntu local storage.
+The account had about $0.46 remaining, while its key cap had about $1.94 remaining.
+OpenRouter's Image API requires an account balance above $1 before every request,
+as documented in https://openrouter.ai/blog/tutorials/image-generation/.
+It needs that minimum balance, then a live retest. The image verification script
+now cleans generated images from Ubuntu local storage.
 
 Payment checkout, individual third-party integration consent, push delivery to a
 physical device, microphone capture, and every possible agent tool combination
