@@ -1,3 +1,4 @@
+from local_media import media_storage
 # python-backend/agent_runner.py (Corrected for Dependency Injection)
 
 import logging
@@ -6,6 +7,8 @@ import re
 import traceback
 import inspect
 import base64
+import uuid
+import time
 from typing import Dict, Any, List, Tuple
 from redis import Redis
 import requests
@@ -33,6 +36,11 @@ from deploy_platform import (
 )
 import config
 from run_control import RunControlGate, clear_control as clear_run_control
+from agno_storage import get_agno_db, session_history, get_title
+from user_questions import QuestionRepository, public_request, apply_answers, restore_turn_media
+from native_agent_events import NativeMemberFrames
+from usage_legs import metric_snapshot, metric_delta
+from plan_agent import create_plan_agent
 
 # --- Agno Framework Imports ---
 from agno.media import Image, Audio, Video, File
@@ -473,21 +481,12 @@ def _extract_metrics_from_run_output(
 
 def _extract_metrics_from_agno_session(conversation_id: str) -> Dict[str, int]:
     try:
-        response = (
-            supabase_client
-            .from_("agno_sessions")
-            .select("session_data,runs")
-            .eq("session_id", conversation_id)
-            .maybe_single()
-            .execute()
-        )
-        row = response.data or {}
-    except Exception as e:
-        logger.warning(f"Token logging fallback query failed for session {conversation_id}: {e}")
+        history = get_agno_db().get_session(session_id=conversation_id, deserialize=False, runs_limit=100)
+        row = history or {}
+    except Exception:
+        logger.exception("Could not read current Agno run metrics")
         return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
-    # Prefer per-run metrics (delta for latest run). Session metrics can be cumulative.
-    # We aggregate latest top-level run + all child member runs for this turn.
     input_tokens = 0
     output_tokens = 0
     total_tokens = 0
@@ -595,10 +594,12 @@ def _log_request_tokens(
     conversation_id: str,
     message_id: str,
     run_output: RunOutput | TeamRunOutput | None,
+    execution_leg_id: str | None = None,
+    metrics_override: dict | None = None,
 ) -> None:
-    metrics = _extract_metrics_from_run_output(run_output)
+    metrics = metrics_override if metrics_override is not None else _extract_metrics_from_run_output(run_output)
     source = "run_output"
-    if metrics["input_tokens"] <= 0 and metrics["output_tokens"] <= 0:
+    if metrics_override is None and metrics["input_tokens"] <= 0 and metrics["output_tokens"] <= 0:
         metrics = _extract_metrics_from_agno_session(conversation_id)
         source = "agno_session_fallback"
 
@@ -626,6 +627,8 @@ def _log_request_tokens(
             metrics=metrics,
             usage_window=usage_window,
             source=f"agent_runner:{source}",
+            run_id=getattr(run_output, "run_id", None),
+            execution_leg_id=execution_leg_id,
         )
         logger.info(
             "[TOKENS][CONVEX] Logged token usage event for user=%s conversation=%s message=%s window=%s result=%s",
@@ -645,7 +648,7 @@ def _log_request_tokens(
         )
 
 
-def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
+def process_files(files_data: List[Dict[str, Any]], user_id: str | None = None) -> Tuple[List[Image], List[Audio], List[Video], List[File]]:
     """
     Processes a list of file data from the frontend, downloading media from
     Supabase storage and converting them into Agno media objects.
@@ -662,14 +665,16 @@ def process_files(files_data: List[Dict[str, Any]]) -> Tuple[List[Image], List[A
         is_text_file = bool(file_data.get('isText'))
         storage_path = str(file_data.get('path') or '').strip()
 
+        if storage_path and user_id and not storage_path.startswith(str(user_id) + "/"):
+            raise PermissionError("Attachment does not belong to this user.")
         if is_text_file:
             logger.info("Queuing inline text file for prompt injection: %s", file_name)
             continue
 
         if storage_path:
             try:
-                logger.info(f"Downloading file from Supabase storage: {storage_path}")
-                file_bytes = supabase_client.storage.from_('media-uploads').download(storage_path)
+                logger.info("Reading locally stored attachment: %s", file_name)
+                file_bytes = media_storage().download(storage_path)
 
                 if file_type.startswith('image/'):
                     images.append(Image(content=file_bytes, name=file_name))
@@ -737,6 +742,7 @@ def run_agent_and_stream(
     connection_manager: ConnectionManager,
     redis_client: Redis,
     run_state_manager: RunStateManager = None,  # NEW: optional, safe for assistant path
+    continuation: dict | None = None,
 ):
     """
     FUNCTION DESCRIPTION:
@@ -768,7 +774,13 @@ def run_agent_and_stream(
         logger.info(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}, room={room_name}")
 
         # 1. Retrieve Session and User Data
-        session_data = connection_manager.get_session(conversation_id)
+        if continuation:
+            current_request = QuestionRepository().get(str(continuation["request_id"]), str(continuation["user_id"]))
+            if not current_request or current_request["status"] != "resuming":
+                return
+        session_data = (continuation or {}).get("context", {}).get("session_data") or connection_manager.get_session(conversation_id)
+        if continuation:
+            connection_manager.redis_client.set(f"session:{conversation_id}", json.dumps(session_data), ex=connection_manager.SESSION_TTL)
         if not session_data:
             raise Exception(f"Session data not found for conversation {conversation_id}")
         user_id = session_data['user_id']
@@ -841,9 +853,9 @@ def run_agent_and_stream(
             session_coder_target = "cloud"
 
         requested_mode = str(agent_mode or "").strip().lower()
-        if requested_mode not in ("coder", "computer", "default", "system-assistant"):
+        if requested_mode not in ("coder", "computer", "default", "system-assistant", "plan"):
             requested_mode = session_agent_mode
-        if requested_mode not in ("coder", "computer", "default", "system-assistant"):
+        if requested_mode not in ("coder", "computer", "default", "system-assistant", "plan"):
             requested_mode = "default"
 
         requested_coder_target = str(
@@ -882,7 +894,10 @@ def run_agent_and_stream(
             requested_coder_target=requested_coder_target,
         )
 
-        if requested_mode == "coder":
+        if requested_mode == "plan":
+            agent = create_plan_agent(debug_mode=config.AGNO_DEBUG_MODE, enable_user_questions=True,
+                user_id=str(user_id), persist_session=True)
+        elif requested_mode == "coder":
             agent = get_coder_agent(
                 user_id=user_id,
                 session_info=session_data,
@@ -925,6 +940,7 @@ def run_agent_and_stream(
                 mobile_tools_config=mobile_tools_config,
                 user_id=user_id,
                 debug_mode=config.SYSTEM_ASSISTANT_DEBUG_MODE,
+                enable_user_questions=bool(session_config.get("enable_user_questions")),
             )
         else:
             llm_os_config = _filter_kwargs_for_callable(
@@ -946,7 +962,7 @@ def run_agent_and_stream(
         # --- MODIFICATION END ---
 
         # 3. Process Input Data
-        images, audio, videos, other_files = process_files(incoming_files)
+        images, audio, videos, other_files = process_files(incoming_files if not continuation else [], str(user_id))
         inline_text_files_prompt = build_inline_text_files_prompt(incoming_files)
         current_session_state = {'turn_context': turn_data}
         user_message = turn_data.get("user_message", "")
@@ -959,9 +975,9 @@ def run_agent_and_stream(
             for session_id in context_session_ids:
                 try:
                     # Fetch conversation runs
-                    response = supabase_client.from_('agno_sessions').select('runs').eq('session_id', session_id).single().execute()
-                    if response.data and response.data.get('runs'):
-                        runs = response.data['runs']
+                    history = session_history(session_id, str(user_id))
+                    if history and history.get('runs'):
+                        runs = history['runs']
                         top_level_runs = [run for run in runs if not run.get('parent_run_id')]
                         for run in top_level_runs:
                             user_input = run.get('input', {}).get('input_content', '')
@@ -1024,13 +1040,19 @@ def run_agent_and_stream(
             if contextual_prefix else composed_user_message
         )
 
+        if requested_mode == "plan":
+            final_user_message = turn_data["plan_prompt"]
+        previous_usage = (continuation or {}).get("context", {}).get("usage_snapshot", {})
+        root_run_id = (continuation or {}).get("run_id") or str(uuid.uuid4())
+        last_heartbeat = 0.0
+
         # 5. Run the Agent and Stream Results
         # --- DEBUG LOG ---
         print(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         logger.info(f"[AGENT_RUNNER] Starting agent.run() for message_id={message_id}")
         run_output: RunOutput | TeamRunOutput | None = None
-        accumulated_content: list[str] = []
-        accumulated_events: list[dict] = []
+        accumulated_content: list[str] = list((continuation or {}).get("context", {}).get("content", []))
+        accumulated_events: list[dict] = list((continuation or {}).get("context", {}).get("events", []))
         accumulated_log_content: Dict[str, List[str]] = {}
         log_owner_order: List[str] = []
         completed_tool_history: List[Dict[str, Any]] = []
@@ -1041,19 +1063,42 @@ def run_agent_and_stream(
         tool_call_count = 0
         control_gate = _build_run_control_gate(redis_client, conversation_id, message_id, room_name)
         stop_requested = False
-        run_stream = agent.run(
-            input=final_user_message,
-            images=images or None,
-            audio=audio or None,
-            videos=videos or None,
-            files=other_files or None,
-            session_id=conversation_id,
-            session_state=current_session_state,
-            stream=True,
-            stream_intermediate_steps=True,
-            add_history_to_context=True
-        )
+        execution_leg_id = str((continuation or {}).get("submission_id") or uuid.uuid4())
+        member_frames = NativeMemberFrames(agent, message_id, lambda event, payload: socketio.emit(event, payload, room=room_name))
+        if continuation:
+            paused_run = get_agno_db().get_run(continuation["run_id"])
+            if paused_run is None or not paused_run.is_paused or str(paused_run.user_id) != str(user_id):
+                raise ValueError("This run is no longer awaiting these answers.")
+            if incoming_files:
+                restore_turn_media(paused_run, process_files(incoming_files, str(user_id)), get_agno_db())
+            apply_answers(paused_run.active_requirements, continuation["questions"], continuation["answers"])
+            run_stream = agent.continue_run(run_response=paused_run, session_id=conversation_id,
+                user_id=user_id, requirements=paused_run.requirements, stream=True, stream_events=True,
+                yield_run_output=True)
+        else:
+            run_stream = agent.run(
+                input=final_user_message,
+                run_id=root_run_id,
+                images=images or None,
+                audio=audio or None,
+                videos=videos or None,
+                files=other_files or None,
+                session_id=conversation_id,
+                session_state=current_session_state,
+                stream=True,
+                stream_events=True,
+                yield_run_output=True,
+                add_history_to_context=True
+            )
         for chunk in run_stream:
+            if continuation and time.monotonic()-last_heartbeat > 10:
+                row = QuestionRepository().get(str(continuation["request_id"]), str(user_id))
+                if row is None or row["status"] != "resuming":
+                    stop_requested = True
+                    run_stream.close()
+                    break
+                QuestionRepository().heartbeat(str(continuation["request_id"]))
+                last_heartbeat = time.monotonic()
             # Pause blocks here; stop ends the turn with what was produced so far.
             if control_gate is not None and control_gate.checkpoint():
                 stop_requested = True
@@ -1076,6 +1121,8 @@ def run_agent_and_stream(
 
             if not chunk or not hasattr(chunk, 'event'):
                 continue
+            if chunk.event in (RunEvent.run_error.value, TeamRunEvent.run_error.value) and (getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)) == agent.name:
+                raise RuntimeError(str(getattr(chunk, 'content', None) or 'Agent execution failed.'))
 
             if (
                 chunk.event
@@ -1089,6 +1136,7 @@ def run_agent_and_stream(
                 )
 
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
+            delegation_metadata = member_frames.metadata(chunk)
             owner_reasoning_key = owner_name or "Aetheria_AI"
             chunk_reasoning_content = getattr(chunk, 'reasoning_content', None)
             if chunk_reasoning_content:
@@ -1103,11 +1151,13 @@ def run_agent_and_stream(
                     socketio.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
+                        **delegation_metadata,
                         "step": reasoning_delta
                     }, room=room_name)
                     accumulated_events.append({
                         "type": "reasoning_step",
                         "agent_name": owner_name,
+                        **delegation_metadata,
                         "step": reasoning_delta,
                     })
 
@@ -1117,7 +1167,7 @@ def run_agent_and_stream(
                 if chunk.content:
                     content_chunk_count += 1
                 is_final = (
-                    owner_name in ("Aetheria_AI", "Aetheria_Coder", "Aetheria_Computer", "Aetheria_System_Assistant")
+                    owner_name == agent.name
                     and not getattr(chunk, 'member_responses', [])
                 )
                 # Include reasoning_content if present
@@ -1131,11 +1181,17 @@ def run_agent_and_stream(
                         accumulated_log_content[owner_name] = []
                         log_owner_order.append(owner_name)
                     accumulated_log_content[owner_name].append(str(chunk.content))
-                socketio.emit("response", {
+                if requested_mode == "plan":
+                    socketio.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
+                        "messageId": message_id, "conversationId": conversation_id, "streaming": True,
+                        "content": chunk.content, "agent_name": owner_name}, room=room_name)
+                else:
+                    socketio.emit("response", {
                     "content": chunk.content,
                     "streaming": True,
                     "id": message_id,
                     "agent_name": owner_name,
+                        **delegation_metadata,
                     "is_log": not is_final,
                     "reasoning_content": reasoning_content
                 }, room=room_name)  # <-- ROOM, not SID
@@ -1152,6 +1208,7 @@ def run_agent_and_stream(
                     "type": "tool_start",
                     "name": tool_name,
                     "agent_name": owner_name,
+                        **delegation_metadata,
                     "id": message_id,
                     "tool": tool_payload,
                 }, room=room_name)
@@ -1160,6 +1217,7 @@ def run_agent_and_stream(
                     "step_type": "tool_start",
                     "name": tool_name,
                     "agent_name": owner_name,
+                        **delegation_metadata,
                     "tool": tool_payload,
                 })
             elif chunk.event in (RunEvent.tool_call_completed.value, TeamRunEvent.tool_call_completed.value):
@@ -1185,6 +1243,7 @@ def run_agent_and_stream(
                     "type": "tool_end",
                     "name": tool_name,
                     "agent_name": owner_name,
+                        **delegation_metadata,
                     "id": message_id,
                     "tool": tool_payload,
                 }, room=room_name)
@@ -1193,6 +1252,7 @@ def run_agent_and_stream(
                     "step_type": "tool_end",
                     "name": tool_name,
                     "agent_name": owner_name,
+                        **delegation_metadata,
                     "tool": tool_payload,
                 })
                 completed_tool_history.append({
@@ -1208,13 +1268,37 @@ def run_agent_and_stream(
                     socketio.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
+                        **delegation_metadata,
                         "step": reasoning_text
                     }, room=room_name)
                     accumulated_events.append({
                         "type": "reasoning_step",
                         "agent_name": owner_name,
+                        **delegation_metadata,
                         "step": reasoning_text,
                     })
+
+        usage_snapshot = metric_snapshot(run_output)
+        leg_metrics = metric_delta(usage_snapshot, previous_usage)
+        if continuation:
+            resolved = QuestionRepository().finish(str(continuation["request_id"]), "cancelled" if stop_requested else "answered")
+            if resolved:
+                socketio.emit("user_question_ack", {**public_request(resolved), "success": True}, room=room_name)
+        if run_output is not None and getattr(run_output, "is_paused", False) and not stop_requested:
+            latest_session = connection_manager.get_session(conversation_id) or session_data
+            request_row = QuestionRepository().create(run=run_output, conversation_id=conversation_id,
+                message_id=message_id, user_id=str(user_id), context={"session_data": latest_session,
+                    "agent_mode": requested_mode, "turn_data": turn_data, "events": accumulated_events,
+                    "content": accumulated_content, "usage_snapshot": usage_snapshot,
+                    "channel": "plan" if requested_mode == "plan" else "chat"})
+            if run_state_manager:
+                run_state_manager.wait_for_input(conversation_id, message_id, str(user_id), run_output.run_id,
+                    expires_at=request_row["expires_at"])
+            connection_manager.redis_client.expire(f"session:{conversation_id}", 86460)
+            socketio.emit("user_question", public_request(request_row), room=room_name)
+            _log_request_tokens(user_id=user_id, conversation_id=conversation_id, message_id=message_id,
+                run_output=run_output, execution_leg_id=execution_leg_id, metrics_override=leg_metrics)
+            return
 
         # 6. Finalize the Stream and Log Metrics
         final_content = "".join(accumulated_content) if accumulated_content else None
@@ -1233,7 +1317,12 @@ def run_agent_and_stream(
         done_payload = {"done": True, "id": message_id}
         if stop_requested:
             done_payload["stopped"] = True
-        socketio.emit("response", done_payload, room=room_name)
+        if requested_mode == "plan":
+            socketio.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
+                "messageId": message_id, "conversationId": conversation_id, "done": True,
+                "plan": final_content or "", "stopped": stop_requested}, room=room_name)
+        else:
+            socketio.emit("response", done_payload, room=room_name)
         if redis_client is not None:
             try:
                 clear_run_control(redis_client, conversation_id)
@@ -1260,12 +1349,7 @@ def run_agent_and_stream(
         if run_state_manager:
             # Fetch session title for notification
             conversation_title = None
-            try:
-                title_resp = supabase_client.from_("session_titles").select("tittle").eq("session_id", conversation_id).maybe_single().execute()
-                if title_resp and title_resp.data:
-                    conversation_title = title_resp.data.get("tittle")
-            except Exception:
-                pass
+            conversation_title = get_title(conversation_id, str(user_id))
             run_state_manager.complete_run(
                 conversation_id,
                 message_id,
@@ -1308,13 +1392,22 @@ def run_agent_and_stream(
                 conversation_id=conversation_id,
                 message_id=message_id,
                 run_output=run_output,
+                execution_leg_id=execution_leg_id,
+                metrics_override=leg_metrics,
             )
         except Exception as e:
             logger.error(f"Failed to write token usage logs for session {conversation_id}: {e}")
 
     except Exception as e:
+        if continuation:
+            failed = QuestionRepository().finish(str(continuation["request_id"]), "failed")
+            if failed:
+                socketio.emit("user_question_ack", {**public_request(failed), "success": True}, room=room_name)
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
         if run_state_manager:
             run_state_manager.fail_run(conversation_id, message_id, str(e))
             # Session content cache removed - frontend handles caching
+        if agent_mode == "plan":
+            socketio.emit("plan_response", {"success": False, "requestId": turn_data.get("plan_request_id"),
+                "messageId": message_id, "error": "Plan execution failed. Please retry."}, room=room_name)
         socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=room_name)
