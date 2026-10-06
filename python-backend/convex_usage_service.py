@@ -93,12 +93,16 @@ class ConvexUsageService:
         metrics: dict[str, Any],
         usage_window: dict[str, Any],
         source: str = "agent_runner",
+        run_id: Optional[str] = None,
+        execution_leg_id: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
         client = self._get_client()
         if client is None:
             return None
 
-        event_key = f"{conversation_id}:{message_id or 'unknown'}"
+        event_key = f"{user_id}:{conversation_id}:{message_id or 'unknown'}"
+        if execution_leg_id:
+            event_key += f":{execution_leg_id}"
         day_key = str(usage_window.get("day_key") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
         payload = {
             "user_id": str(user_id),
@@ -116,9 +120,14 @@ class ConvexUsageService:
             "window_end_ms": _to_unix_ms(usage_window.get("window_end")),
             "source": str(source or "agent_runner"),
         }
+        if run_id:
+            payload["run_id"] = run_id
+        if execution_leg_id:
+            payload["execution_leg_id"] = execution_leg_id
         if payload["total_tokens"] <= 0:
             payload["total_tokens"] = payload["input_tokens"] + payload["output_tokens"]
 
+        payload = {key: value for key, value in payload.items() if value is not None}
         return client.mutation("usage:recordTokenUsage", payload)
 
     def get_window_usage(self, *, user_id: str, window_key: str) -> Optional[dict[str, Any]]:
