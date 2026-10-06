@@ -1076,7 +1076,7 @@ class ContextHandler {
                     assistantResponseDiv.className = 'turn-assistant-response';
                     
                     if (window.renderTurnFromEvents) {
-                        window.renderTurnFromEvents(assistantResponseDiv, run, { inlineArtifacts: true, replaying: true });
+                        window.renderTurnFromEvents(assistantResponseDiv, run, { inlineArtifacts: true, replaying: true, inputRequests: session.input_requests || [] });
                     } else {
                         const fallbackText = document.createElement('div');
                         fallbackText.className = 'message-text';
