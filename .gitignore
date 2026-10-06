@@ -100,3 +100,6 @@ python-backend/changelog.md
 
 # Miscellaneous Uncommitted Documentation Folders
 How to Access v2 Changelog Documentation in Markdown/
+.local-data/
+js/runtime-config.json
+.agent-feature-staging/
