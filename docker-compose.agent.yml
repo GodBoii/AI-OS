@@ -17,5 +17,8 @@ services:
     environment:
       AGENT_STORAGE_ROOT: /data/aetheria
       MEDIA_STORAGE_ROOT: /data/aetheria/media
+      USER_FILE_STORAGE_ROOT: /data/vault
     volumes:
+      - ./python-backend:/app
       - /srv/aetheria/agent-data:/data/aetheria
+      - /srv/aetheria/vault:/data/vault

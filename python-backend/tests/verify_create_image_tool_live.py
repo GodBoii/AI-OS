@@ -1,4 +1,4 @@
-"""Opt-in paid integration test with temporary Supabase fixtures and cleanup."""
+"""Opt-in paid integration test with local images and disposable auth fixtures."""
 
 import argparse
 import json
@@ -33,6 +33,8 @@ def main() -> int:
     from agno.media import Image
     from agno.models.message import Message
     from media_tools import MediaTools
+    from local_media import media_storage
+    from sqlalchemy import select
     from model_routing import DEFAULT_MODEL_ID
     from primary_model_factory import get_primary_model
     from supabase_client import supabase_client
@@ -103,13 +105,13 @@ def main() -> int:
         if user_id:
             # Delete only this run's generated objects, registry rows, and test identity.
             prefix = f"{user_id}/{conversation_id}/generated"
-            bucket = supabase_client.storage.from_("media-uploads")
             try:
-                names = [entry["name"] for entry in bucket.list(prefix)]
-                if any("/" in name or name in {".", ".."} for name in names):
-                    raise RuntimeError("Unexpected cleanup object name")
-                if names:
-                    bucket.remove([f"{prefix}/{name}" for name in names])
+                storage = media_storage()
+                with storage.engine.connect() as connection:
+                    paths = connection.execute(select(storage.table.c.path).where(
+                        storage.table.c.path.startswith(prefix + "/", autoescape=True)
+                    )).scalars().all()
+                storage.remove(paths)
                 supabase_client.table("session_content").delete().eq("user_id", user_id).eq(
                     "session_id", conversation_id
                 ).execute()

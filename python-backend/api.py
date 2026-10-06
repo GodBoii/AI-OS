@@ -2234,12 +2234,12 @@ def get_artifact_details(artifact_id):
         # Get artifact metadata
         result = supabase_client.table('sandbox_artifacts').select(
             '*'
-        ).eq('artifact_id', artifact_id).eq('user_id', str(user.id)).single().execute()
+        ).eq('artifact_id', artifact_id).eq('user_id', str(user.id)).limit(1).execute()
         
         if not result.data:
             return jsonify({"error": "Artifact not found"}), 404
         
-        artifact = result.data
+        artifact = result.data[0]
         
         # Generate download URL
         download_url = persistence_service.get_artifact_download_url(

@@ -72,6 +72,7 @@ presentation-toolkit-output/
 
 # Database & SQL Files
 *.sql
+!python-backend/migrations/app_metadata.sql
 
 # Skills
 skills/
