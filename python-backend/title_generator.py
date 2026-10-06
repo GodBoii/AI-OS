@@ -1,9 +1,8 @@
 
 import logging
 from agno.agent import Agent
-from agno.models.google import Gemini
 from openrouter_reasoning_model import get_openrouter_model
-from supabase_client import supabase_client
+from agno_storage import save_title
 from extensions import socketio
 import uuid
 
@@ -65,7 +64,7 @@ def generate_and_save_title(conversation_id: str, user_id: str, first_message: s
         }
         
         # Insert into Supabase
-        result = supabase_client.from_("session_titles").insert(data).execute()
+        save_title(session_uuid, str(user_id), title)
         logger.info(f"Successfully saved title for session {conversation_id}")
 
         # Emit the title to the conversation room so the frontend can display it live
