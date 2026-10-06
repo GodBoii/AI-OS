@@ -185,15 +185,17 @@ def test_legacy_alias_uses_new_image_path(toolkit, module):
     module.generate_openrouter_image.assert_called_once_with("test-key", "a tree", None)
 
 
-def test_persistence_records_actual_model_and_mime(module, png):
+def test_persistence_records_actual_model_and_mime(module, png, monkeypatch):
     tool = module.MediaTools({"user_id": "user", "conversation_id": "conversation", "message_id": "message"})
-    module.supabase_client.storage.from_.return_value.create_signed_url.return_value = {"signedURL": "https://example.com/file"}
+    storage = Mock()
+    storage.create_signed_url.return_value = {"signedURL": "https://example.com/file"}
+    monkeypatch.setattr(module, "media_storage", lambda: storage)
     module.get_persistence_service.return_value.register_content.return_value = True
     artifact, _, filename = tool._persist_generated_media(
         media_bytes=png, mime_type="image/png", media_kind="image", prompt="tree",
         source_urls=[], provider_response={"model": TEXT_IMAGE_MODEL},
     )
-    upload = module.supabase_client.storage.from_.return_value.upload.call_args
+    upload = storage.upload.call_args
     assert upload.args[0] == f"user/conversation/generated/{filename}"
     assert upload.args[1] == png
     registration = module.get_persistence_service.return_value.register_content.call_args.kwargs
