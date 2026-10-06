@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from r2_client import get_r2_client
 from supabase_client import supabase_client
+from local_media import media_storage
 
 logger = logging.getLogger(__name__)
 
@@ -436,27 +437,33 @@ class SandboxPersistenceService:
                 if guessed_type:
                     mime_type = guessed_type
             
-            # Generate R2 key
-            r2_key = self.r2_client.generate_artifact_key(
-                user_id, session_id, sandbox_id, artifact_id, filename
-            )
-            
-            # Upload to R2
-            upload_result = self.r2_client.upload_file(
-                r2_key,
-                file_content,
-                content_type=mime_type,
-                metadata={
-                    'artifact_id': artifact_id,
-                    'execution_id': execution_id,
-                    'original_path': file_path
-                }
-            )
-            
-            if not upload_result['success']:
-                logger.error(f"Failed to upload artifact to R2: {upload_result.get('error')}")
-                return None
-            
+            if mime_type.startswith("image/"):
+                local_path = f"{user_id}/{session_id}/artifacts/{artifact_id}/{filename}"
+                media_storage().upload(local_path, file_content, {"content-type": mime_type})
+                r2_key = "local-media:" + local_path
+                upload_result = {"success": True, "size": len(file_content)}
+            else:
+                # Generate R2 key
+                r2_key = self.r2_client.generate_artifact_key(
+                    user_id, session_id, sandbox_id, artifact_id, filename
+                )
+
+                # Upload to R2
+                upload_result = self.r2_client.upload_file(
+                    r2_key,
+                    file_content,
+                    content_type=mime_type,
+                    metadata={
+                        'artifact_id': artifact_id,
+                        'execution_id': execution_id,
+                        'original_path': file_path
+                    }
+                )
+
+                if not upload_result['success']:
+                    logger.error(f"Failed to upload artifact to R2: {upload_result.get('error')}")
+                    return None
+
             # Insert into Postgres
             result = self.db.table('sandbox_artifacts').insert({
                 'artifact_id': artifact_id,
@@ -600,9 +607,12 @@ class SandboxPersistenceService:
                 return None
             
             r2_key = result.data['r2_key']
+            if r2_key.startswith("local-media:") and not r2_key.removeprefix("local-media:").startswith(str(user_id)+"/"):
+                raise PermissionError("Artifact media ownership mismatch.")
             
             # Generate presigned URL
-            url = self.r2_client.generate_presigned_get_url(r2_key, expiry=expiry)
+            url = (media_storage().create_signed_url(r2_key.removeprefix("local-media:"), expiry)["signed_url"]
+                if r2_key.startswith("local-media:") else self.r2_client.generate_presigned_get_url(r2_key, expiry=expiry))
             
             return url
             
@@ -636,7 +646,7 @@ class SandboxPersistenceService:
                 return False
             
             # Delete from R2
-            self.r2_client.delete_object(result.data['r2_key'])
+            media_storage().remove([result.data['r2_key'].removeprefix('local-media:')]) if result.data['r2_key'].startswith('local-media:') else self.r2_client.delete_object(result.data['r2_key'])
             
             # Delete from Postgres
             self.db.table('sandbox_artifacts').delete().eq(
