@@ -1,3 +1,4 @@
+from local_media import media_storage
 # python-backend/computer_tools.py
 # Computer Control Toolkit for AI Agent Desktop Automation
 
@@ -39,6 +40,7 @@ class ComputerTools(Toolkit):
             redis_client (Redis): An initialized Redis client for Pub/Sub.
         """
         self.sid = sid
+        self.user_id = kwargs.pop("user_id", None)
         self.socketio = socketio
         self.redis_client = redis_client
         self.message_id = kwargs.pop("message_id", None)
@@ -136,7 +138,9 @@ class ComputerTools(Toolkit):
                         raise ValueError("Invalid or oversized inline screenshot")
                     image_bytes = base64.b64decode(screenshot_base64, validate=True)
                 elif screenshot_path:
-                    image_bytes = supabase_client.storage.from_('media-uploads').download(screenshot_path)
+                    if self.user_id and not screenshot_path.startswith(str(self.user_id) + "/"):
+                        raise PermissionError("Screenshot ownership mismatch.")
+                    image_bytes = media_storage().download(screenshot_path)
                 else:
                     raise ValueError("No screenshot bytes or storage path returned")
                 image_artifact = Image(content=image_bytes)
