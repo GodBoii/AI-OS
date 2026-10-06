@@ -19,6 +19,7 @@ class PythonBridge {
         this.serverUrl = config.backend.url;
         this.isShuttingDown = false;
         this.reconnectExhausted = false;
+        this.conversationSubscriptions = new Map();
     }
 
     _canSendToRenderer() {
@@ -76,6 +77,19 @@ class PythonBridge {
     }
 
     setupIpcHandlers() {
+        if (!this.questionIpcRegistered) {
+            this.questionIpcRegistered = true;
+            ipcMain.on('join-conversation', (_event, payload) => {
+                if (!payload?.conversationId || !payload.accessToken) return;
+                this.conversationSubscriptions.set(payload.conversationId, payload);
+                if (this.socket?.connected) this.socket.emit('join_conversation', payload);
+            });
+            ipcMain.on('submit-user-answers', (_event, payload) => {
+                if (this.socket?.connected) this.socket.emit('submit_user_answers', payload);
+                else this._sendToRenderer('user-question-ack', { requestId: payload?.requestId,
+                    success: false, error: 'Reconnect before submitting your answers.' });
+            });
+        }
         // This method is unchanged and correctly handles communication from the renderer.
         ipcMain.on('send-message', (event, data) => {
             this.sendMessage(data);
@@ -153,6 +167,7 @@ class PythonBridge {
                 this.initialized = true;
                 this.reconnectAttempts = 0;
                 this._sendToRenderer('socket-connection-status', { connected: true });
+                for (const payload of this.conversationSubscriptions.values()) this.socket.emit('join_conversation', payload);
                 resolve();
             });
             this.socket.on('connect_error', (error) => {
@@ -175,6 +190,18 @@ class PythonBridge {
     }
 
     setupSocketHandlers() {
+        for (const [event, channel] of Object.entries({ user_question: 'user-question',
+            user_question_ack: 'user-question-ack', run_status: 'run-status', run_catchup: 'run-catchup',
+            assistant_response_reset: 'assistant-response-reset' })) {
+            this.socket.on(event, payload => {
+                this._sendToRenderer(channel, payload);
+                if (event === 'user_question' && payload.status === 'pending') this.eventEmitter.emit('agent-run-ended', {
+                    conversationId: payload.conversationId, messageId: payload.id, outcome: 'waiting_for_input' });
+                if (((event === 'user_question_ack' && payload.success) || event === 'user_question') && payload.status === 'resuming') {
+                    this.eventEmitter.emit('agent-run-started', { conversationId: payload.conversationId, messageId: payload.id });
+                }
+            });
+        }
         // This method is mostly unchanged, but the 'browser-command' handler is now functional.
         this.socket.on('response', (data) => {
             this._sendToRenderer('chat-response', data);
@@ -406,6 +433,10 @@ class PythonBridge {
     }
 
     sendMessage(message) {
+        message = { ...message, supports_user_questions: true };
+        if (message?.type === 'terminate_session') this.conversationSubscriptions.delete(message.conversationId);
+        else if (message?.conversationId && message.accessToken) this.conversationSubscriptions.set(message.conversationId,
+            { conversationId: message.conversationId, accessToken: message.accessToken });
         // This method is unchanged.
         if (!this.socket || !this.socket.connected) {
             console.error('Socket not connected');
@@ -448,7 +479,7 @@ class PythonBridge {
             if (typeof payload === 'object' && payload !== null) {
                 payload.deviceType = 'desktop';
             }
-            this.socket.emit('plan_request', JSON.stringify(payload || {}));
+            this.socket.emit('plan_request', JSON.stringify({ ...payload, supports_user_questions: true }));
         } catch (error) {
             console.error('Error sending plan request:', error);
             this._sendToRenderer('plan-response', {
