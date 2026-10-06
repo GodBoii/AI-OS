@@ -2,5 +2,14 @@ services:
   web:
     environment:
       USER_FILE_STORAGE_ROOT: /data/vault
+      AGENT_STORAGE_ROOT: /data/aetheria
+      MEDIA_STORAGE_ROOT: /data/aetheria/media
     volumes:
       - /srv/aetheria/vault:/data/vault
+      - /srv/aetheria/agent-data:/data/aetheria
+  flower:
+    environment:
+      AGENT_STORAGE_ROOT: /data/aetheria
+      MEDIA_STORAGE_ROOT: /data/aetheria/media
+    volumes:
+      - /srv/aetheria/agent-data:/data/aetheria
