@@ -1,0 +1,21 @@
+services:
+  web:
+    image: ai-os-web:agent-v3
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-upgrade
+    environment:
+      AGENT_STORAGE_ROOT: /data/aetheria
+      MEDIA_STORAGE_ROOT: /data/aetheria/media
+    volumes:
+      - /srv/aetheria/agent-data:/data/aetheria
+  flower:
+    image: ai-os-web:agent-v3
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-upgrade
+    environment:
+      AGENT_STORAGE_ROOT: /data/aetheria
+      MEDIA_STORAGE_ROOT: /data/aetheria/media
+    volumes:
+      - /srv/aetheria/agent-data:/data/aetheria
