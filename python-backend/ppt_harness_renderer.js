@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const PptxGenJS = require('pptxgenjs');
 const { buildProfessionalSlide } = require('./presentation_layouts');
+const { DESIGN_PROFILES } = require('./presentation_designs');
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const CANVAS_W = 1920;
@@ -177,7 +178,8 @@ function safeColor(value, fallback) {
 }
 
 function pickTemplate(name) {
-  return BUILT_IN_TEMPLATES[name] || BUILT_IN_TEMPLATES.aetheria_modern;
+  const id = BUILT_IN_TEMPLATES[name] ? name : 'aetheria_modern';
+  return { ...BUILT_IN_TEMPLATES[id], ...DESIGN_PROFILES[id], description: DESIGN_PROFILES[id].personality, id };
 }
 
 function isDarkTemplate(template) {
@@ -238,7 +240,7 @@ function readableColor(template, color, background) {
 }
 
 function px(value) {
-  return Math.round(Number(value || 0));
+  return Math.round(Number(value || 0) * 1000) / 1000;
 }
 
 function toIn(value) {
@@ -473,7 +475,8 @@ function estimateTextCapacity(object) {
   const style = object.style || {};
   const sizePx = fontPx(style.fontSizePt || 12);
   const lineHeight = sizePx * (style.lineHeight || 1.16);
-  const charWidth = sizePx * (style.bold ? 0.54 : 0.49);
+  const mono = /Consolas|Courier/.test(style.fontFace || '');
+  const charWidth = sizePx * (mono ? 0.6 : style.bold ? 0.54 : 0.49);
   const lines = Math.max(1, Math.floor(object.h / Math.max(lineHeight, 1)));
   const charsPerLine = Math.max(5, Math.floor((object.w - sizePx * 0.3) / Math.max(charWidth, 1)));
   return Math.floor(lines * charsPerLine * 1.08);
@@ -626,10 +629,12 @@ function objectStyle(object) {
   ];
   if (object.type === 'textbox') {
     const fontFace = style.fontFace || BODY_FONT;
-    const fallbacks = fontFace === SERIF_HEADING_FONT ? "'Liberation Serif',serif" : "'Liberation Sans',Arial,sans-serif";
+    const fallbacks = /Consolas|Courier/.test(fontFace) ? "'Liberation Mono',monospace"
+      : /Georgia|Cambria|Times/.test(fontFace) ? "Caladea,'Liberation Serif',serif"
+        : "Carlito,'Liberation Sans',Arial,sans-serif";
     rules.push(`font-family:'${fontFace}',${fallbacks}`);
     rules.push(`font-size:${fontPx(style.fontSizePt || 12)}px`);
-    rules.push(`padding-right:${fontPx(style.fontSizePt || 12) * 0.3}px`);
+    rules.push(`padding-right:${fontPx(style.fontSizePt || 12) * (/Consolas|Courier/.test(fontFace) ? 0.5 : 0.3)}px`);
     rules.push(`line-height:${style.lineHeight || 1.12}`);
     rules.push(`font-weight:${style.bold ? 700 : 400}`);
     rules.push(`color:${cssColor(style.color || '000000')}`);
@@ -672,7 +677,7 @@ function renderHtmlObject(object) {
   }
   if (object.type === 'image' && object.data?.imagePath) {
     const src = pathToFileUrl(object.data.imagePath);
-    return `<img ${attrs} src="${src}" style="${objectStyle(object)};object-fit:cover" />`;
+    return `<img ${attrs} src="${src}" style="${objectStyle(object)};object-fit:${object.data.fit || 'cover'}" />`;
   }
   if (object.style?.shape === 'line') {
     const y1 = object.style.flipH ? object.h : 0;
@@ -944,7 +949,7 @@ function renderText(slide, object) {
     align: style.align || 'left',
     valign: style.valign || 'top',
     // Reserve font overhang measured in native PowerPoint, also used in HTML.
-    margin: [0, (style.fontSizePt || 12) * 0.3, 0, 0],
+    margin: [0, (style.fontSizePt || 12) * (/Consolas|Courier/.test(style.fontFace || '') ? 0.5 : 0.3), 0, 0],
     breakLine: false,
     lineSpacingMultiple: style.lineHeight || 1.12,
     charSpace: style.letterSpacing || 0,
@@ -1286,6 +1291,8 @@ async function main() {
       id: payload.template || 'aetheria_modern',
       name: template.name,
       description: template.description,
+      personality: template.personality,
+      typography: { heading: template.headingFace, body: template.fontFace },
       colors: {
         background: template.background,
         surface: template.surface,
