@@ -32,7 +32,7 @@ class FileAttachmentHandler {
             'cmake': 'text/x-cmake', 'gradle': 'text/x-gradle',
             'tf': 'text/x-terraform', 'hcl': 'text/x-hcl',
             'proto': 'text/x-protobuf',
-            // Media and Document files (uploaded to Supabase)
+            // Media and Document files (uploaded to server storage)
             'pdf': 'application/pdf',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'doc': 'application/msword',
@@ -421,7 +421,7 @@ class FileAttachmentHandler {
         return files;
     }
 
-    async uploadFileToSupabase(file) {
+    async uploadFileToServer(file) {
         const session = await window.electron.auth.getSession();
         if (!session || !session.access_token) {
             throw new Error("User not authenticated. Please log in again.");
@@ -466,8 +466,8 @@ class FileAttachmentHandler {
 
         if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
-            console.error("Supabase upload error:", errorText);
-            throw new Error('File upload to cloud storage failed.');
+            console.error("Server upload error:", errorText);
+            throw new Error('File upload to server storage failed.');
         }
 
         return path;
@@ -547,11 +547,11 @@ class FileAttachmentHandler {
 
                 // STEP 2: Handle file-type specific processing
                 if (isMedia) {
-                    // Media files: Upload to Supabase
+                    // Media files: Upload to server storage
                     this.attachedFiles[fileIndex].status = 'uploading';
                     this.renderFilePreview();
                     
-                    const filePathInBucket = await this.uploadFileToSupabase(file);
+                    const filePathInBucket = await this.uploadFileToServer(file);
                     this.attachedFiles[fileIndex].path = filePathInBucket;
                     this.attachedFiles[fileIndex].status = 'completed';
                 } else {
