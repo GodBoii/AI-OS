@@ -27,7 +27,7 @@ from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
 from agent_runner import run_agent_and_stream
-from plan_agent import stream_plan
+from plan_agent import stream_plan, build_plan_prompt
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
 from subscription_service import UsageLimitExceeded, enforce_usage_limit
@@ -35,6 +35,8 @@ from model_routing import DEFAULT_MODEL_ID, ModelRoutingError, normalize_thinkin
 from cache_manager import CacheManager
 from socket_security import can_access_conversation, safe_socket_message_metadata
 from utils import get_user_from_jwt
+from user_questions import QuestionRepository, public_request
+from agno_storage import conversation_owner, get_agno_db, save_title
 from run_control import (
     MESSAGE_TYPES as RUN_CONTROL_MESSAGE_TYPES,
     clear_control as clear_run_control,
@@ -339,7 +341,7 @@ def on_join_conversation(data: Dict[str, Any]):
         conversation_id,
         connection_manager_service,
         run_state_manager_instance,
-    ):
+    ) and conversation_owner(conversation_id) != str(user.id):
         logger.warning(
             "[Join] Rejected unauthorized or unknown conversation for SID %s",
             sid,
@@ -350,6 +352,14 @@ def on_join_conversation(data: Dict[str, Any]):
     join_room(room_name)
     _register_socket_conversation(sid, conversation_id)
     logger.info(f"[Join] SID {sid} joined room {room_name}")
+
+    pending_requests = QuestionRepository().list_for_conversation(conversation_id, str(user.id), pending_only=True)
+    for question_request in pending_requests:
+        socketio.emit("user_question", public_request(question_request), room=sid)
+    if pending_requests:
+        socketio.emit("run_status", {"status": "waiting_for_input", "conversationId": conversation_id,
+            "messageId": pending_requests[0]["message_id"]}, room=sid)
+        return
 
     if not run_state_manager_instance:
         return
@@ -363,6 +373,12 @@ def on_join_conversation(data: Dict[str, Any]):
 
     status = state.get("status")
     message_id = state.get("message_id")
+    if status == "waiting_for_input":
+        recent = QuestionRepository().list_for_conversation(conversation_id, str(user.id))
+        if recent:
+            socketio.emit("user_question", public_request(recent[0]), room=sid)
+        return
+
 
     if status == "running":
         # Agent is still working — tell the client it's in-progress
@@ -405,6 +421,41 @@ def on_join_conversation(data: Dict[str, Any]):
             "error": (result or {}).get("error", "An error occurred."),
         }, room=sid)
         logger.info(f"[Join] Conv {conversation_id} had failed run, notified SID {sid}")
+
+
+@socketio.on("submit_user_answers")
+def on_submit_user_answers(data):
+    sid = request.sid
+    request_id = data.get("requestId") if isinstance(data, dict) else None
+    try:
+        if not isinstance(data, dict):
+            raise ValueError("Invalid answer submission.")
+        token = data.get("accessToken") or _socket_auth_tokens.get(sid)
+        if not token:
+            raise PermissionError("Authentication is required.")
+        user, auth_error = get_user_from_jwt(token)
+        if auth_error or not user:
+            raise PermissionError("Your session has expired. Sign in again.")
+        row, accepted = QuestionRepository().submit(str(request_id), str(user.id),
+            str(data.get("submissionId")), data.get("answers"))
+        room = f"conv:{row['conversation_id']}"
+        join_room(room)
+        _register_socket_conversation(sid, row["conversation_id"])
+        socketio.emit("user_question_ack", {**public_request(row), "success": True}, room=room)
+        if accepted:
+            if run_state_manager_instance:
+                run_state_manager_instance.start_run(row["conversation_id"], row["message_id"], str(user.id))
+            eventlet.spawn(run_agent_and_stream, sid, row["conversation_id"], row["message_id"],
+                row["context"].get("turn_data", {}),
+                {"sid": sid, "socketio": socketio, "redis_client": redis_client_instance}, [],
+                row["context"]["agent_mode"], connection_manager_service, redis_client_instance,
+                run_state_manager_instance, row)
+    except (ValueError, LookupError, PermissionError) as exc:
+        socketio.emit("user_question_ack", {"requestId": request_id, "success": False, "error": str(exc)}, room=sid)
+    except Exception:
+        logger.exception("Answer submission failed for request %s", request_id)
+        socketio.emit("user_question_ack", {"requestId": request_id, "success": False,
+            "error": "Could not submit answers. Please retry."}, room=sid)
 
 
 @socketio.on('save-user-context')
@@ -619,6 +670,34 @@ def on_plan_request(data: str):
 
         incoming_config = _sanitize_plan_config(dict(data.get("config", {}) or {}))
 
+        if data.get("supports_user_questions") is True:
+            if not conversation_id or not message_id:
+                raise ValueError("Conversation and message IDs are required.")
+            owner = conversation_owner(conversation_id)
+            if owner is not None and owner != str(user.id):
+                raise PermissionError("Conversation not found.")
+            if run_state_manager_instance and run_state_manager_instance.is_running(conversation_id):
+                raise ValueError("Stop or answer the active turn first.")
+            if QuestionRepository().list_for_conversation(conversation_id, str(user.id), pending_only=True):
+                raise ValueError("Answer the pending questions first.")
+            session = connection_manager_service.get_session(conversation_id)
+            if not session:
+                session = connection_manager_service.create_session(conversation_id, str(user.id),
+                    {**incoming_config, "enable_user_questions": True}, device_type="desktop")
+            join_room(f"conv:{conversation_id}")
+            _register_socket_conversation(sid, conversation_id)
+            save_title(conversation_id, str(user.id), raw_message.split("\n")[0][:120] or "Plan")
+            turn_data = {"user_message": raw_message, "files": [], "plan_request_id": request_id,
+                "plan_prompt": build_plan_prompt(message=raw_message, config=incoming_config,
+                    files=data.get("files", []), selected_sessions=data.get("selected_sessions", []),
+                    workspace_context=data.get("workspace_context", {}))}
+            if run_state_manager_instance:
+                run_state_manager_instance.start_run(conversation_id, message_id, str(user.id))
+            eventlet.spawn(run_agent_and_stream, sid, conversation_id, message_id, turn_data,
+                {"sid": sid, "socketio": socketio, "redis_client": redis_client_instance}, [], "plan",
+                connection_manager_service, redis_client_instance, run_state_manager_instance)
+            return
+
         common_payload = {
             "success": True,
             "requestId": request_id,
@@ -742,6 +821,10 @@ def on_send_message(data: str):
                 room=sid,
             )
 
+        persisted_owner = conversation_owner(conversation_id)
+        if persisted_owner is not None and persisted_owner != str(user.id):
+            return socketio.emit("error", {"message": "Conversation not found.", "reset": True}, room=sid)
+
         # Subscribe only after authentication and ownership checks.
         room_name = f"conv:{conversation_id}"
         join_room(room_name)
@@ -756,6 +839,22 @@ def on_send_message(data: str):
 
         # Pause / resume / stop for a running turn (desktop taskbar buttons).
         if data.get("type") in RUN_CONTROL_MESSAGE_TYPES:
+            if data["type"] == "stop_run":
+                cancelled = QuestionRepository().cancel(conversation_id, str(user.id))
+                for row in cancelled:
+                    paused = get_agno_db().get_run(row["run_id"])
+                    if paused is not None and paused.is_paused:
+                        from agno.run.base import RunStatus
+                        paused.status = RunStatus.cancelled
+                        get_agno_db().upsert_run(paused, session_id=paused.session_id, user_id=str(user.id))
+                    socketio.emit("user_question_ack", {**public_request(row), "success": True}, room=room_name)
+                if cancelled:
+                    if run_state_manager_instance:
+                        run_state_manager_instance.complete_run(conversation_id, cancelled[0]["message_id"])
+                    socketio.emit("response", {"done": True, "stopped": True, "id": cancelled[0]["message_id"]}, room=room_name)
+                    return
+            elif QuestionRepository().list_for_conversation(conversation_id, str(user.id), pending_only=True):
+                return socketio.emit("status", {"message": "Answer the pending questions to continue."}, room=sid)
             state = request_run_control(redis_client_instance, conversation_id, data["type"])
             logger.info("[send_message] Run control %s for %s -> %s", data["type"], conversation_id, state)
             return socketio.emit(
@@ -763,6 +862,13 @@ def on_send_message(data: str):
                 {"message": f"Run control {data['type']} accepted", "conversationId": conversation_id},
                 room=sid,
             )
+
+        if run_state_manager_instance and run_state_manager_instance.is_running(conversation_id):
+            return socketio.emit("error", {"message": "This conversation already has an active turn.",
+                "recoverable": True, "conversationId": conversation_id}, room=sid)
+        if QuestionRepository().list_for_conversation(conversation_id, str(user.id), pending_only=True):
+            return socketio.emit("error", {"message": "Answer or stop the pending question request first.",
+                "recoverable": True, "conversationId": conversation_id}, room=sid)
 
         requested_agent_mode = _normalize_agent_mode(
             data.get("agent_mode") or (data.get("config", {}) or {}).get("agent_mode")
@@ -804,6 +910,8 @@ def on_send_message(data: str):
             dict(data.get("config", {}) or {}),
             str(user.id),
         )
+
+        incoming_config["enable_user_questions"] = data.get("supports_user_questions") is True
 
         if not existing_session:
             device_type = data.get("deviceType", "web")
@@ -912,6 +1020,9 @@ def on_send_message(data: str):
             clear_run_control(redis_client_instance, conversation_id)
         except Exception as control_error:
             logger.warning("Could not clear stale run control for %s: %s", conversation_id, control_error)
+
+        if run_state_manager_instance:
+            run_state_manager_instance.start_run(conversation_id, message_id, str(user.id))
 
         eventlet.spawn(
             run_agent_and_stream,
