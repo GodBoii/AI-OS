@@ -1,3 +1,4 @@
+from local_media import media_storage
 # python-backend/browser_tools_server.py
 """
 Server-side browser automation toolkit for mobile devices.
@@ -229,7 +230,7 @@ class ServerBrowserTools(Toolkit):
             import uuid
             filename = f"{self.user_id}/{self.session_id}/{uuid.uuid4()}.png"
             
-            supabase_client.storage.from_('media-uploads').upload(
+            media_storage().upload(
                 filename,
                 screenshot_bytes,
                 file_options={"content-type": "image/png"}
@@ -256,7 +257,7 @@ class ServerBrowserTools(Toolkit):
             # with /object/public/ endpoint — it returns 400 Bad Request
             signed_url = screenshot_url  # fallback to raw path
             try:
-                signed_response = supabase_client.storage.from_('media-uploads').create_signed_url(
+                signed_response = media_storage().create_signed_url(
                     path=screenshot_url,
                     expires_in=7200  # 2 hours
                 )
@@ -324,7 +325,7 @@ class ServerBrowserTools(Toolkit):
         if result.get("status") == "success" and "screenshot_path" in result:
             screenshot_path = result.pop("screenshot_path")
             try:
-                image_bytes = supabase_client.storage.from_('media-uploads').download(screenshot_path)
+                image_bytes = media_storage().download(screenshot_path)
                 image_artifact = Image(content=image_bytes)
                 return ToolResult(content=json.dumps(result), images=[image_artifact])
             except Exception as e:
