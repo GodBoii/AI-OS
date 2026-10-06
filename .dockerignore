@@ -1,0 +1,12 @@
+.git
+node_modules
+dist
+.local-data
+.env*
+**/.env*
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+js/runtime-config.json
+.runtime-test.env
+.agent-feature-staging
