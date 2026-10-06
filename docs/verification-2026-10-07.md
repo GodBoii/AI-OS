@@ -30,12 +30,20 @@ starting the base Compose configuration alone omits the agent storage mount.
 - Sandbox creation, command execution, file write/read/list, and termination passed.
 - All 13 public Supabase metadata tables have RLS enabled. There are no hosted
   Agno history tables. Local SQLite integrity check returned `ok`.
+  Authenticated reads of all 13 tables and task create/update/delete passed;
+  authenticated attempts to update profile billing fields returned 403.
+- The configured chat model returned HTTP 200 through OpenRouter. Public backend
+  health endpoints also returned HTTP 200 after the final restart.
 - Google is enabled in live Supabase settings. Its authorization endpoint returns
   a Google redirect with the new project's callback. The user confirmed sign-in
   works. The older installed desktop build still contains the old project URL.
 - Desktop 1.3.1 Windows installer and Android debug APK built successfully.
   Both packaged public configurations target the new Supabase project; the
   desktop archive contains no private `.env` file.
+- Mobile web/native auth now share the new public runtime configuration.
+  Mobile history, titles, usage, and upload viewing use the authenticated backend
+  APIs. Its transport contract test passed, and its rebuilt entry page and signup
+  form loaded without console errors. The final APK includes these changes.
 
 ## Cleanup
 
