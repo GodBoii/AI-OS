@@ -106,7 +106,7 @@ class AetheriaToolBridge(Toolkit):
                 input=full_query,
                 session_id=background_session_id,
                 stream=False,
-                stream_intermediate_steps=False,
+                stream_events=False,
             )
             
             if run_response and hasattr(run_response, 'content'):
