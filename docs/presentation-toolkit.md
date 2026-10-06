@@ -1,5 +1,7 @@
 # Presentation toolkit
 
+The October 6 update adds distinct template compositions, typography, actual picker previews, and a presentation image tool. See [the design and image verification report](presentation-designs.md) for the current behavior and live provider result.
+
 The presentation agent now submits finished content in one compact call. Local code chooses the layout, draws editable PowerPoint objects, renders previews, and checks the result. It makes no model calls while rendering or validating.
 
 The default layouts are cover, insight list, comparison, metrics, bar/column/line chart, table, process, image, section break, and closing. All nine existing template IDs remain available. Fonts, spacing, source lines, and page numbers are consistent across a deck. Decorative network graphics and repeated side panels were removed.
