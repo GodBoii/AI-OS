@@ -5,13 +5,15 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
-from agno.db.postgres import PostgresDb
+from agno_storage import get_agno_db
 from agno.run.team import TeamRunEvent
 from agno.team import Team
 from agno.tools import Toolkit
 from agno.tools.duckduckgo import DuckDuckGoTools
 
-from agent_delegation_tools import AgentDelegationTools
+from coder_agent import get_coder_agent
+from computer_agent import get_computer_agent
+from user_questions import question_tools
 from browser_tools import BrowserTools
 from browser_tools_server import ServerBrowserTools
 from composio_tools import (
@@ -78,6 +80,7 @@ def get_llm_os(
     message_id: Optional[str] = None,
     enable_user_file_vault: bool = True,
     model_id: str = DEFAULT_MODEL_ID,
+    enable_user_questions: bool = False,
 ) -> Team:
     """
     Build the main Aetheria AI team.
@@ -95,10 +98,7 @@ def get_llm_os(
 
     direct_tools: List[Union[Toolkit, callable]] = []
     members: List[Union[Agent, Team]] = []
-    db = PostgresDb(
-        db_url=get_sqlalchemy_database_url(),
-        db_schema="public",
-    )
+    db = get_agno_db()
 
     connected_platform_tools: List[Union[Toolkit, callable]] = []
     connected_platform_instructions = [
@@ -146,6 +146,7 @@ def get_llm_os(
         )
 
     if connected_platform_tools:
+        connected_platform_tools.extend(question_tools(enable_user_questions))
         connected_platform_instructions.append("</available_tools>")
         members.append(
             Agent(
@@ -230,34 +231,31 @@ def get_llm_os(
                 socketio=socketio_instance,
                 sid=sid,
                 debug_mode=debug_mode,
+                enable_user_questions=enable_user_questions,
             )
         )
 
-    if can_delegate_coder or can_delegate_computer:
-        direct_tools.append(
-            AgentDelegationTools(
-                user_id=user_id,
-                session_info=session_info,
-                session_id=session_id,
-                message_id=message_id,
-                socketio=socketio_instance,
-                sid=sid,
-                redis_client=redis_client_instance,
-                use_memory=use_memory,
-                use_session_summaries=use_session_summaries,
-                debug_mode=debug_mode,
-                enable_github=enable_github,
-                enable_coder=can_delegate_coder,
-                enable_computer=can_delegate_computer,
-            )
-        )
+    direct_tools.extend(question_tools(enable_user_questions and has_socket_context))
+    if can_delegate_coder:
+        members.append(get_coder_agent(user_id=user_id, session_info=session_info,
+            browser_tools_config=browser_tools_config, session_id=session_id, message_id=message_id,
+            use_memory=use_memory, use_session_summaries=use_session_summaries, debug_mode=debug_mode,
+            enable_github=enable_github, persist_session=False, model_id=model_id,
+            coder_execution_target=(session_info or {}).get("config", {}).get("coder_execution_target", "cloud")))
+    if can_delegate_computer:
+        members.append(get_computer_agent(user_id=user_id, session_info=session_info,
+            browser_tools_config=browser_tools_config, computer_tools_config=browser_tools_config,
+            session_id=session_id, message_id=message_id, use_memory=use_memory,
+            use_session_summaries=use_session_summaries, debug_mode=debug_mode, persist_session=False,
+            enable_google_email=enable_google_email, enable_google_drive=enable_google_drive,
+            enable_google_sheets=enable_google_sheets, model_id=model_id))
 
     aetheria_instructions = [
         "<system_instructions>",
         "You are Aetheria AI, providing deeply personalized responses using all available user context.",
         "Access context via session_state['turn_context'].",
         "Users talk directly to you. Use direct tools and explicit delegation tools silently and effectively.",
-        "When delegation tools are available in main mode, use `delegate_to_coder(task_description)` for coding tasks and `delegate_to_computer(task_description)` for desktop/browser control tasks.",
+        "Use delegate_task_to_member to route coding work to Aetheria_Coder and desktop/browser control to Aetheria_Computer when those members are available.",
         "Use DuckDuckGoTools for current internet data when needed.",
         "BrowserTools gives you access to a complete browser. Always call get_browser_status() first before browser actions.",
         "Use every available tool and method to fulfil user demands. If a tool fails, silently try alternatives before giving up.",
@@ -280,8 +278,7 @@ def get_llm_os(
         "- composio_youtube_tools: list_youtube_actions() first, then execute with an exact YOUTUBE_ slug",
         "For social tools, read/list operations are safe to perform as needed. Only publish, comment, reply, message, edit, or delete when the user's request clearly authorizes that exact external action; ask for confirmation when intent or target is ambiguous.",
         "- DuckDuckGoTools: fast web search",
-        "- delegate_to_coder: dedicated coding-agent execution in realtime main-mode sessions",
-        "- delegate_to_computer: dedicated computer-agent execution when computer control is enabled",
+        "- delegate_task_to_member: route tasks to available specialist members",
         "</tools>",
     ]
 
@@ -306,19 +303,19 @@ def get_llm_os(
         user_id=user_id,
         db=db,
         enable_agentic_memory=use_memory,
-        enable_user_memories=use_memory,
+        update_memory_on_run=use_memory,
         enable_session_summaries=use_session_summaries,
-        stream_intermediate_steps=True,
+        stream_events=True,
         search_knowledge=use_memory,
         send_media_to_model=True,
-        store_media=True,
+        store_media=False,
         events_to_skip=[
             TeamRunEvent.run_started,
             TeamRunEvent.run_completed,
             TeamRunEvent.memory_update_started,
             TeamRunEvent.memory_update_completed,
         ],
-        read_team_history=True,
+        read_chat_history=True,
         add_history_to_context=True,
         num_history_runs=40,
         store_events=True,
