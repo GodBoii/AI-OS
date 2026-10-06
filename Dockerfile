@@ -13,6 +13,8 @@ RUN apt-get update \
     libffi-dev \
     libssl-dev \
     fonts-liberation \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
  && rm -rf /var/lib/apt/lists/*
 
 
