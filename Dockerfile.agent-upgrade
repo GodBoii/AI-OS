@@ -1,0 +1,4 @@
+# Upgrade the existing backend runtime while retaining its installed tool dependencies.
+FROM ai-os-web:latest
+RUN pip install --no-cache-dir "agno==3.1.1" "SQLAlchemy>=2.0.41,<2.1"
+COPY python-backend/ /app/
