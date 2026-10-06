@@ -68,6 +68,10 @@ def get_system_assistant(
                     "- For communication tasks: use send_message with requested channel and recipient.",
                     "- Prefer semantic UI actions (tap_text, input_text) before coordinate gestures (tap, swipe).",
                     "- Use navigation helpers when needed: press_back, open_notifications, open_quick_settings, open_recents.",
+                    "- For directions: get_travel_estimate for time/distance, open_navigation to start turn-by-turn.",
+                    "- Quick device actions: set_flashlight, media_control (play_pause/next/previous), web_search.",
+                    "- For calendar events use create_calendar_event (epoch ms); the user saves it in the calendar app.",
+                    "- For calls use dial_number; the user presses call. If the recipient is unclear, use pick_contact first.",
                     "- Keep actions safe and intentional; avoid repetitive destructive loops.",
                 ]
             )
