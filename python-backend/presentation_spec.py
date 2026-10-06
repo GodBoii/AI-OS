@@ -6,14 +6,14 @@ import re
 from typing import Any
 
 LAYOUTS = {
-    "title": "title, subtitle?, kicker?",
+    "title": "title, subtitle?, kicker?, image_path?, image_fit:contain|cover?, metrics?",
     "content": "title, bullets[1..4], subtitle?, callout?",
     "two_column": "title, left_title, right_title, left_content[1..4], right_content[1..4]",
     "metrics": "title, metrics[{value,label}][1..4], subtitle?",
     "chart": "title, chart{type:bar|column|line,data:[{label,value}]}, source?, callout?",
     "table": "title, table:[[header,...],[cell,...],...], source?",
     "diagram": "title, steps:[string|{title,detail}][2..5]",
-    "image": "title, image_path, caption?, bullets[0..3]",
+    "image": "title, image_path, image_fit:contain|cover?, caption?, bullets[0..3]",
     "section": "title, subtitle?",
     "closing": "title, bullets[1..3], callout?",
 }
@@ -57,6 +57,7 @@ def parse_outline(outline: str) -> list[dict[str, Any]]:
             "notes",
             "caption",
             "image_path",
+            "image_fit",
             "left_title",
             "right_title",
             "left_content",
@@ -111,6 +112,13 @@ def content_issues(slides: list[dict[str, Any]]) -> list[dict[str, Any]]:
             issue(index, "type", "Use a layout name as text.")
             continue
         layout = ALIASES.get(raw_layout.lower(), raw_layout.lower())
+        image_fit = slide.get("image_fit", "contain")
+        if not isinstance(image_fit, str) or image_fit not in {"contain", "cover"}:
+            issue(
+                index,
+                "image_fit",
+                "Choose contain to preserve the full image, or cover for intentional cropping.",
+            )
         if layout == "html" or slide.get("html") or slide.get("contract_html"):
             continue  # Geometry and strict contract checks run in the renderer.
         if layout not in LAYOUTS:
