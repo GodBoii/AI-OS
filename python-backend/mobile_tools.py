@@ -14,6 +14,8 @@ from redis import Redis
 from agno.tools import Toolkit
 from agno.tools.function import ToolResult
 
+from mobile_action_contract import COMMAND_TTL_SECONDS, CONTRACT_VERSION
+
 logger = logging.getLogger(__name__)
 
 MOBILE_COMMAND_TIMEOUT_SECONDS = 35
@@ -44,6 +46,7 @@ class MobileTools(Toolkit):
             tools=[
                 self.get_device_state,
                 self.get_active_app_context,
+                self.get_visible_ui_text,
                 self.list_apps,
                 self.open_app,
                 self.act_settings,
@@ -65,6 +68,15 @@ class MobileTools(Toolkit):
                 self.tap,
                 self.swipe,
                 self.press_back,
+                self.get_travel_estimate,
+                self.prepare_navigation,
+                self.open_navigation,
+                self.set_flashlight,
+                self.media_control,
+                self.create_calendar_event,
+                self.dial_number,
+                self.web_search,
+                self.pick_contact,
             ],
             **kwargs,
         )
@@ -72,6 +84,11 @@ class MobileTools(Toolkit):
     def _send_command_and_wait(self, command_payload: Dict[str, Any]) -> ToolResult:
         request_id = str(uuid.uuid4())
         command_payload["request_id"] = request_id
+        # Contract stamp checked by MobileActionPolicy on the device (version + freshness).
+        issued_at_ms = int(time.time() * 1000)
+        command_payload["contract_version"] = CONTRACT_VERSION
+        command_payload["issued_at_ms"] = issued_at_ms
+        command_payload["expires_at_ms"] = issued_at_ms + COMMAND_TTL_SECONDS * 1000
         if self.conversation_id:
             command_payload["conversation_id"] = self.conversation_id
         if self.message_id:
@@ -391,3 +408,86 @@ class MobileTools(Toolkit):
         Performs Android global BACK action.
         """
         return self._send_command_and_wait({"action": "press_back"})
+
+    def get_travel_estimate(self, destination: str, mode: str = "driving") -> ToolResult:
+        """
+        Estimates distance and travel time from the current location.
+        mode: driving, walking or bicycling. Results with approximate=true are rough.
+        """
+        return self._send_command_and_wait(
+            {"action": "get_travel_estimate", "destination": destination, "mode": mode}
+        )
+
+    def prepare_navigation(self, destination: str, mode: str = "driving") -> ToolResult:
+        """
+        Checks location and resolves the destination before starting navigation.
+        """
+        return self._send_command_and_wait(
+            {"action": "prepare_navigation", "destination": destination, "mode": mode}
+        )
+
+    def open_navigation(self, destination: str, mode: str = "driving") -> ToolResult:
+        """
+        Opens turn-by-turn navigation to the destination in the maps app.
+        """
+        return self._send_command_and_wait(
+            {"action": "open_navigation", "destination": destination, "mode": mode}
+        )
+
+    def set_flashlight(self, enabled: bool) -> ToolResult:
+        """
+        Turns the flashlight (torch) on or off.
+        """
+        return self._send_command_and_wait({"action": "set_flashlight", "enabled": bool(enabled)})
+
+    def media_control(self, command: str) -> ToolResult:
+        """
+        Controls whatever media is playing. command: play_pause, play, pause, next, previous, stop.
+        """
+        return self._send_command_and_wait(
+            {"action": "media_control", "command": (command or "").strip().lower()}
+        )
+
+    def create_calendar_event(
+        self,
+        title: str,
+        start_time_ms: int,
+        end_time_ms: int = 0,
+        all_day: bool = False,
+        location: str = "",
+        description: str = "",
+    ) -> ToolResult:
+        """
+        Opens the calendar app with a new event filled in; the user saves it.
+        Times are Unix epoch milliseconds in the user's timezone. end_time_ms defaults to one hour later.
+        """
+        return self._send_command_and_wait(
+            {
+                "action": "create_calendar_event",
+                "title": title,
+                "start_time_ms": int(start_time_ms),
+                "end_time_ms": int(end_time_ms or 0),
+                "all_day": bool(all_day),
+                "location": location,
+                "description": description,
+            }
+        )
+
+    def dial_number(self, number: str) -> ToolResult:
+        """
+        Opens the phone dialer with the number entered. The user presses call.
+        """
+        return self._send_command_and_wait({"action": "dial_number", "number": number})
+
+    def web_search(self, query: str) -> ToolResult:
+        """
+        Opens a web search for the query in the device's browser or search app.
+        """
+        return self._send_command_and_wait({"action": "web_search", "query": query})
+
+    def pick_contact(self) -> ToolResult:
+        """
+        Shows the system contact picker so the user can choose who to message or call.
+        Returns name and phone_number, or status=cancelled.
+        """
+        return self._send_command_and_wait({"action": "pick_contact"})
