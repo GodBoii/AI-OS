@@ -13,9 +13,15 @@ from typing import Any
 
 from agno.agent import Agent
 from agno.tools import Toolkit
+from presentation_images import PresentationImageTools, prepare_slide_images
 from presentation_spec import LAYOUTS, content_issues, parse_outline
 
 logger = logging.getLogger(__name__)
+DESIGN_PROFILES = json.loads(
+    Path(__file__)
+    .with_name("presentation_design_profiles.json")
+    .read_text(encoding="utf-8")
+)
 
 
 def get_persistence_service() -> Any:
@@ -232,11 +238,14 @@ DECK_ARCHETYPES: dict[str, dict[str, Any]] = {
 
 
 def _template_summary(template_id: str, template: dict[str, Any]) -> dict[str, str]:
+    design = DESIGN_PROFILES[template_id]
     return {
         "id": template_id,
         "name": str(template.get("name", template_id)),
         "best_for": str(template.get("best_for", "")),
-        "description": str(template.get("description", "")),
+        "description": design["personality"],
+        "design": design["personality"],
+        "typography": f"{design['headingFace']} / {design['fontFace']}",
     }
 
 
@@ -535,7 +544,7 @@ class PresentationTools(Toolkit):
         if expected_slide_count is not None:
             try:
                 _bounded_slide_count(expected_slide_count)
-            except ValueError as exc:
+            except (ValueError, TypeError) as exc:
                 return self._error(str(exc))
         return self.create_presentation(topic, slides, template, filename)
 
@@ -565,6 +574,10 @@ class PresentationTools(Toolkit):
         if not node:
             return self._error("Node.js is required for layout validation.")
         with tempfile.TemporaryDirectory(prefix="ppt-lint-") as directory:
+            try:
+                prepare_slide_images(normalized, Path(directory))
+            except (ValueError, TypeError) as exc:
+                return self._error(str(exc))
             payload = Path(directory) / "payload.json"
             payload.write_text(
                 json.dumps(
@@ -875,6 +888,8 @@ class PresentationTools(Toolkit):
             "data": {
                 "id": resolved_id,
                 **template,
+                "description": DESIGN_PROFILES[resolved_id]["personality"],
+                "design_system": DESIGN_PROFILES[resolved_id],
             },
             "metadata": {
                 "kind": "presentation_tool_output",
@@ -1137,6 +1152,12 @@ class PresentationTools(Toolkit):
             work_dir = Path(tempfile.mkdtemp(prefix="aetheria-ppt-"))
             output_path = work_dir / safe_name
             payload_path = work_dir / "payload.json"
+            try:
+                prepare_slide_images(normalized_slides, work_dir)
+            except (ValueError, TypeError) as exc:
+                result = self._error(str(exc))
+                result["issues"] = [{"type": "broken_image", "message": str(exc)}]
+                return result
 
             payload = {
                 "topic": str(topic).strip(),
@@ -1507,7 +1528,8 @@ def build_presentation_agent(
             message_id=message_id,
             socketio=socketio,
             sid=sid,
-        )
+        ),
+        PresentationImageTools(),
     ]
     from openrouter_reasoning_model import get_openrouter_model
 
@@ -1523,6 +1545,8 @@ def build_presentation_agent(
             "<system_instructions>",
             "Build editable, audience-specific PowerPoint decks. Make each title a claim and each slide one idea. Use supplied sources; never invent statistics or placeholder evidence. Ask one concise clarification only if missing information prevents useful work, otherwise choose sensible defaults.",
             "Respect the selected template and exact requested slide count. Default to a cover, varied evidence/argument slides, then a decision or takeaway. Match layouts to content, not a repeating cycle. Avoid generic titles and repeated bullets. Notes only when requested.",
+            "Each template has a distinct composition and typography. Use create_presentation_image when an illustration would explain the subject or strengthen a cover. Pass the selected template for matching art direction. Inspect the returned image, then use data.image_path on a title or image slide. Default image_fit='contain' preserves the complete subject; cover is opt-in for intentional photographic cropping. Never put slide titles, labels, statistics or diagrams inside generated images. Reuse assets; create only the images the narrative needs. Generate assets before submitting the deck so export remains one compact call.",
+            "If image creation fails, report the provider error. Use supplied assets or a text/diagram layout when appropriate. Never invent an image path or claim image creation succeeded; do not repeat a billing or configuration failure without a changed account setting.",
             "Default to ONE create_presentation_from_outline call for 5, 10, or 15 slides, or ONE create_presentation call with compact slide objects. Do not call a tool for every slide. Layout, typography, spacing, previews and validation are computed locally, without model calls. No HTML, coordinates, colors or redundant fields are needed.",
             "Outline syntax: ## [layout] Title then - points or field: value lines. Layouts: title, content, two_column, metrics, chart, table, diagram, image, section, closing. chart/table/steps/metrics/left_content/right_content use single-line JSON. Call get_presentation_toolkit once only if field details are needed. Call list_presentation_templates only if template fit is unclear.",
             "Use titles <=100 characters, 1-4 concise points <=150 characters, comparison panel titles and lists, metrics as value/label pairs, charts as {type:bar|column|line,data:[{label,value}]} with source, tables as equal rows, diagrams as 2-5 steps with optional detail. Image slides need an existing image_path; use a meaningful layout when no image exists.",
