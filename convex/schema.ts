@@ -27,6 +27,8 @@ export default defineSchema({
     event_key: v.string(),
     conversation_id: v.optional(v.string()),
     message_id: v.optional(v.string()),
+    run_id: v.optional(v.string()),
+    execution_leg_id: v.optional(v.string()),
     day_key: v.string(),
     window_key: v.string(),
     plan_type: v.string(),
