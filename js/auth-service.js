@@ -231,133 +231,15 @@ class AuthService {
      * This is optimized to fetch only metadata without heavy runs data
      */
     async fetchSessionTitles(limit = 15, offset = 0) {
-        if (!await this.ensureInitialized()) {
-            throw new Error('Supabase client not initialized.');
-        }
-
         const session = await this.getSession();
-        const userId = this.user?.id || session?.user?.id;
-
-        if (!userId) {
-            throw new Error('User not authenticated.');
-        }
-
-        // First, try to fetch from session_titles table (has proper sorting by session_created_at)
-        const { data: titlesData, error: titlesError } = await this.supabase
-            .from('session_titles')
-            .select('session_id, tittle, created_at, session_created_at')
-            .eq('user_id', userId)
-            .order('session_created_at', { ascending: false, nullsFirst: false })
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-
-        if (titlesError) {
-            console.error('Error fetching session titles:', titlesError);
-            throw new Error(titlesError.message || 'Failed to fetch session titles.');
-        }
-
-        // Get session IDs that have titles
-        const sessionIdsWithTitles = new Set((titlesData || []).map(t => t.session_id));
-        const titledSessionIds = Array.from(sessionIdsWithTitles).filter(Boolean);
-        const sessionMetadataById = new Map();
-
-        if (titledSessionIds.length > 0) {
-            const { data: sessionMetadata, error: metadataError } = await this.supabase
-                .from('agno_sessions')
-                .select('session_id, session_type, agent_id, team_id, created_at')
-                .eq('user_id', userId)
-                .in('session_id', titledSessionIds);
-
-            if (metadataError) {
-                console.error('Error fetching session workspace metadata:', metadataError);
-            } else {
-                (sessionMetadata || []).forEach(row => {
-                    sessionMetadataById.set(row.session_id, row);
-                });
-            }
-        }
-
-        // Calculate remaining slots for sessions without titles
-        const remainingSlots = limit - (titlesData?.length || 0);
-
-        let sessionsWithoutTitles = [];
-        if (remainingSlots > 0) {
-            // Fetch sessions from agno_sessions that don't have titles yet
-            // Fetch runs field to extract first user message as title
-            let query = this.supabase
-                .from('agno_sessions')
-                .select('session_id, user_id, created_at, session_type, agent_id, team_id, runs')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
-
-            if (titledSessionIds.length > 0) {
-                query = query.not('session_id', 'in', `(${titledSessionIds.join(',')})`);
-            }
-
-            const { data, error: sessionsError } = await query
-                .range(0, remainingSlots - 1);
-
-            if (sessionsError) {
-                console.error('Error fetching sessions without titles:', sessionsError);
-            } else {
-                sessionsWithoutTitles = data || [];
-            }
-        }
-
-        // Combine both sources
-        const allSessions = [
-            ...(titlesData || []).map(t => {
-                const metadata = sessionMetadataById.get(t.session_id) || {};
-                return {
-                    session_id: t.session_id,
-                    session_title: t.tittle,
-                    created_at: t.session_created_at || metadata.created_at || t.created_at,
-                    session_type: metadata.session_type || null,
-                    agent_id: metadata.agent_id || null,
-                    team_id: metadata.team_id || null,
-                    has_title: true,
-                    has_session_row: Boolean(metadata.session_id)
-                };
-            }),
-            ...(sessionsWithoutTitles || []).map(s => ({
-                session_id: s.session_id,
-                session_title: this.extractTitleFromRuns(s.runs),
-                created_at: s.created_at,
-                session_type: s.session_type || null,
-                agent_id: s.agent_id || null,
-                team_id: s.team_id || null,
-                has_title: false
-            }))
-        ];
-
-        // Sort by created_at (most recent first)
-        allSessions.sort((a, b) => b.created_at - a.created_at);
-
-        // PHASE 3: Check which sessions have attachments
-        if (allSessions.length > 0) {
-            const sessionIds = allSessions.map(s => s.session_id);
-            const { data: attachmentData, error: attachmentError } = await this.supabase
-                .from('attachment')
-                .select('session_id')
-                .in('session_id', sessionIds)
-                .eq('user_id', userId);
-
-            if (!attachmentError && attachmentData) {
-                const sessionsWithAttachments = new Set(attachmentData.map(a => a.session_id));
-                allSessions.forEach(session => {
-                    session.has_attachments = sessionsWithAttachments.has(session.session_id);
-                });
-            }
-        }
-
-        return allSessions;
+        if (!session?.access_token) throw new Error('Sign in to load your conversations.');
+        const response = await fetch(`${config.backend.url}/api/sessions?limit=${limit}&offset=${offset}`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error('Could not load conversations.');
+        return await response.json();
     }
 
-    /**
-     * Fetch attachment metadata for a specific session
-     * @param {string} sessionId - Session ID to fetch attachments for
-     * @returns {Promise<Array>} Array of attachment metadata objects
-     */
     async fetchSessionAttachments(sessionId) {
         if (!await this.ensureInitialized()) {
             throw new Error('Supabase client not initialized.');
@@ -400,116 +282,35 @@ class AuthService {
             throw new Error('User not authenticated.');
         }
 
-        // Fetch full session data including runs
-        const { data: sessionData, error } = await this.supabase
-            .from('agno_sessions')
-            .select('*')
-            .eq('session_id', sessionId)
-            .eq('user_id', userId)
-            .single();
+        const response = await fetch(`${config.backend.url}/api/sessions/${encodeURIComponent(sessionId)}/history`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error('Could not load conversation history.');
+        const sessionData = await response.json();
 
-        if (error) {
-            throw new Error(error.message || 'Failed to fetch session data.');
-        }
-
-        // Try to get title from session_titles table
-        const { data: titleData } = await this.supabase
-            .from('session_titles')
-            .select('tittle')
-            .eq('session_id', sessionId)
-            .eq('user_id', userId)
-            .single();
-
-        return {
-            ...sessionData,
-            session_title: titleData?.tittle || null
-        };
+        return sessionData;
     }
 
-    async renameSessionTitle(sessionId, newTitle, sessionCreatedAt = null) {
-        if (!await this.ensureInitialized()) {
-            throw new Error('Supabase client not initialized.');
-        }
-
+    async renameSessionTitle(sessionId, newTitle) {
+        const title = String(newTitle || '').trim();
+        if (!title || title.length > 120) throw new Error('Enter a title of up to 120 characters.');
         const session = await this.getSession();
-        const userId = this.user?.id || session?.user?.id;
-        if (!userId) {
-            throw new Error('User not authenticated.');
-        }
-
-        const normalizedSessionId = String(sessionId || '').trim();
-        const normalizedTitle = String(newTitle || '').trim();
-
-        if (!normalizedSessionId) {
-            throw new Error('Session ID is required.');
-        }
-        if (!normalizedTitle) {
-            throw new Error('Title cannot be empty.');
-        }
-        if (normalizedTitle.length > 120) {
-            throw new Error('Title is too long.');
-        }
-
-        const payload = {
-            session_id: normalizedSessionId,
-            user_id: userId,
-            tittle: normalizedTitle
-        };
-
-        if (typeof sessionCreatedAt === 'number' && Number.isFinite(sessionCreatedAt)) {
-            payload.session_created_at = sessionCreatedAt;
-        }
-
-        const { error } = await this.supabase
-            .from('session_titles')
-            .upsert(payload, { onConflict: 'session_id' });
-
-        if (error) {
-            console.error('Error renaming session title:', error);
-            throw new Error(error.message || 'Failed to rename session title.');
-        }
-
+        if (!session?.access_token) throw new Error('Sign in to rename this conversation.');
+        const response = await fetch(`${config.backend.url}/api/sessions/${encodeURIComponent(sessionId)}/title`, {
+            method: 'PUT', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+        });
+        if (!response.ok) throw new Error('Could not rename conversation.');
         return true;
     }
 
     async deleteSession(sessionId) {
-        if (!await this.ensureInitialized()) {
-            throw new Error('Supabase client not initialized.');
-        }
-
         const session = await this.getSession();
-        const userId = this.user?.id || session?.user?.id;
-        if (!userId) {
-            throw new Error('User not authenticated.');
-        }
-
-        const normalizedSessionId = String(sessionId || '').trim();
-        if (!normalizedSessionId) {
-            throw new Error('Session ID is required.');
-        }
-
-        const { error: titleDeleteError } = await this.supabase
-            .from('session_titles')
-            .delete()
-            .eq('session_id', normalizedSessionId)
-            .eq('user_id', userId);
-
-        if (titleDeleteError) {
-            console.error('Error deleting session title:', titleDeleteError);
-            throw new Error(titleDeleteError.message || 'Failed to delete session title.');
-        }
-
-        const { error: sessionDeleteError } = await this.supabase
-            .from('agno_sessions')
-            .delete()
-            .eq('session_id', normalizedSessionId)
-            .eq('user_id', userId);
-
-        if (sessionDeleteError) {
-            console.error('Error deleting session:', sessionDeleteError);
-            throw new Error(sessionDeleteError.message || 'Failed to delete session.');
-        }
-
+        if (!session?.access_token) throw new Error('Sign in to delete this conversation.');
+        const response = await fetch(`${config.backend.url}/api/sessions/${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error('Could not delete conversation.');
         return true;
     }
 
