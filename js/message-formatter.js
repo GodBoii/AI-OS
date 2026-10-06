@@ -6,6 +6,7 @@ class MessageFormatter {
     constructor() {
         this.pendingContent = new Map();
         this.inlineRenderer = this.buildInlineRenderer();
+        this.streamingInlineRenderer = this.buildInlineRenderer(true);
         this.mermaidInteractionMap = new WeakMap();
 
         mermaid.initialize({
@@ -74,6 +75,11 @@ class MessageFormatter {
         };
 
         marked.use({ renderer: artifactRenderer });
+        this.streamingArtifactRenderer = new marked.Renderer();
+        this.streamingArtifactRenderer.table = artifactRenderer.table;
+        this.streamingArtifactRenderer.code = (code, language) => language === 'mermaid'
+            ? this.renderPendingMermaid(code)
+            : artifactRenderer.code(code, language);
 
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.artifact-reference');
@@ -93,7 +99,7 @@ class MessageFormatter {
         });
     }
 
-    buildInlineRenderer() {
+    buildInlineRenderer(streaming = false) {
         const renderer = new marked.Renderer();
         renderer.code = (code, language = 'plaintext') => {
             if (language === 'image') {
@@ -105,7 +111,7 @@ class MessageFormatter {
             }
 
             if (language === 'mermaid') {
-                return this.renderMermaidInline(code);
+                return streaming ? this.renderPendingMermaid(code) : this.renderMermaidInline(code);
             }
 
             const normalizedLang = hljs.getLanguage(language) ? language : 'plaintext';
@@ -117,6 +123,11 @@ class MessageFormatter {
         };
 
         return renderer;
+    }
+
+    renderPendingMermaid(code) {
+        return `<div class="artifact-mermaid-pending" role="status">Writing diagram…</div>
+            <pre class="inline-artifact-code"><code class="language-mermaid">${this.escapeHtml(code)}</code></pre>`;
     }
 
     renderCodeInline(code, language) {
@@ -196,14 +207,15 @@ class MessageFormatter {
         // Apply live markdown formatting during streaming
         try {
             if (!inlineArtifacts) {
-                const rawHtml = marked.parse(newTotalContent);
+                // Parsing runs for every token. Mermaid must only render during final formatting.
+                const rawHtml = marked.parse(newTotalContent, { renderer: this.streamingArtifactRenderer });
                 return DOMPurify.sanitize(rawHtml, {
                     ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
                     ADD_ATTR: ['class', 'id', 'data-artifact-id']
                 });
             }
 
-            const rawHtml = marked.parse(newTotalContent, { renderer: this.inlineRenderer });
+            const rawHtml = marked.parse(newTotalContent, { renderer: this.streamingInlineRenderer });
             return DOMPurify.sanitize(rawHtml, {
                 ADD_TAGS: ['div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'button', 'i'],
                 ADD_ATTR: ['class', 'title', 'aria-label', 'data-copy-setup']

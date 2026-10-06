@@ -86,6 +86,8 @@
     --z-input-container: 1002;
     --z-selected-context-viewer: 1003;
     --z-dropdown-menu: 1004;
+    --z-artifact-backdrop: 1059;
+    --z-artifact-viewer: 1060;
 }
 
 /* Dark Mode Theme Overrides — Pure Black Glassmorphism */

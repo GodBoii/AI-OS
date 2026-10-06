@@ -25,13 +25,15 @@ class ArtifactHandler {
         const container = document.createElement('div');
         container.id = 'artifact-container';
         container.className = 'artifact-container hidden';
+        container.inert = true;
         
         container.innerHTML = `
-            <div class="artifact-window">
+            <section class="artifact-window" role="region" aria-label="Artifact viewer">
                 <div class="artifact-header">
-                    <div class="artifact-title">Artifact Viewer</div>
+                    <div class="artifact-heading"><span class="artifact-kind">Artifact</span><div class="artifact-title">Artifact viewer</div></div>
                     <div class="artifact-controls">
-                        <div class="artifact-view-toggle hidden" role="group" aria-label="View mode">
+                        <div class="artifact-view-toggle t-tabs hidden" role="group" aria-label="View mode">
+                            <span class="t-tabs-pill" aria-hidden="true"></span>
                             <button type="button" class="view-toggle-btn active" data-view="preview" aria-pressed="true" title="Preview mode">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             </button>
@@ -45,21 +47,51 @@ class ArtifactHandler {
                         <button class="download-artifact-btn" title="Download">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </button>
-                        <button class="close-artifact-btn">
+                        <button type="button" class="expand-artifact-btn" aria-label="Expand viewer" aria-pressed="false" title="Expand viewer">
+                            <span class="artifact-icon"><span class="t-icon-swap" data-state="a" aria-hidden="true">
+                                <span class="t-icon" data-icon="a"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span>
+                                <span class="t-icon" data-icon="b"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></svg></span>
+                            </span></span><span class="artifact-expand-label">Expand</span>
+                        </button>
+                        <button class="close-artifact-btn" aria-label="Close viewer" title="Close viewer">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                     </div>
                 </div>
                 <div class="artifact-content"></div>
-            </div>
+            </section>
         `;
         
         document.body.appendChild(container);
+        const backdrop = document.createElement('div');
+        backdrop.className = 'artifact-focus-backdrop';
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.addEventListener('click', () => this.setExpanded(false));
+        container.before(backdrop);
+        this.artifactBackdrop = backdrop;
         this.setupDeployPreviewModal();
         
         container.querySelector('.close-artifact-btn').addEventListener('click', () => this.hideArtifact());
         container.querySelector('.copy-artifact-btn').addEventListener('click', () => this.copyArtifactContent());
         container.querySelector('.download-artifact-btn').addEventListener('click', () => this.downloadArtifact());
+        container.querySelector('.copy-artifact-btn').setAttribute('aria-label', 'Copy source');
+        container.querySelector('.download-artifact-btn').setAttribute('aria-label', 'Download artifact');
+        container.querySelector('.expand-artifact-btn').addEventListener('click', () => this.setExpanded(!container.classList.contains('artifact-expanded')));
+        container.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !document.querySelector('#deploy-preview-modal:not(.hidden)')) {
+                event.preventDefault();
+                if (container.classList.contains('artifact-expanded')) this.setExpanded(false);
+                else this.hideArtifact();
+            }
+            if (event.key === 'Tab' && container.classList.contains('artifact-expanded')) {
+                const focusable = Array.from(container.querySelectorAll('button, a[href], input, textarea, select, iframe, [tabindex="0"]'))
+                    .filter(element => !element.disabled && !element.closest('[inert]') && element.getClientRects().length);
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            }
+        });
 
         this.viewToggleContainer = container.querySelector('.artifact-view-toggle');
         this.viewToggleButtons = Array.from(this.viewToggleContainer.querySelectorAll('.view-toggle-btn'));
@@ -69,6 +101,93 @@ class ArtifactHandler {
                 this.setViewMode(mode);
             });
         });
+        this.setupArtifactToolbar(container);
+    }
+
+    setupArtifactToolbar(container) {
+        container.querySelectorAll('.artifact-controls button').forEach((button, index) => {
+            const label = button.getAttribute('aria-label') || button.title;
+            button.setAttribute('aria-label', label);
+            button.removeAttribute('title');
+            if (!button.querySelector('.artifact-icon')) {
+                const icon = document.createElement('span');
+                icon.className = 'artifact-icon';
+                icon.setAttribute('aria-hidden', 'true');
+                icon.appendChild(button.querySelector('svg'));
+                button.prepend(icon);
+            }
+            const wrap = document.createElement('span');
+            wrap.className = 't-tt-wrap artifact-tool';
+            const tooltip = document.createElement('span');
+            tooltip.className = 't-tt';
+            tooltip.id = `artifact-tool-${index}`;
+            tooltip.setAttribute('role', 'tooltip');
+            tooltip.textContent = label;
+            button.classList.add('t-tt-trigger');
+            button.setAttribute('aria-describedby', tooltip.id);
+            button.before(wrap);
+            wrap.append(button, tooltip);
+            button.addEventListener('click', () => {
+                wrap.classList.add('tooltip-dismissed');
+                if (container.classList.contains('hidden') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+                button.classList.remove('is-activating');
+                void button.offsetWidth;
+                button.classList.add('is-activating');
+            });
+            button.addEventListener('animationend', (event) => {
+                if (event.animationName === 'artifact-icon-tap') button.classList.remove('is-activating');
+            });
+            wrap.addEventListener('pointerleave', () => wrap.classList.remove('tooltip-dismissed'));
+            button.addEventListener('blur', () => wrap.classList.remove('tooltip-dismissed'));
+        });
+        const copy = container.querySelector('.copy-artifact-btn .artifact-icon');
+        const original = copy.firstElementChild;
+        const swap = document.createElement('span');
+        swap.className = 't-icon-swap';
+        swap.dataset.state = 'a';
+        const normal = document.createElement('span');
+        normal.className = 't-icon';
+        normal.dataset.icon = 'a';
+        normal.append(original);
+        swap.append(normal);
+        swap.insertAdjacentHTML('beforeend', '<span class="t-icon" data-icon="b"><svg class="artifact-copy-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>');
+        copy.append(swap);
+    }
+
+    setExpanded(expanded, animate = true) {
+        const container = document.getElementById('artifact-container');
+        if (container.classList.contains('artifact-expanded') === expanded) return;
+        const before = container.getBoundingClientRect();
+        this.artifactResizeAnimation?.cancel();
+        container.classList.toggle('artifact-expanded', expanded);
+        this.artifactBackdrop.classList.toggle('is-open', expanded);
+        const viewer = container.querySelector('.artifact-window');
+        viewer.setAttribute('role', expanded ? 'dialog' : 'region');
+        if (expanded) viewer.setAttribute('aria-modal', 'true');
+        else viewer.removeAttribute('aria-modal');
+        const button = container.querySelector('.expand-artifact-btn');
+        button.setAttribute('aria-pressed', String(expanded));
+        button.setAttribute('aria-label', expanded ? 'Restore viewer size' : 'Expand viewer');
+        button.querySelector('.t-icon-swap').dataset.state = expanded ? 'b' : 'a';
+        button.querySelector('.artifact-expand-label').textContent = expanded ? 'Restore' : 'Expand';
+        button.parentElement.querySelector('.t-tt').textContent = expanded ? 'Restore viewer size · Esc' : 'Expand viewer';
+        if (expanded) {
+            this.artifactInertElements = Array.from(document.querySelectorAll('.chat-container, .floating-input-container, .sidebar, .active-workspace-pill'))
+                .map(element => [element, element.inert]);
+            this.artifactInertElements.forEach(([element]) => { element.inert = true; });
+        } else {
+            this.artifactInertElements?.forEach(([element, inert]) => { element.inert = inert; });
+            this.artifactInertElements = null;
+        }
+        if (animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            const after = container.getBoundingClientRect();
+            const styles = getComputedStyle(container);
+            this.artifactResizeAnimation = container.animate([
+                { transform: `translate(${before.left - after.left}px, ${before.top - after.top}px) scale(${before.width / after.width}, ${before.height / after.height})` },
+                { transform: 'none' }
+            ], { duration: parseFloat(styles.getPropertyValue('--artifact-resize-duration')) || 300, easing: styles.getPropertyValue('--artifact-motion-ease').trim() || 'ease-out' });
+        }
+        button.focus({ preventScroll: true });
     }
 
     setupDeployPreviewModal() {
@@ -197,7 +316,12 @@ class ArtifactHandler {
     }
 
     showArtifact(type, data, artifactId = null, options = {}) {
+        this.disposeArtifactView?.();
+        this.disposeArtifactView = null;
         const container = document.getElementById('artifact-container');
+        if (container.classList.contains('hidden')) this.artifactReturnFocus = document.activeElement;
+        container.inert = false;
+        container.querySelector('.artifact-kind').textContent = type === 'presentation' ? 'PowerPoint' : type === 'mermaid' ? 'Diagram' : type === 'image' ? 'Image' : type === 'video' ? 'Video' : type === 'browser_view' ? 'Browser' : (options.language || this.inferLanguageFromType(type));
         const contentDiv = container.querySelector('.artifact-content');
         const titleEl = container.querySelector('.artifact-title');
         const copyBtn = container.querySelector('.copy-artifact-btn');
@@ -295,7 +419,10 @@ class ArtifactHandler {
                         language: 'mermaid'
                     });
                 } else {
-                    this.updateArtifactViewMode(currentArtifactId, viewMode);
+                    this.artifacts.set(currentArtifactId, {
+                        ...this.artifacts.get(currentArtifactId), content: data, type: 'mermaid',
+                        language: 'mermaid', title: options.title || null, viewMode
+                    });
                 }
                 break;
 
@@ -314,18 +441,17 @@ class ArtifactHandler {
                 this.updateViewToggleButtons(viewModeForCode);
                 this.renderTextArtifactView(data, language, contentDiv, viewModeForCode);
                 if (!currentArtifactId) {
-                    currentArtifactId = this.createArtifact(data, type, null, {
+                    currentArtifactId = this.createArtifact(data, 'code', null, {
                         viewMode: viewModeForCode,
                         title: options.title || null,
                         language
                     });
                 } else {
-                    const existing = this.artifacts.get(currentArtifactId);
-                    if (existing) {
-                        existing.title = options.title || existing.title || null;
-                        existing.language = language;
-                        existing.viewMode = viewModeForCode;
-                    }
+                    this.artifacts.set(currentArtifactId, {
+                        ...this.artifacts.get(currentArtifactId), content: data, type: 'code',
+                        title: options.title || this.artifacts.get(currentArtifactId)?.title || null,
+                        language, viewMode: viewModeForCode
+                    });
                 }
                 break;
         }
@@ -333,6 +459,7 @@ class ArtifactHandler {
         const chatContainer = document.querySelector('.chat-container');
         const inputContainer = document.querySelector('.floating-input-container');
         container.classList.remove('hidden');
+        this.updateViewToggleButtons(this.currentViewMode, false);
         chatContainer.classList.add('with-artifact');
         inputContainer.classList.add('with-artifact');
 
@@ -356,7 +483,7 @@ class ArtifactHandler {
     }
 
     setViewMode(mode) {
-        if (!mode || this.currentViewMode === mode) {
+        if (!['preview', 'source'].includes(mode) || this.currentViewMode === mode) {
             return;
         }
 
@@ -385,6 +512,8 @@ class ArtifactHandler {
         }
 
         this.updateArtifactViewMode(activeId, mode);
+        this.disposeArtifactView?.();
+        this.disposeArtifactView = null;
         contentDiv.innerHTML = '';
         if (artifact.type === 'mermaid') {
             this.renderMermaidView(artifact.content, contentDiv, mode);
@@ -393,7 +522,7 @@ class ArtifactHandler {
         }
     }
 
-    updateViewToggleButtons(mode) {
+    updateViewToggleButtons(mode, animate = true) {
         if (!Array.isArray(this.viewToggleButtons)) {
             return;
         }
@@ -403,6 +532,18 @@ class ArtifactHandler {
             button.classList.toggle('active', isActive);
             button.setAttribute('aria-pressed', String(isActive));
         });
+        const active = this.viewToggleButtons.find(button => button.dataset.view === mode);
+        const pill = this.viewToggleContainer.querySelector('.t-tabs-pill');
+        if (active && pill && active.offsetWidth) {
+            const transition = pill.style.transition;
+            if (!animate) pill.style.transition = 'none';
+            pill.style.transform = `translateX(${active.parentElement.offsetLeft}px)`;
+            pill.style.width = `${active.offsetWidth}px`;
+            if (!animate) {
+                void pill.offsetWidth;
+                pill.style.transition = transition;
+            }
+        }
     }
 
     renderBrowserView(data) {
@@ -444,8 +585,42 @@ class ArtifactHandler {
         img.src = typeof base64Data === 'string' && /^(data:image\/|https?:\/\/)/i.test(base64Data)
             ? base64Data
             : `data:image/png;base64,${base64Data}`;
-        img.alt = 'Generated Image';
-        container.appendChild(img);
+        img.alt = document.querySelector('#artifact-container .artifact-title').textContent;
+        const stage = document.createElement('div');
+        stage.className = 'artifact-image-stage';
+        stage.tabIndex = 0;
+        stage.setAttribute('aria-label', 'Image preview. Use plus and minus to zoom, zero to fit.');
+        const toolbar = document.createElement('div');
+        toolbar.className = 'artifact-local-toolbar';
+        toolbar.innerHTML = '<span class="image-dimensions" role="status">Loading image…</span><div><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="fit">Fit</button><button type="button" data-zoom="actual">100%</button><button type="button" data-zoom="in" aria-label="Zoom in">+</button></div>';
+        container.append(toolbar, stage);
+        stage.appendChild(img);
+        let scale = null;
+        const update = (action) => {
+            const fitted = Math.min((stage.clientWidth - 32) / (img.naturalWidth || 1), (stage.clientHeight - 32) / (img.naturalHeight || 1), 1);
+            scale = action === 'fit' ? null : action === 'actual' ? 1 : Math.min(4, Math.max(0.1, (scale ?? fitted) * (action === 'in' ? 1.25 : 0.8)));
+            stage.classList.toggle('actual-size', scale !== null);
+            img.style.width = scale === null ? '' : `${img.naturalWidth * scale}px`;
+            img.style.maxWidth = scale === null ? '' : 'none';
+            img.style.maxHeight = scale === null ? '' : 'none';
+            toolbar.querySelector('[data-zoom="fit"]').setAttribute('aria-pressed', String(scale === null));
+        };
+        toolbar.addEventListener('click', (event) => {
+            const action = event.target.closest('[data-zoom]')?.dataset.zoom;
+            if (action) update(action);
+        });
+        stage.addEventListener('keydown', (event) => {
+            const action = { '+': 'in', '=': 'in', '-': 'out', '0': 'fit' }[event.key];
+            if (action) { event.preventDefault(); update(action); }
+        });
+        img.addEventListener('load', () => {
+            toolbar.querySelector('.image-dimensions').textContent = `${img.naturalWidth} × ${img.naturalHeight} px`;
+            update('fit');
+        });
+        img.addEventListener('error', () => {
+            toolbar.querySelector('.image-dimensions').textContent = 'Image could not be loaded. Try reopening it.';
+            toolbar.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        });
     }
 
     renderVideo(videoUrl, container, mimeType = null) {
@@ -490,6 +665,40 @@ class ArtifactHandler {
             </div>
         `;
         container.appendChild(deck);
+        if (!slides.length) return;
+        const reader = document.createElement('section');
+        reader.className = 'presentation-reader';
+        reader.setAttribute('aria-label', 'Slide preview');
+        reader.tabIndex = 0;
+        reader.innerHTML = '<div class="artifact-local-toolbar"><button type="button" data-slide="previous" aria-label="Previous slide">← Previous</button><span class="slide-position" role="status"></span><button type="button" data-slide="next" aria-label="Next slide">Next →</button></div><div class="presentation-reader-content"></div>';
+        deck.querySelector('.presentation-artifact-grid').before(reader);
+        let selected = 0;
+        const select = (index) => {
+            selected = Math.max(0, Math.min(slides.length - 1, index));
+            reader.querySelector('.presentation-reader-content').innerHTML = this.renderPresentationSlideCard(slides[selected], metadata?.template);
+            reader.querySelector('.slide-position').textContent = `Slide ${selected + 1} of ${slides.length}${slides[selected].preview_data_uri ? '' : ' · Layout preview'}`;
+            reader.querySelector('[data-slide="previous"]').disabled = selected === 0;
+            reader.querySelector('[data-slide="next"]').disabled = selected === slides.length - 1;
+            deck.querySelectorAll('.presentation-select-slide').forEach((button, i) => button.setAttribute('aria-pressed', String(i === selected)));
+        };
+        deck.querySelectorAll('.presentation-artifact-grid .presentation-slide-card').forEach((card, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'presentation-select-slide';
+            button.textContent = `View slide ${index + 1}`;
+            button.addEventListener('click', () => { select(index); reader.focus({ preventScroll: true }); reader.scrollIntoView({ block: 'nearest' }); });
+            card.appendChild(button);
+        });
+        reader.addEventListener('click', (event) => {
+            const direction = event.target.closest('[data-slide]')?.dataset.slide;
+            if (direction) select(selected + (direction === 'next' ? 1 : -1));
+        });
+        reader.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                event.preventDefault(); select(selected + (event.key === 'ArrowRight' ? 1 : -1));
+            }
+        });
+        select(0);
     }
 
     renderPresentationSlideCard(slide = {}, template = {}) {
@@ -584,7 +793,7 @@ class ArtifactHandler {
         interactiveWrapper.appendChild(panContainer);
         container.appendChild(interactiveWrapper);
 
-        mermaid.init(undefined, [mermaidDiv]);
+        const renderPromise = Promise.resolve().then(() => mermaid.init(undefined, [mermaidDiv]));
 
         const hiddenSource = document.createElement('div');
         hiddenSource.className = 'mermaid-source-cache hidden';
@@ -690,7 +899,13 @@ class ArtifactHandler {
             centerDiagram();
         };
 
-        requestAnimationFrame(prepareDiagram);
+        renderPromise.then(() => {
+            if (interactiveWrapper.isConnected) prepareDiagram();
+        }).catch(() => {
+            if (!interactiveWrapper.isConnected) return;
+            interactiveWrapper.textContent = 'Unable to render this diagram. Switch to source to inspect the Mermaid syntax.';
+            zoomControls.remove();
+        });
 
         let resizeObserver = null;
         if (typeof ResizeObserver !== 'undefined') {
@@ -701,6 +916,7 @@ class ArtifactHandler {
             });
             resizeObserver.observe(interactiveWrapper);
         }
+        this.disposeArtifactView = () => resizeObserver?.disconnect();
 
         interactiveWrapper.addEventListener('wheel', (event) => {
             event.preventDefault();
@@ -790,6 +1006,7 @@ class ArtifactHandler {
             <button class="zoom-reset-btn" title="Reset View"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
         `;
         container.appendChild(zoomControls);
+        zoomControls.querySelectorAll('button').forEach(button => button.setAttribute('aria-label', button.title));
 
         zoomControls.querySelector('.zoom-in-btn').addEventListener('click', () => {
             zoomByStep(1, interactiveWrapper.clientWidth / 2, interactiveWrapper.clientHeight / 2);
@@ -835,12 +1052,11 @@ class ArtifactHandler {
         svg.style.maxWidth = 'none';
         svg.style.maxHeight = 'none';
 
-        const targetWidth = wrapper ? Math.max(wrapper.clientWidth, viewBoxWidth) : viewBoxWidth;
-        const targetHeight = wrapper ? Math.max(wrapper.clientHeight, viewBoxHeight) : viewBoxHeight;
-
-        panContainer.style.minWidth = `${targetWidth}px`;
-        panContainer.style.minHeight = `${targetHeight}px`;
-        panContainer.style.padding = `${padding}px`;
+        panContainer.style.width = `${viewBoxWidth}px`;
+        panContainer.style.height = `${viewBoxHeight}px`;
+        panContainer.style.minWidth = '0';
+        panContainer.style.minHeight = '0';
+        panContainer.style.padding = '0';
     }
 
     inferLanguageFromType(type) {
@@ -921,6 +1137,16 @@ class ArtifactHandler {
     }
 
     renderCode(content, language, container) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'artifact-local-toolbar';
+        const info = document.createElement('span');
+        info.textContent = `${language} · ${String(content).split('\n').length} lines`;
+        const wrap = document.createElement('button');
+        wrap.type = 'button';
+        wrap.textContent = 'Wrap lines';
+        wrap.setAttribute('aria-pressed', 'false');
+        toolbar.append(info, wrap);
+        container.appendChild(toolbar);
         const pre = document.createElement('pre');
         pre.className = 'artifact-code';
         const code = document.createElement('code');
@@ -931,6 +1157,16 @@ class ArtifactHandler {
         if (window.hljs) {
             window.hljs.highlightElement(code);
         }
+        const gutter = document.createElement('span');
+        gutter.className = 'artifact-line-numbers';
+        gutter.setAttribute('aria-hidden', 'true');
+        gutter.textContent = String(content).split('\n').map((_, index) => index + 1).join('\n');
+        pre.prepend(gutter);
+        wrap.addEventListener('click', () => {
+            const wrapped = pre.classList.toggle('artifact-code-wrapped');
+            gutter.hidden = wrapped;
+            wrap.setAttribute('aria-pressed', String(wrapped));
+        });
     }
 
     hideArtifact() {
@@ -938,7 +1174,17 @@ class ArtifactHandler {
         const chatContainer = document.querySelector('.chat-container');
         const inputContainer = document.querySelector('.floating-input-container');
         
+        this.artifactResizeAnimation?.cancel();
+        this.setExpanded(false, false);
+        clearTimeout(this.artifactCopyTimer);
+        container.querySelector('.copy-artifact-btn .t-icon-swap').dataset.state = 'a';
+        container.querySelector('.copy-artifact-btn').classList.remove('is-copied');
+        container.querySelector('.copy-artifact-btn').parentElement.querySelector('.t-tt').textContent = 'Copy source';
         container.classList.add('hidden');
+        container.inert = true;
+        this.disposeArtifactView?.();
+        this.disposeArtifactView = null;
+        if (container.contains(document.activeElement) && this.artifactReturnFocus?.isConnected) this.artifactReturnFocus.focus({ preventScroll: true });
         chatContainer.classList.remove('with-artifact');
         inputContainer.classList.remove('with-artifact');
 
@@ -1005,6 +1251,16 @@ class ArtifactHandler {
         if (content) {
             try {
                 await navigator.clipboard.writeText(content);
+                const button = container.querySelector('.copy-artifact-btn');
+                button.querySelector('.t-icon-swap').dataset.state = 'b';
+                button.classList.add('is-copied');
+                button.parentElement.querySelector('.t-tt').textContent = 'Copied';
+                clearTimeout(this.artifactCopyTimer);
+                this.artifactCopyTimer = setTimeout(() => {
+                    button.querySelector('.t-icon-swap').dataset.state = 'a';
+                    button.classList.remove('is-copied');
+                    button.parentElement.querySelector('.t-tt').textContent = 'Copy source';
+                }, 1800);
                 this.showNotification('Content copied to clipboard!', 'success');
             } catch (err) {
                 this.showNotification('Failed to copy content', 'error');

@@ -11,13 +11,14 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
-    z-index: 100;
-    transition: transform var(--anim-normal) var(--easing-standard), opacity var(--anim-fast) var(--easing-standard);
+    z-index: var(--z-artifact-viewer, 1060);
+    transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease-out;
     overflow: hidden;
     border: 1px solid var(--border-color);
 }
 
 .artifact-container.hidden {
+    transition-duration: 350ms, 150ms;
     transform: translateX(120%);
     opacity: 0;
     pointer-events: none;
@@ -38,6 +39,8 @@
     background: var(--card-bg);
     border-radius: 12px 12px 0 0;
 }
+
+
 
 .artifact-title {
     font-weight: var(--font-semibold);
@@ -1409,3 +1412,359 @@
     padding: 3px 7px;
 }
 
+
+/* Artifact inspection controls */
+.artifact-container.artifact-expanded {
+    width: calc(100% - max(64px, calc(2.5vw + 24px)) - 24px);
+    right: 24px; top: 24px; height: calc(100% - 48px);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .32);
+}
+.artifact-container { box-sizing: border-box; }
+.artifact-heading { min-width: 0; flex: 1; }
+.artifact-kind { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.artifact-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-controls { flex-shrink: 0; align-items: center; }
+.expand-artifact-btn {
+    display: grid; place-items: center; width: 32px; height: 32px;
+    border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer;
+}
+.expand-artifact-btn:hover { background: var(--hover-bg); color: var(--text-color); }
+#artifact-container button:focus-visible, #artifact-container [tabindex]:focus-visible {
+    outline: 2px solid var(--accent-color); outline-offset: 2px;
+}
+.artifact-view-toggle.hidden { display: none; }
+.artifact-local-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px;
+    background: var(--card-bg); color: var(--text-secondary); font-size: 12px; flex-shrink: 0;
+    margin-bottom: 12px; font-variant-numeric: tabular-nums;
+}
+.artifact-local-toolbar > div { display: flex; gap: 4px; }
+.artifact-local-toolbar button, .presentation-select-slide {
+    border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px;
+    background: var(--window-bg); color: var(--text-color); font: inherit; cursor: pointer;
+    transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.artifact-local-toolbar button:hover, .presentation-select-slide:hover { background: var(--hover-bg); }
+.artifact-local-toolbar button[aria-pressed="true"], .presentation-select-slide[aria-pressed="true"] {
+    background: var(--hover-bg); border-color: var(--accent-color); color: var(--text-color);
+}
+.artifact-local-toolbar button:disabled { opacity: .45; cursor: default; }
+.artifact-image-stage {
+    flex: 1; min-height: 240px; overflow: auto; display: grid; place-items: center;
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+    padding: 16px; border: 1px solid var(--border-color); border-radius: 8px;
+    background-color: var(--card-bg);
+    background-image: radial-gradient(var(--border-color) .8px, transparent .8px); background-size: 16px 16px;
+}
+.artifact-image-stage .generated-image-artifact { max-width: 100%; max-height: 100%; object-fit: contain; margin: 0; }
+.artifact-image-stage.actual-size { display: block; }
+.artifact-image-stage.actual-size img { display: block; margin: auto; }
+.artifact-code { display: flex; align-items: stretch; border: 1px solid var(--border-color); box-shadow: none; }
+.artifact-code code { flex: 1; min-width: 0; overflow: visible; line-height: 1.65; tab-size: 4; }
+.artifact-line-numbers {
+    position: sticky; left: 0; padding: 16px 12px; border-right: 1px solid var(--border-color);
+    background: var(--code-bg); color: var(--text-secondary); user-select: none; text-align: right;
+    font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65;
+}
+.artifact-code-wrapped code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.artifact-line-numbers[hidden] { display: none; }
+.presentation-reader { margin-top: 18px; }
+.presentation-reader .presentation-slide-card { padding: 16px; }
+.presentation-reader .presentation-slide-thumb { margin-bottom: 12px; }
+.presentation-reader-content { max-width: 850px; margin: 0 auto; }
+.presentation-select-slide { width: 100%; margin-top: 12px; font-size: 12px; }
+.presentation-artifact-hero { flex-wrap: wrap; }
+.presentation-artifact-hero > div { min-width: 0; }
+.presentation-artifact-hero h2 { font-size: 1.4rem; overflow-wrap: anywhere; }
+.presentation-artifact-meta { min-width: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.presentation-artifact-meta span { overflow-wrap: anywhere; padding: 4px 8px; }
+.presentation-artifact { box-sizing: border-box; padding: 16px; }
+.presentation-artifact-hero { padding: 4px 0 12px; gap: 12px; }
+.presentation-artifact-hero p { font-size: 13px; }
+.presentation-artifact-grid { grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
+.artifact-content .mermaid-pan-container { transform-origin: top left; min-width: 0; min-height: 0; padding: 0; }
+.artifact-content .mermaid-interactive { display: block; }
+.artifact-content .mermaid-interactive-hint { bottom: auto; top: 12px; right: 12px; }
+
+.artifact-local-toolbar { flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) {
+    .artifact-container, .artifact-container.hidden, #artifact-container *, #artifact-container *::before, #artifact-container *::after {
+        transition: none !important; animation: none !important; scroll-behavior: auto !important;
+    }
+}
+
+/* Motion recipes from Jakubantalik/transitions.dev. */
+
+:root {
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+}
+
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+
+:root {
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-text-muted: rgba(15, 15, 15, 0.8);
+  --tabs-text-active: #0f0f0f;
+  --tabs-bar-bg: #f1f1f1;
+  --tabs-pill-bg: #ffffff;
+}
+
+/* The bar is just a flex container with padding for the pill
+   to sit inside. Tabs sit on z-index: 1, the pill on z-index: 0,
+   so labels read above the pill background. */
+.t-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 48px;
+  background: var(--tabs-bar-bg);
+}
+.t-tab {
+  position: relative;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 4px 12px;
+  color: var(--tabs-text-muted);
+  cursor: pointer;
+  border-radius: 48px;
+  z-index: 1;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tab:not([aria-selected="true"]):hover,
+.t-tab[aria-selected="true"] {
+  color: var(--tabs-text-active);
+}
+
+/* The pill: width + transform are written inline by JS so
+   the transition tweens between the previous and next
+   measured positions. */
+.t-tabs-pill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 30px;
+  width: 0;
+  background: var(--tabs-pill-bg);
+  border-radius: 48px;
+  transform: translateX(0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width     var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tabs-pill, .t-tab { transition: none !important; }
+}
+
+:root {
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  --tt-bg: #ffffff;
+  --tt-fg: #2f2f2f;
+}
+
+.t-tt-wrap {
+  position: relative;
+  display: inline-block;
+}
+.t-tt {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 0) scale(var(--tt-scale));
+  transform-origin: 50% 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--tt-bg);
+  color: var(--tt-fg);
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 2px 6px 0 rgba(0, 0, 0, 0.05),
+    0 4px 42px 0 rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  pointer-events: none;
+  /* Default rule controls the LEAVE state. transition-delay
+     stays unset so leaving plays without delay. */
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease),
+    transform var(--tt-out-dur) var(--tt-out-ease);
+}
+/* The 50ms delay belongs ONLY to the hover rule so leaving
+   the trigger snaps the delay back to 0 and the disappear
+   plays immediately. */
+.t-tt-wrap:hover .t-tt,
+.t-tt-trigger:focus-visible + .t-tt {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  transition-duration: var(--tt-in-dur);
+  transition-timing-function: var(--tt-in-ease);
+  transition-delay: var(--tt-delay);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tt { transition: none !important; }
+}
+
+/* Desktop artifact toolbar: quiet surfaces, distinct state changes. */
+.artifact-container {
+    --artifact-resize-duration: 300ms;
+    --artifact-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --artifact-hover-duration: 180ms;
+    --artifact-press-duration: 100ms;
+    --artifact-surface: #fafafa;
+    --artifact-header-surface: #f4f4f5;
+    --tabs-bar-bg: var(--artifact-header-surface);
+    --tabs-pill-bg: var(--text-color);
+    --tt-bg: var(--text-color);
+    --tt-fg: var(--artifact-surface);
+    --icon-swap-start-scale: .65;
+    background: var(--artifact-surface);
+    transform-origin: top left;
+}
+.dark-mode .artifact-container {
+    --artifact-surface: #101012;
+    --artifact-header-surface: #18181a;
+}
+.artifact-window { min-width: 0; }
+.artifact-header {
+    position: relative; z-index: 3; min-height: 64px; box-sizing: border-box;
+    padding: 12px 18px; gap: 16px; background: var(--artifact-header-surface);
+}
+.artifact-kind { font-size: 10px; letter-spacing: .075em; line-height: 1.5; }
+.artifact-title { font-size: 14px; line-height: 1.6; }
+.artifact-controls { gap: 4px; }
+.artifact-controls button {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border: 1px solid transparent; border-radius: 8px;
+    color: var(--text-secondary); background: transparent; cursor: pointer;
+    transition: background-color var(--artifact-hover-duration) ease-out,
+        border-color var(--artifact-hover-duration) ease-out, color var(--artifact-hover-duration) ease-out,
+        transform var(--artifact-press-duration) var(--artifact-motion-ease);
+}
+.artifact-controls button:hover, .artifact-controls button:focus-visible {
+    color: var(--text-color); background: var(--hover-bg); border-color: var(--border-color);
+}
+.artifact-controls button:active { transform: scale(.92); transition-duration: var(--artifact-press-duration); }
+.artifact-icon {
+    display: inline-grid; place-items: center; flex-shrink: 0;
+    transition: transform 250ms var(--artifact-motion-ease);
+}
+.artifact-icon svg { display: block; width: 16px; height: 16px; }
+.artifact-controls button.is-activating .artifact-icon { animation: artifact-icon-tap 250ms var(--artifact-motion-ease); }
+@keyframes artifact-icon-tap {
+    0% { transform: scale(.78); }
+    60% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+.artifact-controls button:hover .artifact-icon { transform: translateY(-1px) scale(1.08); }
+.artifact-controls .download-artifact-btn:hover .artifact-icon { transform: translateY(2px); }
+.artifact-controls .close-artifact-btn:hover .artifact-icon { transform: rotate(90deg); }
+.artifact-controls .close-artifact-btn:hover { color: var(--danger-color, #ef4444); }
+.artifact-controls .expand-artifact-btn {
+    width: auto; min-width: 94px; gap: 7px; padding: 0 11px;
+    color: var(--text-color); background: var(--artifact-surface); border-color: var(--border-color);
+    font: 500 12px var(--font-sans);
+}
+.artifact-expand-label { min-width: 43px; text-align: left; }
+.artifact-controls .expand-artifact-btn:hover { background: var(--hover-bg); }
+.artifact-controls .expand-artifact-btn[aria-pressed="true"] { background: var(--text-color); color: var(--artifact-surface); }
+.artifact-controls .expand-artifact-btn[aria-pressed="true"]:hover { opacity: .9; }
+.artifact-controls .is-copied { color: var(--success-color, #22c55e); }
+.artifact-copy-check path { stroke-dasharray: 24; stroke-dashoffset: 24; }
+.is-copied .artifact-copy-check path { animation: artifact-check-draw 350ms var(--artifact-motion-ease) 80ms forwards; }
+@keyframes artifact-check-draw { to { stroke-dashoffset: 0; } }
+.artifact-view-toggle.t-tabs {
+    gap: 2px; padding: 3px; border-radius: 10px; margin-right: 8px;
+    border: 1px solid var(--border-color); background: var(--artifact-surface);
+}
+.artifact-view-toggle .t-tabs-pill { top: 3px; height: 34px; border-radius: 7px; }
+.artifact-view-toggle .view-toggle-btn { border: 0; z-index: 1; }
+.artifact-view-toggle .view-toggle-btn.active { color: var(--artifact-surface); background: transparent; }
+.artifact-view-toggle .view-toggle-btn.active:hover { background: transparent; }
+.artifact-tool { display: inline-flex; flex-shrink: 0; }
+.artifact-tool:has(> button[style*="display: none"]) { display: none; }
+.artifact-tool .t-tt {
+    top: calc(100% + 12px); bottom: auto; transform-origin: 50% 0;
+    padding: 6px 9px; border-radius: 6px; font: 500 11px var(--font-sans); z-index: 4;
+}
+.artifact-controls > .artifact-tool:last-child .t-tt { left: auto; right: -4px; transform: scale(var(--tt-scale)); }
+.artifact-controls > .artifact-tool:last-child:hover .t-tt,
+.artifact-controls > .artifact-tool:last-child .t-tt-trigger:focus-visible + .t-tt { transform: scale(1); }
+.artifact-tool.tooltip-dismissed .t-tt { opacity: 0; transition-delay: 0s; }
+.artifact-local-toolbar button, .presentation-select-slide, .mermaid-controls button {
+    transition: background-color 150ms ease-out, color 150ms ease-out, transform 150ms var(--artifact-motion-ease);
+}
+.artifact-local-toolbar button:not(:disabled):active, .presentation-select-slide:active, .mermaid-controls button:active { transform: scale(.96); }
+.mermaid-controls button svg { transition: transform 180ms var(--artifact-motion-ease); }
+.mermaid-controls button:hover svg { transform: scale(1.12); }
+.artifact-focus-backdrop {
+    position: fixed; inset: 0; z-index: var(--z-artifact-backdrop, 1059);
+    background: rgba(0, 0, 0, .4); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 150ms ease-out, visibility 0s linear 150ms;
+}
+.artifact-focus-backdrop.is-open {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transition: opacity 250ms ease-out, visibility 0s;
+}
+.artifact-mermaid-pending {
+    display: flex; align-items: center; gap: 8px; padding: 10px 0;
+    color: var(--text-secondary); font: 500 12px var(--font-sans);
+}
+.artifact-mermaid-pending::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+    animation: artifact-writing-pulse 1200ms ease-in-out infinite;
+}
+@keyframes artifact-writing-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+    #artifact-container *, #artifact-container *::before, #artifact-container *::after, .artifact-focus-backdrop {
+        transition: none !important; animation: none !important;
+    }
+    #artifact-container .artifact-icon, #artifact-container .mermaid-controls button svg { transform: none !important; }
+    #artifact-container .artifact-copy-check path { stroke-dashoffset: 0; }
+    #artifact-container button:active { transform: none; }
+    .artifact-mermaid-pending::before { animation: none; }
+}
