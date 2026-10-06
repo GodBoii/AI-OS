@@ -51,6 +51,13 @@ class RunStateManager:
         self.redis.set(key, json.dumps(state), ex=STATE_TTL)
         logger.info(f"[RunState] Started run for conv={conversation_id} msg={message_id}")
 
+    def wait_for_input(self, conversation_id: str, message_id: str, user_id: str, run_id: str, expires_at: float) -> None:
+        self.redis.set(f"{RUN_STATE_PREFIX}{conversation_id}", json.dumps({
+            "status": "waiting_for_input", "message_id": message_id, "user_id": user_id,
+            "run_id": run_id, "updated_at": time.time(),
+            "expires_at": expires_at,
+        }), ex=max(60, int(expires_at-time.time())+60))
+
     def complete_run(
         self,
         conversation_id: str,
@@ -137,7 +144,9 @@ class RunStateManager:
 
     def is_running(self, conversation_id: str) -> bool:
         state = self.get_state(conversation_id)
-        return bool(state and state.get("status") == "running")
+        if state and state.get("status") == "waiting_for_input" and state.get("expires_at", 0) < time.time():
+            return False
+        return bool(state and state.get("status") in {"running", "waiting_for_input"})
 
     def clear(self, conversation_id: str) -> None:
         """Remove all run state for a conversation (e.g. on new conversation)."""
