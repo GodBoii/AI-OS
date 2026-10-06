@@ -1,0 +1,20 @@
+.agent-question-card { margin: 18px 0; padding: 20px; border: 1px solid var(--border-color, #85858555); border-radius: 14px; color: var(--text-primary); background: var(--bg-secondary, #8585850b); max-inline-size: 100%; }
+.agent-question-card h3 { font: inherit; font-weight: 600; margin: 0 0 16px; }
+.agent-question-card fieldset { min-inline-size: 0; border: 0; padding: 0; margin: 0 0 20px; }
+.agent-question-card legend { margin-block-end: 10px; font-weight: 500; overflow-wrap: anywhere; }
+.agent-question-option { display: flex; align-items: flex-start; gap: 10px; min-block-size: 44px; padding: 12px; margin-block: 6px; border: 1px solid var(--border-color, #85858555); border-radius: 9px; cursor: pointer; }
+.agent-question-option:has(input:checked) { border-color: var(--text-primary); background: #85858518; }
+.agent-question-option input { margin-block-start: 3px; accent-color: var(--text-primary); }
+.agent-question-option span { min-inline-size: 0; overflow-wrap: anywhere; }
+.agent-question-option strong { display: block; font-weight: 500; }
+.agent-question-option span span { display: block; margin-block-start: 4px; color: var(--text-secondary); font-size: 13px; }
+.agent-question-reply { display: block; margin-block-start: 12px; font-size: 13px; color: var(--text-secondary); }
+.agent-question-reply textarea { display: block; box-sizing: border-box; inline-size: 100%; margin-block-start: 8px; padding: 10px; border: 1px solid var(--border-color, #85858555); border-radius: 9px; background: transparent; color: var(--text-primary); font: inherit; resize: vertical; }
+.agent-question-card :focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+.agent-question-status { min-block-size: 20px; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.agent-question-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.agent-question-actions[hidden] { display: none; }
+.agent-question-actions button { min-block-size: 44px; padding: 9px 16px; border: 1px solid var(--border-color, #85858555); border-radius: 9px; font: inherit; color: inherit; background: transparent; cursor: pointer; }
+.agent-question-actions .agent-question-submit { background: var(--text-primary, #222); color: var(--bg-primary, #fff); }
+.agent-question-card :disabled { cursor: default; }
+@media (max-width: 480px) { .agent-question-card { padding: 14px; } }
