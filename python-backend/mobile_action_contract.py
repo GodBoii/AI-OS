@@ -54,9 +54,18 @@ ACTION_SPECS: Dict[str, MobileActionSpec] = {
     "tap": MobileActionSpec("medium", True, "conditional", "Tap screen coordinates"),
     "swipe": MobileActionSpec("low", True, "none", "Swipe on screen"),
     "press_back": MobileActionSpec("low", True, "none", "Navigate back one screen"),
+    "set_flashlight": MobileActionSpec("low", True, "none", "Turn the flashlight on or off"),
+    "media_control": MobileActionSpec("low", True, "none", "Play, pause or skip the active media"),
+    "create_calendar_event": MobileActionSpec("low", True, "app_ui", "Open a prefilled calendar event for the user to save"),
+    "dial_number": MobileActionSpec("low", True, "app_ui", "Open the dialer with a number; the user places the call"),
+    "web_search": MobileActionSpec("low", True, "none", "Open a web search on the device"),
+    "pick_contact": MobileActionSpec("sensitive_read", False, "app_ui", "Let the user pick one contact from the system picker"),
 }
 
 EXPOSED_ACTIONS: FrozenSet[str] = frozenset(ACTION_SPECS)
+
+# Native capabilities the backend deliberately never sends to the device.
+INTENTIONALLY_UNEXPOSED_NATIVE_ACTIONS: FrozenSet[str] = frozenset({"go_home"})
 
 
 def get_action_spec(action: str) -> MobileActionSpec | None:
