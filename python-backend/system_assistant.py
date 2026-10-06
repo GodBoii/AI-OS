@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from agno.agent import Agent
-from agno.db.postgres import PostgresDb
+from agno_storage import get_agno_db
 from openrouter_reasoning_model import get_openrouter_model
 from agno.models.groq import Groq
 
@@ -18,6 +18,7 @@ def get_system_assistant(
     mobile_tools_config: Optional[Dict[str, Any]] = None,
     user_id: Optional[str] = None,
     debug_mode: bool = False,
+    enable_user_questions: bool = False,
 ) -> Agent:
     """
     Constructs the lightweight System Assistant Agent.
@@ -83,19 +84,19 @@ def get_system_assistant(
                 bool(redis_client),
             )
 
+    from user_questions import question_tools
+    tools.extend(question_tools(enable_user_questions))
     agent = Agent(
         name="Aetheria_System_Assistant",
         model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         instructions=system_instructions,
         tools=tools,
         user_id=user_id,
-        db=PostgresDb(
-            db_url=get_sqlalchemy_database_url(),
-            db_schema="public",
-        ),
+        db=get_agno_db(),
         add_history_to_context=True,
         num_history_runs=12,
         store_events=True,
+        store_media=False,
         markdown=True,
         debug_mode=debug_mode,
     )
