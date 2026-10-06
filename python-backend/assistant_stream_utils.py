@@ -60,6 +60,14 @@ def build_system_assistant_terminal_message(
             return "I prepared the requested time action. Please review it on screen."
         if name in {"prepare_navigation", "open_navigation"}:
             return "I prepared the requested navigation. Please review it on screen."
+        if name == "create_calendar_event":
+            return "I opened the calendar with the event filled in. Save it there to add it."
+        if name == "dial_number":
+            return "I opened the dialer with the number ready. Press call when you're ready."
+        if name == "pick_contact":
+            if status == "cancelled":
+                return "No contact was picked."
+            return "I got the contact you picked."
         return "I finished the available device steps. Please review the current screen."
 
     if history:
