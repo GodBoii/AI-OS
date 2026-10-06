@@ -1134,6 +1134,26 @@ body:not(.dark-mode) .ppt-template-preview.selected {
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
+.ppt-template-rendered-preview {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ppt-template-canvas:has(.ppt-template-rendered-preview),
+.ppt-slide-canvas:has(.ppt-template-rendered-preview) {
+    display: block;
+    aspect-ratio: 16 / 9;
+    background: transparent;
+}
+
+.ppt-template-canvas:has(.ppt-template-rendered-preview)::before {
+    display: none;
+}
+
 .ppt-template-preview.mini .ppt-template-canvas {
     flex: none;
     width: 100%;
