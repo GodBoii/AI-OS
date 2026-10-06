@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
-from agno.db.postgres import PostgresDb
+from agno_storage import get_agno_db
 from agno.models.groq import Groq
 from primary_model_factory import get_primary_model
 from agno.tools import Toolkit
@@ -15,6 +15,7 @@ from google_email_tools import GoogleEmailTools
 from google_sheets_tools import GoogleSheetsTools
 from database_config import get_sqlalchemy_database_url
 from model_routing import DEFAULT_MODEL_ID
+from user_questions import question_tools
 
 
 def _db_url_sqlalchemy() -> str:
@@ -43,10 +44,7 @@ def get_computer_agent(
     Dedicated desktop/browser automation agent used for computer workspace mode.
     """
     db = (
-        PostgresDb(
-            db_url=_db_url_sqlalchemy(),
-            db_schema="public",
-        )
+        get_agno_db()
         if persist_session
         else None
     )
@@ -85,6 +83,7 @@ def get_computer_agent(
         if enable_google_sheets:
             tools.append(GoogleSheetsTools(user_id=user_id))
 
+    tools.extend(question_tools(bool((session_info or {}).get("config", {}).get("enable_user_questions"))))
     return Agent(
         name="Aetheria_Computer",
         model=get_primary_model(model_id),
@@ -132,9 +131,9 @@ def get_computer_agent(
         user_id=user_id,
         db=db,
         enable_agentic_memory=use_memory,
-        enable_user_memories=use_memory,
+        update_memory_on_run=use_memory,
         enable_session_summaries=use_session_summaries,
-        stream_intermediate_steps=True,
+        stream_events=True,
         search_knowledge=False,
         add_history_to_context=True,
         num_history_runs=40,
