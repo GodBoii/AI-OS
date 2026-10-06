@@ -1,3 +1,4 @@
+from local_media import media_storage
 # python-backend/browser_tools.py (Updated for Redis Pub/Sub)
 
 import logging
@@ -34,6 +35,7 @@ class BrowserTools(Toolkit):
             redis_client (Redis): An initialized Redis client for Pub/Sub.
         """
         self.sid = sid
+        self.user_id = kwargs.get("user_id")
         self.socketio = socketio
         self.redis_client = redis_client
 
@@ -56,7 +58,9 @@ class BrowserTools(Toolkit):
         if result.get("status") == "success" and "screenshot_path" in result:
             screenshot_path = result.pop("screenshot_path")
             try:
-                image_bytes = supabase_client.storage.from_('media-uploads').download(screenshot_path)
+                if self.user_id and not screenshot_path.startswith(str(self.user_id)+"/"):
+                    raise PermissionError("Screenshot ownership mismatch.")
+                image_bytes = media_storage().download(screenshot_path)
                 image_artifact = Image(content=image_bytes)
                 return ToolResult(content=json.dumps(result), images=[image_artifact])
             except Exception as e:
