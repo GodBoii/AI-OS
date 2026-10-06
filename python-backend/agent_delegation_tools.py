@@ -146,7 +146,7 @@ class AgentDelegationTools(Toolkit):
                 session_id=self.session_id,
                 session_state={"turn_context": {"user_message": task_description, "files": []}},
                 stream=True,
-                stream_intermediate_steps=True,
+                stream_events=True,
                 add_history_to_context=True,
             ):
                 if not chunk or not hasattr(chunk, "event"):
