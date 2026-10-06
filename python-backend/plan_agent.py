@@ -79,12 +79,20 @@ PLAN_OUTPUT_SECTIONS = [
 ]
 
 
-def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = True) -> Agent:
+def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = True,
+    enable_user_questions: bool = False, user_id: str | None = None, persist_session: bool = False) -> Agent:
     from openrouter_reasoning_model import get_openrouter_model
+    from user_questions import question_tools
+    from agno_storage import get_agno_db
     return Agent(
         name="plan_agent",
+        user_id=user_id,
+        db=get_agno_db() if persist_session else None,
+        metadata={"plan_mode": True},
+        store_media=False,
+        store_events=True,
         model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
-        tools=[DuckDuckGoTools()] if enable_read_only_tools else [],
+        tools=([DuckDuckGoTools()] if enable_read_only_tools else []) + question_tools(enable_user_questions),
         instructions=[
             "<system_instructions>",
             "You are Aetheria's Plan Mode agent.",
@@ -188,7 +196,7 @@ def stream_plan(
             for chunk in agent.run(
                 prompt,
                 stream=True,
-                stream_intermediate_steps=True,
+                stream_events=True,
             ):
                 if not chunk or not hasattr(chunk, "event"):
                     continue
