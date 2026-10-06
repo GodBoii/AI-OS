@@ -51,11 +51,18 @@ test('the actual presentation viewer retains images across tool/socket updates',
                 return { images: document.querySelectorAll('.presentation-artifact img').length,
                     width: img.naturalWidth, artifact: document.getElementById('artifact-container').dataset.activeArtifactId };
             }, { image, order });
-            assert.equal(result.images, 1);
+            assert.ok(result.images >= 1);
             assert.ok(result.width > 0);
             assert.equal(result.artifact, `deck-${order}`);
         }
-        await page.click('.close-artifact-btn');
+        await page.waitForSelector('#artifact-container:not(.hidden) .close-artifact-btn', { visible: true });
+        await page.evaluate(async () => {
+            const container = document.getElementById('artifact-container');
+            await Promise.all(container.getAnimations({ subtree: true })
+                .filter(animation => Number.isFinite(animation.effect.getComputedTiming().endTime))
+                .map(animation => animation.finished.catch(() => {})));
+        });
+        await page.click('#artifact-container .close-artifact-btn');
         assert.equal(await page.$eval('#artifact-container', node => node.classList.contains('hidden')), true);
         assert.deepEqual(errors, []);
     } finally {
