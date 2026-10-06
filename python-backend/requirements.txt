@@ -122,7 +122,7 @@ smmap
 sniffio
 snowballstemmer
 soupsieve
-SQLAlchemy
+SQLAlchemy>=2.0.41,<2.1
 tiktoken
 tokenizers
 tomli
@@ -142,7 +142,7 @@ yarl
 zipp
 zstandard
 google-genai==1.32.0
-agno==2.0.5
+agno==3.1.1
 eventlet==0.36.1
 gunicorn[eventlet]==23.0.0
 supabase
