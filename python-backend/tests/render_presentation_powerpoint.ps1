@@ -1,4 +1,4 @@
-param([string]$OutputRoot = 'presentation-toolkit-output')
+param([string]$OutputRoot = 'presentation-toolkit-output', [switch]$DesignReview)
 
 $ErrorActionPreference = 'Stop'
 $taskOutputRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
@@ -7,14 +7,25 @@ $taskExistingDecks = $taskPowerPoint.Presentations.Count
 $taskOriginalAlerts = $taskPowerPoint.DisplayAlerts
 $taskPowerPoint.DisplayAlerts = 1
 $taskAudits = @()
-try {
+$taskSlideCount = 0
+$taskDecks = if ($DesignReview) {
+    foreach ($taskTemplate in @('venture_blueprint', 'aetheria_modern', 'executive', 'startup_pitch', 'academic', 'creative_portfolio', 'minimal_zen', 'tech_dark', 'corporate_gradient')) {
+        [pscustomobject]@{ Path = Join-Path $taskOutputRoot "$taskTemplate/$taskTemplate.pptx"; Preview = Join-Path $taskOutputRoot "$taskTemplate/powerpoint-previews"; Label = $taskTemplate }
+    }
+} else {
     foreach ($taskCount in @(5, 10, 15)) {
-        $taskDeckPath = Join-Path $taskOutputRoot "$taskCount-slides/support-pilot-$taskCount.pptx"
-        $taskPreviewPath = Join-Path $taskOutputRoot "$taskCount-slides/powerpoint-previews"
+        [pscustomobject]@{ Path = Join-Path $taskOutputRoot "$taskCount-slides/support-pilot-$taskCount.pptx"; Preview = Join-Path $taskOutputRoot "$taskCount-slides/powerpoint-previews"; Label = "$taskCount-slides" }
+    }
+}
+try {
+    foreach ($taskInfo in $taskDecks) {
+        $taskDeckPath = $taskInfo.Path
+        $taskPreviewPath = $taskInfo.Preview
         New-Item -ItemType Directory -Path $taskPreviewPath -Force | Out-Null
         $taskDeck = $null
         try {
             $taskDeck = $taskPowerPoint.Presentations.Open($taskDeckPath, -1, 0, 0)
+            $taskSlideCount += $taskDeck.Slides.Count
             $taskDeck.Export($taskPreviewPath, 'PNG', 1920, 1080)
             foreach ($taskSlide in $taskDeck.Slides) {
                 foreach ($taskShape in $taskSlide.Shapes) {
@@ -24,7 +35,8 @@ try {
                         $taskExcessHeight = $taskText.BoundTop + $taskText.BoundHeight - $taskShape.Top - $taskShape.Height
                         if ($taskExcessWidth -gt 1 -or $taskExcessHeight -gt 1) {
                             $taskAudits += [pscustomobject]@{
-                                deck_slides = $taskCount
+                                deck_slides = $taskDeck.Slides.Count
+                                template = $taskInfo.Label
                                 slide = $taskSlide.SlideIndex
                                 text = $taskText.Text
                                 excess_width_pt = $taskExcessWidth
@@ -42,7 +54,7 @@ try {
             }
         }
     }
-    $taskReport = @{ slide_count = 30; overflow_count = $taskAudits.Count; issues = $taskAudits }
+    $taskReport = @{ slide_count = $taskSlideCount; overflow_count = $taskAudits.Count; issues = $taskAudits }
     $taskReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $taskOutputRoot 'powerpoint-audit.json') -Encoding UTF8
     if ($taskAudits.Count -gt 0) { throw "PowerPoint found $($taskAudits.Count) overflowing text boxes. See powerpoint-audit.json." }
 } finally {
