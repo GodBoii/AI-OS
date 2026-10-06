@@ -1,6 +1,10 @@
 /**
  * Configuration for the AI-OS application
  */
+const fs = require('fs');
+const path = require('path');
+const settingsPath = path.join(__dirname, 'runtime-config.json');
+const runtimeSettings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
 const config = {
     // Backend connection settings
     backend: {
@@ -17,14 +21,12 @@ const config = {
         connectionTimeout: 20000
     },
 
-    // Supabase configuration
-    supabase: {
-        // Supabase project URL
-        url: 'https://gugmnnmjhqdtjwriaywa.supabase.co',
-
-        // Supabase anonymous key
-        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1Z21ubm1qaHFkdGp3cmlheXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzEyOTksImV4cCI6MjA5NTMwNzI5OX0.uVHpeoyla5u-LMrj4_NXX6FzYnsK2oY9rT28TH0ATjY'
+    // Public client settings are supplied locally and packaged with the app.
+    supabase: runtimeSettings.supabase || {
+        url: process.env.SUPABASE_URL || '',
+        anonKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
     }
+
 };
 
 module.exports = config; 
