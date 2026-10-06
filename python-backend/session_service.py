@@ -165,10 +165,11 @@ class ConnectionManager:
         
         # Update last accessed time and refresh TTL
         session_data["last_accessed"] = datetime.datetime.now().isoformat()
+        remaining = self.redis_client.ttl(f"session:{conversation_id}")
         self.redis_client.set(
             f"session:{conversation_id}", 
             json.dumps(session_data), 
-            ex=self.SESSION_TTL
+            ex=max(self.SESSION_TTL, remaining)
         )
         self._refresh_sandbox_expirations(conversation_id, session_data.get("sandbox_ids", []))
         
