@@ -89,6 +89,7 @@ skills/
 !/package-lock.json
 !/version.json
 python-backend/*.json
+!python-backend/presentation_design_profiles.json
 
 # Root Markdown Notes & Reports (preserve core project documentation)
 /*.md
