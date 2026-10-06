@@ -1,3 +1,4 @@
+from local_media import media_storage
 import base64
 import binascii
 import json
@@ -303,7 +304,9 @@ class MediaTools(Toolkit):
 
     def _create_signed_media_url(self, storage_path: str, expires_in: int = 3600) -> Optional[str]:
         try:
-            response = supabase_client.storage.from_("media-uploads").create_signed_url(storage_path, expires_in)
+            if self.user_id and not storage_path.startswith(str(self.user_id) + "/"):
+                raise PermissionError("Media ownership mismatch.")
+            response = media_storage().create_signed_url(storage_path, expires_in)
             if isinstance(response, dict):
                 return response.get("signedURL") or response.get("signed_url")
         except Exception as exc:
@@ -348,7 +351,7 @@ class MediaTools(Toolkit):
         conversation_segment = self.conversation_id or "unknown-conversation"
         storage_path = f"{user_segment}/{conversation_segment}/generated/{file_name}"
 
-        supabase_client.storage.from_("media-uploads").upload(
+        media_storage().upload(
             storage_path,
             media_bytes,
             file_options={"content-type": mime_type},
