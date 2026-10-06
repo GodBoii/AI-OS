@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 from agno.agent import Agent
-from agno.db.postgres import PostgresDb
+from agno_storage import get_agno_db
 from primary_model_factory import get_primary_model
 from agno.models.groq import Groq
 from agno.tools import Toolkit
@@ -10,12 +10,12 @@ from agno.tools import Toolkit
 from user_file_vault_tools import UserFileVaultTools
 from deployed_project_tools import DeployedProjectTools
 from github_tools import GitHubTools
-from agno.models.google import Gemini
 from local_coder_tools import LocalCoderTools
 from sandbox_persistence import get_persistence_service
 from sandbox_tools import SandboxTools
 from database_config import get_sqlalchemy_database_url
 from model_routing import DEFAULT_MODEL_ID
+from user_questions import question_tools
 
 
 def _db_url_sqlalchemy() -> str:
@@ -46,10 +46,7 @@ def get_coder_agent(
     _ = custom_tool_config
 
     db = (
-        PostgresDb(
-            db_url=_db_url_sqlalchemy(),
-            db_schema="public",
-        )
+        get_agno_db()
         if persist_session
         else None
     )
@@ -103,6 +100,7 @@ def get_coder_agent(
         if enable_github:
             coder_tools.append(GitHubTools(user_id=user_id))
 
+    coder_tools.extend(question_tools(bool(session_config.get("enable_user_questions"))))
     return Agent(
         name="Aetheria_Coder",
         model=get_primary_model(model_id),
@@ -143,9 +141,9 @@ def get_coder_agent(
         user_id=user_id,
         db=db,
         enable_agentic_memory=use_memory,
-        enable_user_memories=use_memory,
+        update_memory_on_run=use_memory,
         enable_session_summaries=use_session_summaries,
-        stream_intermediate_steps=True,
+        stream_events=True,
         search_knowledge=False,
         add_history_to_context=True,
         num_history_runs=40,
