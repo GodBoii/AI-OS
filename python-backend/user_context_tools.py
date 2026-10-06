@@ -10,7 +10,7 @@ import uuid
 import time
 from typing import Optional, Dict, Any
 from agno.tools import Toolkit
-from supabase_client import supabase_client
+from local_memories import MemoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -42,156 +42,50 @@ class UserContextTools(Toolkit):
             Success or error message
         """
         try:
-            # Create a structured memory entry for user context
-            memory_content = self._format_context_as_memory(context_data)
-            
-            # Check if user context memory already exists
-            # Note: Using contains instead of ilike since memory is JSON
-            existing = supabase_client.table("agno_memories").select("*").eq(
-                "user_id", self.user_id
-            ).eq("team_id", self.team_id).execute()
-            
-            # Filter for user context entries
-            user_context_entry = None
-            if existing.data:
-                for entry in existing.data:
-                    topics = entry.get("topics", [])
-                    if isinstance(topics, str):
-                        topics = json.loads(topics)
-                    if "user_context" in topics:
-                        user_context_entry = entry
-                        break
-            
-            current_timestamp = int(time.time())
-            
-            if user_context_entry:
-                # Update existing memory
-                memory_id = user_context_entry["memory_id"]
-                
-                update_data = {
-                    "memory": memory_content,  # Store as plain string (Supabase will handle JSON encoding)
-                    "input": "User context updated",
-                    "updated_at": current_timestamp,
-                    "topics": ["user_context", "personal_info", "preferences"]  # Store as JSON array
-                }
-                
-                response = supabase_client.table("agno_memories").update(update_data).eq(
-                    "memory_id", memory_id
-                ).execute()
-                
-                logger.info(f"User context updated for user {self.user_id}: {response}")
-                return "✅ User context updated successfully!"
+            if not isinstance(context_data, dict):
+                return "Context must be a JSON object."
+            repository = MemoryRepository()
+            existing = self._context_entry()
+            # Persist the structured context so individual fields can be edited.
+            content = json.dumps(context_data, ensure_ascii=False)
+            row = {"memory": content, "input": "User context", "updated_at": int(time.time()),
+                "topics": ["user_context", "personal_info", "preferences"]}
+            if existing:
+                repository.update(existing["memory_id"], self.user_id, row)
             else:
-                # Create new memory
-                memory_id = str(uuid.uuid4())
-                
-                memory_data = {
-                    "memory_id": memory_id,
-                    "memory": memory_content,  # Store as plain string (Supabase will handle JSON encoding)
-                    "input": "User context saved",
-                    "team_id": self.team_id,
-                    "user_id": self.user_id,
-                    "topics": ["user_context", "personal_info", "preferences"],  # Store as JSON array
-                    "updated_at": current_timestamp
-                }
-                
-                response = supabase_client.table("agno_memories").insert(memory_data).execute()
-                
-                logger.info(f"User context created for user {self.user_id}: {response}")
-                return "✅ User context saved successfully!"
-                
-        except Exception as e:
-            logger.error(f"Error saving user context: {e}", exc_info=True)
-            return f"❌ Error saving user context: {str(e)}"
-    
+                repository.create({**row, "memory_id": str(uuid.uuid4()), "team_id": self.team_id,
+                    "user_id": self.user_id})
+            return "User context saved."
+        except Exception:
+            logger.exception("Could not save user context for %s", self.user_id)
+            return "Could not save user context."
+
+    def _context_entry(self) -> dict | None:
+        return next((row for row in MemoryRepository().list(self.user_id, team_id=self.team_id)
+            if "user_context" in (row.get("topics") or [])), None)
+
     def get_user_context(self) -> str:
-        """
-        Retrieve user context information from agno_memories.
-        
-        Returns:
-            Formatted user context or message if not found
-        """
-        try:
-            response = supabase_client.table("agno_memories").select("*").eq(
-                "user_id", self.user_id
-            ).eq("team_id", self.team_id).execute()
-            
-            # Filter for user context entries
-            user_context_entry = None
-            if response.data:
-                for entry in response.data:
-                    topics = entry.get("topics", [])
-                    if isinstance(topics, str):
-                        topics = json.loads(topics)
-                    if "user_context" in topics:
-                        user_context_entry = entry
-                        break
-            
-            if not user_context_entry:
-                return "📋 No user context found. User can provide their information for personalized assistance."
-            
-            memory_content = user_context_entry["memory"]
-            # Memory is stored as a string in the JSON field
-            return f"📋 **User Context:**\n\n{memory_content}"
-            
-        except Exception as e:
-            logger.error(f"Error retrieving user context: {e}", exc_info=True)
-            return f"❌ Error retrieving user context: {str(e)}"
-    
+        """Return the current user's saved personal information and preferences."""
+        entry = self._context_entry()
+        return entry["memory"] if entry else "No saved user context."
+
     def update_user_context(self, field: str, value: Any) -> str:
-        """
-        Update a specific field in user context.
-        
-        Args:
-            field: Field path to update (e.g., 'personal.name', 'preferences.workingHours')
-            value: New value for the field
-        
-        Returns:
-            Success or error message
-        """
-        try:
-            # Get existing context
-            response = supabase_client.table("agno_memories").select("*").eq(
-                "user_id", self.user_id
-            ).eq("team_id", self.team_id).execute()
-            
-            # Filter for user context entries
-            user_context_entry = None
-            if response.data:
-                for entry in response.data:
-                    topics = entry.get("topics", [])
-                    if isinstance(topics, str):
-                        topics = json.loads(topics)
-                    if "user_context" in topics:
-                        user_context_entry = entry
-                        break
-            
-            if not user_context_entry:
-                return "❌ No user context found. Please save context first."
-            
-            # Parse existing memory to extract context data
-            memory_content = user_context_entry["memory"]
-            if isinstance(memory_content, str):
-                memory_content = json.loads(memory_content)
-            
-            context_data = self._parse_memory_to_context(memory_content)
-            
-            # Update the specific field
-            field_parts = field.split('.')
-            current = context_data
-            for part in field_parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-            current[field_parts[-1]] = value
-            
-            # Save updated context
-            return self.save_user_context(context_data)
-            
-        except Exception as e:
-            logger.error(f"Error updating user context field: {e}", exc_info=True)
-            return f"❌ Error updating user context: {str(e)}"
-    
+        """Update a field such as personal.name in this user's saved context."""
+        entry = self._context_entry()
+        if not entry:
+            return "Save user context first."
+        if not field or len(field)>200:
+            return "Invalid context field."
+        data = json.loads(entry["memory"])
+        target = data
+        parts = field.split('.')
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+            if not isinstance(target, dict):
+                return "This context field is not an object."
+        target[parts[-1]] = value
+        return self.save_user_context(data)
+
     def _format_context_as_memory(self, context_data: Dict[str, Any]) -> str:
         """Format context data as a readable memory string"""
         memory_lines = ["User Context:"]
