@@ -103,7 +103,7 @@ class BrowserHandler {
                 headers: { 'Content-Type': 'image/jpeg' }
             });
 
-            console.log(`Screenshot successfully uploaded to Supabase path: ${path}`);
+            console.log(`Screenshot successfully uploaded to server storage path: ${path}`);
             return path;
 
         } catch (error) {
