@@ -90,7 +90,7 @@ export const PRESENTATION_TEMPLATES = [
         shortName: 'Creative',
         description: 'Bold expressive deck with vibrant gradients and asymmetric layouts.',
         bestFor: 'Design portfolios, creative briefs, brand pitches',
-        colors: ['#1A1025', '#FF6B6B', '#C084FC', '#4ADE80'],
+        colors: ['#F37763', '#411E3D', '#FFE49B', '#2A1730'],
         slides: [
             { type: 'title', label: 'Splash', description: 'Full-bleed gradient hero', previewLayout: 'title' },
             { type: 'content', label: 'Story', description: 'Expressive bullets with accent strip', previewLayout: 'bullets' },
@@ -151,6 +151,53 @@ export const PRESENTATION_TEMPLATES = [
         ]
     }
 ];
+
+const PRESENTATION_DESIGN_DETAILS = {
+    "venture_blueprint": {
+        "typography": "Georgia / Arial",
+        "description": "Editorial venture journal"
+    },
+    "aetheria_modern": {
+        "typography": "Arial / Arial",
+        "description": "Swiss product editorial"
+    },
+    "executive": {
+        "typography": "Cambria / Calibri",
+        "description": "Formal board memorandum"
+    },
+    "startup_pitch": {
+        "typography": "Arial Black / Arial",
+        "description": "Bold cinematic pitch"
+    },
+    "academic": {
+        "typography": "Times New Roman / Times New Roman",
+        "description": "Scholarly research briefing"
+    },
+    "creative_portfolio": {
+        "typography": "Georgia / Trebuchet MS",
+        "description": "Coral art-direction poster"
+    },
+    "minimal_zen": {
+        "typography": "Corbel / Corbel",
+        "description": "Quiet photographic keynote"
+    },
+    "tech_dark": {
+        "typography": "Consolas / Consolas",
+        "description": "Technical terminal blueprint"
+    },
+    "corporate_gradient": {
+        "typography": "Trebuchet MS / Arial",
+        "description": "Blue commercial report"
+    }
+};
+
+for (const template of PRESENTATION_TEMPLATES) {
+    Object.assign(template, PRESENTATION_DESIGN_DETAILS[template.id]);
+    const descriptions = { title: `${template.description}, ${template.typography}`, content: `${template.description} content layout`,
+        two_column: 'Readable comparison panels', chart: 'Editable evidence chart', table: 'Structured rows and columns',
+        diagram: 'Numbered process with short explanations', image: 'Complete image with a separate text area' };
+    for (const slide of template.slides) slide.description = descriptions[slide.type] || slide.description;
+}
 
 const STORAGE_KEY = 'aetheria:selected-presentation-template';
 
