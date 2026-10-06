@@ -140,7 +140,7 @@ def test_system_assistant_is_configured_for_persistent_history():
     tree = ast.parse((BACKEND_DIR / "system_assistant.py").read_text(encoding="utf-8"))
     source = (BACKEND_DIR / "system_assistant.py").read_text(encoding="utf-8")
 
-    assert "PostgresDb" in source
+    assert "get_agno_db" in source
     assert "add_history_to_context=True" in source
     assert "num_history_runs=" in source
     assert any(
@@ -154,7 +154,7 @@ def test_agent_runner_captures_agent_and_team_run_outputs():
 
     assert "RunOutput" in source
     assert "isinstance(chunk, (RunOutput, TeamRunOutput))" in source
-    assert ".maybe_single()" in source
+    assert "get_title(conversation_id, str(user_id))" in source
 
 
 def test_assistant_socket_does_not_log_raw_payload():
