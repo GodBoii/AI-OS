@@ -1,3 +1,4 @@
+from local_media import media_storage
 # python-backend/api.py
 
 import logging
@@ -11,7 +12,7 @@ import hashlib
 import mimetypes
 from typing import Any, Optional
 from urllib.parse import urlparse, unquote
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 
 # Import the utility function from the factory (or a future utils module)
 from utils import get_user_from_token
@@ -51,6 +52,12 @@ from subscription_service import (
     verify_webhook_signature,
 )
 from convex_usage_service import get_convex_usage_service
+from agno_storage import conversation_owner, session_history, get_agno_db, get_engine, list_sessions, save_title
+from sqlalchemy import text
+from user_questions import QuestionRepository, public_request
+from local_media import verify_transfer, safe_path
+from itsdangerous import BadSignature
+from local_memories import MemoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +146,76 @@ def _collect_workspace_upload_files(sandbox_id: str, project_directory: str = _P
 
 # --- Run Status Endpoints (used for reconnect / catch-up) ---
 
+@api_bp.route('/health', methods=['GET'])
+def backend_health():
+    try:
+        with get_engine().connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return jsonify({"ok": True}), 200
+    except Exception:
+        logger.exception("Local agent storage health check failed")
+        return jsonify({"ok": False}), 503
+
+@api_bp.route('/sessions', methods=['GET'])
+@limiter.limit('120 per minute')
+def list_local_sessions():
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+    try:
+        limit = int(request.args.get("limit", 20))
+        offset = int(request.args.get("offset", 0))
+    except ValueError:
+        return jsonify({"error": "Invalid pagination."}), 400
+    return jsonify(list_sessions(str(user.id), limit, offset)), 200
+
+
+@api_bp.route('/sessions/<conversation_id>/title', methods=['PUT'])
+def rename_local_session(conversation_id):
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+    if conversation_owner(conversation_id) != str(user.id):
+        return jsonify({"error": "Conversation not found."}), 404
+    title = (request.get_json(silent=True) or {}).get("title")
+    if not isinstance(title, str) or not title.strip() or len(title)>120:
+        return jsonify({"error": "Enter a title of up to 120 characters."}), 400
+    save_title(conversation_id, str(user.id), title.strip())
+    return jsonify({"ok": True}), 200
+
+
+@api_bp.route('/sessions/<conversation_id>', methods=['DELETE'])
+def delete_local_session(conversation_id):
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+    if conversation_owner(conversation_id) != str(user.id):
+        return jsonify({"error": "Conversation not found."}), 404
+    if _run_state_manager and _run_state_manager.is_running(conversation_id):
+        return jsonify({"error": "Stop this conversation before deleting it."}), 409
+    QuestionRepository().cancel(conversation_id, str(user.id))
+    get_agno_db().delete_session(conversation_id)
+    with get_engine().begin() as connection:
+        connection.execute(text("DELETE FROM local_titles WHERE session_id=:id AND user_id=:owner"),
+            {"id": conversation_id, "owner": str(user.id)})
+        connection.execute(text("DELETE FROM agent_input_requests WHERE conversation_id=:id AND user_id=:owner"),
+            {"id": conversation_id, "owner": str(user.id)})
+    return jsonify({"ok": True}), 200
+
+@api_bp.route('/sessions/<conversation_id>/history', methods=['GET'])
+@limiter.limit('120 per minute')
+def conversation_history(conversation_id):
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"error": error[0]}), error[1]
+    history = session_history(conversation_id, str(user.id))
+    if not history:
+        return jsonify({"error": "Conversation not found."}), 404
+    history["input_requests"] = [public_request(row) for row in
+        QuestionRepository().list_for_conversation(conversation_id, str(user.id))]
+    return jsonify(history), 200
+
+
 @api_bp.route('/conversations/<conversation_id>/status', methods=['GET'])
 @limiter.limit('120 per minute')
 def conversation_run_status(conversation_id):
@@ -150,6 +227,14 @@ def conversation_run_status(conversation_id):
     user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
+
+    if conversation_owner(conversation_id) != str(user.id):
+        return jsonify({"error": "Conversation not found."}), 404
+
+    pending = QuestionRepository().list_for_conversation(conversation_id, str(user.id), pending_only=True)
+    if pending:
+        return jsonify({"conversationId": conversation_id, "status": "waiting_for_input",
+            "messageId": pending[0]["message_id"], "requests": [public_request(row) for row in pending]}), 200
 
     if not _run_state_manager:
         return jsonify({"status": "idle"}), 200
@@ -177,6 +262,9 @@ def conversation_run_result(conversation_id):
     user, error = get_user_from_token(request)
     if error:
         return jsonify({"error": error[0]}), error[1]
+
+    if conversation_owner(conversation_id) != str(user.id):
+        return jsonify({"error": "Conversation not found."}), 404
 
     if not _run_state_manager:
         return jsonify({"status": "none"}), 200
@@ -482,16 +570,7 @@ def list_memories():
         if cached_data:
             return jsonify(cached_data), 200
 
-        response = (
-            supabase_client
-            .table("agno_memories")
-            .select("*")
-            .eq("user_id", str(user.id))
-            .order("updated_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        response_data = {"ok": True, "memories": response.data or []}
+        response_data = {"ok": True, "memories": MemoryRepository().list(str(user.id), limit=limit)}
         CacheManager.set(cache_key, response_data, ttl_seconds=3600)
         return jsonify(response_data), 200
     except Exception as e:
@@ -536,13 +615,7 @@ def create_memory():
     }
 
     try:
-        response = (
-            supabase_client
-            .table("agno_memories")
-            .insert(row)
-            .execute()
-        )
-        inserted = (response.data or [None])[0]
+        inserted = MemoryRepository().create(row)
         CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
         return jsonify({"ok": True, "memory": inserted, "memory_id": memory_id}), 201
     except Exception as e:
@@ -561,28 +634,12 @@ def memory_by_id(memory_id):
         return jsonify({"error": error[0]}), error[1]
 
     try:
-        existing_resp = (
-            supabase_client
-            .table("agno_memories")
-            .select("*")
-            .eq("memory_id", str(memory_id))
-            .eq("user_id", str(user.id))
-            .limit(1)
-            .execute()
-        )
-        existing = (existing_resp.data or [None])[0]
+        existing = MemoryRepository().get(str(memory_id), str(user.id))
         if not existing:
             return jsonify({"ok": False, "error": "memory not found"}), 404
 
         if request.method == 'DELETE':
-            (
-                supabase_client
-                .table("agno_memories")
-                .delete()
-                .eq("memory_id", str(memory_id))
-                .eq("user_id", str(user.id))
-                .execute()
-            )
+            MemoryRepository().delete(str(memory_id), str(user.id))
             CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
             return jsonify({"ok": True, "deleted": True, "memory_id": memory_id}), 200
 
@@ -608,15 +665,7 @@ def memory_by_id(memory_id):
         if len(update_data.keys()) == 1:
             return jsonify({"ok": False, "error": "no fields provided to update"}), 400
 
-        updated_resp = (
-            supabase_client
-            .table("agno_memories")
-            .update(update_data)
-            .eq("memory_id", str(memory_id))
-            .eq("user_id", str(user.id))
-            .execute()
-        )
-        updated = (updated_resp.data or [None])[0]
+        updated = MemoryRepository().update(str(memory_id), str(user.id), update_data)
         CacheManager.invalidate_pattern(f"cache:memories:{user.id}:*")
         return jsonify({"ok": True, "memory": updated, "memory_id": memory_id}), 200
     except Exception as e:
@@ -801,6 +850,38 @@ def composio_tools():
         return jsonify({"error": "Failed to list Composio tools"}), 500
 
 
+@api_bp.route('/media/write/<token>', methods=['PUT'])
+@limiter.limit('40 per minute')
+def write_local_media(token):
+    try:
+        path = verify_transfer(token, "write")
+        media_storage().upload_stream(path, request.stream, request.mimetype or "application/octet-stream")
+        return jsonify({"path": path}), 201
+    except FileExistsError:
+        return jsonify({"error": "This upload link has already been used."}), 409
+    except (ValueError, BadSignature):
+        return jsonify({"error": "Invalid upload or expired link."}), 400
+
+
+@api_bp.route('/media/read/<token>', methods=['GET'])
+def read_local_media(token):
+    try:
+        path = verify_transfer(token, "read")
+        metadata = media_storage().metadata(path)
+        if not metadata:
+            return jsonify({"error": "File not found."}), 404
+        response = send_file(safe_path(path), mimetype=metadata["mime_type"],
+            download_name=path.rsplit("/", 1)[-1], conditional=True)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return response
+    except (ValueError, BadSignature):
+        return jsonify({"error": "Invalid or expired file link."}), 403
+    except FileNotFoundError:
+        return jsonify({"error": "File not found."}), 404
+
+
 @api_bp.route('/generate-upload-url', methods=['POST'])
 @limiter.limit('20 per minute')
 def generate_upload_url():
@@ -812,14 +893,18 @@ def generate_upload_url():
     if error:
         return jsonify({"error": error[0]}), error[1]
         
-    file_name = request.json.get('fileName')
-    if not file_name:
+    data = request.get_json(silent=True) or {}
+    file_name = data.get('fileName')
+    if not isinstance(file_name, str) or not file_name or len(file_name)>200:
         return jsonify({"error": "fileName is required"}), 400
+    file_name = file_name.replace("\\", "/").rsplit("/", 1)[-1]
+    if file_name in {"", ".", ".."}:
+        return jsonify({"error": "Invalid file name."}), 400
         
     # Create a unique path for the file to prevent collisions
     file_path = f"{user.id}/{uuid.uuid4()}/{file_name}"
     
-    upload_details = supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
+    upload_details = media_storage().create_signed_upload_url(file_path)
 
     return jsonify({"signedURL": upload_details['signed_url'], "path": upload_details['path']}), 200
 
@@ -997,6 +1082,12 @@ def _log_assistant_token_usage(
 def _extract_media_upload_path(url: str) -> Optional[str]:
     if not url:
         return None
+    local_prefix = config.BACKEND_PUBLIC_URL + "/api/media/read/"
+    if url.startswith(local_prefix):
+        try:
+            return verify_transfer(url.removeprefix(local_prefix).split("?", 1)[0], "read")
+        except (BadSignature, ValueError):
+            return None
     marker = "media-uploads/"
     if marker not in url:
         return None
@@ -1050,8 +1141,8 @@ def assistant_upload_link():
 
         logger.info("Generating assistant upload link for user %s path=%s", user.id, file_path)
 
-        upload_details = supabase_client.storage.from_('media-uploads').create_signed_upload_url(file_path)
-        public_url = supabase_client.storage.from_('media-uploads').get_public_url(file_path)
+        upload_details = media_storage().create_signed_upload_url(file_path)
+        public_url = media_storage().get_public_url(file_path)
 
         return jsonify({
             "uploadUrl": upload_details['signed_url'],
@@ -1174,7 +1265,7 @@ def mindspace_ask():
             images=images or None,
             session_id=f"mindspace-{analysis_id}",
             stream=False,
-            stream_intermediate_steps=False,
+            stream_events=False,
             add_history_to_context=False,
         )
 
@@ -1318,7 +1409,7 @@ def assistant_chat():
                         relative_path = _extract_media_upload_path(url)
                         if relative_path and relative_path.startswith(expected_prefix):
                             logger.info("Downloading assistant image from storage path: %s", relative_path)
-                            image_bytes = supabase_client.storage.from_('media-uploads').download(relative_path)
+                            image_bytes = media_storage().download(relative_path)
                             images.append(Image(content=image_bytes))
                             continue
 
@@ -2392,9 +2483,9 @@ def get_session_content(session_id):
             elif content_type == 'upload':
                 metadata = _normalize_metadata(item.get('metadata'))
                 storage_path = str(metadata.get('path') or '').strip()
-                if storage_path:
+                if storage_path and storage_path.startswith(str(user.id) + "/"):
                     try:
-                        signed_response = supabase_client.storage.from_('media-uploads').create_signed_url(
+                        signed_response = media_storage().create_signed_url(
                             storage_path,
                             3600,
                         )
