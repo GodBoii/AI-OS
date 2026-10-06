@@ -1,0 +1,64 @@
+{
+  "venture_blueprint": {
+    "headingFace": "Georgia",
+    "fontFace": "Arial",
+    "personality": "Editorial venture journal",
+    "contentLayout": "rail"
+  },
+  "aetheria_modern": {
+    "headingFace": "Arial",
+    "fontFace": "Arial",
+    "personality": "Swiss product editorial",
+    "contentLayout": "tiles"
+  },
+  "executive": {
+    "headingFace": "Cambria",
+    "fontFace": "Calibri",
+    "personality": "Formal board memorandum",
+    "contentLayout": "memo"
+  },
+  "startup_pitch": {
+    "headingFace": "Arial Black",
+    "fontFace": "Arial",
+    "personality": "Bold cinematic pitch",
+    "contentLayout": "stack"
+  },
+  "academic": {
+    "headingFace": "Times New Roman",
+    "fontFace": "Times New Roman",
+    "personality": "Scholarly research briefing",
+    "contentLayout": "paper"
+  },
+  "creative_portfolio": {
+    "headingFace": "Georgia",
+    "fontFace": "Trebuchet MS",
+    "personality": "Coral art-direction poster",
+    "contentLayout": "poster",
+    "background": "F37763",
+    "surface": "FFE8DE",
+    "ink": "2A1730",
+    "muted": "411E3D",
+    "accent": "411E3D",
+    "accent2": "FFE49B",
+    "accent3": "2A1730",
+    "grid": "BC554D"
+  },
+  "minimal_zen": {
+    "headingFace": "Corbel",
+    "fontFace": "Corbel",
+    "personality": "Quiet photographic keynote",
+    "contentLayout": "quiet"
+  },
+  "tech_dark": {
+    "headingFace": "Consolas",
+    "fontFace": "Consolas",
+    "personality": "Technical terminal blueprint",
+    "contentLayout": "terminal"
+  },
+  "corporate_gradient": {
+    "headingFace": "Trebuchet MS",
+    "fontFace": "Arial",
+    "personality": "Blue commercial report",
+    "contentLayout": "cards"
+  }
+}
