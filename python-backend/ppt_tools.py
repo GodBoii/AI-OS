@@ -1520,6 +1520,7 @@ def build_presentation_agent(
     socketio=None,
     sid: str | None = None,
     debug_mode: bool = True,
+    enable_user_questions: bool = False,
 ) -> Agent:
     tools = [
         PresentationTools(
@@ -1531,10 +1532,13 @@ def build_presentation_agent(
         ),
         PresentationImageTools(),
     ]
+    from user_questions import question_tools
+    tools.extend(question_tools(enable_user_questions))
     from openrouter_reasoning_model import get_openrouter_model
 
     return Agent(
         name="presentation_agent",
+        store_media=False,
         model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
         role=(
             "Native PowerPoint specialist. Plans concise decks and creates editable "
