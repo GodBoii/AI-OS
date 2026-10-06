@@ -1,6 +1,7 @@
 // chat.js (Final, Corrected Version with Simplified Event Handling)
 
 import { messageFormatter } from './message-formatter.js';
+import { QuestionCards } from './question-cards.js';
 import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
 import WelcomeDisplay from './welcome-display.js';
@@ -73,6 +74,47 @@ const planRenderStates = new Map();
 const planReasoningBuffers = new Map();
 const planReasoningRenderStates = new Map();
 const conversationThreads = new Map();
+const pendingAnswerSubmissions = new Map();
+const questionsByConversation = new Map();
+const questionCards = new QuestionCards({
+    onTerminal: request => {
+        const pending = questionsByConversation.get(request.conversationId);
+        if (pending?.requestId !== request.requestId) return;
+        questionsByConversation.delete(request.conversationId);
+        delete ongoingStreams[request.id];
+        if (request.channel === 'plan' && pendingPlanMessageId === request.id) {
+            setPlanGenerating(false);
+            pendingPlanRequestId = null;
+            pendingPlanMessageId = null;
+        }
+        if (isConversationActive(request.conversationId)) {
+            window.chatSendInProgress = false;
+            const input = document.getElementById('floating-input');
+            const send = document.getElementById('send-message');
+            if (input) input.disabled = false;
+            if (send) { send.disabled = false; send.classList.remove('sending'); }
+            updatePrimaryComposerAction();
+        }
+    },
+    submit: async payload => {
+        const session = await window.electron.auth.getSession();
+        if (!session?.access_token) throw new Error('Sign in before answering.');
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                pendingAnswerSubmissions.delete(payload.requestId);
+                reject(new Error('No confirmation received. You can retry safely.'));
+            }, 15000);
+            pendingAnswerSubmissions.set(payload.requestId, { resolve, reject, timer });
+            ipcRenderer.send('submit-user-answers', { ...payload, accessToken: session.access_token });
+        });
+    },
+    cancel: async request => {
+        const session = await window.electron.auth.getSession();
+        if (!session?.access_token) throw new Error('Sign in before stopping this turn.');
+        ipcRenderer.send('send-message', { type: 'stop_run', conversationId: request.conversationId,
+            accessToken: session.access_token });
+    }
+});
 const conversationLabels = new Map();
 const queuedConversations = new Map();
 const persistedComputerOutputIds = new Set();
@@ -172,6 +214,7 @@ function commitPrimaryRouteForSend(files) {
 function setCurrentConversationId(conversationId) {
     currentConversationId = conversationId;
     window.currentConversationId = conversationId;
+    if (conversationId) void joinQuestionConversation(conversationId);
 
     // Update the title bar when switching conversations
     const titleBar = document.getElementById('conversation-title-bar');
@@ -186,6 +229,16 @@ function setCurrentConversationId(conversationId) {
             titleBar.classList.add('hidden');
             titleBar.classList.remove('fade-in');
         }
+    }
+}
+
+async function joinQuestionConversation(conversationId) {
+    try {
+        const session = await window.electron.auth.getSession();
+        if (session?.access_token) ipcRenderer.send('join-conversation', { conversationId,
+            accessToken: session.access_token });
+    } catch (error) {
+        console.warn('Could not join conversation:', error.message);
     }
 }
 
@@ -497,7 +550,7 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
 }
 
 // FUNCTION DESCRIPTION:
-// Coordinates transitioning the client interface to a selected conversation thread. 
+// Coordinates transitioning the client interface to a selected conversation thread.
 // If the conversation being left has a running background process, it flags it as a background run
 // (triggering the sidebar brain indicator). It then toggles CSS visibility flags across all message list container threads,
 // removes the newly activated thread from the background stack tray, synchronizes local displays, and triggers scroll resets.
@@ -1648,6 +1701,7 @@ function setupIpcListeners() {
     ipcRenderer.on('socket-connection-status', (data) => {
         connectionStatus = data.connected;
         if (data.connected) {
+            for (const conversationId of conversationThreads.keys()) void joinQuestionConversation(conversationId);
             // Remove old connection error elements
             document.querySelectorAll('.connection-error').forEach(e => e.remove());
 
@@ -1682,8 +1736,76 @@ function setupIpcListeners() {
         }
     });
 
+    ipcRenderer.on('user-question', request => {
+        if (!request?.conversationId || !request.id) return;
+        questionsByConversation.set(request.conversationId, request);
+        if (request.channel === 'plan') {
+            pendingPlanRequestId = request.planRequestId;
+            pendingPlanMessageId = request.id;
+            setPlanGenerating(true);
+        }
+        if (!getStreamMessageDiv(request.id)) createBotMessagePlaceholder(request.id, request.conversationId);
+        const message = getStreamMessageDiv(request.id);
+        if (message) {
+            questionCards.mount(request, message);
+            setThinkingOrbsPaused(message, true);
+        }
+        autoScrollIfSticky();
+    });
+    ipcRenderer.on('user-question-ack', acknowledgement => {
+        const pending = pendingAnswerSubmissions.get(acknowledgement?.requestId);
+        if (pending) {
+            clearTimeout(pending.timer);
+            pendingAnswerSubmissions.delete(acknowledgement.requestId);
+            if (acknowledgement.success) pending.resolve();
+            else pending.reject(new Error(acknowledgement.error || 'Could not submit answers.'));
+        }
+        if (acknowledgement?.success) {
+            if (acknowledgement.status === 'resuming' && !getStreamMessageDiv(acknowledgement.id)) {
+                createBotMessagePlaceholder(acknowledgement.id, acknowledgement.conversationId);
+            }
+            questionCards.update(acknowledgement);
+            const request = questionsByConversation.get(acknowledgement.conversationId);
+            if (request?.requestId === acknowledgement.requestId) questionsByConversation.delete(acknowledgement.conversationId);
+            const message = getStreamMessageDiv(acknowledgement.id);
+            if (message) setThinkingOrbsPaused(message, acknowledgement.status !== 'resuming');
+        }
+    });
+    ipcRenderer.on('run-status', data => {
+        if (data?.status === 'waiting_for_input') {
+            const message = getStreamMessageDiv(data.messageId);
+            if (message) setThinkingOrbsPaused(message, true);
+        }
+    });
+    ipcRenderer.on('run-catchup', data => {
+        if (!data?.messageId || !data.conversationId) return;
+        if (!getStreamMessageDiv(data.messageId)) createBotMessagePlaceholder(data.messageId, data.conversationId);
+        if (data.content) populateBotMessage({ id: data.messageId, content: data.content, agent_name: 'Aetheria_AI' });
+        const message = getStreamMessageDiv(data.messageId);
+        if (message) {
+            setThinkingOrbsPaused(message, true);
+            const indicator = message.querySelector('.thinking-indicator');
+            if (indicator) indicator.classList.add('steps-done');
+        }
+        delete ongoingStreams[data.messageId];
+    });
+    ipcRenderer.on('assistant-response-reset', data => {
+        const message = getStreamMessageDiv(data?.id);
+        const content = message?.querySelector('.message-content');
+        if (content) content.replaceChildren();
+        if (data?.id) messageFormatter.pendingContent.delete(`${data.id}-Aetheria_AI`);
+    });
+
     ipcRenderer.on('plan-response', (data) => {
         if (!data) return;
+        if (pendingPlanRequestId && data.requestId && data.requestId !== pendingPlanRequestId) return;
+        if (data.stopped) {
+            setPlanGenerating(false);
+            pendingPlanRequestId = null;
+            pendingPlanMessageId = null;
+            if (data.messageId) completePlanThinking(data.messageId);
+            return;
+        }
         if (!pendingPlanRequestId) {
             return;
         }
@@ -2550,7 +2672,7 @@ function setupIpcListeners() {
                     if (mainContent) {
                         const errorContentBlock = document.createElement('div');
                         errorContentBlock.className = 'content-block error-block';
-                        
+
                         const innerContent = document.createElement('div');
                         innerContent.className = 'inner-content';
                         innerContent.innerHTML = `
@@ -2561,7 +2683,7 @@ function setupIpcListeners() {
                                 <i class="fas fa-redo"></i> Try again
                             </button>
                         `;
-                        
+
                         const tryAgainBtn = innerContent.querySelector('.try-again-btn');
                         tryAgainBtn.addEventListener('mouseover', () => {
                             tryAgainBtn.style.background = 'var(--surface-3, #3a3a3a)';
@@ -2569,7 +2691,7 @@ function setupIpcListeners() {
                         tryAgainBtn.addEventListener('mouseout', () => {
                             tryAgainBtn.style.background = 'var(--surface-2, #2a2a2a)';
                         });
-                        
+
                         tryAgainBtn.addEventListener('click', () => {
                             const prevUserMessage = messageDiv.previousElementSibling;
                             if (prevUserMessage && prevUserMessage.classList.contains('message-user')) {
@@ -2588,11 +2710,11 @@ function setupIpcListeners() {
                             }
                             messageDiv.remove(); // Remove this error message
                         });
-                        
+
                         errorContentBlock.appendChild(innerContent);
                         mainContent.appendChild(errorContentBlock);
                     }
-                    
+
                     const thinkingIndicator = messageDiv.querySelector('.thinking-indicator');
                     if (thinkingIndicator) {
                         thinkingIndicator.classList.add('steps-done');
@@ -2601,7 +2723,7 @@ function setupIpcListeners() {
                         if (liveStepsContainer) liveStepsContainer.classList.add('hidden');
                     }
                 }
-                
+
                 if (typeof messageFormatter !== 'undefined' && typeof messageFormatter.finishStreamingForAllOwners === 'function') {
                     messageFormatter.finishStreamingForAllOwners(messageId);
                 }
@@ -2872,8 +2994,8 @@ function appendReasoningContent(messageId, options = {}) {
     autoScrollIfSticky();
 }
 
-function createBotMessagePlaceholder(messageId) {
-    const activeThread = getActiveConversationThread();
+function createBotMessagePlaceholder(messageId, conversationId = currentConversationId) {
+    const activeThread = getOrCreateConversationThread(conversationId);
     if (!activeThread) return;
 
     const messageDiv = document.createElement('div');
@@ -2911,7 +3033,7 @@ function createBotMessagePlaceholder(messageId) {
 
     activeThread.appendChild(messageDiv);
     ongoingStreams[messageId] = {
-        conversationId: currentConversationId,
+        conversationId,
         element: messageDiv,
     };
 
@@ -3208,6 +3330,10 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
 
     destroyThinkingOrbs(targetContainer);
     targetContainer.innerHTML = finalHtml;
+
+    for (const request of options.inputRequests || []) {
+        if (request.runId === run.run_id) questionCards.mount(request, targetContainer.querySelector('.message-bot'));
+    }
 
     const historicalMessage = targetContainer.querySelector('.message-bot');
     if (historicalMessage) {
@@ -4624,24 +4750,24 @@ document.addEventListener('click', (e) => {
     const compBtn = e.target.closest('#computer-know-me-btn');
     const closeBtn = e.target.closest('#know-me-modal-close');
     const backdrop = e.target.closest('#know-me-backdrop');
-    
+
     if (projBtn || compBtn) {
         const modal = document.getElementById('know-me-modal');
         const projContent = document.getElementById('know-me-project-content');
         const compContent = document.getElementById('know-me-computer-content');
-        
+
         if (modal && projContent && compContent) {
             modal.classList.remove('hidden');
             projContent.classList.add('hidden');
             compContent.classList.add('hidden');
-            
+
             if (projBtn) projContent.classList.remove('hidden');
             if (compBtn) compContent.classList.remove('hidden');
-            
+
             // Re-render mermaid by clearing processed flags and calling init
             const targetContent = projBtn ? projContent : compContent;
             const mermaidEls = targetContent.querySelectorAll('.mermaid-code, .mermaid');
-            
+
             mermaidEls.forEach(el => {
                 const originalText = el.getAttribute('data-mermaid-src') || el.textContent;
                 el.setAttribute('data-mermaid-src', originalText);
@@ -4649,11 +4775,11 @@ document.addEventListener('click', (e) => {
                 el.className = 'mermaid'; // Ensure Mermaid picks it up
                 el.removeAttribute('data-processed');
             });
-            
+
             // Delay slightly to ensure browser composite lets modal be visible for dimension math
             if (window.mermaid) {
                 setTimeout(() => {
-                    try { window.mermaid.init(undefined, targetContent.querySelectorAll('.mermaid')); } 
+                    try { window.mermaid.init(undefined, targetContent.querySelectorAll('.mermaid')); }
                     catch(err) { console.error('Mermaid render error:', err); }
                 }, 50);
             }
