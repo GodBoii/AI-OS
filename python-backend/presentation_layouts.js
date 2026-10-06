@@ -1,5 +1,6 @@
 // All layouts use the same editable objects for browser previews and PowerPoint.
 const fs = require('node:fs');
+const { buildDesignedSlide, applyDesignChrome } = require('./presentation_designs');
 
 function buildProfessionalSlide(data, index, ctx, api) {
   const { template: t, topic, totalSlides } = ctx;
@@ -53,6 +54,27 @@ function buildProfessionalSlide(data, index, ctx, api) {
       text(`metric-label-${i}`, metric.label, x, y + 196, width - 42, 100, 18, { color: muted });
     });
   };
+
+  const image = (id, x, y, w, h) => {
+    const imagePath = data.image_path || data.imagePath;
+    if (!fs.existsSync(imagePath)) throw new Error(`Slide ${index}: image does not exist: ${imagePath}`);
+    rect(`${id}-frame`, x, y, w, h, t.surface);
+    let box = { x, y, w, h };
+    const fit = data.image_fit || 'contain';
+    if (fit === 'contain' && data.image_width && data.image_height) {
+      const scale = Math.min(w / data.image_width, h / data.image_height);
+      const fittedW = data.image_width * scale;
+      const fittedH = data.image_height * scale;
+      box = { x: x + (w - fittedW) / 2, y: y + (h - fittedH) / 2, w: fittedW, h: fittedH };
+    }
+    addObject(spec, { id, type: 'image', ...box, z: 2, data: { imagePath, fit }, style: {} });
+  };
+
+  if (buildDesignedSlide(data, index, ctx, { spec, text, rect, rule, list, image, readableColor })) {
+    source();
+    applyDesignChrome(spec, t, rect);
+    return spec;
+  }
 
   if (type === 'title' || type === 'section') {
     text('cover-number', type === 'section' ? String(index).padStart(2, '0') : '01',
@@ -187,6 +209,7 @@ function buildProfessionalSlide(data, index, ctx, api) {
     if (data.metrics?.length) throw new Error(`Slide ${index}: use a metrics slide to keep numbers readable.`);
   }
   source();
+  applyDesignChrome(spec, t, rect);
   return spec;
 }
 
