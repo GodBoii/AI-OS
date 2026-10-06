@@ -23,7 +23,7 @@ const PILL_CONFIG = [
 const CAROUSEL_SLIDES = [
     {
         title: 'Create Presentations',
-        desc: 'Design stunning slide decks with 8 professional templates and AI-powered content generation.',
+        desc: 'Create slide decks with nine distinct design systems and AI-generated illustrations.',
         image: 'assets/stock1.png'
     },
     {
@@ -444,11 +444,7 @@ class WelcomeDisplay {
             return `
                 <div class="template-scroll-card ${isSelected ? 'selected' : ''}" data-template-id="${this.escapeHtml(t.id)}">
                     <div class="template-scroll-canvas-wrap">
-                        <span class="ppt-template-canvas" style="--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};">
-                            <span class="ppt-template-line title"></span>
-                            <span class="ppt-template-line short"></span>
-                            <span class="ppt-template-bars"><i></i><i></i><i></i></span>
-                        </span>
+                        ${this.getTemplateCanvasHtml(t)}
                         <button class="template-preview-btn" data-preview-id="${this.escapeHtml(t.id)}" title="Preview slide layouts" type="button">
                             <i class="fa-regular fa-eye" aria-hidden="true"></i>
                         </button>
@@ -548,24 +544,29 @@ class WelcomeDisplay {
         const colors = template.colors || [];
         return `
             <button type="button" class="ppt-template-preview ${size === 'mini' ? 'mini' : ''} ${selected ? 'selected' : ''}" data-template-id="${this.escapeHtml(template.id)}">
-                <span class="ppt-template-canvas" style="--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};">
-                    <span class="ppt-template-line title"></span>
-                    <span class="ppt-template-line short"></span>
-                    <span class="ppt-template-bars"><i></i><i></i><i></i></span>
-                </span>
+                ${this.getTemplateCanvasHtml(template)}
                 <span class="ppt-template-copy">
                     <strong>${this.escapeHtml(template.name)}</strong>
-                    ${size === 'mini' ? '' : `<small>${this.escapeHtml(template.description)}</small>`}
+                    ${size === 'mini' ? '' : `<small>${this.escapeHtml(template.description)}<br>${this.escapeHtml(template.typography || '')}</small>`}
                 </span>
             </button>
         `;
+    }
+
+    getTemplateCanvasHtml(template) {
+        return `<span class="ppt-template-canvas"><img class="ppt-template-rendered-preview" src="assets/presentation-design-previews/${this.escapeHtml(template.id)}/cover.jpg" alt="${this.escapeHtml(template.name)} example slide" loading="lazy" width="720" height="405"></span>`;
     }
 
     /* ═══════════════════════════════════════════════════════════════
        SLIDE CANVAS HTML — Used by template drawer slide previews
        (preserved from original code)
        ═══════════════════════════════════════════════════════════════ */
-    getSlideCanvasHtml(layout, colors) {
+    getSlideCanvasHtml(layout, colors, templateId = null) {
+        if (templateId) {
+            const previews = { title: 'cover', bullets: 'content', 'two-col': 'comparison', chart: 'chart', table: 'table', flow: 'diagram', visual: 'image' };
+            const file = previews[layout] || 'content';
+            return `<span class="ppt-slide-canvas"><img class="ppt-template-rendered-preview" src="assets/presentation-design-previews/${this.escapeHtml(templateId)}/${file}.jpg" alt="${this.escapeHtml(file)} example slide" loading="lazy" width="720" height="405"></span>`;
+        }
         const style = `--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};`;
         const layouts = {
             'title': `
@@ -779,7 +780,7 @@ class WelcomeDisplay {
 
         const slidesGridHtml = slides.map((slide) => `
             <div class="ppt-slide-preview-item">
-                ${this.getSlideCanvasHtml(slide.previewLayout, colors)}
+                ${this.getSlideCanvasHtml(slide.previewLayout, colors, template.id)}
                 <div class="ppt-slide-preview-info">
                     <strong>${this.escapeHtml(slide.label)}</strong>
                     <small>${this.escapeHtml(slide.description)}</small>
@@ -791,11 +792,7 @@ class WelcomeDisplay {
             <div class="template-preview-panel" role="dialog" aria-modal="true" aria-label="${this.escapeHtml(template.name)} slide layouts">
                 <div class="template-preview-header">
                     <div class="template-preview-header-info">
-                        <span class="ppt-template-canvas mini-canvas" style="--ppt-bg:${colors[0]};--ppt-a:${colors[1]};--ppt-b:${colors[2]};--ppt-c:${colors[3]};">
-                            <span class="ppt-template-line title"></span>
-                            <span class="ppt-template-line short"></span>
-                            <span class="ppt-template-bars"><i></i><i></i><i></i></span>
-                        </span>
+                        ${this.getTemplateCanvasHtml(template)}
                         <div>
                             <h3>${this.escapeHtml(template.name)}</h3>
                             <p>${this.escapeHtml(template.description)}</p>
@@ -825,13 +822,37 @@ class WelcomeDisplay {
 
         this.templatePreviewOverlay.classList.remove('hidden');
         this.templatePreviewOverlay.classList.add('visible');
+        if (!this.templatePreviewKeyHandler) this.templatePreviewPreviousFocus = document.activeElement;
+        if (this.templatePreviewKeyHandler) document.removeEventListener('keydown', this.templatePreviewKeyHandler);
+        this.templatePreviewKeyHandler = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                this.closeTemplatePreview();
+            } else if (event.key === 'Tab') {
+                const controls = Array.from(this.templatePreviewOverlay.querySelectorAll('button:not([disabled])'));
+                const first = controls[0];
+                const last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault(); last?.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault(); first?.focus();
+                }
+            }
+        };
+        document.addEventListener('keydown', this.templatePreviewKeyHandler);
+        this.templatePreviewOverlay.querySelector('.template-preview-close-btn')?.focus();
     }
 
     closeTemplatePreview() {
+        if (this.templatePreviewKeyHandler) {
+            document.removeEventListener('keydown', this.templatePreviewKeyHandler);
+            this.templatePreviewKeyHandler = null;
+        }
         if (this.templatePreviewOverlay) {
             this.templatePreviewOverlay.classList.remove('visible');
             this.templatePreviewOverlay.classList.add('hidden');
         }
+        this.templatePreviewPreviousFocus?.focus();
     }
 
     openTemplateDrawer() {
@@ -892,7 +913,7 @@ class WelcomeDisplay {
                             <div class="ppt-slide-preview-grid">
                                 ${slides.map((slide) => `
                                     <div class="ppt-slide-preview-item">
-                                        ${this.getSlideCanvasHtml(slide.previewLayout, colors)}
+                                        ${this.getSlideCanvasHtml(slide.previewLayout, colors, template.id)}
                                         <div class="ppt-slide-preview-info">
                                             <strong>${this.escapeHtml(slide.label)}</strong>
                                             <small>${this.escapeHtml(slide.description)}</small>
