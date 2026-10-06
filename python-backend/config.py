@@ -145,7 +145,5 @@ CELERY_CONFIG = {
 # The application cannot run without these.
 if not FLASK_SECRET_KEY:
     raise ValueError("CRITICAL: FLASK_SECRET_KEY must be set in the environment.")
-if not DATABASE_URL:
-    raise ValueError("CRITICAL: DATABASE_URL must be set in the environment.")
 if not REDIS_URL:
     raise ValueError("CRITICAL: REDIS_URL must be set in the environment.")
