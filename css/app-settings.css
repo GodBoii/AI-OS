@@ -307,8 +307,103 @@ body:not(.dark-mode) .settings-shortcut-keys kbd {
 .settings-field-select {
     width: 136px;
     flex: 0 0 auto;
-    /* Native select keeps the platform popup, keyboard behaviour and a11y. */
+    color-scheme: dark;
+    --settings-option-bg: #242424;
+    --settings-option-text: #f1f1f3;
+    --settings-option-hover: #353535;
+    --settings-option-border: #454545;
     cursor: pointer;
+}
+
+/* Also keep options legible on runtimes without customizable select support. */
+.settings-field-select option {
+    background: var(--settings-option-bg);
+    color: var(--settings-option-text);
+}
+
+body:not(.dark-mode) .settings-field-select {
+    color-scheme: light;
+    --settings-option-bg: #fff;
+    --settings-option-text: #1e293b;
+    --settings-option-hover: #eef0f4;
+    --settings-option-border: #d1d5db;
+}
+
+.settings-field-select:disabled {
+    opacity: 0.5;
+    cursor: progress;
+}
+
+/* Electron's Chromium renders this picker in the top layer, outside card clips.
+   The select retains its labels, keyboard navigation and change events. */
+@supports (appearance: base-select) {
+    .settings-field-select,
+    .settings-field-select::picker(select) {
+        appearance: base-select;
+    }
+
+    .settings-field-select {
+        align-items: center;
+        gap: 12px;
+    }
+
+    .settings-field-select::picker-icon {
+        color: inherit;
+    }
+
+    .settings-field-select::picker(select) {
+        /* Avoid Chromium 138's incorrect anchor offsets inside the transformed
+           Account window. initSettingsSelectPickers supplies viewport bounds. */
+        position: fixed;
+        position-area: none;
+        position-try-fallbacks: none;
+        inset: auto;
+        left: var(--settings-picker-left);
+        top: var(--settings-picker-top);
+        width: var(--settings-picker-width);
+        max-height: var(--settings-picker-max-height);
+        box-sizing: border-box;
+        overflow-y: auto;
+        margin: 0;
+        padding: 5px;
+        border: 1px solid var(--settings-option-border);
+        border-radius: 10px;
+        background: var(--settings-option-bg);
+        color: var(--settings-option-text);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+        font: inherit;
+    }
+
+    .settings-field-select option {
+        min-height: 34px;
+        padding: 7px 10px;
+        gap: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .settings-field-select option:checked {
+        background: var(--settings-option-hover);
+        font-weight: 600;
+    }
+
+    .settings-field-select option:hover,
+    .settings-field-select option:focus-visible {
+        background: var(--settings-option-hover);
+        outline: 1px solid var(--accent-color, #a1a1aa);
+        outline-offset: -1px;
+    }
+
+    .settings-field-select option::checkmark {
+        color: inherit;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-field-select,
+    .settings-field-select::picker(select) {
+        transition: none;
+    }
 }
 
 .settings-field-num {
