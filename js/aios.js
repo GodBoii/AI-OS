@@ -3402,7 +3402,55 @@ class AIOS {
      * main's validator and the sanitized result is written back into the control,
      * so out-of-range input corrects itself in front of the user.
      */
+    initSettingsSelectPickers() {
+        if (!CSS.supports('appearance: base-select')) return;
+        document.querySelectorAll('.settings-field-select').forEach(select => {
+            if (select.dataset.pickerBound === '1') return;
+            select.dataset.pickerBound = '1';
+            let frame = null;
+            const position = () => {
+                const bounds = select.getBoundingClientRect();
+                const gap = 6;
+                const edge = 8;
+                const menuHeight = select.options.length * 34 + 12;
+                const below = Math.max(0, innerHeight - bounds.bottom - gap - edge);
+                const above = Math.max(0, bounds.top - gap - edge);
+                const upwards = below < menuHeight && above > below;
+                const height = Math.min(menuHeight, upwards ? above : below);
+                const width = Math.min(bounds.width, innerWidth - edge * 2);
+                select.style.setProperty('--settings-picker-left', `${Math.max(edge, Math.min(bounds.left, innerWidth - width - edge))}px`);
+                select.style.setProperty('--settings-picker-top', `${upwards ? bounds.top - gap - height : bounds.bottom + gap}px`);
+                select.style.setProperty('--settings-picker-width', `${width}px`);
+                select.style.setProperty('--settings-picker-max-height', `${height}px`);
+            };
+            const follow = () => {
+                frame = null;
+                if (!select.isConnected || !select.matches(':open')) return;
+                position();
+                frame = requestAnimationFrame(follow);
+            };
+            const prepare = () => {
+                position();
+                if (frame === null) frame = requestAnimationFrame(follow);
+            };
+            // Position before the native default action opens the picker. Follow
+            // the card's hover movement and scrolling only while it stays open.
+            select.addEventListener('pointerdown', prepare);
+            select.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && select.matches(':open')) {
+                    // Let the native picker close without closing Account too.
+                    event.stopPropagation();
+                    return;
+                }
+                prepare();
+            });
+            select.addEventListener('focus', prepare);
+            position();
+        });
+    }
+
     async initBrowserSettings() {
+        this.initSettingsSelectPickers();
         const ipc = window.electron?.ipcRenderer;
         const typingStatus = document.getElementById('settings-typing-speed-status');
         if (!ipc?.invoke) {
