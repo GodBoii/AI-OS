@@ -13,7 +13,7 @@ const executablePath = [process.env.PUPPETEER_EXECUTABLE_PATH,
 
 test('typing selector uses actual settings logic and survives save errors and reopening', { skip: !executablePath }, async t => {
     const source = fs.readFileSync(path.join(root, 'js/aios.js'), 'utf8');
-    const card = source.slice(source.indexOf('<!-- Agent typing -->'), source.indexOf('<!-- Browser Automation Section -->'));
+    const card = source.slice(source.indexOf('<!-- Agent typing -->'), source.indexOf('<!-- Browser Sessions Section -->'));
     const sheets = fs.readFileSync(path.join(root, 'index.html'), 'utf8').match(/href="css\/[^\"]+\.css"/g).map(match => match.slice(6, -1));
     const server = http.createServer((request, response) => {
         if (request.url === '/') {
@@ -41,7 +41,7 @@ test('typing selector uses actual settings logic and survives save errors and re
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.evaluate(() => {
-        window.saved = { typingSpeed: 'instant' };
+        window.saved = { typingSpeed: 'instant', visibility: 'background', idleCloseMinutes: 15, blockedDomains: [] };
         window.writes = [];
         window.failSave = false;
         window.electron = { ipcRenderer: { invoke: async (channel, patch) => {
@@ -67,10 +67,13 @@ test('typing selector uses actual settings logic and survives save errors and re
     await page.select('#settings-typing-speed', 'instant');
     await page.waitForFunction(() => document.getElementById('settings-typing-speed-status').textContent.includes('Could not save'));
     assert.equal(await page.$eval('#settings-typing-speed', el => el.value), 'slow');
-    // Check native keyboard interaction without adding custom dropdown behavior.
+    // Customizable native selects commit the highlighted option with Enter.
     await page.evaluate(() => { window.failSave = false; });
     await page.focus('#settings-typing-speed');
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => document.getElementById('settings-typing-speed').matches(':open') && document.activeElement.tagName === 'OPTION');
     await page.keyboard.press('Home');
+    await page.keyboard.press('Enter');
     await page.keyboard.press('Tab');
     await page.waitForFunction(() => window.saved.typingSpeed === 'instant');
     fs.mkdirSync(path.join(root, '.ui-check'), { recursive: true });
@@ -88,7 +91,31 @@ test('typing selector uses actual settings logic and survives save errors and re
             assert.equal(layout.inside, true);
             assert.equal(layout.label, 'Typing speed');
             await page.screenshot({ path: path.join(root, `.ui-check/typing-settings-${theme}-${width}.png`) });
+            for (const id of ['settings-typing-speed', 'settings-browser-visibility']) {
+                await page.click(`#${id}`);
+                await page.waitForFunction(id => document.getElementById(id).matches(':open'), {}, id);
+                await page.waitForFunction(id => getComputedStyle(document.getElementById(id), '::picker(select)').opacity === '1', {}, id);
+                const picker = await page.$eval(`#${id}`, el => {
+                    const style = getComputedStyle(el, '::picker(select)');
+                    const option = getComputedStyle(el.options[0]);
+                    return { appearance: style.appearance, background: style.backgroundColor, text: option.color };
+                });
+                assert.equal(picker.appearance, 'base-select');
+                assert.notEqual(picker.background, picker.text);
+                await page.screenshot({ path: path.join(root, `.ui-check/${id}-${theme}-${width}-open.png`) });
+                await page.keyboard.press('Escape');
+                assert.equal(await page.$eval(`#${id}`, el => el.matches(':open')), false);
+                await page.waitForFunction(id => getComputedStyle(document.getElementById(id), '::picker(select)').display === 'none', {}, id);
+            }
         }
     }
+    await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    assert.equal(await page.$eval('#settings-typing-speed', el => getComputedStyle(el, '::picker(select)').transitionDuration), '0s');
+    await page.focus('#settings-browser-visibility');
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => document.getElementById('settings-browser-visibility').matches(':open'));
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.saved.visibility === 'visible');
     assert.deepEqual(errors, []);
 });
