@@ -5,6 +5,8 @@ import { artifactHandler } from './artifact-handler.js';
 class MessageFormatter {
     constructor() {
         this.pendingContent = new Map();
+        this.artifactScope = null;
+        this.nextArtifactScope = 0;
         this.inlineRenderer = this.buildInlineRenderer();
         this.streamingInlineRenderer = this.buildInlineRenderer(true);
         this.mermaidInteractionMap = new WeakMap();
@@ -37,7 +39,7 @@ class MessageFormatter {
             code: (code, language) => {
                 if (language === 'image') {
                     const artifactId = code.trim();
-                    artifactHandler.createArtifact(artifactId, 'image');
+                    this.createOwnedArtifact(artifactId, 'image');
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                         View Generated Image
@@ -46,7 +48,7 @@ class MessageFormatter {
 
                 if (language === 'video') {
                     const artifactId = code.trim();
-                    artifactHandler.createArtifact(artifactId, 'video');
+                    this.createOwnedArtifact(artifactId, 'video');
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
                         View Generated Video
@@ -54,7 +56,7 @@ class MessageFormatter {
                 }
 
                 if (language === 'mermaid') {
-                    const artifactId = artifactHandler.createArtifact(code, 'mermaid');
+                    const artifactId = this.createOwnedArtifact(code, 'mermaid');
                     artifactHandler.showArtifact('mermaid', code, artifactId);
                     return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h6v6H3z"></path><path d="M15 3h6v6h-6z"></path><path d="M9 21h6v6H9z"></path><path d="M6 9v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 14v7"></path></svg>
@@ -63,7 +65,7 @@ class MessageFormatter {
                 }
 
                 const validLanguage = hljs.getLanguage(language) ? language : 'plaintext';
-                const artifactId = artifactHandler.createArtifact(code, validLanguage);
+                const artifactId = this.createOwnedArtifact(code, validLanguage);
                 return `<button class="artifact-reference" data-artifact-id="${artifactId}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                     View ${validLanguage} Code Block
@@ -97,6 +99,27 @@ class MessageFormatter {
                 artifactHandler.reopenArtifact(btn.dataset.artifactId);
             }
         });
+    }
+
+    createOwnedArtifact(content, type) {
+        const scope = this.artifactScope;
+        const id = scope && type !== 'image' && type !== 'video'
+            ? `artifact-${encodeURIComponent(scope.id)}-${scope.index++}` : null;
+        return artifactHandler.createArtifact(content, type, id, { conversationId: scope?.conversationId });
+    }
+
+    parseArtifacts(content, renderer, options = {}) {
+        const previous = this.artifactScope;
+        this.artifactScope = {
+            id: options.artifactScope || `format-${this.nextArtifactScope++}`,
+            conversationId: options.conversationId || window.currentConversationId || null,
+            index: 0,
+        };
+        try {
+            return marked.parse(content, renderer ? { renderer } : undefined);
+        } finally {
+            this.artifactScope = previous;
+        }
     }
 
     buildInlineRenderer(streaming = false) {
@@ -208,7 +231,7 @@ class MessageFormatter {
         try {
             if (!inlineArtifacts) {
                 // Parsing runs for every token. Mermaid must only render during final formatting.
-                const rawHtml = marked.parse(newTotalContent, { renderer: this.streamingArtifactRenderer });
+                const rawHtml = this.parseArtifacts(newTotalContent, this.streamingArtifactRenderer, { ...options, artifactScope: streamId });
                 return DOMPurify.sanitize(rawHtml, {
                     ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
                     ADD_ATTR: ['class', 'id', 'data-artifact-id']
@@ -234,7 +257,7 @@ class MessageFormatter {
         const inlineArtifacts = options.inlineArtifacts === true;
 
         if (!inlineArtifacts) {
-            const rawHtml = marked.parse(content);
+            const rawHtml = this.parseArtifacts(content, null, options);
             return DOMPurify.sanitize(rawHtml, {
                 ADD_TAGS: ['button', 'i', 'div', 'span', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
                 ADD_ATTR: ['class', 'id', 'data-artifact-id']
