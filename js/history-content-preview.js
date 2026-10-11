@@ -4,6 +4,10 @@
 class HistoryContentPreview {
     constructor() {
         this.currentContent = null;
+        this.previewRequest = null;
+        this.renderRequests = new WeakMap();
+        this.previewUrls = new Set();
+        this.hideTimer = null;
         this.init();
     }
 
@@ -73,6 +77,10 @@ class HistoryContentPreview {
     }
 
     async show(content) {
+        clearTimeout(this.hideTimer);
+        this.releasePreview();
+        const request = { controller: new AbortController() };
+        this.previewRequest = request;
         console.log('[HistoryContentPreview] Showing content:', content);
         this.currentContent = content;
 
@@ -80,6 +88,8 @@ class HistoryContentPreview {
         const titleText = overlay.querySelector('.preview-title-text');
         const previewBody = overlay.querySelector('.preview-content');
         const loading = overlay.querySelector('.preview-loading');
+        const staging = document.createElement('div');
+        this.renderRequests.set(staging, request);
 
         // Update title
         const metadata = content.metadata || {};
@@ -93,14 +103,17 @@ class HistoryContentPreview {
         // Show overlay with animation
         overlay.classList.remove('hidden');
         requestAnimationFrame(() => {
-            overlay.classList.add('visible');
+            if (this.previewRequest === request) overlay.classList.add('visible');
         });
 
         try {
             // Render content based on type
-            await this.renderContent(content, previewBody);
+            await this.renderContent(content, staging);
+            if (this.previewRequest !== request) return;
+            previewBody.replaceChildren(...staging.childNodes);
             loading.classList.add('hidden');
         } catch (error) {
+            if (this.previewRequest !== request || request.controller.signal.aborted) return;
             console.error('[HistoryContentPreview] Error rendering content:', error);
             loading.classList.add('hidden');
             previewBody.innerHTML = `
@@ -115,13 +128,49 @@ class HistoryContentPreview {
 
     hide() {
         const overlay = document.getElementById('history-content-preview');
+        clearTimeout(this.hideTimer);
+        this.releasePreview();
         overlay.classList.remove('visible');
         
         // Wait for animation to complete before hiding
-        setTimeout(() => {
+        this.hideTimer = setTimeout(() => {
             overlay.classList.add('hidden');
             this.currentContent = null;
         }, 300);
+    }
+
+    releasePreview() {
+        this.previewRequest?.controller.abort();
+        this.previewRequest = null;
+        this.currentContent = null;
+        const body = document.querySelector('#history-content-preview .preview-content');
+        body?.querySelectorAll('video, audio').forEach(media => {
+            media.pause();
+            media.removeAttribute('src');
+            media.querySelectorAll('source').forEach(source => source.removeAttribute('src'));
+            media.load();
+        });
+        body?.replaceChildren();
+        for (const url of this.previewUrls) URL.revokeObjectURL(url);
+        this.previewUrls.clear();
+    }
+
+    fetchPreview(url, container) {
+        const signal = this.renderRequests.get(container)?.controller.signal;
+        signal?.throwIfAborted();
+        return fetch(url, { signal });
+    }
+
+    createPreviewUrl(blob, container) {
+        this.renderRequests.get(container)?.controller.signal.throwIfAborted();
+        const url = URL.createObjectURL(blob);
+        this.previewUrls.add(url);
+        return url;
+    }
+
+    dispose() {
+        clearTimeout(this.hideTimer);
+        this.releasePreview();
     }
 
     async renderContent(content, container) {
@@ -149,7 +198,7 @@ class HistoryContentPreview {
         }
 
         // Fetch content
-        const response = await fetch(content.download_url);
+        const response = await this.fetchPreview(content.download_url, container);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -182,6 +231,7 @@ class HistoryContentPreview {
                 const exists = await window.electron.fileArchive.fileExists(relativePath);
                 if (exists) {
                     const fileData = await window.electron.fileArchive.readFile(relativePath);
+                    this.renderRequests.get(container)?.controller.signal.throwIfAborted();
                     
                     if (mimeType.startsWith('image/')) {
                         this.renderImageFromBuffer(fileData, mimeType, container);
@@ -196,19 +246,20 @@ class HistoryContentPreview {
                     return;
                 }
             } catch (error) {
+                if (this.renderRequests.get(container)?.controller.signal.aborted) throw error;
                 console.warn('[HistoryContentPreview] Could not read local file:', error);
             }
         }
 
         if (content.signed_url) {
             if (mimeType.startsWith('image/')) {
-                const response = await fetch(content.signed_url);
+                const response = await this.fetchPreview(content.signed_url, container);
                 if (response.ok) {
                     await this.renderImage(response, container);
                     return;
                 }
             } else if (mimeType.startsWith('video/')) {
-                const response = await fetch(content.signed_url);
+                const response = await this.fetchPreview(content.signed_url, container);
                 if (response.ok) {
                     await this.renderVideo(response, mimeType, container);
                     return;
@@ -230,7 +281,7 @@ class HistoryContentPreview {
 
         if (content.stdout_url) {
             try {
-                const response = await fetch(content.stdout_url);
+                const response = await this.fetchPreview(content.stdout_url, container);
                 if (response.ok) {
                     stdout = await response.text();
                 }
@@ -241,7 +292,7 @@ class HistoryContentPreview {
 
         if (content.stderr_url) {
             try {
-                const response = await fetch(content.stderr_url);
+                const response = await this.fetchPreview(content.stderr_url, container);
                 if (response.ok) {
                     stderr = await response.text();
                 }
@@ -256,7 +307,7 @@ class HistoryContentPreview {
 
     async renderImage(response, container) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const url = this.createPreviewUrl(blob, container);
         
         const wrapper = document.createElement('div');
         wrapper.className = 'preview-image-wrapper';
@@ -271,8 +322,7 @@ class HistoryContentPreview {
     }
 
     renderImageFromBuffer(buffer, mimeType, container) {
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-        const dataUrl = `data:${mimeType};base64,${base64}`;
+        const dataUrl = this.createPreviewUrl(new Blob([buffer], { type: mimeType }), container);
         
         const wrapper = document.createElement('div');
         wrapper.className = 'preview-image-wrapper';
@@ -288,13 +338,13 @@ class HistoryContentPreview {
 
     async renderVideo(response, mimeType, container) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const url = this.createPreviewUrl(blob, container);
         this.renderVideoUrl(url, mimeType, container);
     }
 
     renderVideoFromBuffer(buffer, mimeType, container) {
         const blob = new Blob([buffer], { type: mimeType });
-        const url = URL.createObjectURL(blob);
+        const url = this.createPreviewUrl(blob, container);
         this.renderVideoUrl(url, mimeType, container);
     }
 
