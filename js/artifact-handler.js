@@ -6,6 +6,7 @@ class ArtifactHandler {
     constructor() {
         this.artifacts = new Map();
         this.pendingMedia = new Map();
+        this.artifactOwners = new Map();
         this.currentId = 0;
         this.browserArtifactId = 'browser_view_artifact';
         this.currentViewMode = 'preview';
@@ -273,7 +274,41 @@ class ArtifactHandler {
         });
     }
 
+    snapshotConversation(conversationId) {
+        return [...this.artifactOwners].filter(([, owners]) => owners.has(conversationId))
+            .map(([id]) => [id, this.artifacts.get(id)]).filter(([, artifact]) => artifact);
+    }
+
+    restoreConversation(conversationId, artifacts = []) {
+        for (const [id, artifact] of artifacts) {
+            if (!this.artifacts.has(id)) this.artifacts.set(id, artifact);
+            const owners = this.artifactOwners.get(id) || new Set();
+            owners.add(conversationId);
+            this.artifactOwners.set(id, owners);
+        }
+    }
+
+    releaseConversation(conversationId) {
+        for (const [id, owners] of this.artifactOwners) {
+            owners.delete(conversationId);
+            if (owners.size) continue;
+            const container = document.getElementById('artifact-container');
+            if (container?.dataset.activeArtifactId === id) this.hideArtifact();
+            this.artifacts.delete(id);
+            this.pendingMedia.delete(id);
+            this.artifactOwners.delete(id);
+        }
+        this.deployTargetsByConversation.delete(conversationId);
+    }
+
     createArtifact(content, type, artifactId = null, options = {}) {
+        const owner = options.conversationId || window.currentConversationId;
+        const ownedId = type === 'image' || type === 'video' ? content.trim() : artifactId;
+        if (owner && ownedId) {
+            const owners = this.artifactOwners.get(ownedId) || new Set();
+            owners.add(owner);
+            this.artifactOwners.set(ownedId, owners);
+        }
         if (type === 'image' || type === 'video') {
             const mediaId = content.trim();
             
@@ -312,6 +347,11 @@ class ArtifactHandler {
             language: options.language || (type === 'mermaid' ? 'mermaid' : (type && type !== 'code' ? String(type).toLowerCase() : 'plaintext'))
         };
         this.artifacts.set(id, artifactData);
+        if (owner) {
+            const owners = this.artifactOwners.get(id) || new Set();
+            owners.add(owner);
+            this.artifactOwners.set(id, owners);
+        }
         return id;
     }
 
@@ -468,6 +508,8 @@ class ArtifactHandler {
 
         if (currentArtifactId) {
             container.dataset.activeArtifactId = currentArtifactId;
+            const owner = options.conversationId || window.currentConversationId;
+            if (owner && !this.artifactOwners.has(currentArtifactId)) this.artifactOwners.set(currentArtifactId, new Set([owner]));
         } else {
             delete container.dataset.activeArtifactId;
         }
