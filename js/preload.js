@@ -175,10 +175,13 @@ contextBridge.exposeInMainWorld(
             }
         },
         on: (channel, func) => {
-            if (validReceiveChannels.includes(channel)) {
+            if (validReceiveChannels.includes(channel) && typeof func === 'function') {
                 // Deliberately strip event as it includes sender 
-                ipcRenderer.on(channel, (event, ...args) => func(...args));
+                const listener = (event, ...args) => func(...args);
+                ipcRenderer.on(channel, listener);
+                return () => ipcRenderer.removeListener(channel, listener);
             }
+            return () => {};
         },
         invoke: async (channel, ...args) => {
             if (validInvokeChannels.includes(channel)) {
@@ -228,6 +231,7 @@ contextBridge.exposeInMainWorld(
 
         // Promise-based operations
         promises: {
+            access: async (path) => await fs.promises.access(path),
             readFile: async (path, options) => await fs.promises.readFile(path, options),
             writeFile: async (path, data, options) => await fs.promises.writeFile(path, data, options),
             unlink: async (path) => await fs.promises.unlink(path),
