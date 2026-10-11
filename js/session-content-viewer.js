@@ -10,6 +10,11 @@ class SessionContentViewer {
         this.contentCache = new Map(); // Cache for session content
         this.cacheTimestamps = new Map(); // Track when cache was created
         this.cacheExpiry = 5 * 60 * 1000; // 5 minutes cache expiry
+        this.cacheSizes = new Map();
+        this.maxCacheEntries = 12;
+        this.maxCacheBytes = 16 * 1024 * 1024;
+        this.cacheTimer = null;
+        this.loadController = null;
         this.isHistoryMode = false; // Track if we're in history mode
         this.init();
     }
@@ -186,6 +191,9 @@ class SessionContentViewer {
     }
 
     hide() {
+        this.loadController?.abort();
+        this.content = [];
+        document.querySelectorAll('#session-content-modal .content-list').forEach(list => list.replaceChildren());
         const modal = document.getElementById('session-content-modal');
         modal.classList.add('hidden');
         modal.classList.remove('history-mode');
@@ -244,6 +252,9 @@ class SessionContentViewer {
     }
 
     async loadContent(sessionId, forceRefresh = false) {
+        this.loadController?.abort();
+        const controller = new AbortController();
+        this.loadController = controller;
         console.log('[SessionContentViewer] Loading content for session:', sessionId);
 
         const filesPanel = document.getElementById('files-panel');
@@ -280,6 +291,7 @@ class SessionContentViewer {
         try {
             // Get auth session
             const session = await window.electron.auth.getSession();
+            controller.signal.throwIfAborted();
             if (!session || !session.access_token) {
                 throw new Error('Not authenticated');
             }
@@ -287,6 +299,7 @@ class SessionContentViewer {
             // Fetch content from backend
             console.log('[SessionContentViewer] Fetching from API...');
             const response = await fetch(`https://api.aetheriaai.website/api/sessions/${sessionId}/content`, {
+                signal: controller.signal,
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`
                 }
@@ -297,6 +310,7 @@ class SessionContentViewer {
             }
 
             const data = await response.json();
+            controller.signal.throwIfAborted();
             this.content = data.content || [];
 
             // Cache the content
@@ -312,6 +326,7 @@ class SessionContentViewer {
             this.renderTerminal(executions, terminalPanel);
 
         } catch (error) {
+            if (controller.signal.aborted) return;
             console.error('[SessionContentViewer] Error loading content:', error);
 
             // Show error state
@@ -329,8 +344,13 @@ class SessionContentViewer {
      * Cache content for a session
      */
     cacheContent(sessionId, content) {
+        const bytes = JSON.stringify(content).length * 2;
+        this.invalidateCache(sessionId);
+        if (bytes > this.maxCacheBytes) return;
         this.contentCache.set(sessionId, content);
         this.cacheTimestamps.set(sessionId, Date.now());
+        this.cacheSizes.set(sessionId, bytes);
+        this.pruneCache();
         console.log('[SessionContentViewer] Cached content for session:', sessionId);
     }
 
@@ -338,6 +358,7 @@ class SessionContentViewer {
      * Get cached content if available and not expired
      */
     getCachedContent(sessionId) {
+        this.pruneCache();
         if (!this.contentCache.has(sessionId)) {
             return null;
         }
@@ -352,7 +373,34 @@ class SessionContentViewer {
             return null;
         }
 
-        return this.contentCache.get(sessionId);
+        const content = this.contentCache.get(sessionId);
+        this.contentCache.delete(sessionId);
+        this.contentCache.set(sessionId, content);
+        return content;
+    }
+
+    pruneCache() {
+        clearTimeout(this.cacheTimer);
+        const now = Date.now();
+        for (const [id, timestamp] of this.cacheTimestamps) {
+            if (now - timestamp >= this.cacheExpiry) this.deleteCacheEntry(id);
+        }
+        let bytes = [...this.cacheSizes.values()].reduce((total, size) => total + size, 0);
+        for (const id of this.contentCache.keys()) {
+            if (this.contentCache.size <= this.maxCacheEntries && bytes <= this.maxCacheBytes) break;
+            bytes -= this.cacheSizes.get(id) || 0;
+            this.deleteCacheEntry(id);
+        }
+        if (this.cacheTimestamps.size) {
+            const expiresAt = Math.min(...this.cacheTimestamps.values()) + this.cacheExpiry;
+            this.cacheTimer = setTimeout(() => this.pruneCache(), Math.max(1, expiresAt - now));
+        }
+    }
+
+    deleteCacheEntry(sessionId) {
+        this.contentCache.delete(sessionId);
+        this.cacheTimestamps.delete(sessionId);
+        this.cacheSizes.delete(sessionId);
     }
 
     /**
@@ -360,13 +408,14 @@ class SessionContentViewer {
      */
     invalidateCache(sessionId) {
         if (sessionId) {
-            this.contentCache.delete(sessionId);
-            this.cacheTimestamps.delete(sessionId);
+            this.deleteCacheEntry(sessionId);
             console.log('[SessionContentViewer] Invalidated cache for session:', sessionId);
         } else {
             // Clear all cache
             this.contentCache.clear();
             this.cacheTimestamps.clear();
+            this.cacheSizes.clear();
+            clearTimeout(this.cacheTimer);
             console.log('[SessionContentViewer] Cleared all cache');
         }
     }
