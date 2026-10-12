@@ -71,6 +71,33 @@ test('preload subscriptions unsubscribe individually and never expose the IPC ev
     assert.equal(typeof exposed.ipcRenderer.on('forbidden', () => {}), 'function');
 });
 
+test('bridge replacement releases its IPC and result subscriptions', () => {
+    const ipc = new EventEmitter();
+    const emitter = new EventEmitter();
+    const context = { module: { exports: {} }, require(name) {
+        if (name === 'electron') return { ipcMain: ipc };
+        if (name === 'socket.io-client') return () => {};
+        if (name === './config') return { backend: { maxReconnectAttempts: 1, reconnectDelay: 1, url: 'http://fixture' } };
+        if (name === './agent-activity') return require('../agent-activity');
+        return require(name);
+    }, console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout };
+    vm.runInNewContext(fs.readFileSync(path.join(root, 'js/python-bridge.js'), 'utf8'), context);
+    const PythonBridge = context.module.exports;
+    const mainRestart = () => {};
+    ipc.on('restart-python-bridge', mainRestart);
+    for (let i = 0; i < 10; i++) {
+        const bridge = new PythonBridge(null, emitter);
+        bridge.setupIpcHandlers();
+        bridge.setupIpcHandlers();
+        assert.equal(ipc.listenerCount('send-message'), 1);
+        assert.equal(emitter.listenerCount('browser-command-result'), 1);
+        bridge.stop();
+        assert.equal(ipc.listenerCount('send-message'), 0);
+        assert.equal(emitter.listenerCount('browser-command-result'), 0);
+    }
+    assert.deepEqual(ipc.listeners('restart-python-bridge'), [mainRestart]);
+});
+
 test('browser artifact, media, cache and lazy-library lifetimes', { skip: !executablePath }, async t => {
     const requests = [];
     let chartFailed = false;
