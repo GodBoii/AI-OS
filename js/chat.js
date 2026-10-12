@@ -1,6 +1,7 @@
 // chat.js (Final, Corrected Version with Simplified Event Handling)
 
 import { messageFormatter } from './message-formatter.js';
+import { ConversationViewCache } from './conversation-view-cache.js';
 import { QuestionCards } from './question-cards.js';
 import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
@@ -74,6 +75,28 @@ const planRenderStates = new Map();
 const planReasoningBuffers = new Map();
 const planReasoningRenderStates = new Map();
 const conversationThreads = new Map();
+const conversationPreviewUrls = new Map();
+let conversationSwitchGeneration = 0;
+const conversationViews = new ConversationViewCache({
+    threads: conversationThreads,
+    // Pending questions, editable plans and retry buttons must keep their live controls.
+    isPinned: (id, thread) => hasActiveRunForConversation(id) || !!questionsByConversation.get(id)
+        || !!thread.querySelector('.plan-output-card, .try-again-btn, .agent-question-card, .inline-mermaid-block, iframe, video, audio'),
+    serialize: (thread, id) => ({ html: thread.outerHTML, artifacts: artifactHandler.snapshotConversation(id) }),
+    hydrate: (snapshot, id) => {
+        const template = document.createElement('template');
+        template.innerHTML = snapshot.html;
+        const thread = template.content.firstElementChild;
+        artifactHandler.restoreConversation(id, snapshot.artifacts);
+        hydrateConversationControls(thread);
+        return thread;
+    },
+    dispose: (thread, id) => {
+        destroyThinkingOrbs(thread);
+        questionCards.releaseContainer(thread);
+        artifactHandler.releaseConversation(id);
+    },
+});
 const pendingAnswerSubmissions = new Map();
 const questionsByConversation = new Map();
 const questionCards = new QuestionCards({
@@ -255,6 +278,8 @@ function getOrCreateConversationThread(conversationId) {
 
     let thread = getConversationThread(conversationId);
     if (thread) {
+        const root = getChatMessagesRoot();
+        if (root && thread.parentElement !== root) root.appendChild(thread);
         return thread;
     }
 
@@ -508,11 +533,26 @@ function destroyConversationState(conversationId) {
 
     const thread = getConversationThread(conversationId);
     if (thread) {
+        destroyThinkingOrbs(thread);
+        questionCards.releaseContainer(thread);
         thread.remove();
         conversationThreads.delete(conversationId);
     }
 
     conversationLabels.delete(conversationId);
+    artifactHandler.releaseConversation(conversationId);
+    sessionContentViewer.invalidateCache(conversationId);
+    conversationViews.forget(conversationId);
+    window.projectWorkspace?.releaseConversation?.(conversationId);
+    releaseConversationPreviewUrls(conversationId);
+}
+
+function releaseConversationPreviewUrls(conversationId) {
+    const urls = conversationPreviewUrls.get(conversationId) || new Set();
+    conversationPreviewUrls.delete(conversationId);
+    for (const url of urls) {
+        if (![...conversationPreviewUrls.values()].some(other => other.has(url))) URL.revokeObjectURL(url);
+    }
 }
 
 function reassignConversationThread(previousConversationId, nextConversationId) {
@@ -563,8 +603,12 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
 // - Updates the global state `currentConversationId`.
 // - Alters visibility of `.conversation-thread` divs in the DOM.
 // - Redraws active layouts, sidebar icons, and welcome boards.
-function switchConversation(conversationId) {
+async function switchConversation(conversationId) {
     if (!conversationId) return;
+    const switchGeneration = ++conversationSwitchGeneration;
+    try { await conversationViews.restore(conversationId); }
+    catch (error) { showNotification(`Could not reopen conversation: ${error.message}`, 'error'); return; }
+    if (switchGeneration !== conversationSwitchGeneration) return;
 
     if (currentConversationId && currentConversationId !== conversationId) {
         const previousConversationId = currentConversationId;
@@ -601,6 +645,39 @@ function switchConversation(conversationId) {
     }
     checkAndShowContentButton();
     scrollActiveConversationToBottom();
+    void conversationViews.prune(conversationId);
+}
+
+function hydrateConversationControls(thread) {
+    thread.querySelectorAll('.message-user[data-context]').forEach(message => {
+        try {
+            const files = JSON.parse(message.dataset.context).files || [];
+            const rail = message.querySelector('.message-attachment-rail');
+            if (rail && files.length) rail.replaceWith(createMessageAttachmentRail(files));
+        } catch (error) { console.warn('[ConversationViews] Attachment restore failed:', error.message); }
+    });
+    thread.querySelectorAll('.message-bot').forEach(message => {
+        const summary = message.querySelector('.reasoning-summary');
+        if (summary) delete summary.dataset.bound;
+        bindReasoningSummary(summary, message);
+        message.querySelectorAll('.message-actions').forEach(actions => actions.remove());
+        addMessageActionButtons(message);
+    });
+    thread.querySelectorAll('.tool-log-header').forEach(header => header.addEventListener('click', event => {
+        event.stopPropagation();
+        const entry = header.closest('.tool-log-entry');
+        if (entry?.classList.contains('has-preview')) entry.classList.toggle('preview-expanded');
+    }));
+    thread.querySelectorAll('.code-block-wrapper').forEach(wrapper => {
+        if (wrapper.querySelector('.inline-artifact-code')) return;
+        const pre = wrapper.querySelector('pre');
+        if (pre) wrapper.replaceWith(pre);
+    });
+    thread.querySelectorAll('[data-copy-setup]').forEach(node => node.removeAttribute('data-copy-setup'));
+    addCopyButtonsToCodeBlocks(thread);
+    messageFormatter.setupCodeCopyButtons(thread);
+    mountThinkingOrbs(thread, { state: 'solving', size: 64, speed: 0.25 });
+    setThinkingOrbsPaused(thread, true);
 }
 
 function invalidateContentForConversation(conversationId) {
@@ -1576,7 +1653,7 @@ async function startNewConversation() {
     console.log(`Starting new conversation with ID: ${currentConversationId}`);
 
     getOrCreateConversationThread(currentConversationId);
-    switchConversation(currentConversationId);
+    await switchConversation(currentConversationId);
     document.getElementById('floating-input').disabled = false;
     document.getElementById('send-message').disabled = false;
     window.chatSendInProgress = false;
@@ -1946,7 +2023,7 @@ function setupIpcListeners() {
                     const innerContentDiv = block.querySelector('.inner-content');
                     if (finalContent && innerContentDiv) {
                         const inlineArtifacts = isProjectWorkspaceMode();
-                        innerContentDiv.innerHTML = messageFormatter.format(finalContent, { inlineArtifacts });
+                        innerContentDiv.innerHTML = messageFormatter.format(finalContent, { inlineArtifacts, artifactScope: streamId, conversationId: streamConversationId });
 
                         if (inlineArtifacts) {
                             if (typeof messageFormatter.applyInlineEnhancements === 'function') {
@@ -1978,6 +2055,7 @@ function setupIpcListeners() {
 
                 // Add action buttons (copy, share) to the completed message
                 addMessageActionButtons(messageDiv);
+                void conversationViews.prune(currentConversationId);
 
                 // CORRECTED FLOW: Save attachment metadata AFTER AI response completes successfully
                 if (window.pendingAttachmentMetadata && window.pendingAttachmentMetadata.sessionId === streamConversationId) {
@@ -2818,6 +2896,11 @@ function addUserMessage(message, turnContextData = null) {
         const fileCount = turnContextData.files?.length || 0;
 
         if (fileCount > 0) {
+            const urls = conversationPreviewUrls.get(currentConversationId) || new Set();
+            for (const file of turnContextData.files) {
+                if (file.previewUrl?.startsWith('blob:')) urls.add(file.previewUrl);
+            }
+            conversationPreviewUrls.set(currentConversationId, urls);
             userMessageContainer.appendChild(createMessageAttachmentRail(turnContextData.files));
         }
 
@@ -3081,7 +3164,7 @@ function populateBotMessage(data) {
 
     const streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
     const contentBlockId = `content-block-${messageId}-${streamOwnerKey}`;
-    let contentBlock = document.getElementById(contentBlockId);
+    let contentBlock = messageDiv.querySelector(`[id="${CSS.escape(contentBlockId)}"]`);
 
     if (!contentBlock) {
         contentBlock = document.createElement('div');
@@ -3111,7 +3194,7 @@ function populateBotMessage(data) {
         if (inlineArtifacts && artifactHandler) {
             artifactHandler.hideArtifact();
         }
-        const formattedContent = messageFormatter.formatStreaming(content, streamId, { inlineArtifacts });
+        const formattedContent = messageFormatter.formatStreaming(content, streamId, { inlineArtifacts, conversationId: getStreamConversationId(messageId) });
         innerContentDiv.innerHTML = formattedContent;
 
         if (inlineArtifacts) {
@@ -3877,6 +3960,8 @@ function submitApprovedPlan(card = null) {
 }
 
 async function handleSendMessage() {
+    try { await window.uiManager?.workspaceLoadPromise; }
+    catch (error) { showNotification(`Workspace could not load: ${error.message}`, 'error'); return; }
     if (planModeEnabled && !submittingApprovedPlan) {
         await requestPlanFromAgent();
         return;
@@ -4687,6 +4772,44 @@ function init() {
         }
     });
 
+    window.addEventListener('pagehide', () => {
+        window.historyContentPreview?.dispose();
+        sessionContentViewer.invalidateCache();
+        audioInputHandler?.destroy();
+        composerContentObserver?.disconnect();
+    });
+
+    window.electron.auth.onAuthChange(user => {
+        if (user) {
+            if (!currentConversationId) void startNewConversation();
+            return;
+        }
+        conversationSwitchGeneration++;
+        for (const id of [...conversationThreads.keys()]) destroyConversationState(id);
+        for (const id of [...conversationViews.archived]) {
+            removeBackgroundConversation(id);
+            artifactHandler.releaseConversation(id);
+            releaseConversationPreviewUrls(id);
+        }
+        void conversationViews.clear().catch(error => console.warn('[ConversationViews] Logout cleanup failed:', error.message));
+        ongoingStreams = {};
+        questionsByConversation.clear();
+        for (const pending of pendingAnswerSubmissions.values()) {
+            clearTimeout(pending.timer);
+            pending.reject(new Error('Signed out'));
+        }
+        pendingAnswerSubmissions.clear();
+        planStreamBuffers.clear();
+        planReasoningBuffers.clear();
+        messageFormatter.pendingContent.clear();
+        artifactHandler.artifacts.clear();
+        artifactHandler.pendingMedia.clear();
+        artifactHandler.artifactOwners.clear();
+        window.historyContentPreview?.dispose();
+        sessionContentViewer.invalidateCache();
+        setCurrentConversationId(null);
+    });
+
     startNewConversation();
 }
 
@@ -4695,14 +4818,15 @@ function init() {
 
 function hasConversation(conversationId) {
     return Boolean(conversationId)
-        && (conversationId === currentConversationId || conversationThreads.has(conversationId));
+        && (conversationId === currentConversationId || conversationThreads.has(conversationId) || conversationViews.archived.has(conversationId));
 }
 
 // Only conversations from this app session have a thread to show; older
 // ones live in History and are not reopened from here.
-function openConversation(conversationId) {
+async function openConversation(conversationId) {
     if (!hasConversation(conversationId)) return false;
-    if (conversationId !== currentConversationId) switchConversation(conversationId);
+    if (conversationId !== currentConversationId) await switchConversation(conversationId);
+    if (currentConversationId !== conversationId) return false;
     window.stateManager?.setState({ isChatOpen: true });
     return true;
 }
@@ -4721,7 +4845,7 @@ async function sendPromptFromDesktop(text, { conversationId = null, newConversat
     if (!prompt) return false;
     if (newConversation) {
         await startNewConversation();
-    } else if (conversationId && !openConversation(conversationId)) {
+    } else if (conversationId && !await openConversation(conversationId)) {
         return false;
     }
     const input = document.getElementById('floating-input');
