@@ -574,6 +574,8 @@ class UIManager {
         this.isResizing = false;
         this.dragStart = { x: 0, y: 0 };
         this.sidebarDock = null;
+        this.ipcSubscriptions = [];
+        this.loadedWorkspaceFeatures = new Set();
         this.init();
     }
 
@@ -609,8 +611,8 @@ class UIManager {
 
     setupWebViewEvents() {
         const ipcRenderer = window.electron.ipcRenderer;
-        ipcRenderer.on('webview-created', (bounds) => this.createWebViewContainer(bounds));
-        ipcRenderer.on('webview-closed', () => this.removeWebViewContainer());
+        this.ipcSubscriptions.push(ipcRenderer.on('webview-created', (bounds) => this.createWebViewContainer(bounds)));
+        this.ipcSubscriptions.push(ipcRenderer.on('webview-closed', () => this.removeWebViewContainer()));
     }
 
     createWebViewContainer(bounds) {
@@ -1269,7 +1271,7 @@ class UIManager {
     }
 
     setupStateSubscription() {
-        this.state.subscribe((state, changedKeys) => {
+        this.unsubscribeState = this.state.subscribe((state, changedKeys) => {
             changedKeys.forEach(key => {
                 switch (key) {
                     case 'isDarkMode': this.updateTheme(state.isDarkMode); break;
@@ -1461,6 +1463,22 @@ class UIManager {
     }
 
     updateProjectWorkspaceVisibility(isOpen) {
+        if (isOpen && window.loadRendererFeature && !this.loadedWorkspaceFeatures.has('project')) {
+            const pending = window.loadRendererFeature('project').then(() => {
+                this.loadedWorkspaceFeatures.add('project');
+                if (this.state.getState().isProjectWorkspaceOpen) this.updateProjectWorkspaceVisibility(true);
+            });
+            this.workspaceLoadPromise = pending;
+            this.elements.projectWorkspaceIcon?.setAttribute('aria-busy', 'true');
+            pending.catch(error => {
+                this.state.setState({ isProjectWorkspaceOpen: false });
+                this.showFeatureLoadError(error);
+            }).finally(() => {
+                this.elements.projectWorkspaceIcon?.removeAttribute('aria-busy');
+                if (this.workspaceLoadPromise === pending) this.workspaceLoadPromise = null;
+            });
+            return;
+        }
         document.getElementById('project-workspace-panel')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('project-panel-open', isOpen);
 
@@ -1488,6 +1506,22 @@ class UIManager {
     }
 
     updateComputerWorkspaceVisibility(isOpen) {
+        if (isOpen && window.loadRendererFeature && !this.loadedWorkspaceFeatures.has('computer')) {
+            const pending = window.loadRendererFeature('computer').then(() => {
+                this.loadedWorkspaceFeatures.add('computer');
+                if (this.state.getState().isComputerWorkspaceOpen) this.updateComputerWorkspaceVisibility(true);
+            });
+            this.workspaceLoadPromise = pending;
+            this.elements.computerWorkspaceIcon?.setAttribute('aria-busy', 'true');
+            pending.catch(error => {
+                this.state.setState({ isComputerWorkspaceOpen: false });
+                this.showFeatureLoadError(error);
+            }).finally(() => {
+                this.elements.computerWorkspaceIcon?.removeAttribute('aria-busy');
+                if (this.workspaceLoadPromise === pending) this.workspaceLoadPromise = null;
+            });
+            return;
+        }
         document.getElementById('computer-workspace-chip')?.classList.toggle('hidden', !isOpen);
         document.body.classList.toggle('computer-panel-open', isOpen);
 
@@ -1513,6 +1547,23 @@ class UIManager {
 
         this.updateActiveWorkspacePill();
     }
+
+    showFeatureLoadError(error) {
+        console.error('[UIManager] Feature load failed:', error);
+        const notice = document.createElement('div');
+        notice.className = 'notification notification-error';
+        notice.setAttribute('role', 'alert');
+        notice.textContent = `${error.message}. Try opening it again.`;
+        document.body.appendChild(notice);
+        setTimeout(() => notice.remove(), 8000);
+    }
+
+    dispose() {
+        this.ipcSubscriptions.forEach(unsubscribe => unsubscribe?.());
+        this.ipcSubscriptions = [];
+        this.unsubscribeState?.();
+        this.sidebarDock?.destroy();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1520,6 +1571,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.stateManager = stateManager;
     const uiManager = new UIManager(stateManager);
     window.uiManager = uiManager;
+    window.addEventListener('pagehide', () => uiManager.dispose(), { once: true });
 
     const loadModule = async (name, containerId, initFunc) => {
         try {
