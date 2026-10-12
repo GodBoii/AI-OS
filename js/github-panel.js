@@ -50,7 +50,7 @@ class GithubPanel {
         this.onDocumentKeyDown = this.onDocumentKeyDown.bind(this);
         this.onViewportChange = this.onViewportChange.bind(this);
 
-        this.init();
+        this.ready = this.init();
     }
 
     async init() {
