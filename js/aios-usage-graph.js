@@ -162,6 +162,7 @@ class AIOSUsageGraph {
         console.log('[UsageGraph] load-start days=%s', days);
 
         try {
+            if (window.loadRendererFeature) await window.loadRendererFeature('chart');
             const response = await this.aios._callAuthorizedApi(`/api/usage/daily?limit=${days}`);
             if (!response || !response.ok || !Array.isArray(response.rows)) {
                 throw new Error('No usage data available');
