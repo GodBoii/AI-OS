@@ -3724,7 +3724,9 @@ function updatePlanOutputCard(messageId, planText, done = false) {
     const targetContainer = messageDiv?.querySelector(`#main-content-${messageId}`);
     if (!messageDiv || !targetContainer) return;
 
-    const formattedPlan = messageFormatter.format(planText || '', { inlineArtifacts: false });
+    const formattedPlan = messageFormatter.format(planText || '', {
+        inlineArtifacts: false, artifactScope: `plan-${messageId}`, conversationId: getStreamConversationId(messageId),
+    });
     let card = targetContainer.querySelector('.plan-output-card');
     if (!card) {
         targetContainer.innerHTML = `
