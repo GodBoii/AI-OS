@@ -81,22 +81,18 @@ class AIOS {
             const userDataPath = await window.electron.ipcRenderer.invoke('get-path', 'userData');
             this.userDataPath = window.electron.path.join(userDataPath, 'userData');
 
-            if (!window.electron.fs.existsSync(this.userDataPath)) {
-                window.electron.fs.mkdirSync(this.userDataPath, { recursive: true });
-            }
+            await window.electron.fs.promises.mkdir(this.userDataPath, { recursive: true });
         } catch (error) {
             console.error('Failed to initialize paths:', error);
             this.userDataPath = window.electron.path.join('userData');
-            if (!window.electron.fs.existsSync(this.userDataPath)) {
-                window.electron.fs.mkdirSync(this.userDataPath, { recursive: true });
-            }
+            await window.electron.fs.promises.mkdir(this.userDataPath, { recursive: true });
         }
 
     }
 
     _setVaultAccount(userId) {
         const accountId = userId || null;
-        if (this.userFilesAccountId === accountId) return;
+        if (this.userFilesAccountId === accountId) return this.vaultReady;
         this.vaultAbortController.abort();
         this.vaultAbortController = new AbortController();
         this.userFilesAccountId = accountId;
@@ -115,20 +111,24 @@ class AIOS {
         this._releaseLocalPreviewUrls();
         this._renderVaultStorage();
         if (!accountId || !this.userDataPath) return;
-        try {
-            const directory = window.electron.path.join(this.userDataPath, 'file-vault-cache', accountId);
-            window.electron.fs.mkdirSync(directory, { recursive: true });
-            this.userFilesLocalDir = directory;
-            this.userFilesManifestPath = window.electron.path.join(directory, 'manifest.json');
-            if (window.electron.fs.existsSync(this.userFilesManifestPath)) {
-                const manifest = JSON.parse(window.electron.fs.readFileSync(this.userFilesManifestPath, 'utf8'));
+        const directory = window.electron.path.join(this.userDataPath, 'file-vault-cache', accountId);
+        const manifestPath = window.electron.path.join(directory, 'manifest.json');
+        this.userFilesLocalDir = directory;
+        this.userFilesManifestPath = manifestPath;
+        this.vaultReady = (async () => {
+            try {
+                await window.electron.fs.promises.mkdir(directory, { recursive: true });
+                const raw = await window.electron.fs.promises.readFile(manifestPath, 'utf8');
+                if (this.userFilesAccountId !== accountId || this.userFilesManifestPath !== manifestPath) return;
+                const manifest = raw ? JSON.parse(raw) : null;
                 if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) {
                     this.localFileManifest = manifest;
                 }
+            } catch (error) {
+                if (error.code !== 'ENOENT') console.error('Could not initialize the file cache:', error);
             }
-        } catch (error) {
-            console.error('Could not initialize the file cache:', error);
-        }
+        })();
+        return this.vaultReady;
     }
 
     _renderVaultStorage() {
@@ -1312,15 +1312,12 @@ class AIOS {
         if (this.activeCheckoutPlan) {
             return;
         }
-        if (typeof window.Razorpay !== 'function') {
-            this.showNotification('Razorpay checkout failed to load.', 'error');
-            return;
-        }
-
         this.activeCheckoutPlan = normalizedPlan;
         this.updatePricingButtons();
 
         try {
+            if (window.loadRendererFeature) await window.loadRendererFeature('checkout');
+            if (typeof window.Razorpay !== 'function') throw new Error('Razorpay checkout failed to load.');
             const payload = await this._callAuthorizedApi('/api/subscription/create', 'POST', {
                 plan_type: normalizedPlan,
             });
@@ -1480,14 +1477,32 @@ class AIOS {
         return cleaned || 'file';
     }
 
-    _persistLocalFileManifest() {
+    queueFileOperation(filePath, operation) {
+        this.fileWritePromises ||= new Map();
+        const previous = this.fileWritePromises.get(filePath) || Promise.resolve();
+        const next = previous.catch(() => {}).then(operation);
+        this.fileWritePromises.set(filePath, next);
+        const clear = () => {
+            if (this.fileWritePromises.get(filePath) === next) this.fileWritePromises.delete(filePath);
+        };
+        next.then(clear, clear);
+        return next;
+    }
+
+    async localPathExists(filePath) {
+        try { await window.electron.fs.promises.access(filePath); return true; }
+        catch (error) {
+            if (error.code === 'ENOENT') return false;
+            throw error;
+        }
+    }
+
+    async _persistLocalFileManifest() {
         if (!this.userFilesManifestPath) return;
+        const filePath = this.userFilesManifestPath;
+        const data = JSON.stringify(this.localFileManifest || {}, null, 2);
         try {
-            window.electron.fs.writeFileSync(
-                this.userFilesManifestPath,
-                JSON.stringify(this.localFileManifest || {}, null, 2),
-                'utf8'
-            );
+            await this.queueFileOperation(filePath, () => window.electron.fs.promises.writeFile(filePath, data, 'utf8'));
         } catch (error) {
             console.error('Failed to persist local file manifest:', error);
         }
@@ -1517,14 +1532,11 @@ class AIOS {
         const fileId = this._safeText(file?.id, '');
         const record = this.localFileManifest?.[fileId];
         if (!record || !record.local_path) return false;
-        try {
-            return window.electron.fs.existsSync(record.local_path);
-        } catch (error) {
-            return false;
-        }
+        // Rendering uses cached metadata. Opening/downloading validates the file asynchronously.
+        return true;
     }
 
-    _recordLocalFile(file, localPath) {
+    async _recordLocalFile(file, localPath) {
         const fileId = this._safeText(file?.id, '');
         if (!fileId || !localPath) return;
         this.localFileManifest[fileId] = {
@@ -1534,7 +1546,7 @@ class AIOS {
             size_bytes: Number(file?.size_bytes || 0),
             updated_at: Date.now(),
         };
-        this._persistLocalFileManifest();
+        await this._persistLocalFileManifest();
     }
 
     async _downloadAndCacheFile(file) {
@@ -1542,7 +1554,8 @@ class AIOS {
         const signal = this.vaultAbortController.signal;
         const fileId = this._safeText(file?.id, '');
         if (!fileId || !this.userFilesLocalDir) return false;
-        if (this._localFileExists(file)) return true;
+        await this.vaultReady;
+        if (this._localFileExists(file) && await this.localPathExists(this.localFileManifest[file.id].local_path)) return true;
 
         const token = await this._getAccessToken();
         if (accountId !== this.userFilesAccountId) return false;
@@ -1560,7 +1573,7 @@ class AIOS {
         if (!localPath) return false;
         await window.electron.fs.promises.writeFile(localPath, bytes);
         if (accountId !== this.userFilesAccountId) return false;
-        this._recordLocalFile(file, localPath);
+        await this._recordLocalFile(file, localPath);
         return true;
     }
 
@@ -1900,6 +1913,7 @@ class AIOS {
     }
 
     async loadUserFiles(showNotification = false, force = false) {
+        await this.vaultReady;
         if (!force && !showNotification && this.userFilesLoadPromise) return this.userFilesLoadPromise;
         const accountId = this.userFilesAccountId;
         if (!accountId) return [];
@@ -2427,6 +2441,7 @@ class AIOS {
     }
 
     async handleUserFilesUpload() {
+        await this.vaultReady;
         if (!this._ensureOnlineForAction('upload files')) return;
         if (this.userFilesUploadInProgress) return;
         this.userFilesUploadInProgress = true;
@@ -2464,7 +2479,7 @@ class AIOS {
                         if (accountId !== this.userFilesAccountId) return;
                         await window.electron.fs.promises.writeFile(localPath, bytes);
                         if (accountId !== this.userFilesAccountId) return;
-                        this._recordLocalFile(metadata, localPath);
+                        await this._recordLocalFile(metadata, localPath);
                     } catch (error) {
                         console.warn('Could not cache the uploaded file:', error);
                     }
@@ -2488,6 +2503,7 @@ class AIOS {
     }
 
     async openUserFile(fileId) {
+        await this.vaultReady;
         const accountId = this.userFilesAccountId;
         const signal = this.vaultAbortController.signal;
         if (!fileId) return;
@@ -2495,7 +2511,8 @@ class AIOS {
             const file = (this.userFilesCache || []).find((item) => String(item.id) === String(fileId));
             const record = this.localFileManifest?.[String(fileId)];
 
-            if (record?.local_path && window.electron.fs.existsSync(record.local_path)) {
+            if (record?.local_path && await this.localPathExists(record.local_path)) {
+                if (signal.aborted || accountId !== this.userFilesAccountId) return;
                 if (window.electron?.shell?.openPath) {
                     const result = await window.electron.shell.openPath(record.local_path);
                     if (typeof result === 'string' && result.length > 0) {
@@ -2536,7 +2553,7 @@ class AIOS {
             if (localPath) {
                 await window.electron.fs.promises.writeFile(localPath, bytes);
             if (accountId !== this.userFilesAccountId) return;
-                this._recordLocalFile(
+                await this._recordLocalFile(
                     {
                         id: resolved.id,
                         file_name: resolved.file_name,
@@ -2598,7 +2615,7 @@ class AIOS {
             const record = this.localFileManifest?.[String(fileId)];
             if (record?.local_path) {
                 try {
-                    if (window.electron.fs.existsSync(record.local_path)) {
+                    if (await this.localPathExists(record.local_path)) {
                         await window.electron.fs.promises.unlink(record.local_path);
                     }
                 } catch (e) {
@@ -2607,7 +2624,7 @@ class AIOS {
             }
             if (accountId !== this.userFilesAccountId) return;
             delete this.localFileManifest[String(fileId)];
-            this._persistLocalFileManifest();
+            await this._persistLocalFileManifest();
             this.showNotification('File deleted', 'success');
             await this.loadUserFiles(false, true);
         } catch (error) {
@@ -2906,23 +2923,24 @@ class AIOS {
         };
         try {
             const profilePath = window.electron.path.join(this.userDataPath, 'profile.json');
-            return window.electron.fs.existsSync(profilePath)
-                ? { ...defaultData, ...JSON.parse(window.electron.fs.readFileSync(profilePath, 'utf8')) }
-                : defaultData;
+            const raw = await window.electron.fs.promises.readFile(profilePath, 'utf8');
+            return raw ? { ...defaultData, ...JSON.parse(raw) } : defaultData;
         } catch (error) {
+            if (error.code === 'ENOENT') return defaultData;
             console.error('Error loading user data:', error);
             return defaultData;
         }
     }
 
-    saveUserData() {
+    async saveUserData() {
         try {
             const profilePath = window.electron.path.join(this.userDataPath, 'profile.json');
             const dataToSave = {
                 account: this.userData.account,
                 lastUpdate: new Date().toISOString()
             };
-            window.electron.fs.writeFileSync(profilePath, JSON.stringify(dataToSave, null, 2), 'utf8');
+            const contents = JSON.stringify(dataToSave, null, 2);
+            await this.queueFileOperation(profilePath, () => window.electron.fs.promises.writeFile(profilePath, contents, 'utf8'));
         } catch (error) {
             console.error('Error saving user data:', error);
             this.showNotification('Failed to save user data', 'error');
@@ -2939,7 +2957,7 @@ class AIOS {
         }
     }
 
-    handleSupportSubmit() {
+    async handleSupportSubmit() {
         const formData = {
             subject: this.elements.subject?.value,
             description: this.elements.description?.value,
@@ -2947,11 +2965,15 @@ class AIOS {
         };
         try {
             const feedbackPath = window.electron.path.join(this.userDataPath, 'feedback.json');
-            const feedbackHistory = window.electron.fs.existsSync(feedbackPath)
-                ? JSON.parse(window.electron.fs.readFileSync(feedbackPath, 'utf8'))
-                : [];
-            feedbackHistory.push(formData);
-            window.electron.fs.writeFileSync(feedbackPath, JSON.stringify(feedbackHistory, null, 2), 'utf8');
+            await this.queueFileOperation(feedbackPath, async () => {
+                let feedbackHistory = [];
+                try {
+                    const raw = await window.electron.fs.promises.readFile(feedbackPath, 'utf8');
+                    if (raw) feedbackHistory = JSON.parse(raw);
+                } catch (error) { if (error.code !== 'ENOENT') throw error; }
+                feedbackHistory.push(formData);
+                await window.electron.fs.promises.writeFile(feedbackPath, JSON.stringify(feedbackHistory, null, 2), 'utf8');
+            });
             this.elements.supportForm?.reset();
             this.showNotification('Feedback submitted successfully', 'success');
         } catch (error) {
