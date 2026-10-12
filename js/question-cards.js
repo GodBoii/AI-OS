@@ -119,6 +119,18 @@ export class QuestionCards {
         if (request.status !== 'pending') this.update(request);
     }
 
+    releaseContainer(container) {
+        for (const [id, entries] of this.cards) {
+            const retained = entries.filter(entry => {
+                if (!container.contains(entry.element)) return true;
+                clearTimeout(entry.expiryTimer);
+                return false;
+            });
+            if (retained.length) this.cards.set(id, retained);
+            else this.cards.delete(id);
+        }
+    }
+
     update(request) {
         for (const entry of this.cards.get(request.requestId) || []) this.updateEntry(entry, request);
         if (['cancelled', 'expired', 'failed'].includes(request.status)) this.onTerminal(request);
