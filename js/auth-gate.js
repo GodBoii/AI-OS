@@ -263,6 +263,8 @@
         }, 700);
 
         // Notify the rest of the app
+        // Cached auth can resolve before renderer.js starts listening.
+        window._authGateAuthenticated = true;
         window.dispatchEvent(new CustomEvent('auth-gate:authenticated'));
     }
 
