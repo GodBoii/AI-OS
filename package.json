@@ -5,6 +5,7 @@
   "author": "Aetheria ai aetheriaai1@gmail.com",
   "main": "js/main.js",
   "scripts": {
+    "test:desktop-memory": "node --test js/tests/desktop-memory.test.js js/tests/desktop-shell-electron.test.js",
     "test:vault": "vitest run convex/vault.test.ts && node --test js/tests/user-file-vault-browser.test.js",
     "start": "electron .",
     "build": "electron-builder",
@@ -31,6 +32,7 @@
     },
     "files": [
       "js/**/*",
+      "!js/tests/**/*",
       "css/**/*",
       "*.html",
       "assets/**/*",
