@@ -9,7 +9,7 @@ test('Electron shell preserves background chat, archived actions and workspace f
     const root = path.resolve(__dirname, '../..');
     const archive = process.env.DESKTOP_MEMORY_ASAR;
     const readResource = file => archive
-        ? require('@electron/asar').extractFile(archive, path.relative(root, file).replace(/\\/g, '/'))
+        ? require('@electron/asar').extractFile(archive, path.relative(root, file))
         : fs.readFileSync(file);
     const requests = [];
     let githubFailed = false;
@@ -25,10 +25,11 @@ test('Electron shell preserves background chat, archived actions and workspace f
         }
         res.setHeader('Content-Type', file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
             : /\.(?:js|mjs)$/.test(file) ? 'text/javascript' : file.endsWith('.png') ? 'image/png' : 'application/octet-stream');
-        res.end(readResource(file));
+        try { res.end(readResource(file)); }
+        catch (error) { res.writeHead(500); res.end(`Packaged resource unavailable: ${req.url}: ${error.message}`); }
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    t.after(() => new Promise(resolve => server.close(resolve)));
+    t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
     const browser = await puppeteer.launch({ executablePath: require('electron'), ignoreDefaultArgs: true,
         args: [path.join(__dirname, 'fixtures/settings-electron.cjs'), '--remote-debugging-port=0'] });
     t.after(() => browser.close());
