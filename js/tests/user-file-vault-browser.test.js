@@ -25,7 +25,7 @@ async function setup(t) {
         await page.addStyleTag({ content: fs.readFileSync(path.join(root, `css/${sheet}.css`), 'utf8') });
     }
     await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'js/aios.js'), 'utf8') });
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
         const disk = new Map();
         window.opened = [];
         window.electron = {
@@ -34,6 +34,8 @@ async function setup(t) {
                 existsSync: key => disk.has(key), mkdirSync: () => {},
                 readFileSync: key => disk.get(key), writeFileSync: (key, bytes) => disk.set(key, bytes),
                 promises: {
+                    mkdir: async () => {},
+                    access: async key => { if (!disk.has(key)) throw Object.assign(new Error('Missing file'), { code: 'ENOENT' }); },
                     writeFile: async (key, bytes) => disk.set(key, bytes),
                     readFile: async key => disk.get(key), unlink: async key => disk.delete(key),
                 },
@@ -52,7 +54,7 @@ async function setup(t) {
         app._getAccessToken = async () => app.userFilesAccountId;
         app.showNotification = (message, type) => { window.notification = { message, type }; };
         app._enqueueBackgroundDownload = () => {};
-        app._setVaultAccount('00000000-0000-4000-8000-000000000001');
+        await app._setVaultAccount('00000000-0000-4000-8000-000000000001');
         app.currentTab = 'database';
         document.getElementById('database-tab').style.display = 'block';
         window.files = [];
@@ -100,10 +102,27 @@ test('vault uploads multipart, refreshes, escapes filenames, opens cached files 
     assert.match(await page.$eval('.file-card h4', element => element.textContent), /<img onerror=alert\(1\)>.txt/);
     assert.equal(await page.$('.file-card img'), null);
     assert.match(await page.$eval('#user-files-storage', element => element.textContent), /of 500 MB used/);
+    // This case opens a cached file. Seed its disk bytes independently of the disabled download worker.
+    await page.evaluate(async () => {
+        const file = app.userFilesCache[0];
+        const localPath = app._getLocalFilePath(file);
+        await window.electron.fs.promises.writeFile(localPath, new TextEncoder().encode('hello vault'));
+        await app._recordLocalFile(file, localPath);
+    });
+    await page.evaluate(async () => {
+        await Promise.all(document.querySelector('.file-card').getAnimations().map(animation => animation.finished));
+    });
     await page.click('.user-file-open-btn');
-    await page.waitForFunction(() => window.opened.length === 1);
+    await page.waitForFunction(() => window.opened.length === 1, { timeout: 3000 }).catch(async error => {
+        throw new Error(`${error.message}: ${JSON.stringify(await page.evaluate(() => ({
+            notification: window.notification, manifest: app.localFileManifest, files: app.userFilesCache,
+            target: (() => { const r = document.querySelector('.user-file-open-btn').getBoundingClientRect();
+                return document.elementsFromPoint(r.x + r.width / 2, r.y + r.height / 2).map(el => el.className); })(),
+        })))}`);
+    });
     assert.match(await page.evaluate(() => window.opened[0]), /file-vault-cache\/00000000-0000-4000-8000-000000000001\//);
-    await page.click('.user-file-delete-btn');
+    await page.focus('.user-file-delete-btn');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelectorAll('.file-card').length === 0);
     assert.equal(await page.evaluate(() => app.userFilesStorage.used_bytes), 0);
     assert.equal(await page.evaluate(() => Object.keys(app.localFileManifest).length), 0);
