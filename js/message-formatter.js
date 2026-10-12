@@ -79,9 +79,14 @@ class MessageFormatter {
         marked.use({ renderer: artifactRenderer });
         this.streamingArtifactRenderer = new marked.Renderer();
         this.streamingArtifactRenderer.table = artifactRenderer.table;
-        this.streamingArtifactRenderer.code = (code, language) => language === 'mermaid'
-            ? this.renderPendingMermaid(code)
-            : artifactRenderer.code(code, language);
+        this.streamingArtifactRenderer.code = (code, language) => {
+            if (language === 'mermaid') {
+                // Reserve its ordinal even though diagrams still render only at completion.
+                if (this.artifactScope) this.artifactScope.index++;
+                return this.renderPendingMermaid(code);
+            }
+            return artifactRenderer.code(code, language);
+        };
 
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.artifact-reference');
@@ -103,8 +108,9 @@ class MessageFormatter {
 
     createOwnedArtifact(content, type) {
         const scope = this.artifactScope;
+        const index = scope ? scope.index++ : null;
         const id = scope && type !== 'image' && type !== 'video'
-            ? `artifact-${encodeURIComponent(scope.id)}-${scope.index++}` : null;
+            ? `artifact-${encodeURIComponent(scope.id)}-${index}` : null;
         return artifactHandler.createArtifact(content, type, id, { conversationId: scope?.conversationId });
     }
 
