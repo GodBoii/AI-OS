@@ -3,7 +3,7 @@ class ComputerWorkspace {
         this.initialized = false;
         this.activeContext = null;
         this.menuCloseTimer = null;
-        this.init();
+        this.ready = this.init();
     }
 
     async init() {
