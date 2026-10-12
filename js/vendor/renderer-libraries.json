@@ -1,0 +1,20 @@
+[
+  {
+    "file": "highlight-11.7.0.min.js",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js",
+    "bytes": 120762,
+    "sha256": "9f19cebc1d4441ae1f0ffc696a42628b9f865fe5d99deda1f1e8cd5bec878888"
+  },
+  {
+    "file": "marked-9.1.6.min.js",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js",
+    "bytes": 36054,
+    "sha256": "6002af63485b043fa60ddaba1b34363b98d2a8b2c63b607004f3a2405a8a053a"
+  },
+  {
+    "file": "mermaid-10.2.4.min.js",
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.2.4/mermaid.min.js",
+    "bytes": 2886256,
+    "sha256": "2ec8539b51597405269ac95ff06da6a6a7f3790e47109ed23eeb407bb0638795"
+  }
+]
