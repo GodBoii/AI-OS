@@ -6,10 +6,8 @@ const path = require('path');
 const PythonBridge = require('./python-bridge');
 const http = require('http');
 const { EventEmitter } = require('events');
-const BrowserHandler = require('./browser-handler.js');
 const BrowserSettings = require('./browser-settings.js');
-const ComputerControlHandler = require('./computer-control-handler.js');
-const LocalCoderHandler = require('./local-coder-handler.js');
+const { createLazyDesktopController } = require('./lazy-desktop-controller');
 const NativeNotificationService = require('./native-notification-service.js');
 const WindowsNativeSpeechService = require('./windows-native-speech-service.js');
 const { initUpdater } = require('./updater.js');
@@ -444,7 +442,7 @@ function createWindow() {
         electron,
         getWindow: () => mainWindow,
         getPythonBridge: () => pythonBridge,
-        getComputerHandler: () => computerControlHandler,
+        getComputerHandler: () => computerControlHandler?.peek(),
         emitter: mainProcessEmitter,
         sendToRenderer: sendToRendererWhenReady,
         showMainWindow,
@@ -507,20 +505,27 @@ function createWindow() {
 
     const appDataPath = app.getPath('userData');
     browserSettings = new BrowserSettings(appDataPath);
-    browserHandler = new BrowserHandler(mainProcessEmitter, appDataPath, getAuthToken, browserSettings);
-
-    browserHandler.initialize();
+    browserHandler = createLazyDesktopController({
+        factory: () => new (require('./browser-handler'))(mainProcessEmitter, appDataPath, getAuthToken, browserSettings),
+        emitter: mainProcessEmitter, commandChannel: 'execute-browser-command',
+        resultChannel: 'browser-command-result', commandMethod: '_enqueueCommand',
+    });
 
     pythonBridge.setBrowserController(browserHandler);
 
     // Initialize Computer Control Handler
-    computerControlHandler = new ComputerControlHandler(mainProcessEmitter, appDataPath, getAuthToken, browserSettings);
-    computerControlHandler.initialize();
+    computerControlHandler = createLazyDesktopController({
+        factory: () => new (require('./computer-control-handler'))(mainProcessEmitter, appDataPath, getAuthToken, browserSettings),
+        emitter: mainProcessEmitter, commandChannel: 'execute-computer-command', resultChannel: 'computer-command-result',
+        onCreate: handler => nativeFeatures?.syncComputerLockState(handler),
+    });
     pythonBridge.setComputerController(computerControlHandler);
 
     // Initialize Local Coder Handler
-    localCoderHandler = new LocalCoderHandler(mainProcessEmitter, mainWindow);
-    localCoderHandler.initialize();
+    localCoderHandler = createLazyDesktopController({
+        factory: () => new (require('./local-coder-handler'))(mainProcessEmitter, mainWindow),
+        emitter: mainProcessEmitter, commandChannel: 'execute-local-coder-command', resultChannel: 'local-coder-command-result',
+    });
     pythonBridge.setLocalCoderController(localCoderHandler);
 
     nativeNotificationService = new NativeNotificationService();
@@ -746,7 +751,7 @@ function createWindow() {
         // Window mode is a Chrome command-line flag, fixed for the life of the
         // process. Drop the running instance so the next command relaunches with
         // the new flags rather than silently ignoring the change.
-        if (before.visibility !== after.visibility && browserHandler) {
+        if (before.visibility !== after.visibility && browserHandler?.peek()) {
             await browserHandler.closeBrowser();
         }
         return after;
@@ -773,7 +778,9 @@ function createWindow() {
         if (!computerControlHandler) {
             return { success: false, error: 'Computer control handler not initialized' };
         }
-        return { success: true, state: computerControlHandler.getAccessState() };
+        return { success: true, state: computerControlHandler.peek()?.getAccessState() || {
+            enabled: false, permissionSource: null, scopes: [], defaultScope: app.getPath('home'), platform: process.platform,
+        } };
     });
 
     ipcMain.handle('computer-manual-grant', async () => {
@@ -1331,6 +1338,11 @@ app.on('before-quit', async () => {
         } catch (error) {
             console.error('Error cleaning up LocalCoderHandler:', error.message);
         }
+    }
+
+    if (computerControlHandler) {
+        try { await computerControlHandler.cleanup(); }
+        catch (error) { console.error('Error cleaning up ComputerControlHandler:', error.message); }
     }
 
     if (linkWebView) {
