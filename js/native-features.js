@@ -283,6 +283,7 @@ function installNativeFeatures({
         onRunCompleted,
         addRecentDocument,
         isBackgrounded,
+        syncComputerLockState: handler => handler.setSystemLocked(lockState.pauseOnLock && (lockState.screenLocked || lockState.suspended)),
         setDefaultOverlay: (image, description) => desktop.setDefaultOverlay(image, description),
         dispose,
     };
