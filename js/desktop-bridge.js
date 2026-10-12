@@ -113,12 +113,12 @@
                 break;
             }
             case 'open-conversation':
-                if (!chat.openConversation(payload.conversationId)) {
+                if (!await chat.openConversation(payload.conversationId)) {
                     notify('That conversation is no longer open. Find it in History.', 'info');
                 }
                 break;
             case 'focus-reply':
-                if (chat.openConversation(payload.conversationId)) chat.focusComposer();
+                if (await chat.openConversation(payload.conversationId)) chat.focusComposer();
                 else notify('That conversation is no longer open. Find it in History.', 'info');
                 break;
             case 'reply': {
