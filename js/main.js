@@ -925,6 +925,7 @@ function createWindow() {
     });
 
     ipcMain.handle('project-unwatch-local-workspace', async (event, payload) => {
+        if (!localCoderHandler?.peek()) return { success: true };
         if (!localCoderHandler) {
             return { success: false, error: 'Local coder handler not initialized' };
         }
@@ -973,6 +974,7 @@ function createWindow() {
     });
 
     ipcMain.handle('project-local-terminal-stop', async (event, payload) => {
+        if (!localCoderHandler?.peek()) return { success: true };
         if (!localCoderHandler) {
             return { success: false, error: 'Local coder handler not initialized' };
         }
