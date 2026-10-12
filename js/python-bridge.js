@@ -77,29 +77,35 @@ class PythonBridge {
     }
 
     setupIpcHandlers() {
+        if (this.ownedListeners?.length) return;
+        this.ownedListeners = [];
+        const listen = (emitter, channel, callback) => {
+            emitter.on(channel, callback);
+            this.ownedListeners.push(() => emitter.removeListener(channel, callback));
+        };
         if (!this.questionIpcRegistered) {
             this.questionIpcRegistered = true;
-            ipcMain.on('join-conversation', (_event, payload) => {
+            listen(ipcMain, 'join-conversation', (_event, payload) => {
                 if (!payload?.conversationId || !payload.accessToken) return;
                 this.conversationSubscriptions.set(payload.conversationId, payload);
                 if (this.socket?.connected) this.socket.emit('join_conversation', payload);
             });
-            ipcMain.on('submit-user-answers', (_event, payload) => {
+            listen(ipcMain, 'submit-user-answers', (_event, payload) => {
                 if (this.socket?.connected) this.socket.emit('submit_user_answers', payload);
                 else this._sendToRenderer('user-question-ack', { requestId: payload?.requestId,
                     success: false, error: 'Reconnect before submitting your answers.' });
             });
         }
         // This method is unchanged and correctly handles communication from the renderer.
-        ipcMain.on('send-message', (event, data) => {
+        listen(ipcMain, 'send-message', (event, data) => {
             this.sendMessage(data);
         });
 
-        ipcMain.on('plan-request', (event, data) => {
+        listen(ipcMain, 'plan-request', (event, data) => {
             this.sendPlanRequest(data);
         });
 
-        ipcMain.on('terminate-session', (event, data) => {
+        listen(ipcMain, 'terminate-session', (event, data) => {
             this.sendMessage({
                 type: 'terminate_session',
                 message: 'terminate',
@@ -108,7 +114,7 @@ class PythonBridge {
             });
         });
 
-        ipcMain.on('check-connection-status', () => {
+        listen(ipcMain, 'check-connection-status', () => {
             if (this.socket && this.socket.connected) {
                 this._sendToRenderer('socket-connection-status', { connected: true });
             } else {
@@ -116,26 +122,22 @@ class PythonBridge {
             }
         });
 
-        ipcMain.on('restart-python-bridge', () => {
-            console.log('Received restart request from renderer');
-            this.stop();
-            setTimeout(() => this.start(), 1000);
-        });
+        // main.js owns bridge restart and creates the replacement instance.
 
         // Listen for browser command results from the BrowserHandler
-        this.eventEmitter.on('browser-command-result', (resultPayload) => {
+        listen(this.eventEmitter, 'browser-command-result', (resultPayload) => {
             console.log('PythonBridge: Received browser-command-result from BrowserHandler:', resultPayload.request_id);
             this.sendBrowserResult(resultPayload);
         });
 
         // NEW: Listen for computer control command results
-        this.eventEmitter.on('computer-command-result', (resultPayload) => {
+        listen(this.eventEmitter, 'computer-command-result', (resultPayload) => {
             console.log('PythonBridge: Received computer-command-result from ComputerControlHandler:', resultPayload.request_id);
             this.sendComputerResult(resultPayload);
         });
 
         // NEW: Listen for local coder command results
-        this.eventEmitter.on('local-coder-command-result', (resultPayload) => {
+        listen(this.eventEmitter, 'local-coder-command-result', (resultPayload) => {
             console.log('PythonBridge: Received local-coder-command-result from LocalCoderHandler:', resultPayload.request_id);
             this.sendLocalCoderResult(resultPayload);
         });
@@ -491,6 +493,9 @@ class PythonBridge {
     }
 
     cleanup() {
+        for (const unsubscribe of this.ownedListeners || []) unsubscribe();
+        this.ownedListeners = [];
+        this.questionIpcRegistered = false;
         // This method is unchanged.
         this.isShuttingDown = true;
         if (this.socket) {
