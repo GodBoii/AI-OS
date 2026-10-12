@@ -14,7 +14,7 @@ class ProjectWorkspace {
         this.terminalResizeObserver = null;
         this.terminalResizeTimer = null;
         this.terminalSessionMode = null;
-        this.init();
+        this.ready = this.init();
     }
 
     async init() {
@@ -199,6 +199,12 @@ class ProjectWorkspace {
             this.workspaceStates.set(key, this.createDefaultState());
         }
         return this.workspaceStates.get(key) || null;
+    }
+
+    releaseConversation(conversationId) {
+        this.workspaceStates.delete(conversationId);
+        void this.stopLocalWatcher(conversationId).catch(error => console.warn('[ProjectWorkspace] Watcher cleanup failed:', error.message));
+        void this.stopLocalTerminal(conversationId).catch(error => console.warn('[ProjectWorkspace] Terminal cleanup failed:', error.message));
     }
 
     getSnapshotState() {
@@ -951,6 +957,14 @@ class ProjectWorkspace {
     async ensureTerminalClientReady() {
         if (this.terminalReady && this.terminal) return true;
         if (!this.el.terminalShell) return false;
+
+        if (window.loadRendererFeature) {
+            try {
+                await Promise.all([window.loadRendererFeature('terminal'), window.loadRendererFeature('terminalFit')]);
+            } catch (error) {
+                console.warn('[ProjectWorkspace] Terminal library failed to load:', error.message);
+            }
+        }
 
         const constructors = this.getTerminalConstructors();
         if (!constructors.ok) {
@@ -2626,7 +2640,9 @@ class ProjectWorkspace {
 
         if (!this.el.terminalOutput) return;
         const prefix = stream === 'stderr' ? '[stderr] ' : '';
-        this.el.terminalOutput.textContent += `${prefix}${normalized}`;
+        // The PTY path already has bounded scrollback. Bound its plain-text fallback too.
+        const maxChars = 256 * 1024;
+        this.el.terminalOutput.textContent = `${this.el.terminalOutput.textContent}${prefix}${normalized}`.slice(-maxChars);
         this.el.terminalOutput.scrollTop = this.el.terminalOutput.scrollHeight;
     }
 
