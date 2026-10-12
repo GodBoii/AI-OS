@@ -146,6 +146,16 @@ test('browser artifact, media, cache and lazy-library lifetimes', { skip: !execu
         return { before, after, remaining };
     });
     assert.deepEqual(identities, { before: 1, after: 1, remaining: ['const x = 2;'] });
+    const mixed = await page.evaluate(() => {
+        const content = '```javascript\nconst first = 1;\n```\n```mermaid\ngraph LR\nA --> B\n```\n```javascript\nconst last = 2;\n```';
+        formatter.formatStreaming(content, 'mixed', { conversationId: 'mixed' });
+        const before = artifactHandler.snapshotConversation('mixed').filter(([, item]) => item.type === 'javascript').map(([id]) => id);
+        formatter.format(content, { artifactScope: 'mixed', conversationId: 'mixed' });
+        const after = artifactHandler.snapshotConversation('mixed').filter(([, item]) => item.type === 'javascript').map(([id]) => id);
+        return { before, after };
+    });
+    assert.deepEqual(mixed.before, ['artifact-mixed-0', 'artifact-mixed-2']);
+    assert.deepEqual(mixed.after, mixed.before);
     const cache = await page.evaluate(async () => {
         viewer.maxCacheEntries = 3;
         for (let i = 0; i < 10; i++) viewer.cacheContent(`s${i}`, [{ title: `${i}` }]);
