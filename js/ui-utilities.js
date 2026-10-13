@@ -1,6 +1,9 @@
 // ui-utilities.js
 // UI utility functions for chat interface (connection errors, message actions, share modal)
 
+import { buildConversationPdfHtml } from './conversation-pdf.mjs';
+import { showConversationPdfExportDialog, selectConversationPdfTurns, prepareConversationPdfTurns } from './conversation-pdf-export.mjs';
+
 // Import ipcRenderer for connection retry functionality
 const ipcRenderer = window.electron?.ipcRenderer;
 
@@ -192,7 +195,7 @@ function showShareModal(options) {
                 </button>
                 <button class="share-option" data-action="export-pdf">
                     <i class="fi fi-tr-file-export"></i>
-                    <span>Share Entire Conversation (PDF)</span>
+                    <span>Export as PDF</span>
                 </button>
             </div>
         </div>
@@ -202,6 +205,7 @@ function showShareModal(options) {
 
     // Add event listeners
     const closeModal = () => {
+        document.removeEventListener('keydown', handleKeyDown);
         overlay.classList.add('closing');
         setTimeout(() => overlay.remove(), 200);
     };
@@ -276,8 +280,8 @@ function showShareModal(options) {
                         closeModal();
                     }
                 } else if (action === 'export-pdf') {
-                    await exportEntireConversationPdf(messageDiv);
                     closeModal();
+                    await exportConversationPdf(messageDiv);
                 }
             } catch (error) {
                 console.error('Share action failed:', error);
@@ -325,17 +329,6 @@ function sanitizeAssistantMessageHtml(contentNode) {
         node.remove();
     });
 
-    // Blob URLs from renderer context won't reliably load in the hidden print window.
-    clone.querySelectorAll('img').forEach((img) => {
-        const src = String(img.getAttribute('src') || '');
-        if (src.startsWith('blob:')) {
-            const replacement = document.createElement('div');
-            replacement.className = 'pdf-image-placeholder';
-            replacement.textContent = '[Image omitted in export]';
-            img.replaceWith(replacement);
-        }
-    });
-
     return clone.innerHTML.trim();
 }
 
@@ -348,16 +341,19 @@ function extractConversationTurns(thread) {
     messages.forEach((message) => {
         if (message.classList.contains('message-user')) {
             const text = (message.querySelector('.user-message-text')?.textContent || '').trim();
-            if (!text) return;
 
             const context = parseMessageContext(message) || {};
             const files = Array.isArray(context.files) ? context.files : [];
             const attachments = files
                 .map((file) => ({
                     name: String(file?.name || '').trim(),
-                    type: String(file?.type || '').trim()
+                    type: String(file?.type || '').trim(),
+                    relativePath: String(file?.relativePath || ''),
+                    previewUrl: String(file?.previewUrl || ''),
+                    url: String(file?.url || file?.download_url || '')
                 }))
                 .filter((file) => file.name);
+            if (!text && !attachments.length) return;
 
             turns.push({
                 role: 'user',
@@ -382,423 +378,6 @@ function extractConversationTurns(thread) {
     });
 
     return turns;
-}
-
-function buildConversationPdfHtml(turns, metadata = {}) {
-    const { title = 'Untitled Conversation', timestamp = new Date() } = metadata;
-    
-    const formattedDate = new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    }).format(timestamp);
-    
-    const formattedTime = new Intl.DateTimeFormat('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-    }).format(timestamp);
-
-    const content = turns.map((turn) => {
-        if (turn.role === 'user') {
-            const attachmentsHtml = (turn.attachments && turn.attachments.length > 0)
-                ? `
-                    <div class="turn-attachments">
-                        ${turn.attachments.map((attachment) => `
-                            <div class="attachment-pill">
-                                <svg class="attachment-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                                </svg>
-                                <div class="attachment-info">
-                                    <span class="attachment-name">${escapeHtml(attachment.name)}</span>
-                                    ${attachment.type ? `<span class="attachment-type">${escapeHtml(attachment.type)}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `
-                : '';
-
-            return `
-                <div class="turn turn-user">
-                    <div class="turn-header">
-                        <div class="turn-avatar turn-avatar-user">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                                <circle cx="12" cy="7" r="4"/>
-                            </svg>
-                        </div>
-                        <div class="turn-label">You</div>
-                    </div>
-                    <div class="turn-body user-body">
-                        <p>${escapeHtml(turn.text)}</p>
-                        ${attachmentsHtml}
-                    </div>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="turn turn-assistant">
-                <div class="turn-header">
-                    <div class="turn-avatar turn-avatar-assistant">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
-                            <path d="M12 12 2.1 12"/>
-                            <path d="M12 12l8.5-4.5"/>
-                        </svg>
-                    </div>
-                    <div class="turn-label">Aetheria ai</div>
-                </div>
-                <div class="turn-body assistant-rich">
-                    ${turn.html || ''}
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(title)} - Aetheria ai</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --color-brand: #6366f1;
-      --color-brand-dark: #4f46e5;
-      --color-text-primary: #0f172a;
-      --color-text-secondary: #475569;
-      --color-text-tertiary: #64748b;
-      --color-surface: #ffffff;
-      --color-surface-user: #f8fafc;
-      --color-surface-assistant: #ffffff;
-      --color-border: #e2e8f0;
-      
-      --font-display: 'Outfit', -apple-system, sans-serif;
-      --font-body: 'Inter', -apple-system, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
-    }
-
-    @page { margin: 24mm 20mm; size: A4; }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: var(--font-body);
-      color: var(--color-text-primary);
-      background: var(--color-surface);
-      line-height: 1.6;
-      font-size: 14px;
-    }
-
-    /* Document Header */
-    .document-header {
-      padding-bottom: 24px;
-      margin-bottom: 36px;
-      border-bottom: 2px solid var(--color-brand);
-      page-break-after: avoid;
-    }
-
-    .brand-section {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark));
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-    }
-
-    .brand-name {
-      font-family: var(--font-display);
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--color-text-primary);
-      letter-spacing: -0.02em;
-    }
-
-    .conversation-title {
-      font-family: var(--font-display);
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--color-text-primary);
-      margin-bottom: 12px;
-      line-height: 1.3;
-    }
-
-    .conversation-meta {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      font-size: 13px;
-      color: var(--color-text-tertiary);
-      font-weight: 500;
-    }
-
-    .meta-item { display: flex; align-items: center; gap: 6px; }
-
-    /* Main Body */
-    .document-body {
-      max-width: 100%;
-    }
-
-    .turn {
-      margin-bottom: 36px;
-    }
-
-    .turn-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-      page-break-after: avoid;
-    }
-
-    .turn-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      flex-shrink: 0;
-    }
-
-    .turn-avatar-user {
-      background: #475569;
-    }
-
-    .turn-avatar-assistant {
-      background: linear-gradient(135deg, var(--color-brand), var(--color-brand-dark));
-    }
-
-    .turn-label {
-      font-family: var(--font-display);
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--color-text-primary);
-    }
-
-    .turn-body {
-      padding: 0 0 0 44px; /* Align with text, after avatar */
-    }
-
-    .user-body {
-      font-size: 15px;
-      color: var(--color-text-primary);
-      white-space: pre-wrap;
-      line-height: 1.7;
-    }
-
-    /* Attachments */
-    .turn-attachments {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .attachment-pill {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 14px;
-      background: var(--color-surface-user);
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-    }
-
-    .attachment-icon { color: var(--color-text-tertiary); flex-shrink: 0; }
-
-    .attachment-info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .attachment-name {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--color-text-primary);
-    }
-
-    .attachment-type {
-      font-size: 11px;
-      font-family: var(--font-mono);
-      color: var(--color-text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    /* Assistant Rich Content */
-    .assistant-rich {
-      font-size: 14.5px;
-      line-height: 1.75;
-      color: var(--color-text-secondary);
-    }
-
-    .assistant-rich p { margin-bottom: 16px; }
-    .assistant-rich p:last-child { margin-bottom: 0; }
-
-    .assistant-rich h1, .assistant-rich h2, .assistant-rich h3, .assistant-rich h4 {
-      font-family: var(--font-display);
-      color: var(--color-text-primary);
-      margin: 24px 0 12px;
-      font-weight: 600;
-    }
-    
-    .assistant-rich h1 { font-size: 20px; }
-    .assistant-rich h2 { font-size: 18px; }
-    .assistant-rich h3 { font-size: 16px; }
-
-    .assistant-rich code {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      background: var(--color-surface-user);
-      border: 1px solid var(--color-border);
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #b91c1c;
-    }
-
-    .assistant-rich pre {
-      background: var(--color-surface-user);
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-      padding: 16px;
-      margin: 16px 0;
-      overflow-x: auto;
-      white-space: pre-wrap;
-    }
-
-    .assistant-rich pre code {
-      background: transparent;
-      border: none;
-      padding: 0;
-      color: var(--color-text-primary);
-      font-size: 13px;
-    }
-
-    .assistant-rich ul, .assistant-rich ol {
-      margin: 16px 0 16px 24px;
-      padding: 0;
-      color: var(--color-text-secondary);
-    }
-    .assistant-rich li { margin-bottom: 8px; }
-    
-    .assistant-rich img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-      border: 1px solid var(--color-border);
-      margin: 16px 0;
-      display: block;
-    }
-
-    .pdf-image-placeholder {
-      margin: 16px 0;
-      padding: 16px;
-      border: 1px dashed var(--color-text-tertiary);
-      border-radius: 8px;
-      color: var(--color-text-tertiary);
-      font-size: 13px;
-      background: var(--color-surface-user);
-      text-align: center;
-      font-style: italic;
-    }
-
-    .assistant-rich blockquote {
-      margin: 16px 0;
-      padding: 12px 20px;
-      border-left: 4px solid var(--color-brand);
-      background: var(--color-surface-user);
-      color: var(--color-text-secondary);
-      font-style: italic;
-      border-radius: 0 8px 8px 0;
-    }
-
-    .assistant-rich table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0;
-      font-size: 13px;
-    }
-
-    .assistant-rich th, .assistant-rich td {
-      border: 1px solid var(--color-border);
-      padding: 12px;
-      text-align: left;
-    }
-
-    .assistant-rich th {
-      background: var(--color-surface-user);
-      font-weight: 600;
-      color: var(--color-text-primary);
-    }
-
-    /* Footer */
-    .document-footer {
-      margin-top: 48px;
-      padding-top: 24px;
-      border-top: 1px solid var(--color-border);
-      text-align: center;
-      color: var(--color-text-tertiary);
-      font-size: 12px;
-      font-family: var(--font-display);
-      page-break-inside: avoid;
-    }
-  </style>
-</head>
-<body>
-  <div class="document-header">
-    <div class="brand-section">
-      <div class="brand-name">Aetheria ai</div>
-    </div>
-    <div class="conversation-title">${escapeHtml(title)}</div>
-    <div class="conversation-meta">
-      <div class="meta-item">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-          <line x1="16" y1="2" x2="16" y2="6"/>
-          <line x1="8" y1="2" x2="8" y2="6"/>
-          <line x1="3" y1="10" x2="21" y2="10"/>
-        </svg>
-        <span>${formattedDate}</span>
-      </div>
-      <div class="meta-item">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span>${formattedTime}</span>
-      </div>
-    </div>
-  </div>
-
-  <main class="document-body">
-    ${content}
-  </main>
-
-  <footer class="document-footer">
-    Generated by Aetheria ai • Premium Export
-  </footer>
-</body>
-</html>
-    `;
 }
 
 function sanitizeFilenameSegment(value) {
@@ -828,7 +407,10 @@ async function createPdfFilename(thread) {
     return `aetheria-conversation-${iso}.pdf`;
 }
 
-async function exportEntireConversationPdf(messageDiv) {
+let pdfExportOpen = false;
+
+async function exportConversationPdf(messageDiv) {
+    if (pdfExportOpen) return;
     const thread = getConversationThreadFromMessage(messageDiv);
     if (!thread) {
         showNotification('Could not find conversation to export', 'error', 3000);
@@ -841,46 +423,43 @@ async function exportEntireConversationPdf(messageDiv) {
         return;
     }
 
-    // Fetch conversation metadata
-    const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
-    let title = 'Untitled Conversation';
-    
-    if (conversationId && window.electron?.auth?.fetchSessionData) {
-        try {
-            const session = await window.electron.auth.fetchSessionData(conversationId);
-            title = String(session?.session_title || '').trim() || title;
-        } catch (error) {
-            console.warn('Could not fetch session title for PDF:', error);
-        }
-    }
-
-    const metadata = {
-        title,
-        timestamp: new Date()
-    };
-
-    const html = buildConversationPdfHtml(turns, metadata);
-
     if (!window.electron?.ipcRenderer?.invoke) {
         showNotification('PDF export is available in desktop app only', 'error', 3000);
         return;
     }
 
-    const result = await window.electron.ipcRenderer.invoke('export-conversation-pdf', {
-        html,
-        defaultPath: await createPdfFilename(thread)
-    });
-
-    if (result?.success) {
-        showNotification('Conversation PDF exported successfully', 'success', 3000);
-        return;
-    }
-
-    if (result?.canceled) {
-        return;
-    }
-
-    showNotification(result?.error || 'Failed to export conversation PDF', 'error', 3000);
+    const returnFocus = document.activeElement?.closest('.share-modal-overlay')
+        ? messageDiv.querySelector('.share-btn') : document.activeElement;
+    pdfExportOpen = true;
+    try {
+        await showConversationPdfExportDialog({
+            turns,
+            returnFocus,
+            onExport: async (options) => {
+                const selected = selectConversationPdfTurns(turns, options);
+                const prepared = await prepareConversationPdfTurns(selected, {
+                    readArchivedFile: window.electron.fileArchive?.readFile,
+                });
+                const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
+                let title = 'Untitled Conversation';
+                if (conversationId && window.electron.auth?.fetchSessionData) {
+                    try {
+                        const session = await window.electron.auth.fetchSessionData(conversationId);
+                        title = String(session?.session_title || '').trim() || title;
+                    } catch (error) { console.warn('Could not fetch session title for PDF:', error); }
+                }
+                const filename = await createPdfFilename(thread);
+                const result = await window.electron.ipcRenderer.invoke('export-conversation-pdf', {
+                    html: buildConversationPdfHtml(prepared, { title, timestamp: new Date(), scope: options.scope }),
+                    defaultPath: options.scope === 'latest' ? filename.replace(/\.pdf$/i, '-latest-response.pdf') : filename,
+                });
+                if (result?.success) showNotification('Conversation PDF exported successfully', 'success', 3000);
+                return result;
+            },
+        });
+    } catch (error) {
+        showNotification(error.message || 'Could not open PDF export options', 'error', 3000);
+    } finally { pdfExportOpen = false; }
 }
 
 export async function exportActiveConversationPdf() {
@@ -894,7 +473,7 @@ export async function exportActiveConversationPdf() {
         return;
     }
 
-    await exportEntireConversationPdf(message);
+    await exportConversationPdf(message);
 }
 
 /**
