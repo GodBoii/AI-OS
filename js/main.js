@@ -1204,18 +1204,14 @@ ipcMain.handle('export-conversation-pdf', async (event, payload) => {
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                sandbox: true
+                sandbox: true,
+                javascript: false
             }
         });
 
         await exportWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
-        const pdfBuffer = await exportWindow.webContents.printToPDF({
-            printBackground: true,
-            preferCSSPageSize: true,
-            pageSize: 'A4',
-            marginsType: 1,
-            landscape: false
-        });
+        const { conversationPdfPrintOptions } = await import('./conversation-pdf.mjs');
+        const pdfBuffer = await exportWindow.webContents.printToPDF(conversationPdfPrintOptions);
 
         await fs.writeFile(saveResult.filePath, pdfBuffer);
         nativeFeatures?.addRecentDocument(saveResult.filePath);
