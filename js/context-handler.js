@@ -904,6 +904,8 @@ class ContextHandler {
                 console.error("Session history viewer elements not found!");
                 return;
             }
+            historyContent.dataset.conversationId = String(sessionId);
+            delete historyContent.dataset.context;
             
             // Show skeleton loading immediately
             historyTitle.textContent = 'Loading...';
@@ -944,6 +946,7 @@ class ContextHandler {
             
             // Fetch full session data including runs
             const session = await window.electron.auth.fetchSessionData(sessionId);
+            if (this.currentHistorySessionId !== sessionId) return;
             
             if (!session) {
                 this.showNotification('Could not find session details.', 'error');
@@ -971,6 +974,7 @@ class ContextHandler {
             if (historyContentBtn) {
                 try {
                     const hasContent = await this.checkSessionHasContent(sessionId);
+                    if (this.currentHistorySessionId !== sessionId) return;
                     if (hasContent) {
                         historyContentBtn.classList.remove('hidden');
                         
@@ -991,12 +995,15 @@ class ContextHandler {
             }
 
             // Clear and populate content
+            if (this.currentHistorySessionId !== sessionId) return;
             historyContent.innerHTML = '';
 
             // PHASE 3: Fetch and display attachments
             try {
                 const attachments = await window.electron.auth.fetchSessionAttachments(sessionId);
+                if (this.currentHistorySessionId !== sessionId) return;
                 const userAttachments = (attachments || []).filter((attachment) => attachment.kind !== 'computer_tool_output');
+                historyContent.dataset.context = JSON.stringify({ files: userAttachments });
                 if (userAttachments.length > 0) {
                     const attachmentsSection = document.createElement('div');
                     attachmentsSection.className = 'session-attachments-section';
@@ -1016,6 +1023,7 @@ class ContextHandler {
                         
                         // Check if file exists locally
                         const fileExists = await window.electron.fileArchive.fileExists(attachment.relativePath);
+                        if (this.currentHistorySessionId !== sessionId) return;
                         const statusIcon = fileExists 
                             ? '<i class="fas fa-check-circle attachment-status-ok" title="Available locally"></i>'
                             : '<i class="fas fa-exclamation-triangle attachment-status-missing" title="File not found locally"></i>';
@@ -1051,6 +1059,7 @@ class ContextHandler {
                 console.error('[ContextHandler] Error fetching attachments:', error);
                 // Non-critical, continue showing session
             }
+            if (this.currentHistorySessionId !== sessionId) return;
 
             if (topLevelRuns.length === 0) {
                 const emptyState = document.createElement('div');
@@ -1090,6 +1099,7 @@ class ContextHandler {
             }
 
         } catch (error) {
+            if (this.currentHistorySessionId !== sessionId) return;
             console.error('[ContextHandler] Error loading session details:', error);
             this.showNotification('Failed to load session details: ' + error.message, 'error');
             this.currentHistorySessionId = null;
