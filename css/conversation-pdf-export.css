@@ -1,0 +1,50 @@
+/* Export-only dialog. Native dialog supplies focus trapping and background inertness. */
+.pdf-export-dialog {
+    --pdf-open-duration: 250ms;
+    --pdf-ease: cubic-bezier(.22, 1, .36, 1);
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    padding: 0;
+    overflow: auto;
+    border: 1px solid var(--border-color, #d4d4d8);
+    border-radius: 18px;
+    background: var(--bg-color, #fff);
+    color: var(--text-color, #18181b);
+    box-shadow: 0 24px 72px rgb(0 0 0 / .22);
+    font-family: 'Outfit', 'Segoe UI', sans-serif;
+    opacity: 0;
+    transform: scale(.96);
+    transition: opacity var(--pdf-open-duration) var(--pdf-ease), transform var(--pdf-open-duration) var(--pdf-ease);
+}
+.pdf-export-dialog.is-open { opacity: 1; transform: scale(1); }
+.pdf-export-dialog::backdrop { background: rgb(0 0 0 / .5); }
+.pdf-export-form { padding: 24px; }
+.pdf-export-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.pdf-export-header h2 { margin: 0 0 6px; font-size: 24px; font-weight: 600; letter-spacing: -.5px; }
+.pdf-export-header p { margin: 0; font-size: 14px; color: var(--text-secondary, #52525b); }
+.pdf-export-close { flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; font-size: 26px; cursor: pointer; }
+.pdf-export-close:hover { background: var(--hover-bg, #f4f4f5); }
+.pdf-export-scope { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.pdf-export-scope legend { padding: 0; margin-bottom: 10px; font-size: 13px; font-weight: 600; }
+.pdf-export-choice { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid var(--border-color, #d4d4d8); border-radius: 10px; cursor: pointer; }
+.pdf-export-choice:has(input:checked) { border-color: var(--text-color, #18181b); background: var(--hover-bg, #f4f4f5); }
+.pdf-export-choice:has(input:disabled) { opacity: .5; cursor: default; }
+.pdf-export-dialog input { flex-shrink: 0; width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--text-color, #18181b); }
+.pdf-export-dialog strong { display: block; font-size: 15px; font-weight: 600; }
+.pdf-export-dialog small { display: block; margin-top: 4px; color: var(--text-secondary, #52525b); font-size: 12px; line-height: 1.5; }
+.pdf-export-attachments { display: flex; align-items: flex-start; gap: 12px; padding: 20px 0; margin-top: 8px; border-bottom: 1px solid var(--border-color, #d4d4d8); cursor: pointer; }
+.pdf-export-summary { margin: 14px 0 20px; color: var(--text-secondary, #52525b); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pdf-export-error { margin: 0 0 16px; padding: 12px; border: 1px solid var(--error-500, #ef4444); border-radius: 8px; color: var(--text-color, #18181b); font-size: 13px; }
+.pdf-export-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.pdf-export-actions button { min-height: 44px; padding: 10px 18px; border: 1px solid var(--border-color, #d4d4d8); border-radius: 8px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.pdf-export-cancel { background: none; color: inherit; }
+.pdf-export-actions .pdf-export-submit { border-color: transparent; background: var(--text-color, #18181b); color: var(--bg-color, #fff); }
+.pdf-export-actions button:hover { opacity: .85; }
+.pdf-export-dialog button:active { transform: translateY(1px); }
+.pdf-export-dialog button:disabled { opacity: .55; cursor: wait; }
+.pdf-export-dialog :focus-visible { outline: 2px solid var(--text-color, #18181b); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .pdf-export-dialog { transition: none; } }
+@media (max-width: 480px) { .pdf-export-form { padding: 20px; } }
