@@ -126,6 +126,85 @@ test('Electron shell preserves background chat, archived actions and workspace f
     await page.waitForSelector('.file-preview-modal .file-text-content');
     assert.equal(await page.$eval('.file-preview-modal .file-text-content', node => node.textContent), 'restored attachment text');
     await page.keyboard.press('Escape');
+    await page.evaluate(async () => {
+        window.savedPdfCalls = [];
+        window.savedPdfSessionReads = [];
+        window.electron.auth.fetchSessionData = async id => {
+            savedPdfSessionReads.push(id);
+            return id === 'saved-pdf-test' ? { session_title: 'Saved conversation export', runs: [
+                { run_id: 'saved-1', input: { input_content: 'Saved prompt one' }, content: 'Saved answer one' },
+                { run_id: 'saved-2', input: { input_content: 'Saved prompt two' }, content: 'Saved answer two' },
+            ] } : { session_title: 'Current conversation', runs: [] };
+        };
+        window.electron.auth.fetchSessionAttachments = async id => id === 'saved-pdf-test'
+            ? [{ name: 'saved-notes.txt', type: 'text/plain', relativePath: 'attachments/saved/notes.txt' }] : [];
+        window.electron.fileArchive = { fileExists: async () => true };
+        const invoke = window.electron.ipcRenderer.invoke;
+        window.electron.ipcRenderer.invoke = async (channel, payload) => {
+            if (channel === 'export-conversation-pdf') { savedPdfCalls.push(payload); return { success: true }; }
+            return invoke(channel, payload);
+        };
+        await contextHandler.showSessionDetails('saved-pdf-test');
+    });
+    await page.click('#session-history-viewer .share-btn');
+    await page.click('[data-action="export-pdf"]');
+    await page.waitForSelector('.pdf-export-dialog[open]');
+    assert.match(await page.$eval('.pdf-export-summary', node => node.textContent), /4 messages.*1 attachment/);
+    if (process.env.CONVERSATION_PDF_OUTPUT_DIR) await page.screenshot({ path: path.join(process.env.CONVERSATION_PDF_OUTPUT_DIR, 'saved-history-export.png') });
+    await page.click('.pdf-export-submit');
+    await page.waitForFunction(() => savedPdfCalls.length === 1 && !document.querySelector('.pdf-export-dialog'));
+    const savedExport = await page.evaluate(() => savedPdfCalls[0]);
+    assert.match(savedExport.html, /Saved prompt one/);
+    assert.match(savedExport.html, /Saved prompt two/);
+    assert.match(savedExport.html, /Saved answer one/);
+    assert.match(savedExport.html, /Saved answer two/);
+    assert.doesNotMatch(savedExport.html, /Question 0|Answer 0|Reasoning involved/);
+    assert.equal(savedExport.defaultPath, 'Saved conversation export.pdf');
+    assert.match(savedExport.html, /saved-notes.txt/);
+    assert.equal(await page.evaluate(() => window.currentConversationId), result[0]);
+    assert.equal(await page.evaluate(() => savedPdfSessionReads.every(id => id === 'saved-pdf-test')), true);
+
+    await page.evaluate(() => {
+        const active = document.querySelector('.conversation-thread.active');
+        window.savedLiveMessageNodes = [...active.childNodes];
+        active.replaceChildren();
+    });
+    await page.click('#session-history-viewer .share-btn');
+    await page.click('[data-action="export-pdf"]');
+    await page.waitForSelector('.pdf-export-dialog[open]');
+    await page.click('[value="latest"]');
+    assert.match(await page.$eval('.pdf-export-summary', node => node.textContent), /1 message.*0 attachments/);
+    await page.click('.pdf-export-submit');
+    await page.waitForFunction(() => savedPdfCalls.length === 2 && !document.querySelector('.pdf-export-dialog'));
+    const savedLatest = await page.evaluate(() => savedPdfCalls[1]);
+    assert.match(savedLatest.html, /Saved answer two/);
+    assert.doesNotMatch(savedLatest.html, /Saved answer one|Saved prompt|saved-notes.txt|Question 0/);
+    assert.equal(savedLatest.defaultPath, 'Saved conversation export-latest-response.pdf');
+
+    await page.evaluate(() => { window.savedToolbarExport = chatModule.exportConversation(); });
+    await page.waitForSelector('.pdf-export-dialog[open]');
+    await page.click('[name="attachments"]');
+    await page.click('.pdf-export-submit');
+    await page.waitForFunction(() => savedPdfCalls.length === 3 && !document.querySelector('.pdf-export-dialog'));
+    await page.evaluate(() => savedToolbarExport);
+    const savedWithoutFiles = await page.evaluate(() => savedPdfCalls[2]);
+    assert.match(savedWithoutFiles.html, /Saved prompt one/);
+    assert.match(savedWithoutFiles.html, /Saved answer two/);
+    assert.doesNotMatch(savedWithoutFiles.html, /saved-notes.txt|Question 0/);
+    await page.evaluate(async () => {
+        document.querySelector('.conversation-thread.active').append(...savedLiveMessageNodes);
+        const readSession = window.electron.auth.fetchSessionData;
+        window.electron.auth.fetchSessionData = id => id === 'slow-old-session'
+            ? new Promise(resolve => { window.resolveOldHistory = resolve; }) : readSession(id);
+        window.oldHistoryLoad = contextHandler.showSessionDetails('slow-old-session');
+        await contextHandler.showSessionDetails('another-saved-session');
+        resolveOldHistory({ session_title: 'Stale session', runs: [{ input: { input_content: 'Stale prompt' }, content: 'Stale answer' }] });
+        await oldHistoryLoad;
+    });
+    assert.equal(await page.$eval('.session-history-content', node => node.dataset.conversationId), 'another-saved-session');
+    assert.deepEqual(await page.$eval('.session-history-content', node => JSON.parse(node.dataset.context).files), []);
+    assert.doesNotMatch(await page.$eval('.session-history-content', node => node.textContent), /Stale prompt|Stale answer/);
+    await page.evaluate(() => contextHandler.closeSessionHistoryViewer());
     await page.click('#project-workspace-icon');
     await page.waitForFunction(() => document.querySelector('.notification[role="alert"]')?.textContent.includes('Try opening it again'));
     assert.equal(await page.evaluate(() => stateManager.getState().isProjectWorkspaceOpen), false);
