@@ -2,7 +2,7 @@
 // UI utility functions for chat interface (connection errors, message actions, share modal)
 
 import { buildConversationPdfHtml } from './conversation-pdf.mjs';
-import { showConversationPdfExportDialog, selectConversationPdfTurns, prepareConversationPdfTurns } from './conversation-pdf-export.mjs';
+import { showConversationPdfExportDialog, selectConversationPdfTurns, prepareConversationPdfTurns, prepareConversationPdfAttachments } from './conversation-pdf-export.mjs';
 
 // Import ipcRenderer for connection retry functionality
 const ipcRenderer = window.electron?.ipcRenderer;
@@ -314,11 +314,18 @@ function parseMessageContext(messageDiv) {
 }
 
 function getConversationThreadFromMessage(messageDiv) {
-    return (
-        messageDiv?.closest?.('.conversation-thread') ||
-        document.querySelector('.conversation-thread.active') ||
-        document.querySelector('#chat-messages .conversation-thread')
-    );
+    return messageDiv?.closest?.('.conversation-thread, .session-history-content') || null;
+}
+
+function normalizePdfAttachments(files) {
+    if (!Array.isArray(files)) return [];
+    return files.map(file => ({
+        name: String(file?.name || '').trim(),
+        type: String(file?.type || '').trim(),
+        relativePath: String(file?.relativePath || ''),
+        previewUrl: String(file?.previewUrl || ''),
+        url: String(file?.url || file?.download_url || ''),
+    })).filter(file => file.name);
 }
 
 function sanitizeAssistantMessageHtml(contentNode) {
@@ -336,23 +343,14 @@ function extractConversationTurns(thread) {
     if (!thread) return [];
 
     const turns = [];
-    const messages = thread.querySelectorAll('.message');
+    const messages = thread.querySelectorAll('.message, .turn-user-message');
 
     messages.forEach((message) => {
-        if (message.classList.contains('message-user')) {
-            const text = (message.querySelector('.user-message-text')?.textContent || '').trim();
+        if (message.classList.contains('message-user') || message.classList.contains('turn-user-message')) {
+            const text = (message.querySelector('.user-message-text, .message-text')?.textContent || '').trim();
 
             const context = parseMessageContext(message) || {};
-            const files = Array.isArray(context.files) ? context.files : [];
-            const attachments = files
-                .map((file) => ({
-                    name: String(file?.name || '').trim(),
-                    type: String(file?.type || '').trim(),
-                    relativePath: String(file?.relativePath || ''),
-                    previewUrl: String(file?.previewUrl || ''),
-                    url: String(file?.url || file?.download_url || '')
-                }))
-                .filter((file) => file.name);
+            const attachments = normalizePdfAttachments(context.files);
             if (!text && !attachments.length) return;
 
             turns.push({
@@ -388,8 +386,7 @@ function sanitizeFilenameSegment(value) {
     return normalized.slice(0, 120) || 'aetheria-conversation';
 }
 
-async function createPdfFilename(thread) {
-    const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
+async function createPdfFilename(conversationId) {
     if (conversationId && window.electron?.auth?.fetchSessionData) {
         try {
             const session = await window.electron.auth.fetchSessionData(conversationId);
@@ -418,6 +415,9 @@ async function exportConversationPdf(messageDiv) {
     }
 
     const turns = extractConversationTurns(thread);
+    const sessionAttachments = thread.matches('.session-history-content')
+        ? normalizePdfAttachments(parseMessageContext(thread)?.files) : [];
+    const conversationId = String(thread.dataset.conversationId || '').trim();
     if (!turns.length) {
         showNotification('No conversation messages found to export', 'error', 3000);
         return;
@@ -434,13 +434,16 @@ async function exportConversationPdf(messageDiv) {
     try {
         await showConversationPdfExportDialog({
             turns,
+            sessionAttachments,
             returnFocus,
             onExport: async (options) => {
                 const selected = selectConversationPdfTurns(turns, options);
-                const prepared = await prepareConversationPdfTurns(selected, {
+                const preparationOptions = {
                     readArchivedFile: window.electron.fileArchive?.readFile,
-                });
-                const conversationId = String(thread?.dataset?.conversationId || window.currentConversationId || '').trim();
+                };
+                const prepared = await prepareConversationPdfTurns(selected, preparationOptions);
+                const preparedSessionAttachments = options.scope === 'entire' && options.includeAttachments
+                    ? await prepareConversationPdfAttachments(sessionAttachments, preparationOptions) : [];
                 let title = 'Untitled Conversation';
                 if (conversationId && window.electron.auth?.fetchSessionData) {
                     try {
@@ -448,9 +451,9 @@ async function exportConversationPdf(messageDiv) {
                         title = String(session?.session_title || '').trim() || title;
                     } catch (error) { console.warn('Could not fetch session title for PDF:', error); }
                 }
-                const filename = await createPdfFilename(thread);
+                const filename = await createPdfFilename(conversationId);
                 const result = await window.electron.ipcRenderer.invoke('export-conversation-pdf', {
-                    html: buildConversationPdfHtml(prepared, { title, timestamp: new Date(), scope: options.scope }),
+                    html: buildConversationPdfHtml(prepared, { title, timestamp: new Date(), scope: options.scope, sessionAttachments: preparedSessionAttachments }),
                     defaultPath: options.scope === 'latest' ? filename.replace(/\.pdf$/i, '-latest-response.pdf') : filename,
                 });
                 if (result?.success) showNotification('Conversation PDF exported successfully', 'success', 3000);
@@ -463,10 +466,15 @@ async function exportConversationPdf(messageDiv) {
 }
 
 export async function exportActiveConversationPdf() {
-    const thread = document.querySelector('.conversation-thread.active') ||
+    const history = document.querySelector('#session-history-viewer:not(.hidden) .session-history-content');
+    if (history?.querySelector('.skeleton-history-loading')) {
+        showNotification('Wait for the saved conversation to finish loading', 'info', 3000);
+        return;
+    }
+    const thread = history || document.querySelector('.conversation-thread.active') ||
         Array.from(document.querySelectorAll('#chat-messages .conversation-thread'))
             .find(candidate => candidate.style.display !== 'none');
-    const message = thread?.querySelector('.message');
+    const message = thread?.querySelector('.message, .turn-user-message');
 
     if (!message) {
         showNotification('Start a conversation before exporting', 'info', 3000);
