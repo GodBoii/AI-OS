@@ -25,7 +25,7 @@ export function selectConversationPdfTurns(turns, { scope, includeAttachments })
         .filter(turn => turn.role !== 'user' || turn.text || turn.attachments.length);
 }
 
-export async function showConversationPdfExportDialog({ turns, onExport, returnFocus }) {
+export async function showConversationPdfExportDialog({ turns, sessionAttachments = [], onExport, returnFocus }) {
     await loadStylesheet();
     const dialog = document.createElement('dialog');
     dialog.className = 'pdf-export-dialog';
@@ -56,8 +56,10 @@ export async function showConversationPdfExportDialog({ turns, onExport, returnF
     let busy = false;
     const getOptions = () => ({ scope: form.elements.scope.value, includeAttachments: form.elements.attachments.checked });
     const updateSummary = () => {
-        const selected = selectConversationPdfTurns(turns, getOptions());
-        const attachments = selected.reduce((count, turn) => count + (turn.attachments?.length || 0), 0);
+        const options = getOptions();
+        const selected = selectConversationPdfTurns(turns, options);
+        const sessionFileCount = options.scope === 'entire' && options.includeAttachments ? sessionAttachments.length : 0;
+        const attachments = selected.reduce((count, turn) => count + (turn.attachments?.length || 0), sessionFileCount);
         summary.textContent = `${selected.length} ${selected.length === 1 ? 'message' : 'messages'} · ${attachments} ${attachments === 1 ? 'attachment' : 'attachments'}`;
         exportButton.disabled = selected.length === 0;
         errorText.hidden = true;
@@ -176,12 +178,17 @@ async function prepareAttachment(file, readArchivedFile) {
     return attachment;
 }
 
-export async function prepareConversationPdfTurns(turns, { readArchivedFile } = {}) {
+export async function prepareConversationPdfAttachments(files, { readArchivedFile } = {}) {
+    const attachments = [];
+    for (const file of files) attachments.push(await prepareAttachment(file, readArchivedFile));
+    return attachments;
+}
+
+export async function prepareConversationPdfTurns(turns, options = {}) {
     const prepared = [];
     // Process one image at a time so large conversations do not decode every attachment at once.
     for (const turn of turns) {
-        const attachments = [];
-        for (const file of turn.attachments || []) attachments.push(await prepareAttachment(file, readArchivedFile));
+        const attachments = await prepareConversationPdfAttachments(turn.attachments || [], options);
         let html = turn.html;
         if (turn.role === 'assistant') {
             const container = document.createElement('div');
