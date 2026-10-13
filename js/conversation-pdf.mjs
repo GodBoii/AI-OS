@@ -55,7 +55,7 @@ function renderTurn(turn) {
     </article>`;
 }
 
-export function buildConversationPdfHtml(turns, { title = 'Untitled Conversation', timestamp = new Date(), scope = 'entire' } = {}) {
+export function buildConversationPdfHtml(turns, { title = 'Untitled Conversation', timestamp = new Date(), scope = 'entire', sessionAttachments = [] } = {}) {
     const date = new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).format(timestamp);
     const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(timestamp);
     const count = turns.length;
@@ -174,7 +174,7 @@ export function buildConversationPdfHtml(turns, { title = 'Untitled Conversation
             <div class="conversation-meta"><span>Exported ${escapeHtml(date)}</span><span>${escapeHtml(time)}</span><span>${count} ${count === 1 ? 'message' : 'messages'}</span></div>
         </div>
     </header>
-    <main>${turns.map(renderTurn).join('\n')}</main>
+    <main>${turns.map(renderTurn).join('\n')}${renderAttachments(sessionAttachments)}</main>
 </body>
 </html>`;
 }
