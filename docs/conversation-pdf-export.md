@@ -9,9 +9,12 @@ when attachments are selected. It does not include that prompt's text.
 
 - `js/chat.js` exposes `exportActiveConversationPdf` through the chat command API.
 - `js/ui-utilities.js` uses the same flow for the Share menu's PDF action. It extracts
-  the selected thread's user messages and assistant response content, excluding
+  the selected live thread or saved history viewer's user messages and assistant response content, excluding
   reasoning logs, message actions, and copy buttons. Attachment-only user messages
   are retained when their files are included.
+- `js/context-handler.js` identifies the history viewer with its saved session ID and
+  attachment metadata. Exporting from history does not fall back to the hidden live
+  conversation. The toolbar export also uses history while that viewer is open.
 - `js/conversation-pdf-export.mjs` opens the native HTML dialog, selects turns, and
   prepares image previews. Its stylesheet loads on first export, not at app startup.
 - `js/conversation-pdf.mjs` builds the self-contained HTML document and exports the
@@ -50,6 +53,10 @@ Excluding attachments removes the file lists and input image previews and avoids
 reading their archive files. An attachment-only user turn is omitted when no files
 remain. Selecting the latest response associates only the nearest preceding prompt's
 attachments, never older prompts' files.
+
+Saved history stores attachment metadata at session level, without associating each
+file with a prompt. These files appear once at the end of an entire-conversation PDF.
+They are excluded from latest-response exports because their owning prompt is unknown.
 
 ## Layout and printing
 
@@ -96,3 +103,10 @@ concurrent suite run and passed on its standalone rerun. A reconstructed version
 the supplied Jantar Mantar sample was also printed and visually inspected. It fits on
 one page with the updated logo and spacing. Its news content is an export sample,
 not a fact-check.
+
+A saved-history regression test reproduces the former wrong-conversation export and
+verifies the saved prompts, answers, title, filename, and attachments through the real
+Electron history renderer. It also covers latest-response export with an empty live
+chat, attachment exclusion, toolbar export, and clearing old attachment metadata when
+switching saved sessions. A delayed response from a previously opened session is
+discarded so its content cannot replace the session currently being exported.
