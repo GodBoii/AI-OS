@@ -1,6 +1,7 @@
 // Physical-pixel hit testing for gestures explicitly bound to one Windows HWND.
-function buildPointerTargetScript(windowId, points) {
+function buildPointerTargetScript(windowId, points, { requireForeground = true } = {}) {
     if (!Number.isSafeInteger(windowId) || windowId <= 0) throw new Error('Invalid window_id');
+    if (typeof requireForeground !== 'boolean') throw new Error('requireForeground must be boolean');
     if (!Array.isArray(points) || points.length < 1 || points.length > 2 || points.some(point =>
         !Number.isInteger(point.x) || !Number.isInteger(point.y) ||
         point.x < -2147483648 || point.x > 2147483647 || point.y < -2147483648 || point.y > 2147483647)) {
@@ -30,7 +31,7 @@ try {
     if ($previousDpi -eq [IntPtr]::Zero) { throw 'Physical-pixel hit testing is unavailable' }
     $hwnd = [IntPtr]${windowId}
     if (-not [AetheriaPointerTarget]::IsWindow($hwnd)) { throw 'Target window is no longer available' }
-    if ([AetheriaPointerTarget]::GetForegroundWindow() -ne $hwnd) { throw 'Target lost foreground focus before input' }
+    ${requireForeground ? "if ([AetheriaPointerTarget]::GetForegroundWindow() -ne $hwnd) { throw 'Target lost foreground focus before input' }" : ''}
     $rect = New-Object AetheriaPointerTarget+Rect
     if (-not [AetheriaPointerTarget]::GetWindowRect($hwnd, [ref]$rect)) { throw 'Target window bounds are unavailable' }
     ${points.map(point => `
