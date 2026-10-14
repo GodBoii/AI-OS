@@ -1238,12 +1238,12 @@ class ComputerControlHandler {
         if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) throw new Error('Coordinates must be finite integer pixels');
     }
 
-    async _assertPointerTarget(windowId, points) {
+    async _assertPointerTarget(windowId, points, options = {}) {
         if (this.platform !== 'win32' || windowId === undefined) return;
         try {
             await this._measureStage('pointer_target', async () => {
-                const script = buildPointerTargetScript(windowId, points);
-                const result = JSON.parse((await this._runAccessibilityScript(script, { timeout: 5000 })).stdout);
+                const script = buildPointerTargetScript(windowId, points, options);
+                const result = JSON.parse((await this._runAccessibilityScript(script, { timeout: 15000 })).stdout);
                 if (result.status !== 'success') throw new Error(result.error || 'Pointer target could not be verified');
             });
         } catch (error) {
@@ -1398,7 +1398,9 @@ $root.SetFocus()
         this._validatePoint(from_x, from_y);
         this._validatePoint(to_x, to_y);
         const { mouse, Point, Button } = this._nut();
-        await this._assertPointerTarget(commandPayload.window_id, [{ x: from_x, y: from_y }, { x: to_x, y: to_y }]);
+        // window_id scopes the source. Existing workflows may drop into another app.
+        await this._assertPointerTarget(commandPayload.window_id, [{ x: from_x, y: from_y }]);
+        await this._assertDragDestination(commandPayload);
         await mouse.setPosition(new Point(from_x, from_y));
         try {
             await mouse.pressButton(Button.LEFT);
@@ -1414,6 +1416,22 @@ $root.SetFocus()
             await mouse.releaseButton(Button.LEFT);
         }
         return { status: 'success', input_sent: true, message: `Dragged from (${from_x}, ${from_y}) to (${to_x}, ${to_y})` };
+    }
+
+    _physicalDisplayBounds() {
+        return screen.getAllDisplays().map(display => screen.dipToScreenRect(null, display.bounds));
+    }
+
+    async _assertDragDestination(payload) {
+        if (this.platform !== 'win32') return;
+        if (payload.to_window_id !== undefined) {
+            await this._assertPointerTarget(payload.to_window_id, [{ x: payload.to_x, y: payload.to_y }], { requireForeground: false });
+        } else if (payload.window_id !== undefined && !this._physicalDisplayBounds().some(bounds =>
+            payload.to_x >= bounds.x && payload.to_x < bounds.x + bounds.width &&
+            payload.to_y >= bounds.y && payload.to_y < bounds.y + bounds.height)) {
+            throw Object.assign(new Error('Drag destination is outside the desktop displays'),
+                { code: 'POINTER_TARGET_UNAVAILABLE', outcome: 'not_executed' });
+        }
     }
 
     // ===== WINDOW MANAGEMENT METHODS =====
