@@ -219,3 +219,12 @@ def test_bridge_timing_preserves_desktop_evidence_and_screenshot_metadata(comput
     assert evidence['expires_at_ms'] == 31000
     assert result.images[0].content == b'png-test-bytes'
     assert pubsub.closed
+
+
+def test_drag_destination_is_optional_and_forwarded_without_changing_legacy_payloads(computer_module):
+    toolkit, _ = make_tools(computer_module, PubSub())
+    toolkit._send_command_and_wait = lambda payload: payload
+    legacy = toolkit.drag_drop(1, 2, 3, 4, window_id=42)
+    targeted = toolkit.drag_drop(1, 2, 3, 4, window_id=42, to_window_id=43)
+    assert 'to_window_id' not in legacy
+    assert targeted == {**legacy, 'to_window_id': 43}
