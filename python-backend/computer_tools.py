@@ -217,6 +217,7 @@ class ComputerTools(Toolkit):
         
         response_channel = f"computer-response:{request_id}"
         pubsub = None
+        started_at = time.monotonic()
         
         try:
             pubsub = self.redis_client.pubsub()
@@ -251,6 +252,8 @@ class ComputerTools(Toolkit):
                     result = json.loads(message['data'])
                     if not isinstance(result, dict):
                         raise ValueError("Computer bridge returned a non-object response")
+                    # Additive envelope data; desktop timings remain untouched.
+                    result['bridge_elapsed_ms'] = round(max(0.0, time.monotonic() - started_at) * 1000, 2)
                     self._emit_tool_result_preview(action, result)
                     
                     # Process screenshot results specially
@@ -266,6 +269,8 @@ class ComputerTools(Toolkit):
             logger.exception("Computer command failed action=%s request_id=%s", action, request_id)
             return {"status": "error", "error": f"An internal error occurred: {e}"}
         finally:
+            logger.info("Computer bridge timing action=%s request_id=%s elapsed_ms=%.2f",
+                        action, request_id, max(0.0, time.monotonic() - started_at) * 1000)
             # 4. Always clean up the subscription
             if pubsub is not None:
                 try:
