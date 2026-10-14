@@ -372,3 +372,20 @@ test('command timings include queue wait and error stages and survive duplicate 
     assert.deepEqual(received[2], received[0]);
     assert.equal(h._commandTiming, null);
 });
+
+test('a source-targeted drag can reach another visible window without changing destination focus', async () => {
+    const h = handler();
+    const calls = fakeInput(h);
+    const targets = [];
+    h._assertPointerTarget = async (...args) => targets.push(args);
+    h._physicalDisplayBounds = () => [{ x: -100, y: 0, width: 500, height: 300 }];
+    await h._dragDrop({ window_id: 42, from_x: 10, from_y: 20, to_x: 250, to_y: 100 });
+    assert.deepEqual(targets, [[42, [{ x: 10, y: 20 }]]]);
+    assert.ok(calls.some(call => call[0] === 'release'));
+    targets.length = 0;
+    await h._dragDrop({ window_id: 42, to_window_id: 43, from_x: 10, from_y: 20, to_x: 250, to_y: 100 });
+    assert.deepEqual(targets[1], [43, [{ x: 250, y: 100 }], { requireForeground: false }]);
+    calls.length = 0;
+    await assert.rejects(h._dragDrop({ window_id: 42, from_x: 10, from_y: 20, to_x: 1000, to_y: 100 }), /outside the desktop/);
+    assert.deepEqual(calls, []);
+});
