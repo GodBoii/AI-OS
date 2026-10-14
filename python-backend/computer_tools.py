@@ -526,7 +526,8 @@ class ComputerTools(Toolkit):
         return self._send_command_and_wait(payload)
 
     def drag_drop(self, from_x: int, from_y: int, to_x: int, to_y: int,
-                  window_id: Optional[int] = None, screenshot_id: Optional[str] = None) -> Union[Dict[str, Any], ToolResult]:
+                  window_id: Optional[int] = None, screenshot_id: Optional[str] = None,
+                  to_window_id: Optional[int] = None) -> Union[Dict[str, Any], ToolResult]:
         """
         Drag and drop from one position to another.
         
@@ -537,15 +538,21 @@ class ComputerTools(Toolkit):
             to_y: Ending Y coordinate
         
         Use this to move files, rearrange windows, or interact with drag-drop interfaces.
+        window_id scopes the source. Optionally supply to_window_id to verify a
+        different destination window without focusing it. For cross-window drags,
+        use absolute desktop coordinates rather than one window's screenshot.
         """
-        return self._send_command_and_wait({
+        payload = {
             'action': 'drag_drop',
             **self._target(window_id, screenshot_id),
             'from_x': from_x,
             'from_y': from_y,
             'to_x': to_x,
             'to_y': to_y
-        })
+        }
+        if to_window_id is not None:
+            payload['to_window_id'] = to_window_id
+        return self._send_command_and_wait(payload)
 
     # ===== WINDOW MANAGEMENT =====
 
