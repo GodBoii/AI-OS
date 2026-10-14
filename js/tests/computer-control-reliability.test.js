@@ -222,3 +222,153 @@ test('local OCR returns confidence and screen coordinates without uploading an i
     assert.equal(result.words[0].x, -70);
     assert.equal(result.words[0].y, 60);
 });
+
+test('targeted pointer actions reject a foreign point before moving or pressing input', async () => {
+    const h = handler();
+    const calls = fakeInput(h);
+    h._runAccessibilityScript = async () => ({ stdout: JSON.stringify({ status: 'error', error: 'Point is outside the target window' }) });
+    for (const [method, payload] of [
+        ['_clickMouse', { x: 10, y: 20 }], ['_scroll', { direction: 'left', x: 10, y: 20 }],
+        ['_dragDrop', { from_x: 10, from_y: 20, to_x: 30, to_y: 40 }], ['_moveMouse', { x: 10, y: 20 }],
+    ]) {
+        await assert.rejects(h[method]({ ...payload, window_id: 42 }), error =>
+            error.outcome === 'not_executed' && error.code === 'POINTER_TARGET_UNAVAILABLE');
+    }
+    assert.deepEqual(calls, []);
+});
+
+test('targeted clicks without coordinates validate the actual cursor; unscoped input needs no helper', async () => {
+    const h = handler();
+    const calls = fakeInput(h, { mouse: { getPosition: async () => ({ x: -20, y: 30 }) } });
+    let script;
+    h._runAccessibilityScript = async value => {
+        script = value;
+        return { stdout: '{"status":"error","error":"Point is covered by another window"}' };
+    };
+    await assert.rejects(h._clickMouse({ window_id: 42 }), /covered/);
+    assert.match(script, /\$point.X = -20; \$point.Y = 30/);
+    assert.deepEqual(calls, []);
+    h._runAccessibilityScript = async () => { throw new Error('Unscoped input must not hit-test a window'); };
+    await h._clickMouse({ x: -20, y: 30 });
+    assert.equal(calls.length, 3);
+});
+
+test('a second click that loses its target reports an unknown outcome and releases held input', async () => {
+    const h = handler();
+    const calls = fakeInput(h);
+    let checks = 0;
+    h._assertPointerTarget = async () => {
+        if (++checks === 3) throw Object.assign(new Error('Target changed'), { outcome: 'not_executed' });
+    };
+    await assert.rejects(h._clickMouse({ window_id: 42, x: 1, y: 2, double: true }), error => error.outcome === 'unknown');
+    assert.deepEqual(calls.slice(1), [['press', 1], ['release', 1]]);
+});
+
+test('snapshot age includes saving and upload and remains monotonic across clock changes', async () => {
+    const h = handler();
+    let now = 100;
+    h._clock = () => now;
+    h._captureScreen = async () => ({ image: { toPNG: () => Buffer.from('png') }, width: 100, height: 80,
+        origin: { x: -100, y: 20 }, windowId: null, coordinateSpace: 'screen_physical' });
+    h._saveComputerOutputBuffer = async () => ({ relativePath: 'fixture.png', outputId: 'test', size: 3 });
+    h._uploadScreenshot = async () => { now += 31000; return null; };
+    const result = await h._takeScreenshot({});
+    assert.equal(result.expires_at_ms - result.captured_at_ms, 30000);
+    assert.equal(result.screenshot_expired, true);
+    await assert.rejects(h._mapScreenshotInput({ screenshot_id: result.screenshot_id, x: 1, y: 2 }), /expired/);
+    const snapshot = h._screenshots.get(result.screenshot_id);
+    snapshot.capturedMonotonic = now;
+    snapshot.created = 1; // Wall-clock age is deliberately wrong; the local monotonic clock wins.
+    assert.equal((await h._mapScreenshotInput({ screenshot_id: result.screenshot_id, x: 1, y: 2 })).x, -99);
+    now += 30000;
+    await assert.rejects(h._mapScreenshotInput({ screenshot_id: result.screenshot_id, x: 1, y: 2 }), /expired/);
+});
+
+test('a screenshot that expires during window-bounds validation cannot produce input coordinates', async () => {
+    const h = handler();
+    let now = 29900;
+    h._clock = () => now;
+    const bounds = { x: 0, y: 0, width: 100, height: 80 };
+    h._screenshots.set('expiring', { capturedMonotonic: 0, windowId: 42, windowBounds: bounds,
+        origin: { x: 0, y: 0 }, width: 100, height: 80 });
+    h._findManagedWindow = async () => ({ id: 42 });
+    h._physicalWindowBounds = async () => { now = 30001; return bounds; };
+    await assert.rejects(h._mapScreenshotInput({ screenshot_id: 'expiring', window_id: 42, x: 1, y: 2 }), /expired/);
+});
+
+function observeField(h) {
+    h._observations.set('field', { created: Date.now(), windowId: 42, elements: [
+        { element_id: '1', RuntimeId: '42,7', IsEnabled: true, Patterns: ['Value'] },
+    ] });
+    h._prepareInputWindow = async () => {};
+    h._pressHotkey = async () => {};
+    h._typeText = async () => ({ status: 'success', input_sent: true, typing_speed: 'slow' });
+}
+
+test('long field values are verified locally instead of comparing a truncated preview', async () => {
+    const h = handler();
+    observeField(h);
+    const value = '😀 नमस्ते'.repeat(700);
+    h._runAccessibilityScript = async script => ({ stdout: JSON.stringify(script.includes('[String]::Equals')
+        ? { status: 'success', verified: true } : { status: 'success' }) });
+    h._getScreenElements = async () => ({ status: 'success', elements: [
+        { RuntimeId: '42,7', Value: value.slice(0, 4000), ValueTruncated: true },
+    ] });
+    const result = await h._performElementAction({ observation_id: 'field', element_id: '1', element_action: 'set_value', value });
+    assert.equal(result.status, 'success');
+    assert.equal(result.verified, true);
+    assert.equal(result.verification, 'passed');
+    assert.equal(result.typing_speed, 'slow');
+    assert.equal(result.state.elements[0].ValueTruncated, true);
+});
+
+test('verification mismatch and helper failure after typing keep an unknown outcome', async () => {
+    for (const fails of [false, true]) {
+        const h = handler();
+        observeField(h);
+        h._runAccessibilityScript = async script => {
+            if (!script.includes('[String]::Equals')) return { stdout: '{"status":"success"}' };
+            if (fails) throw new Error('Provider timed out');
+            return { stdout: '{"status":"success","verified":false}' };
+        };
+        h._getScreenElements = async () => ({ status: 'success', elements: [] });
+        const result = await h._performElementAction({ observation_id: 'field', element_id: '1', element_action: 'set_value', value: 'Expected' });
+        assert.equal(result.status, 'error');
+        assert.equal(result.outcome, 'unknown');
+        assert.equal(result.execution, 'dispatched');
+        assert.equal(result.input_sent, true);
+    }
+});
+
+test('an Invoke with failed state refresh cannot masquerade as a verified success', async () => {
+    const h = handler();
+    observeField(h);
+    h._runAccessibilityScript = async () => ({ stdout: '{"status":"success","input_sent":true}' });
+    h._getScreenElements = async () => ({ status: 'error', error: 'Provider unavailable' });
+    const result = await h._performElementAction({ observation_id: 'field', element_id: '1', element_action: 'invoke' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.input_sent, true);
+    assert.equal(result.outcome, 'unknown');
+    assert.equal(result.verification, 'unavailable');
+});
+
+test('command timings include queue wait and error stages and survive duplicate replay', async () => {
+    const h = handler();
+    let now = 0;
+    h._clock = () => now;
+    const received = [];
+    h.eventEmitter.on('computer-command-result', payload => received.push(payload.result));
+    h._executeCommand = async payload => {
+        try {
+            await h._measureStage('accessibility', async () => { now += 10; throw new Error('Provider failed'); });
+        } catch { h._emitResult(payload.request_id, { status: 'error', outcome: 'not_executed' }); }
+    };
+    const first = h.handleCommand({ action: 'get_screen_elements', request_id: 'timed-one' });
+    const second = h.handleCommand({ action: 'get_screen_elements', request_id: 'timed-two' });
+    await Promise.all([first, second]);
+    await h.handleCommand({ action: 'get_screen_elements', request_id: 'timed-one' });
+    assert.deepEqual(received[0].timings_ms, { queue_wait: 0, accessibility: 10, execution: 10 });
+    assert.equal(received[1].timings_ms.queue_wait, 10);
+    assert.deepEqual(received[2], received[0]);
+    assert.equal(h._commandTiming, null);
+});
