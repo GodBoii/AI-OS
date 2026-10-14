@@ -651,11 +651,10 @@ class BrowserHandler {
                                 // Strategy 2: Force click via JavaScript (bypasses overlay intercepts)
                                 await this.page.$eval(clickSelector, (el) => {
                                     el.focus();
-                                    el.click();
-                                    // Also dispatch pointer events for frameworks that listen to those
+                                    // Preserve mouse listeners, followed by exactly one activation.
                                     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
                                     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                                    el.click();
                                 });
                             } catch (jsClickError) {
                                 // Strategy 3: Click by coordinates (last resort)
