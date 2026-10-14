@@ -2,6 +2,8 @@
 
 Started 14 October 2026. Based on the 13 October research report. Implementation branch: `codex/windows-computer-use-hardening`.
 
+The subsequent regression audit found missing local runtime settings, browser fallback order and cross-window drag compatibility issues. See `docs/windows-computer-use-regression-audit.md` for repairs and expanded startup/native verification. The original checks below did not establish full application readiness.
+
 ## Scope and compatibility
 
 This first increment implements the targeting, observation, lookup, verification and browser-activation corrections, plus timing instrumentation. Command recovery, cancellation, workflow leases, batching, conditional capture and the native-helper pilot remain separate increments because they require coordinated protocol and lifecycle changes.
@@ -41,7 +43,7 @@ Implemented the first increment:
 - UIA lookup no longer collects bounded observation entries. It retains the 2,000-node search budget. Full-value verification compares the live ValuePattern value with ordinal case sensitivity and a 750 ms readiness wait; observations retain their existing 4,000-character preview.
 - Field replacement still uses the saved typing mode. Results distinguish `execution: dispatched` from `verification: passed | failed | unavailable`. A helper exception after input or failed refresh returns an unknown outcome rather than inviting blind replay.
 - The browser fallback keeps mouse-down/up listeners and calls `el.click()` once. Real Chromium checks button activation, checkbox state and disabled-button click behavior.
-- Desktop results include `timings_ms` for queue wait, execution and the stages reached. Stages are inclusive and can overlap; do not add them together. Duplicate replay preserves the original timings. Python results add `bridge_elapsed_ms`, measured through receipt of the response. Backend logs also measure total toolkit time through processing and cleanup, without text/image content.
+- Desktop results include `timings_ms` for queue wait, execution and the stages reached. Stages are inclusive and can overlap; do not add them together. Duplicate replay preserves the original timings. Python results add `bridge_elapsed_ms`, measured through receipt of the response. Backend logs measure toolkit time through response processing, before subscription cleanup, without text/image content.
 
 Verification performed on Windows on 14 October 2026:
 
