@@ -106,6 +106,11 @@ def serialize_tool_event(tool_obj: Any, chunk_obj: Any = None) -> Dict[str, Any]
     tool_output, _source_field = _extract_tool_output(tool_obj, chunk_obj)
 
     payload: Dict[str, Any] = {}
+    call_id = _read_field(tool_obj, "tool_call_id") or _read_field(chunk_obj, "tool_call_id")
+    if call_id:
+        payload["tool_call_id"] = str(call_id)
+    if _read_field(tool_obj, "tool_call_error"):
+        payload["tool_call_error"] = True
     if tool_name:
         payload["tool_name"] = tool_name
     if tool_args is not None:
