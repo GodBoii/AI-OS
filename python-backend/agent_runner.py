@@ -1168,10 +1168,7 @@ def run_agent_and_stream(
             if chunk.event in (RunEvent.run_content.value, TeamRunEvent.run_content.value):
                 if chunk.content:
                     content_chunk_count += 1
-                is_final = (
-                    owner_name == agent.name
-                    and not getattr(chunk, 'member_responses', [])
-                )
+                is_final = owner_name == agent.name
                 # Accumulate main content for catch-up buffer
                 if is_final and chunk.content:
                     accumulated_content.append(str(chunk.content))
