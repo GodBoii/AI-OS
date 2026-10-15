@@ -9,6 +9,8 @@ export class ChatScrollController {
         this.thread = null;
         this.frame = null;
         this.intent = null;
+        this.pointer = null;
+        this.disposed = false;
         this.observed = new Set();
         this.abort = new AbortController();
         const options = { signal: this.abort.signal, passive: true };
@@ -22,18 +24,41 @@ export class ChatScrollController {
         root.addEventListener('touchstart', event => { touchY = event.touches[0]?.clientY; }, options);
         root.addEventListener('touchmove', event => {
             const y = event.touches[0]?.clientY;
+            if (touchY == null || y == null) return;
             const target = this.scrollTarget(event.target, Math.sign(touchY - y));
             if (target && y > touchY && target.scrollTop > 0) this.pause(target);
             if (target) this.noteIntent(target, Math.sign(touchY - y));
             touchY = y;
         }, options);
+        root.addEventListener('touchend', () => { touchY = null; }, options);
+        root.addEventListener('touchcancel', () => { touchY = null; }, options);
         root.addEventListener('pointerdown', event => {
             const target = this.scrollTarget(event.target);
-            if (target) this.noteIntent(target, 0);
+            if (!target || event.target !== target || event.button !== 0) return;
+            const rect = target.getBoundingClientRect();
+            const contentLeft = rect.left + target.clientLeft;
+            // Only a native scrollbar press starts a drag. A content click may
+            // collapse a panel and clamp scrollTop without any scrolling intent.
+            const scrollbar = event.clientX >= rect.left && event.clientX <= rect.right
+                && (event.clientX < contentLeft || event.clientX >= contentLeft + target.clientWidth);
+            if (!scrollbar || target.scrollHeight <= target.clientHeight) return;
+            this.pointer = { id: event.pointerId, target };
+            this.noteIntent(target, 0);
+            this.pause(target);
         }, options);
+        const releasePointer = event => {
+            if (this.pointer?.id !== event.pointerId) return;
+            this.pointer = null;
+            this.intent = null;
+        };
+        window.addEventListener('pointerup', releasePointer, options);
+        window.addEventListener('pointercancel', releasePointer, options);
+        window.addEventListener('blur', () => { this.pointer = null; this.intent = null; }, options);
         root.addEventListener('keydown', event => {
+            if (event.defaultPrevented) return;
             if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
-            if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
+            if (event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+            if (event.key === ' ' && event.target.closest('button, summary, [role="button"]')) return;
             const up = ['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey);
             const target = this.scrollTarget(event.target, up ? -1 : 1);
             if (target && up) this.pause(target);
@@ -71,6 +96,7 @@ export class ChatScrollController {
         }
         this.observeContent();
         this.intent = null;
+        this.pointer = null;
         this.schedule();
     }
 
@@ -101,10 +127,12 @@ export class ChatScrollController {
 
     onScroll(target) {
         const view = this.views.get(this.id);
-        if (!view || !this.root.contains(target)) return;
+        if (!view || !(target instanceof Element) || !this.root.contains(target)) return;
+        if (target !== this.root && (!this.thread?.contains(target) || !target.getClientRects().length)) return;
         const previous = target === this.root ? view.top : Number(target.dataset.followScrollTop || 0);
-        const userInput = this.intent?.target === target && performance.now() - this.intent.time < 1500;
-        if (userInput && target.scrollTop < previous - 1) this.pause(target);
+        const userInput = this.intent?.target === target
+            && (this.pointer?.target === target || performance.now() - this.intent.time < 1500);
+        if (userInput && this.intent.direction <= 0 && target.scrollTop < previous - 1) this.pause(target);
         if (target === this.root) view.top = target.scrollTop;
         else target.dataset.followScrollTop = String(target.scrollTop);
         if (view.mode === 'paused' && view.target?.deref() === target && userInput
@@ -139,14 +167,23 @@ export class ChatScrollController {
     resume() {
         const view = this.views.get(this.id);
         if (!view) return;
+        const pausedTarget = view.target?.deref();
         view.mode = 'following';
         view.target = null;
         this.intent = null;
+        this.pointer = null;
+        // A reader can pause in an older message, outside the latest message's
+        // streaming scopes. Catch up that viewport and its enclosing logs too.
+        let target = pausedTarget;
+        while (target && target !== this.root && this.thread?.contains(target)) {
+            target.scrollTo({ top: target.scrollHeight, behavior: 'instant' });
+            target = target.parentElement?.closest('.reasoning-thought-content, .detailed-logs');
+        }
         this.schedule();
     }
 
     schedule(id = this.id) {
-        if (id !== this.id || this.frame !== null) return;
+        if (this.disposed || !this.thread || id !== this.id || this.frame !== null) return;
         this.frame = requestAnimationFrame(() => {
             this.frame = null;
             if (this.views.get(this.id)?.mode === 'following') {
@@ -163,9 +200,11 @@ export class ChatScrollController {
         const behind = this.scopes().some(node => this.gap(node) > 12)
             || (pausedTarget?.isConnected && pausedTarget.getClientRects().length > 0 && this.gap(pausedTarget) > 12);
         this.button.hidden = !this.thread?.querySelector('.message') || !behind || view?.mode !== 'paused';
-        if (this.composer) {
-            const bottom = this.root.parentElement.getBoundingClientRect().bottom;
-            this.button.style.bottom = `${Math.max(12, bottom - this.composer.getBoundingClientRect().top + 12)}px`;
+        if (this.composer && !this.button.hidden) {
+            const parent = this.root.parentElement.getBoundingClientRect();
+            const composer = this.composer.getBoundingClientRect();
+            const clearance = composer.height > 0 ? parent.bottom - composer.top + 12 : 12;
+            this.button.style.bottom = `${Math.min(Math.max(12, clearance), Math.max(12, parent.height - 56))}px`;
         }
     }
 
@@ -179,6 +218,9 @@ export class ChatScrollController {
             this.id = null;
             this.thread = null;
             this.intent = null;
+            this.pointer = null;
+            if (this.frame !== null) cancelAnimationFrame(this.frame);
+            this.frame = null;
             if (this.button) this.button.hidden = true;
         }
     }
@@ -193,14 +235,22 @@ export class ChatScrollController {
 
     capture() {
         const view = this.views.get(this.id);
-        if (view) view.top = this.root.scrollTop;
+        if (!view) return;
+        view.top = this.root.scrollTop;
+        this.thread?.querySelectorAll('.reasoning-thought-content, .detailed-logs').forEach(node => {
+            if (node.getClientRects().length) node.dataset.followScrollTop = String(node.scrollTop);
+        });
     }
 
     dispose() {
+        this.disposed = true;
         this.abort.abort();
         this.mutations.disconnect();
         this.resize.disconnect();
         if (this.frame !== null) cancelAnimationFrame(this.frame);
+        this.frame = null;
+        this.intent = null;
+        this.pointer = null;
         this.views.clear();
         this.observed.clear();
     }
