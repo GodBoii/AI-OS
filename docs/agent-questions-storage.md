@@ -18,7 +18,9 @@ and continue the same run. Scheduled tasks do not receive interactive question t
 The container mounts `/srv/aetheria/agent-data` at `/data/aetheria`. SQLite uses
 WAL mode and a 30-second busy timeout. Media files require signed read/write
 URLs. Upload links expire after ten minutes and cannot overwrite existing files.
-Question requests expire after 24 hours. An interrupted continuation is marked
+New question requests expire after ten minutes. The question deck displays the
+server deadline, shows one question at a time, and never submits on timeout.
+Existing requests keep their original deadline. An interrupted continuation is marked
 failed after its heartbeat is absent for ten minutes; it is not automatically
 replayed because tool execution may already have occurred.
 
