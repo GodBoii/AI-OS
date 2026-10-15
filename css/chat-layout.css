@@ -202,7 +202,8 @@ body:not(.dark-mode) .active-workspace-pill.workspace-pill-computer {
 .chat-messages {
     flex-grow: 1;
     overflow-y: auto;
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
+    overflow-anchor: none;
     max-width: var(--chat-max-width);
     width: 100%;
     margin: 0 auto;
@@ -219,6 +220,32 @@ body:not(.dark-mode) .active-workspace-pill.workspace-pill-computer {
 
 .conversation-thread {
     width: 100%;
+}
+
+.chat-jump-latest {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background: var(--window-bg);
+    color: var(--text-color);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.16);
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.chat-jump-latest[hidden] { display: none; }
+.chat-jump-latest:hover { background: var(--hover-bg); }
+.chat-jump-latest:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 3px;
 }
 
 /* --- Context Active Indicator --- */
