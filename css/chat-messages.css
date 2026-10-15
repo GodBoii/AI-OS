@@ -623,6 +623,31 @@
     animation: fadeIn var(--anim-normal) var(--easing-standard) forwards;
 }
 
+button.tool-log-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+button.tool-log-header:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+.reasoning-thought-content, .detailed-logs {
+    scroll-behavior: auto;
+    overflow-anchor: none;
+}
+
 .tool-log-entry .tool-log-icon {
     font-size: 1rem;
     color: var(--text-secondary);
