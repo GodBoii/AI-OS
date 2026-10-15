@@ -130,7 +130,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         window.populate=populateBotMessage;
         window.archive=archiveIntermediateResponse;
         window.renderSaved=renderTurnFromEvents;
-        bindReasoningSummary(document.querySelector('.reasoning-summary'),getStreamMessageDiv('message')); 
+        bindReasoningSummary(document.querySelector('.reasoning-summary'),getStreamMessageDiv('message'));
     ` });
     const timeline = await page.evaluate(async () => {
         const event = (type, id) => ({ id:'message', type, name:'take_screenshot', agent_name:'Aetheria_AI',
@@ -144,7 +144,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         await window['agent-step'](event('tool_end','two'));
         reason('message',{content:'After third screenshot. ',delta:true});
         populate({id:'message',content:'Intermediate **response**.',agent_name:'Aetheria_AI'});
-        archive(getStreamMessageDiv('message')); 
+        archive(getStreamMessageDiv('message'));
         await window['agent-step']({...event('tool_start','four'),event_id:'unique-start'});
         await window['agent-step']({...event('tool_start','four'),event_id:'unique-start'});
         populate({id:'message',content:'Final **answer**.',agent_name:'Aetheria_AI'});
