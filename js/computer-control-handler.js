@@ -21,6 +21,8 @@ const windowsAccessibility = require('./windows-accessibility');
 const { WindowsAccessibilityWorker } = require('./windows-accessibility-worker');
 const { getTypingSpeed, typeWithSpeed, pasteWithClipboard } = require('./typing-input');
 const { unicodeTypingScript } = require('./windows-keyboard');
+const { buildPointerTargetScript } = require('./windows-input-target');
+const { performance } = require('node:perf_hooks');
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -57,6 +59,8 @@ class ComputerControlHandler {
         this._screenshots = new Map();
         this._ocrWorkerPromise = null;
         this._accessibilityWorker = null;
+        this._commandTiming = null;
+        this._clock = () => performance.now();
         
         console.log(`ComputerControlHandler: Initialized for platform: ${this.platform}`);
     }
@@ -135,7 +139,10 @@ class ComputerControlHandler {
             this._emitResult(id, result);
             return;
         }
+        const queuedAt = this._clock();
         const job = this._commandQueue.then(async () => {
+            const startedAt = this._clock();
+            this._commandTiming = { requestId: id, startedAt, stages: { queue_wait: startedAt - queuedAt } };
             let result;
             const capture = response => { if (response.request_id === id) result = response.result; };
             this.eventEmitter.on('computer-command-result', capture);
@@ -144,6 +151,7 @@ class ComputerControlHandler {
                 return result;
             } finally {
                 this.eventEmitter.off('computer-command-result', capture);
+                this._commandTiming = null;
             }
         });
         this._pendingCommands.set(id, job);
@@ -176,7 +184,7 @@ class ComputerControlHandler {
             }
 
             if (INPUT_ACTIONS.has(action) && action !== 'perform_element_action' && commandPayload.window_id !== undefined) {
-                await this._prepareInputWindow(commandPayload.window_id);
+                await this._measureStage('focus', () => this._prepareInputWindow(commandPayload.window_id));
             }
             if (INPUT_ACTIONS.has(action) && commandPayload.screenshot_id) {
                 commandPayload = await this._mapScreenshotInput(commandPayload);
@@ -426,7 +434,7 @@ class ComputerControlHandler {
             }
 
             if (result && !result.metadata) {
-                const metadata = await this._buildToolResultMetadata(action, commandPayload, result);
+                const metadata = await this._measureStage('metadata', () => this._buildToolResultMetadata(action, commandPayload, result));
                 if (metadata) {
                     result.metadata = metadata;
                 }
@@ -438,6 +446,8 @@ class ComputerControlHandler {
             this._emitResult(request_id, {
                 status: 'error',
                 error: error.message,
+                ...(error.outcome ? { outcome: error.outcome } : {}),
+                ...(error.code ? { error_code: error.code } : {}),
                 stack: error.stack
             });
         }
@@ -929,14 +939,17 @@ class ComputerControlHandler {
     }
 
     async _takeScreenshot(commandPayload) {
-        const capture = await this._captureScreen(commandPayload);
-        const screenshot = capture.image.toPNG();
+        // Age starts before capture, never after saving or uploading the frame.
+        const capturedAt = Date.now();
+        const capturedMonotonic = this._clock();
+        const capture = await this._measureStage('capture', () => this._captureScreen(commandPayload));
+        const screenshot = await this._measureStage('encoding', () => capture.image.toPNG());
         const screenshotBase64 = screenshot.toString('base64');
-        const localSave = await this._saveComputerOutputBuffer(screenshot, commandPayload, `screenshot-${Date.now()}.png`);
+        const localSave = await this._measureStage('output_save', () => this._saveComputerOutputBuffer(screenshot, commandPayload, `screenshot-${capturedAt}.png`));
         
-        const screenshotPath = await this._uploadScreenshot(screenshotBase64);
+        const screenshotPath = await this._measureStage('upload', () => this._uploadScreenshot(screenshotBase64));
         const screenshotId = crypto.randomUUID();
-        this._screenshots.set(screenshotId, { ...capture, image: undefined, created: Date.now() });
+        this._screenshots.set(screenshotId, { ...capture, image: undefined, created: capturedAt, capturedMonotonic });
         if (this._screenshots.size > 16) this._screenshots.delete(this._screenshots.keys().next().value);
 
         return {
@@ -944,6 +957,9 @@ class ComputerControlHandler {
             screenshot_path: screenshotPath,
             ...(screenshotPath ? {} : { screenshot_base64: screenshotBase64 }),
             screenshot_id: screenshotId,
+            captured_at_ms: capturedAt,
+            expires_at_ms: capturedAt + 30000,
+            screenshot_expired: this._clock() - capturedMonotonic >= 30000,
             width: capture.width,
             height: capture.height,
             coordinate_space: capture.coordinateSpace,
@@ -1101,7 +1117,12 @@ class ComputerControlHandler {
 
     async _mapScreenshotInput(payload) {
         const snapshot = this._screenshots.get(payload.screenshot_id);
-        if (!snapshot || Date.now() - snapshot.created > 30000) throw new Error('Screenshot expired or invalidated. Capture again.');
+        const checkAge = () => {
+            const age = snapshot && (snapshot.capturedMonotonic === undefined
+                ? Date.now() - snapshot.created : this._clock() - snapshot.capturedMonotonic);
+            if (!snapshot || age < 0 || age >= 30000) throw new Error('Screenshot expired or invalidated. Capture again.');
+        };
+        checkAge();
         if (snapshot.windowId !== null) {
             if (payload.window_id !== snapshot.windowId) throw new Error('Supply the screenshot target window_id');
             const window = await this._findManagedWindow(snapshot.windowId);
@@ -1120,6 +1141,7 @@ class ComputerControlHandler {
             mapped[xKey] += snapshot.origin.x;
             mapped[yKey] += snapshot.origin.y;
         }
+        checkAge(); // Bounds lookup may itself take the reference past its deadline.
         return mapped;
     }
 
@@ -1180,6 +1202,7 @@ class ComputerControlHandler {
     async _moveMouse(commandPayload) {
         const { x, y, smooth } = commandPayload;
         this._validatePoint(x, y);
+        await this._assertPointerTarget(commandPayload.window_id, [{ x, y }]);
         const { mouse, Point } = this._nut();
 
         if (smooth) {
@@ -1213,6 +1236,21 @@ class ComputerControlHandler {
 
     _validatePoint(x, y) {
         if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) throw new Error('Coordinates must be finite integer pixels');
+    }
+
+    async _assertPointerTarget(windowId, points, options = {}) {
+        if (this.platform !== 'win32' || windowId === undefined) return;
+        try {
+            await this._measureStage('pointer_target', async () => {
+                const script = buildPointerTargetScript(windowId, points, options);
+                const result = JSON.parse((await this._runAccessibilityScript(script, { timeout: 15000 })).stdout);
+                if (result.status !== 'success') throw new Error(result.error || 'Pointer target could not be verified');
+            });
+        } catch (error) {
+            error.code = 'POINTER_TARGET_UNAVAILABLE';
+            error.outcome = 'not_executed';
+            throw error;
+        }
     }
 
     async _prepareInputWindow(windowId) {
@@ -1249,9 +1287,17 @@ $root.SetFocus()
         if ((x === undefined) !== (y === undefined)) throw new Error('Provide both x and y');
         if (x !== undefined) this._validatePoint(x, y);
         const { mouse, Point, Button } = this._nut();
-        if (x !== undefined) await mouse.setPosition(new Point(x, y));
+        if (x !== undefined) {
+            await this._assertPointerTarget(commandPayload.window_id, [{ x, y }]);
+            await mouse.setPosition(new Point(x, y));
+        }
         const mouseButton = { left: Button.LEFT, right: Button.RIGHT, middle: Button.MIDDLE }[button];
         for (let i = 0; i < (double ? 2 : 1); i++) {
+            if (commandPayload.window_id !== undefined && this.platform === 'win32') {
+                const point = x === undefined ? await mouse.getPosition() : { x, y };
+                try { await this._assertPointerTarget(commandPayload.window_id, [point]); }
+                catch (error) { if (i > 0) error.outcome = 'unknown'; throw error; }
+            }
             try {
                 await mouse.pressButton(mouseButton);
             } finally {
@@ -1336,7 +1382,13 @@ $root.SetFocus()
         if ((x === undefined) !== (y === undefined)) throw new Error('Provide both x and y');
         if (x !== undefined) this._validatePoint(x, y);
         const { mouse, Point } = this._nut();
-        if (x !== undefined) await mouse.setPosition(new Point(x, y));
+        if (x !== undefined) {
+            await this._assertPointerTarget(commandPayload.window_id, [{ x, y }]);
+            await mouse.setPosition(new Point(x, y));
+        }
+        if (commandPayload.window_id !== undefined && this.platform === 'win32') {
+            await this._assertPointerTarget(commandPayload.window_id, [x === undefined ? await mouse.getPosition() : { x, y }]);
+        }
         await mouse[methods[direction]](amount);
         return { status: 'success', input_sent: true, message: `Scrolled ${direction} by ${amount}` };
     }
@@ -1346,6 +1398,9 @@ $root.SetFocus()
         this._validatePoint(from_x, from_y);
         this._validatePoint(to_x, to_y);
         const { mouse, Point, Button } = this._nut();
+        // window_id scopes the source. Existing workflows may drop into another app.
+        await this._assertPointerTarget(commandPayload.window_id, [{ x: from_x, y: from_y }]);
+        await this._assertDragDestination(commandPayload);
         await mouse.setPosition(new Point(from_x, from_y));
         try {
             await mouse.pressButton(Button.LEFT);
@@ -1361,6 +1416,22 @@ $root.SetFocus()
             await mouse.releaseButton(Button.LEFT);
         }
         return { status: 'success', input_sent: true, message: `Dragged from (${from_x}, ${from_y}) to (${to_x}, ${to_y})` };
+    }
+
+    _physicalDisplayBounds() {
+        return screen.getAllDisplays().map(display => screen.dipToScreenRect(null, display.bounds));
+    }
+
+    async _assertDragDestination(payload) {
+        if (this.platform !== 'win32') return;
+        if (payload.to_window_id !== undefined) {
+            await this._assertPointerTarget(payload.to_window_id, [{ x: payload.to_x, y: payload.to_y }], { requireForeground: false });
+        } else if (payload.window_id !== undefined && !this._physicalDisplayBounds().some(bounds =>
+            payload.to_x >= bounds.x && payload.to_x < bounds.x + bounds.width &&
+            payload.to_y >= bounds.y && payload.to_y < bounds.y + bounds.height)) {
+            throw Object.assign(new Error('Drag destination is outside the desktop displays'),
+                { code: 'POINTER_TARGET_UNAVAILABLE', outcome: 'not_executed' });
+        }
     }
 
     // ===== WINDOW MANAGEMENT METHODS =====
@@ -1405,7 +1476,16 @@ $root.SetFocus()
 
     async _runAccessibilityScript(script, options = {}) {
         if (!this._accessibilityWorker) this._accessibilityWorker = new WindowsAccessibilityWorker();
-        return this._accessibilityWorker.run(script, options);
+        return this._measureStage('accessibility', () => this._accessibilityWorker.run(script, options));
+    }
+
+    async _measureStage(name, operation) {
+        const timing = this._commandTiming;
+        const started = this._clock();
+        try { return await operation(); }
+        finally {
+            if (timing) timing.stages[name] = (timing.stages[name] || 0) + this._clock() - started;
+        }
     }
 
     async _requestWindowClose(windowId) {
@@ -2076,6 +2156,7 @@ $shell.ShellExecute($target, '', '', 'open', 1)
         if (commandPayload.window_id !== undefined && commandPayload.window_id !== snapshot.windowId) return { status: 'error', error: 'Element belongs to a different window.' };
         const el = snapshot.elements.find(element => element.element_id === String(element_id));
         if (!el || !el.IsEnabled || el.IsOffscreen) return { status: 'error', error: 'Element is missing, offscreen or disabled.' };
+        let inputSent = false;
         try {
             if (element_action === 'set_value') {
                 if (typeof value !== 'string' || value.length > 100000) throw new Error('value must be text of at most 100000 characters');
@@ -2084,24 +2165,35 @@ $shell.ShellExecute($target, '', '', 'open', 1)
                 const focused = JSON.parse((await this._runAccessibilityScript(focusScript)).stdout);
                 if (focused.status !== 'success') return focused;
                 await this._prepareInputWindow(snapshot.windowId);
+                inputSent = true;
                 await this._pressHotkey({ keys: ['ctrl', 'a'] });
                 await this._pressHotkey({ keys: ['backspace'] });
                 const typed = await this._typeText({ text: value, window_id: snapshot.windowId });
+                const verificationScript = windowsAccessibility.buildScript({
+                    windowId: snapshot.windowId, runtimeId: el.RuntimeId, expectedValue: value,
+                });
+                const verification = JSON.parse((await this._measureStage('verification', () => this._runAccessibilityScript(verificationScript))).stdout);
                 const state = await this._getScreenElements({ window_id: snapshot.windowId });
-                const current = state.elements?.find(element => element.RuntimeId === el.RuntimeId);
-                const verified = state.status === 'success' && current && !current.ValueTruncated && current.Value === value;
-                return { ...typed, state, verified,
+                const verified = verification.status === 'success' && verification.verified === true;
+                return { ...typed, state, verified, execution: 'dispatched',
+                    verification: verified ? 'passed' : verification.status === 'success' ? 'failed' : 'unavailable',
                     ...(verified ? {} : { status: 'error', outcome: 'unknown', error: 'Field value could not be verified. Inspect the state before retrying.' }) };
             }
             const script = windowsAccessibility.buildScript({ windowId: snapshot.windowId, runtimeId: el.RuntimeId, action: element_action, value });
             if (!windowsAccessibility.ACTIONS.has(element_action)) throw new Error('Unsupported accessibility action');
+            inputSent = true;
             const { stdout } = await this._runAccessibilityScript(script, { timeout: 15000 });
             const result = JSON.parse(stdout);
             const state = await this._getScreenElements({ window_id: snapshot.windowId });
             if (result.status !== 'success') return { ...result, state };
-            return { ...result, state, message: 'Accessibility action sent. Inspect the returned state to verify the outcome.' };
+            if (state.status !== 'success') return { ...result, state, status: 'error', outcome: 'unknown',
+                execution: 'dispatched', verification: 'unavailable', error: 'Input was sent, but refreshed state is unavailable. Observe before retrying.' };
+            return { ...result, state, execution: 'dispatched', verification: 'unavailable',
+                message: 'Accessibility action sent. Inspect the returned state to verify the outcome.' };
         } catch (error) {
-            return { status: 'error', error: `Accessibility action failed: ${error.message}` };
+            return { status: 'error', error: `Accessibility action failed: ${error.message}`,
+                execution: inputSent ? 'dispatched' : 'not_started', verification: 'unavailable',
+                outcome: inputSent ? 'unknown' : 'not_executed', input_sent: inputSent };
         }
     }
 
@@ -2301,6 +2393,11 @@ $shell.ShellExecute($target, '', '', 'open', 1)
     }
 
     _emitResult(request_id, result) {
+        if (this._commandTiming?.requestId === request_id) {
+            const timing = this._commandTiming;
+            result = { ...result, timings_ms: Object.fromEntries(Object.entries({ ...timing.stages,
+                execution: this._clock() - timing.startedAt }).map(([key, value]) => [key, Math.round(value * 100) / 100])) };
+        }
         if (typeof request_id === 'string') {
             this._completedResultBytes -= this._completedResultSizes.get(request_id) || 0;
             const maxBytes = 16 * 1024 * 1024;

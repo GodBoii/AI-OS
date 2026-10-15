@@ -199,3 +199,32 @@ def test_invalid_screenshot_cannot_report_success(computer_module):
     result = toolkit._process_screenshot_result({'status': 'success', 'screenshot_base64': 'bad!base64'})
     assert json.loads(result.content)['status'] == 'error'
     assert result.images == []
+
+
+def test_bridge_timing_preserves_desktop_evidence_and_screenshot_metadata(computer_module):
+    source = {'status': 'success', 'execution': 'dispatched', 'verification': 'passed',
+              'timings_ms': {'queue_wait': 2, 'execution': 8},
+              'screenshot_base64': base64.b64encode(b'png-test-bytes').decode(),
+              'screenshot_id': 'snapshot', 'captured_at_ms': 1000, 'expires_at_ms': 31000}
+    pubsub = PubSub([{'type': 'message', 'data': json.dumps(source)}])
+    toolkit, _ = make_tools(computer_module, pubsub)
+    computer_module.time = types.SimpleNamespace(monotonic=lambda: 10, time=lambda: 100)
+    result = toolkit.take_screenshot(window_id=42)
+    evidence = json.loads(result.content)
+    assert evidence['bridge_elapsed_ms'] == 0
+    assert evidence['timings_ms'] == source['timings_ms']
+    assert evidence['verification'] == 'passed'
+    assert evidence['execution'] == 'dispatched'
+    assert evidence['captured_at_ms'] == 1000
+    assert evidence['expires_at_ms'] == 31000
+    assert result.images[0].content == b'png-test-bytes'
+    assert pubsub.closed
+
+
+def test_drag_destination_is_optional_and_forwarded_without_changing_legacy_payloads(computer_module):
+    toolkit, _ = make_tools(computer_module, PubSub())
+    toolkit._send_command_and_wait = lambda payload: payload
+    legacy = toolkit.drag_drop(1, 2, 3, 4, window_id=42)
+    targeted = toolkit.drag_drop(1, 2, 3, 4, window_id=42, to_window_id=43)
+    assert 'to_window_id' not in legacy
+    assert targeted == {**legacy, 'to_window_id': 43}

@@ -10,6 +10,7 @@ class AuthService {
         this.listeners = [];
         this.initPromise = null;
         this.storage = null;
+        this.initializationError = null;
     }
 
     /**
@@ -25,11 +26,11 @@ class AuthService {
     }
 
     async init() {
-        if (this.supabase) {
-            return true;
-        }
         if (this.initPromise) {
             return this.initPromise;
+        }
+        if (this.supabase) {
+            return true;
         }
 
         this.initPromise = this._initClient();
@@ -41,37 +42,48 @@ class AuthService {
     }
 
     async _initClient() {
+        let client;
         try {
-            this.supabase = createClient(
+            if (!config.supabase?.url || !config.supabase?.anonKey) {
+                throw new Error('Authentication configuration is missing. Set the Supabase URL and publishable key in js/runtime-config.json.');
+            }
+            client = createClient(
                 config.supabase.url,
                 config.supabase.anonKey,
                 this.storage ? { auth: { storage: this.storage } } : undefined
             );
 
-            const { data } = await this.supabase.auth.getSession();
-            if (data.session) {
+            const { data, error } = await client.auth.getSession();
+            if (error) throw error;
+            this.supabase = client;
+            if (data?.session) {
                 this.user = data.session.user;
                 this._notifyListeners();
             }
 
-            this.supabase.auth.onAuthStateChange((event, session) => {
+            client.auth.onAuthStateChange((event, session) => {
                 console.log('Auth state changed:', event);
                 this.user = session?.user || null;
                 this._notifyListeners();
             });
-
+            this.initializationError = null;
             return true;
         } catch (error) {
-            console.error('Failed to initialize auth service:', error);
+            try { await client?.auth.stopAutoRefresh?.(); }
+            catch { console.warn('AuthService: failed client refresh cleanup was unavailable.'); }
+            this.supabase = null;
+            if (this.initializationError !== error.message) console.error('Failed to initialize auth service:', error.message);
+            this.initializationError = error.message;
             return false;
         }
     }
 
     async ensureInitialized() {
-        if (this.supabase) {
-            return true;
-        }
         return await this.init();
+    }
+
+    async _requireInitialized() {
+        if (!await this.ensureInitialized()) throw new Error(this.initializationError || 'Authentication could not be initialized. Try again.');
     }
 
     onAuthChange(callback) {
@@ -105,7 +117,7 @@ class AuthService {
 
     async signUp(email, password, name, phoneNumber) {
         try {
-            await this.ensureInitialized();
+            await this._requireInitialized();
             const processedName = typeof name === 'string' ? name.trim() : '';
             const processedPhoneNumber = this.normalizePhoneNumber(phoneNumber);
             const { data, error } = await this.supabase.auth.signUp({
@@ -135,7 +147,7 @@ class AuthService {
 
     async signIn(email, password) {
         try {
-            await this.ensureInitialized();
+            await this._requireInitialized();
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email: email,
                 password: password
@@ -175,7 +187,7 @@ class AuthService {
 
     async signInWithGoogle() {
         try {
-            await this.ensureInitialized();
+            await this._requireInitialized();
             const { data, error } = await this.supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
@@ -324,7 +336,7 @@ class AuthService {
 
     async setSession(accessToken, refreshToken) {
         try {
-            await this.ensureInitialized();
+            await this._requireInitialized();
             const { data, error } = await this.supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
@@ -351,7 +363,7 @@ class AuthService {
 
     async signOut() {
         try {
-            await this.ensureInitialized();
+            await this._requireInitialized();
             const { error } = await this.supabase.auth.signOut();
             if (error) throw error;
             return { success: true };

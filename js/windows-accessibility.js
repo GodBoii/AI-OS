@@ -8,15 +8,19 @@ const TYPES = {
 const ACTIONS = new Set(['invoke', 'focus', 'toggle', 'select', 'expand', 'collapse', 'set_value']);
 const quote = value => `'${String(value).replace(/'/g, "''")}'`;
 
-function buildScript({ windowId, elementType, text, limit = 200, runtimeId, action, value }) {
+function buildScript({ windowId, elementType, text, limit = 200, runtimeId, action, value, expectedValue }) {
+    const lookup = Boolean(action) || expectedValue !== undefined;
     if (!Number.isSafeInteger(windowId) || windowId <= 0) throw new Error('Invalid window ID');
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error('limit must be between 1 and 500');
     if (elementType && !TYPES[elementType]) throw new Error('Unsupported element_type');
     if (action && !ACTIONS.has(action)) throw new Error('Unsupported accessibility action');
-    if (action && (typeof runtimeId !== 'string' || !/^-?\d+(,-?\d+)*$/.test(runtimeId))) {
+    if (lookup && (typeof runtimeId !== 'string' || !/^-?\d+(,-?\d+)*$/.test(runtimeId))) {
         throw new Error('Invalid accessibility runtime ID');
     }
     if (action === 'set_value' && typeof value !== 'string') throw new Error('value must be text');
+    if (expectedValue !== undefined && (typeof expectedValue !== 'string' || expectedValue.length > 100000 || action)) {
+        throw new Error('expectedValue must be text of at most 100000 characters on a read-only request');
+    }
     return `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -40,8 +44,8 @@ try {
             $current = $el.Current
             $rect = $current.BoundingRectangle
             $id = $el.GetRuntimeId() -join ','
-            ${action ? `if ($id -eq ${quote(runtimeId)}) { $target = $el; break }` : ''}
-            if (-not $current.IsOffscreen -and $rect.Width -gt 0 -and $rect.Height -gt 0 ${elementType ? `-and $current.ControlType.ProgrammaticName -eq ${quote(`ControlType.${TYPES[elementType]}`)}` : ''} ${text !== undefined ? `-and $current.Name -eq ${quote(text)}` : ''}) {
+            ${lookup ? `if ($id -eq ${quote(runtimeId)}) { $target = $el; break }` : ''}
+            if (${lookup ? '$false' : '$true'} -and -not $current.IsOffscreen -and $rect.Width -gt 0 -and $rect.Height -gt 0 ${elementType ? `-and $current.ControlType.ProgrammaticName -eq ${quote(`ControlType.${TYPES[elementType]}`)}` : ''} ${text !== undefined ? `-and $current.Name -eq ${quote(text)}` : ''}) {
                 $patterns = @($el.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName -replace 'PatternIdentifiers.Pattern$', '' })
                 $entry = @{
                     Name = $current.Name; ControlType = $current.ControlType.ProgrammaticName
@@ -86,7 +90,19 @@ try {
             if ($child) { $truncated = $true }
         } catch [System.Windows.Automation.ElementNotAvailableException] { }
     }
-    ${action ? `
+    ${expectedValue !== undefined ? `
+    if (-not $target) { throw 'Element is stale or no longer belongs to the target window. Observe again.' }
+    if ($target.Current.IsPassword) { throw 'Password controls are excluded from value verification' }
+    $pattern = $null
+    if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) { throw 'Value verification unavailable' }
+    $wait = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $verified = [String]::Equals($pattern.Current.Value, ${quote(expectedValue)}, [StringComparison]::Ordinal)
+        if ($verified -or $wait.ElapsedMilliseconds -ge 750) { break }
+        Start-Sleep -Milliseconds 25
+    } while ($true)
+    @{ status = 'success'; verified = $verified; verification = $(if ($verified) { 'passed' } else { 'failed' }) } | ConvertTo-Json -Compress
+    ` : action ? `
     if (-not $target) { throw 'Element is stale or no longer belongs to the target window. Observe again.' }
     if ($target.Current.IsOffscreen -or -not $target.Current.IsEnabled) { throw 'Element is offscreen or disabled' }
     if ($target.Current.IsPassword) { throw 'Password controls are excluded from accessibility actions' }
