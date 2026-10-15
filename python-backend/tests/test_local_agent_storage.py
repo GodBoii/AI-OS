@@ -81,6 +81,15 @@ def test_expiry_and_cancel_persist(local_store):
         repository.submit(row['request_id'], 'owner', str(uuid.uuid4()), answers)
 
 
+def test_question_deadline_is_ten_minutes_and_survives_reload(local_store):
+    repository = QuestionRepository()
+    row = repository.create(run=paused_run(), conversation_id='chat', message_id='message', user_id='owner', context={})
+    assert row['expires_at'] - row['created_at'] == 600
+    restored = QuestionRepository().list_for_conversation('chat', 'owner')[0]
+    assert restored['expires_at'] == row['expires_at']
+    assert restored['status'] == 'pending'
+
+
 def test_history_is_local_user_scoped_and_titles_are_editable(local_store):
     local_store.upsert_session(AgentSession(session_id='chat', user_id='owner', agent_id='coder', runs=[RunOutput(
         run_id='run', user_id='owner', session_id='chat', content='Done', status=RunStatus.completed)]))
