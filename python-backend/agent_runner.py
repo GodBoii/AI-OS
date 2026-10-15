@@ -27,6 +27,7 @@ from run_state_manager import RunStateManager
 from cache_manager import CacheManager
 from assistant_stream_utils import build_system_assistant_terminal_message
 from tool_event_payload import serialize_tool_event
+from activity_stream import ActivityStream
 from model_routing import is_video_attachment, resolve_primary_model
 from deploy_platform import (
     get_deployment_file_bytes,
@@ -768,6 +769,7 @@ def run_agent_and_stream(
     """
     # Durable room name - survives SID changes
     room_name = f"conv:{conversation_id}"
+    activity = ActivityStream(socketio, message_id, (continuation or {}).get("context", {}).get("activity_events"))
     try:
         # --- DEBUG LOG ---
         print(f"[AGENT_RUNNER] START RUN: message_id={message_id}, sid={sid}, room={room_name}")
@@ -793,7 +795,7 @@ def run_agent_and_stream(
         # This new dictionary will contain ALL dependencies needed by any tool that
         # communicates directly with the frontend or uses Redis Pub/Sub.
         realtime_tool_config = {
-            'socketio': socketio,
+            'socketio': activity,
             'sid': sid,
             'message_id': message_id,
             'conversation_id': conversation_id,
@@ -931,7 +933,7 @@ def run_agent_and_stream(
         elif requested_mode == "system-assistant":
             mobile_tools_config = {
                 "sid": sid,
-                "socketio": socketio,
+                "socketio": activity,
                 "redis_client": redis_client,
                 "conversation_id": conversation_id,
                 "message_id": message_id,
@@ -1064,7 +1066,7 @@ def run_agent_and_stream(
         control_gate = _build_run_control_gate(redis_client, conversation_id, message_id, room_name)
         stop_requested = False
         execution_leg_id = str((continuation or {}).get("submission_id") or uuid.uuid4())
-        member_frames = NativeMemberFrames(agent, message_id, lambda event, payload: socketio.emit(event, payload, room=room_name))
+        member_frames = NativeMemberFrames(agent, message_id, lambda event, payload: activity.emit(event, payload, room=room_name))
         if continuation:
             paused_run = get_agno_db().get_run(continuation["run_id"])
             if paused_run is None or not paused_run.is_paused or str(paused_run.user_id) != str(user_id):
@@ -1137,7 +1139,7 @@ def run_agent_and_stream(
 
             owner_name = getattr(chunk, 'agent_name', None) or getattr(chunk, 'team_name', None)
             delegation_metadata = member_frames.metadata(chunk)
-            owner_reasoning_key = owner_name or "Aetheria_AI"
+            owner_reasoning_key = f"{owner_name or 'Aetheria_AI'}:{delegation_metadata.get('delegation_id', '')}"
             chunk_reasoning_content = getattr(chunk, 'reasoning_content', None)
             if chunk_reasoning_content:
                 reasoning_text = str(chunk_reasoning_content)
@@ -1146,9 +1148,9 @@ def run_agent_and_stream(
                 if previous_reasoning and reasoning_text.startswith(previous_reasoning):
                     reasoning_delta = reasoning_text[len(previous_reasoning):]
 
-                if reasoning_delta.strip():
+                if reasoning_delta:
                     reasoning_event_count += 1
-                    socketio.emit("reasoning_step", {
+                    activity.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
                         **delegation_metadata,
@@ -1170,8 +1172,6 @@ def run_agent_and_stream(
                     owner_name == agent.name
                     and not getattr(chunk, 'member_responses', [])
                 )
-                # Include reasoning_content if present
-                reasoning_content = getattr(chunk, 'reasoning_content', None)
                 # Accumulate main content for catch-up buffer
                 if is_final and chunk.content:
                     accumulated_content.append(str(chunk.content))
@@ -1182,18 +1182,19 @@ def run_agent_and_stream(
                         log_owner_order.append(owner_name)
                     accumulated_log_content[owner_name].append(str(chunk.content))
                 if requested_mode == "plan":
-                    socketio.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
+                    activity.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
                         "messageId": message_id, "conversationId": conversation_id, "streaming": True,
                         "content": chunk.content, "agent_name": owner_name}, room=room_name)
                 else:
-                    socketio.emit("response", {
+                    activity.emit("response", {
                     "content": chunk.content,
                     "streaming": True,
                     "id": message_id,
                     "agent_name": owner_name,
                         **delegation_metadata,
                     "is_log": not is_final,
-                    "reasoning_content": reasoning_content
+                    "reasoning_content": chunk_reasoning_content,
+                    "reasoning_emitted": bool(chunk_reasoning_content),
                 }, room=room_name)  # <-- ROOM, not SID
             elif chunk.event in (RunEvent.tool_call_started.value, TeamRunEvent.tool_call_started.value):
                 tool_call_count += 1
@@ -1201,10 +1202,10 @@ def run_agent_and_stream(
                 tool_payload = serialize_tool_event(getattr(chunk, "tool", None), chunk_obj=chunk)
                 accumulated_content.clear()
                 final_owner_name = None
-                socketio.emit("assistant_response_reset", {
+                activity.emit("assistant_response_reset", {
                     "id": message_id,
                 }, room=room_name)
-                socketio.emit("agent_step", {
+                activity.emit("agent_step", {
                     "type": "tool_start",
                     "name": tool_name,
                     "agent_name": owner_name,
@@ -1239,7 +1240,7 @@ def run_agent_and_stream(
                     bool(tool_metadata),
                     (tool_metadata or {}).get("preview_type") if isinstance(tool_metadata, dict) else None,
                 )
-                socketio.emit("agent_step", {
+                activity.emit("agent_step", {
                     "type": "tool_end",
                     "name": tool_name,
                     "agent_name": owner_name,
@@ -1265,7 +1266,7 @@ def run_agent_and_stream(
                 if reasoning_step and not chunk_reasoning_content:
                     reasoning_text = str(reasoning_step)
                     reasoning_event_count += 1
-                    socketio.emit("reasoning_step", {
+                    activity.emit("reasoning_step", {
                         "id": message_id,
                         "agent_name": owner_name,
                         **delegation_metadata,
@@ -1283,19 +1284,24 @@ def run_agent_and_stream(
         if continuation:
             resolved = QuestionRepository().finish(str(continuation["request_id"]), "cancelled" if stop_requested else "answered")
             if resolved:
-                socketio.emit("user_question_ack", {**public_request(resolved), "success": True}, room=room_name)
+                activity.emit("user_question_ack", {**public_request(resolved), "success": True}, room=room_name)
         if run_output is not None and getattr(run_output, "is_paused", False) and not stop_requested:
+            try:
+                activity.persist(get_agno_db(), root_run_id, conversation_id, str(user_id))
+            except Exception:
+                logger.exception("Could not persist paused activity for run %s", root_run_id)
             latest_session = connection_manager.get_session(conversation_id) or session_data
             request_row = QuestionRepository().create(run=run_output, conversation_id=conversation_id,
                 message_id=message_id, user_id=str(user_id), context={"session_data": latest_session,
                     "agent_mode": requested_mode, "turn_data": turn_data, "events": accumulated_events,
+                    "activity_events": activity.events,
                     "content": accumulated_content, "usage_snapshot": usage_snapshot,
                     "channel": "plan" if requested_mode == "plan" else "chat"})
             if run_state_manager:
                 run_state_manager.wait_for_input(conversation_id, message_id, str(user_id), run_output.run_id,
                     expires_at=request_row["expires_at"])
             connection_manager.redis_client.expire(f"session:{conversation_id}", 86460)
-            socketio.emit("user_question", public_request(request_row), room=room_name)
+            activity.emit("user_question", public_request(request_row), room=room_name)
             _log_request_tokens(user_id=user_id, conversation_id=conversation_id, message_id=message_id,
                 run_output=run_output, execution_leg_id=execution_leg_id, metrics_override=leg_metrics)
             return
@@ -1306,7 +1312,7 @@ def run_agent_and_stream(
             final_content = build_system_assistant_terminal_message(completed_tool_history)
             if final_content:
                 final_owner_name = "Aetheria_System_Assistant"
-                socketio.emit("response", {
+                activity.emit("response", {
                     "content": final_content,
                     "streaming": True,
                     "id": message_id,
@@ -1318,11 +1324,15 @@ def run_agent_and_stream(
         if stop_requested:
             done_payload["stopped"] = True
         if requested_mode == "plan":
-            socketio.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
+            activity.emit("plan_response", {"success": True, "requestId": turn_data.get("plan_request_id"),
                 "messageId": message_id, "conversationId": conversation_id, "done": True,
                 "plan": final_content or "", "stopped": stop_requested}, room=room_name)
         else:
-            socketio.emit("response", done_payload, room=room_name)
+            activity.emit("response", done_payload, room=room_name)
+        try:
+            activity.persist(get_agno_db(), root_run_id, conversation_id, str(user_id))
+        except Exception:
+            logger.exception("Could not persist completed activity for run %s", root_run_id)
         if redis_client is not None:
             try:
                 clear_run_control(redis_client, conversation_id)
@@ -1354,7 +1364,7 @@ def run_agent_and_stream(
                 conversation_id,
                 message_id,
                 final_content=final_content,
-                events=accumulated_events,
+                events=activity.events,
                 conversation_title=conversation_title,
             )
             # Session content cache removed - frontend handles caching
@@ -1366,7 +1376,7 @@ def run_agent_and_stream(
             _preview = _preview_clean[:400] if _preview_clean else ""
             # A stopped run is not "completed"; the client shows no
             # completion notification for it.
-            socketio.emit("run_stopped" if stop_requested else "run_completed", {
+            activity.emit("run_stopped" if stop_requested else "run_completed", {
                 "conversationId": conversation_id,
                 "messageId": message_id,
                 "title": conversation_title,
@@ -1399,15 +1409,20 @@ def run_agent_and_stream(
             logger.error(f"Failed to write token usage logs for session {conversation_id}: {e}")
 
     except Exception as e:
+        if "root_run_id" in locals() and "user_id" in locals():
+            try:
+                activity.persist(get_agno_db(), root_run_id, conversation_id, str(user_id))
+            except Exception:
+                logger.exception("Could not persist interrupted activity for run %s", root_run_id)
         if continuation:
             failed = QuestionRepository().finish(str(continuation["request_id"]), "failed")
             if failed:
-                socketio.emit("user_question_ack", {**public_request(failed), "success": True}, room=room_name)
+                activity.emit("user_question_ack", {**public_request(failed), "success": True}, room=room_name)
         logger.error(f"Agent run failed for conversation {conversation_id}: {e}\n{traceback.format_exc()}")
         if run_state_manager:
             run_state_manager.fail_run(conversation_id, message_id, str(e))
             # Session content cache removed - frontend handles caching
         if agent_mode == "plan":
-            socketio.emit("plan_response", {"success": False, "requestId": turn_data.get("plan_request_id"),
+            activity.emit("plan_response", {"success": False, "requestId": turn_data.get("plan_request_id"),
                 "messageId": message_id, "error": "Plan execution failed. Please retry."}, room=room_name)
-        socketio.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=room_name)
+        activity.emit("error", {"message": f"An error occurred: {str(e)}. Your conversation is preserved."}, room=room_name)
