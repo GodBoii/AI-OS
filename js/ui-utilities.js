@@ -69,6 +69,11 @@ export function addMessageActionButtons(messageDiv) {
     shareBtn.addEventListener('click', () => handleShareMessage(messageDiv));
 }
 
+function getMainResponseText(messageDiv) {
+    return [...messageDiv.querySelectorAll('.message-content .inner-content')]
+        .map(node => (node.textContent || '').trim()).filter(Boolean).join('\n\n');
+}
+
 /**
  * Handles copying the AI message content to clipboard
  * @param {HTMLElement} messageDiv - The message container element
@@ -76,17 +81,8 @@ export function addMessageActionButtons(messageDiv) {
  */
 async function handleCopyMessage(messageDiv, button) {
     try {
-        // Extract text content from the message
-        const contentBlock = messageDiv.querySelector('.message-content .inner-content');
-        if (!contentBlock) return;
-
-        // Create a temporary div to convert HTML to plain text properly
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = contentBlock.innerHTML;
-
-        // Get text content
-        let textContent = tempDiv.textContent || tempDiv.innerText || '';
-        textContent = textContent.trim();
+        const textContent = getMainResponseText(messageDiv);
+        if (!textContent) return;
 
         // Copy to clipboard
         await navigator.clipboard.writeText(textContent);
@@ -115,14 +111,8 @@ async function handleCopyMessage(messageDiv, button) {
  */
 async function handleShareMessage(messageDiv) {
     try {
-        const contentBlock = messageDiv.querySelector('.message-content .inner-content');
-        if (!contentBlock) return;
-
-        // Extract text content
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = contentBlock.innerHTML;
-        let textContent = tempDiv.textContent || tempDiv.innerText || '';
-        textContent = textContent.trim();
+        const textContent = getMainResponseText(messageDiv);
+        if (!textContent) return;
 
         // For desktop apps (Electron), Web Share API is not reliable
         // Use a cross-platform approach: save to file and show options
