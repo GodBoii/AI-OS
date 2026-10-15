@@ -386,38 +386,14 @@ function resetScrollState() { chatScroll?.resume(); }
 function bindToolPreviewToggle(header) {
     if (!header || header.dataset.previewBound) return;
     header.dataset.previewBound = 'true';
-    const container = header.closest('.tool-log-entry')?.querySelector('.tool-log-preview-container');
-    if (container) container.inert = !header.closest('.tool-log-entry').classList.contains('preview-expanded');
     const toggle = event => {
         event.stopPropagation();
         const entry = header.closest('.tool-log-entry');
         if (!entry?.classList.contains('has-preview')) return;
         const expanded = entry.classList.toggle('preview-expanded');
         header.setAttribute('aria-expanded', String(expanded));
-        const preview = entry.querySelector('.tool-log-preview-container');
-        if (preview) preview.inert = !expanded;
-        if (expanded) loadSearchPreviewIcons(entry);
     };
     header.addEventListener('click', toggle);
-}
-
-function loadSearchPreviewIcons(root) {
-    root.querySelectorAll('.tool-preview-search li:not([hidden]) img[data-icon-url]').forEach(image => {
-        image.addEventListener('error', () => { image.hidden = true; }, { once: true });
-        image.addEventListener('load', () => { image.parentElement.classList.add('has-favicon'); }, { once: true });
-        image.src = image.dataset.iconUrl;
-        delete image.dataset.iconUrl;
-    });
-}
-
-function bindSearchPreview(preview) {
-    const more = preview.querySelector('[data-search-show-all]');
-    if (more) more.addEventListener('click', () => {
-        preview.querySelectorAll('.tool-preview-search li[hidden]').forEach(row => { row.hidden = false; });
-        more.remove();
-        loadSearchPreviewIcons(preview);
-    }, { once: true });
-    if (preview.closest('.preview-expanded')) loadSearchPreviewIcons(preview);
 }
 
 function updateConversationStateForActiveThread() {
@@ -873,61 +849,7 @@ function parseMaybeJson(value) {
     return value;
 }
 
-function getSafeSearchUrl(value) {
-    if (typeof value !== 'string') return '';
-    const raw = value.trim();
-    if (!raw || raw.length > 8192 || /[\x00-\x20\x7f\\]/.test(raw)) return '';
-    try {
-        const url = new URL(raw);
-        if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return '';
-        return url.href;
-    } catch {
-        return '';
-    }
-}
-
-function normalizeSearchLinks(items) {
-    const links = [];
-    const seen = new Set();
-    for (const item of Array.isArray(items) ? items : []) {
-        const url = getSafeSearchUrl(item?.href || item?.url);
-        if (url && !seen.has(url)) {
-            seen.add(url);
-            links.push({ url });
-        }
-    }
-    return links;
-}
-
-function getLegacySearchMetadata(toolName, output, failed) {
-    if (!['web_search', 'search_news', 'duckduckgo_search', 'duckduckgo_news'].includes(toolName)
-        || (!Array.isArray(output) && typeof output !== 'string')) return null;
-    const links = failed ? [] : normalizeSearchLinks(output);
-    return { kind: 'web_search_tool_output', preview_type: 'link_list',
-        state: failed ? 'failed' : links.length ? 'ready' : Array.isArray(output) && !output.length ? 'empty' : 'unavailable',
-        inline: { links } };
-}
-
-function buildSearchPreviewMarkup(metadata) {
-    const links = normalizeSearchLinks(metadata.inline?.links);
-    if (!links.length || metadata.state === 'failed') {
-        const message = metadata.state === 'failed' ? 'Search failed.'
-            : metadata.state === 'empty' ? 'No results found.' : 'Search results unavailable.';
-        return `<div class="tool-preview-card tool-preview-search" role="status">${message}</div>`;
-    }
-    const rows = links.map(({ url }, index) => {
-        const parsed = new URL(url);
-        const iconUrl = `https://${parsed.hostname.includes(':') ? `[${parsed.hostname.replace(/[\[\]]/g, '')}]` : parsed.hostname}/favicon.ico`;
-        const safeUrl = escapeToolPreviewHtml(url);
-        return `<li${index >= 5 ? ' hidden' : ''}><a href="${safeUrl}" title="${safeUrl}" target="_blank" rel="noopener noreferrer">
-            <span class="tool-search-icon" aria-hidden="true"><i class="fas fa-globe"></i><img data-icon-url="${escapeToolPreviewHtml(iconUrl)}" width="16" height="16" alt="" referrerpolicy="no-referrer" decoding="async"></span>
-            <span class="tool-search-url">${safeUrl}</span></a></li>`;
-    }).join('');
-    return `<div class="tool-preview-card tool-preview-search"><ul>${rows}</ul>${links.length > 5
-        ? `<button type="button" class="tool-search-show-all" data-search-show-all>Show all ${links.length} links</button>` : ''}</div>`;
-}
-
-function getComputerToolMetadata(tool, toolName = tool?.tool_name) {
+function getComputerToolMetadata(tool) {
     const toolOutput = parseMaybeJson(tool?.tool_output);
     const directMetadata = parseMaybeJson(tool?.metadata);
     console.log('[ToolPreview] Extract tool metadata', {
@@ -937,13 +859,12 @@ function getComputerToolMetadata(tool, toolName = tool?.tool_name) {
         toolOutputKeys: toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput) : null,
         hasDirectMetadata: !!directMetadata
     });
-    const metadata = toolOutput?.metadata || directMetadata || getLegacySearchMetadata(toolName, toolOutput, tool?.tool_call_error);
+    const metadata = toolOutput?.metadata || directMetadata;
     const metadataKind = metadata?.kind || null;
     const isSupportedKind = metadataKind === 'computer_tool_output'
         || metadataKind === 'google_sheets_tool_output'
         || metadataKind === 'presentation_tool_output'
-        || metadataKind === 'generated_image_tool_output'
-        || metadataKind === 'web_search_tool_output';
+        || metadataKind === 'generated_image_tool_output';
     if (!metadata || !isSupportedKind) {
         console.log('[ToolPreview] No usable metadata found', {
             metadataKind: metadata?.kind || null,
@@ -1307,8 +1228,6 @@ async function resolveGeneratedImagePreviewUrl(metadata) {
 async function buildToolPreviewMarkup(metadata) {
     if (!metadata) return '';
 
-    if (metadata.kind === 'web_search_tool_output') return buildSearchPreviewMarkup(metadata);
-
     const inline = metadata.inline || {};
     const previewType = metadata.preview_type || 'none';
     console.log('[ToolPreview] Build preview markup', {
@@ -1482,7 +1401,6 @@ async function hydrateComputerToolPreviews(root) {
             placeholder.innerHTML = '<div class="tool-preview-card tool-preview-image-fallback">Preview unavailable.</div>';
         }
         placeholder.dataset.hydrated = 'true';
-        if (metadata.kind === 'web_search_tool_output') bindSearchPreview(placeholder);
     }
 }
 
@@ -2461,7 +2379,7 @@ function setupIpcListeners() {
                 }
             }
 
-            const metadata = getComputerToolMetadata(tool, name);
+            const metadata = getComputerToolMetadata(tool);
             if (logEntry && metadata) {
                 await attachComputerToolPreview(logEntry, metadata);
                 if (metadata.kind === 'computer_tool_output') {
@@ -3450,7 +3368,7 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
                 <span class="delegation-frame-status">${entry.status}</span></div>
                 <div class="delegation-frame-caption">${escapeReasoningHtml(entry.content)}</div></div>`;
         }
-        const tool = { ...entry.tool, tool_name: entry.name, tool_output: entry.tool.tool_output ?? entry.tool.result };
+        const tool = { ...entry.tool, tool_output: entry.tool.tool_output ?? entry.tool.result };
         const metadata = entry.metadata || getComputerToolMetadata(tool);
         const preview = metadata ? renderToolPreviewPlaceholder(metadata) : '';
         const name = escapeReasoningHtml(entry.name.replace(/_/g, ' '));
