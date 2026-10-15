@@ -49,7 +49,6 @@ def _default_cors_origins():
         "ionic://localhost",
         "https://api.aetheriaai.website",
         "https://api.aetheriaai.online",
-        "https://aetheria-ai-website.vercel.app",
         "https://aetheriaai.website",
         "https://www.aetheriaai.website",
     }
