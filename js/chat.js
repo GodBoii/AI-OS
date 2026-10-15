@@ -410,13 +410,37 @@ function loadSearchPreviewIcons(root) {
     });
 }
 
-function bindSearchPreview(preview) {
+function bindSearchPreview(preview, metadata) {
+    const entry = preview.closest('.tool-log-entry');
+    const header = entry?.querySelector('.tool-log-header');
+    if (header) {
+        entry.classList.add('tool-log-search');
+        const label = header.querySelector('.tool-log-action');
+        if (label) label.textContent = metadata.state === 'failed' ? 'Search failed' : 'Searched the web';
+        header.querySelector('.tool-log-icon')?.remove();
+        if (!header.querySelector('.tool-search-mark')) {
+            header.insertAdjacentHTML('afterbegin', `<span class="tool-search-mark" aria-hidden="true">${searchPreviewIcon('search')}</span>`);
+        }
+        const count = preview.querySelectorAll('.tool-search-url').length;
+        const oldCount = header.querySelector('.tool-search-count');
+        if (oldCount) oldCount.remove();
+        if (count) header.insertAdjacentHTML('beforeend', `<span class="tool-search-count">${count} ${count === 1 ? 'link' : 'links'}</span>`);
+        header.querySelector('.tool-log-chevron')?.remove();
+        header.insertAdjacentHTML('beforeend', `<span class="tool-log-chevron" aria-hidden="true">${searchPreviewIcon('chevron')}</span>`);
+        const panel = entry.querySelector('.tool-log-preview-container');
+        if (panel) {
+            panel.id ||= `search-preview-${crypto.randomUUID()}`;
+            header.setAttribute('aria-controls', panel.id);
+        }
+    }
     const more = preview.querySelector('[data-search-show-all]');
     if (more) more.addEventListener('click', () => {
-        preview.querySelectorAll('.tool-preview-search li[hidden]').forEach(row => { row.hidden = false; });
-        more.remove();
-        loadSearchPreviewIcons(preview);
-    }, { once: true });
+        const expanded = more.getAttribute('aria-expanded') !== 'true';
+        preview.querySelectorAll('.tool-preview-search li').forEach((row, index) => { row.hidden = !expanded && index >= 5; });
+        more.setAttribute('aria-expanded', String(expanded));
+        more.querySelector('span').textContent = expanded ? 'Show fewer' : `Show all ${more.dataset.searchShowAll} links`;
+        if (expanded) loadSearchPreviewIcons(preview);
+    });
     if (preview.closest('.preview-expanded')) loadSearchPreviewIcons(preview);
 }
 
@@ -908,6 +932,16 @@ function getLegacySearchMetadata(toolName, output, failed) {
         inline: { links } };
 }
 
+function searchPreviewIcon(name) {
+    const paths = {
+        search: '<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/>',
+        chevron: '<path d="m4 6 4 4 4-4"/>',
+        arrow: '<path d="M4 12 12 4M5 4h7v7"/>',
+        globe: '<circle cx="8" cy="8" r="5.5"/><ellipse cx="8" cy="8" rx="2.5" ry="5.5"/><path d="M2.5 8h11"/>',
+    };
+    return `<svg class="tool-search-svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[name] || paths.globe}</svg>`;
+}
+
 function buildSearchPreviewMarkup(metadata) {
     const links = normalizeSearchLinks(metadata.inline?.links);
     if (!links.length || metadata.state === 'failed') {
@@ -918,13 +952,15 @@ function buildSearchPreviewMarkup(metadata) {
     const rows = links.map(({ url }, index) => {
         const iconUrl = new URL('/favicon.ico', url);
         iconUrl.protocol = 'https:';
+        const parsed = new URL(url);
         const safeUrl = escapeToolPreviewHtml(url);
-        return `<li${index >= 5 ? ' hidden' : ''}><a href="${safeUrl}" title="${safeUrl}" target="_blank" rel="noopener noreferrer">
-            <span class="tool-search-icon" aria-hidden="true"><i class="fas fa-globe"></i><img data-icon-url="${escapeToolPreviewHtml(iconUrl.href)}" width="16" height="16" alt="" referrerpolicy="no-referrer" decoding="async"></span>
-            <span class="tool-search-url">${safeUrl}</span></a></li>`;
+        return `<li style="--source-order:${Math.min(index, 4)}"${index >= 5 ? ' hidden' : ''}><a href="${safeUrl}" title="${safeUrl}" target="_blank" rel="noopener noreferrer">
+            <span class="tool-search-icon" aria-hidden="true">${searchPreviewIcon('globe')}<img data-icon-url="${escapeToolPreviewHtml(iconUrl.href)}" width="16" height="16" alt="" referrerpolicy="no-referrer" decoding="async"></span>
+            <span class="tool-search-url"><span class="tool-search-scheme">${parsed.protocol}//</span><span class="tool-search-host">${escapeToolPreviewHtml(parsed.host)}</span><span class="tool-search-path">${escapeToolPreviewHtml(parsed.pathname + parsed.search + parsed.hash)}</span></span>
+            <span class="tool-search-outward" aria-hidden="true">${searchPreviewIcon('arrow')}</span></a></li>`;
     }).join('');
     return `<div class="tool-preview-card tool-preview-search"><ul>${rows}</ul>${links.length > 5
-        ? `<button type="button" class="tool-search-show-all" data-search-show-all>Show all ${links.length} links</button>` : ''}</div>`;
+        ? `<button type="button" class="tool-search-show-all" data-search-show-all="${links.length}" aria-expanded="false"><span>Show all ${links.length} links</span>${searchPreviewIcon('chevron')}</button>` : ''}</div>`;
 }
 
 function getComputerToolMetadata(tool, toolName = tool?.tool_name) {
@@ -1482,7 +1518,7 @@ async function hydrateComputerToolPreviews(root) {
             placeholder.innerHTML = '<div class="tool-preview-card tool-preview-image-fallback">Preview unavailable.</div>';
         }
         placeholder.dataset.hydrated = 'true';
-        if (metadata.kind === 'web_search_tool_output') bindSearchPreview(placeholder);
+        if (metadata.kind === 'web_search_tool_output') bindSearchPreview(placeholder, metadata);
     }
 }
 
