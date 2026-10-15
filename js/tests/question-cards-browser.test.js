@@ -54,7 +54,9 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
                     {label:'Tech & coding',description:'Software projects and web apps'},
                     {label:'Content & media',description:'Presentations, images, and video'},
                     {label:'Research & learning',description:'Web research and exploring new topics'}]}]};
-            window.mount=(overrides={})=>{const chat=document.getElementById('chat');window.cards.releaseContainer(chat);chat.replaceChildren();
+            window.mount=(overrides={})=>{const chat=document.getElementById('chat');window.cards.releaseContainer(chat);
+                chat.innerHTML='<div class="thinking-indicator steps-done"><div role="button" tabindex="0" class="reasoning-summary" aria-expanded="false"><span class="summary-text">Reasoning</span></div></div><div class="detailed-logs"><div class="tool-log-entry" data-tool-name="ask_user" data-tool-call-id="ask-1" data-owner="Assistant"></div></div><div class="message-content">Your response stays here.</div>';
+                chat.querySelector('.reasoning-summary').addEventListener('click',()=>chat.classList.toggle('expanded'));
                 window.cards.mount({...window.request,...overrides},chat)};
             window.mount();</script>`);
     });
@@ -64,12 +66,18 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
         browser = await puppeteer.launch({ executablePath, headless: true });
         const page = await browser.newPage();
         const errors = [];
+        fs.mkdirSync(path.join(root, '.ui-check'), { recursive: true });
         page.on('pageerror', error => errors.push(error.message));
+        await page.setViewport({ width: 1280, height: 850 });
         await page.goto(`http://127.0.0.1:${server.address().port}`);
         await page.waitForSelector('.agent-question-card');
         await page.waitForFunction(() => [...document.styleSheets].some(sheet => sheet.href?.endsWith('question-cards.css')));
 
         await t.test('keyboard choices, back navigation, multi-select, safe retry, and summary', async () => {
+            assert.equal(await page.$eval('.agent-question-card', node => !!node.closest('.detailed-logs')), true);
+            assert.equal(await page.$$eval('.tool-log-entry', nodes => nodes.length), 1);
+            assert.equal(await page.$eval('.agent-question-tool', node => node.dataset.toolCallId), 'ask-1');
+            assert.equal(await page.$$eval('.agent-question-tool button', nodes => nodes.every(node => !node.textContent.trim() && node.querySelector('svg') && node.getAttribute('aria-label'))), true);
             assert.equal(await page.$$eval('fieldset:not([hidden])', nodes => nodes.length), 1);
             assert.equal(await page.$eval('.agent-question-reply', node => node.hidden), true);
             await page.click('.agent-question-submit');
@@ -99,6 +107,10 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
                 three: { selected: ['Tech & coding', 'Research & learning'], text: '' } });
             assert.equal(result.sameId, true);
             assert.equal(await page.$eval('.agent-question-actions', node => node.hidden), true);
+            assert.equal(await page.$eval('.agent-question-tool', node => node.dataset.open), 'false');
+            assert.equal(await page.$eval('.t-acc-panel', node => node.inert), true);
+            await page.click('.agent-question-toggle');
+            assert.equal(await page.$eval('.agent-question-toggle', node => node.getAttribute('aria-expanded')), 'true');
             assert.match(await page.$eval('.agent-question-summary', node => node.textContent), /Mira/);
             await page.evaluate(() => window.cards.update({ requestId: 'request', status: 'answered' }));
             assert.match(await page.$eval('.agent-question-summary', node => node.textContent), /Mira/);
@@ -109,8 +121,11 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
         await t.test('custom replies replace selections, escaped summaries, and missing previous answers', async () => {
             await page.evaluate(() => window.mount());
             await page.click('input[value="Student"]');
-            await page.click('fieldset:not([hidden]) .agent-question-custom');
+            await page.click('.agent-question-custom');
             await page.type('fieldset:not([hidden]) textarea', 'Independent <img src=x onerror=alert(1)>');
+            assert.ok(await page.$eval('fieldset:not([hidden]) textarea', node => node.getBoundingClientRect().height) <= 60);
+            assert.equal(await page.$eval('fieldset:not([hidden]) textarea', node => getComputedStyle(node).boxShadow), 'none');
+            await page.screenshot({ path: path.join(root, '.ui-check/question-custom-reply.png') });
             assert.equal(await page.$eval('input[value="Student"]', node => node.checked), false);
             await page.click('.agent-question-submit');
             await page.type('fieldset:not([hidden]) textarea', 'Mira');
@@ -185,6 +200,7 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
                         document.body.classList.toggle('dark-mode', dark);
                         window.mount();
                     }, dark);
+                    await page.mouse.move(0, 0);
                     await page.evaluate(async () => {
                         await Promise.all(document.getAnimations()
                             .filter(animation => animation.effect.getComputedTiming().iterations !== Infinity)
@@ -193,6 +209,7 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
                     const layout = await page.evaluate(() => {
                         const card = document.querySelector('.agent-question-card').getBoundingClientRect();
                         const button = getComputedStyle(document.querySelector('.agent-question-submit'));
+                        const buttonIcon = getComputedStyle(document.querySelector('.agent-question-submit path'));
                         const canvas = document.createElement('canvas');
                         canvas.width = canvas.height = 1;
                         const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -213,13 +230,13 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
                         const title = getComputedStyle(document.querySelector('fieldset legend'));
                         return { overflow: document.documentElement.scrollWidth > innerWidth,
                             width: card.width, height: card.height,
-                            buttonContrast: ratio(button.color, button.backgroundColor),
+                            buttonContrast: ratio(buttonIcon.color, button.backgroundColor),
                             titleContrast: ratio(title.color, cardStyle.backgroundColor),
                             ink: title.color, surface: cardStyle.backgroundColor };
                     });
                     await page.screenshot({ path: path.join(root, `.ui-check/question-deck-${dark ? 'dark' : 'light'}-${width}.png`) });
                     if (dark && width === 1280) {
-                        const card = await page.$('.agent-question-card');
+                        const card = await page.$('.agent-question-tool');
                         await card.screenshot({ path: path.join(root, '.ui-check/question-deck-preview.png') });
                     }
                     assert.equal(layout.overflow, false);
@@ -237,6 +254,7 @@ test('compact question deck browser flows', { skip: !executablePath }, async t =
             await page.evaluate(() => window.mount({ status: 'answered', answers: { one: { selected: ['Student'], text: '' },
                 two: 'Mira', three: { selected: ['Tech & coding'], text: '' } } }));
             assert.equal(await page.$eval('.agent-question-body', node => node.hidden), true);
+            assert.equal(await page.$eval('.agent-question-tool', node => node.dataset.open), 'false');
             assert.match(await page.$eval('.agent-question-summary', node => node.textContent), /Student/);
             await page.screenshot({ path: path.join(root, '.ui-check/question-deck-summary.png') });
         });
