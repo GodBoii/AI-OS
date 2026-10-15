@@ -3,8 +3,12 @@
         <div id="conversation-title-bar" class="conversation-title-bar hidden">
             <span id="conversation-title-text" class="conversation-title-text"></span>
         </div>
-        <div class="chat-messages" id="chat-messages">
+        <div class="chat-messages" id="chat-messages" tabindex="-1" aria-label="Conversation">
         </div>
+        <button id="chat-jump-latest" class="chat-jump-latest" type="button" hidden
+            aria-label="Jump to latest" title="Jump to latest">
+            <i class="fas fa-arrow-down" aria-hidden="true"></i>
+        </button>
         <div id="project-main-file-preview" class="project-main-file-preview hidden">
             <div class="project-main-file-preview-header">
                 <div id="project-main-file-preview-title" class="project-main-file-preview-title">File Preview</div>
