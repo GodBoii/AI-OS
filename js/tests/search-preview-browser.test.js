@@ -65,7 +65,7 @@ test('search links work live, in history and after recovery without fetching col
         let currentConversationId='chat', handleToolActivity;
         const ongoingStreams={message:{conversationId:'chat'}};
         const seenActivityEvents=new WeakMap();
-        const questionCards={mount(){}};
+        const questionCards={mount(){},reattach(){}};
         const artifactHandler=null;
         const messageFormatter={format:value=>escapeToolPreviewHtml(value),finishStreamingForAllOwners(){}};
         function getStreamMessageDiv(){return document.querySelector('[data-stream-message-id="message"]')}
