@@ -10,7 +10,7 @@ services:
     plan: free
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS
-    branch: master
+    branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # ===================================================================
@@ -31,7 +31,7 @@ services:
     plan: free
     runtime: docker
     repo: https://github.com/GodBoii/AI-OS
-    branch: master
+    branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # ===================================================================
