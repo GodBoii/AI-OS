@@ -50,6 +50,7 @@ test('create_image displays tool results, socket media, saved previews, and down
         const base = `http://127.0.0.1:${server.address().port}`;
         await page.goto(base);
         await page.waitForFunction(() => Boolean(window.viewer));
+        await page.evaluate(async () => { window.activityInvocationId = (await import('/js/chat-activity.js')).activityInvocationId; });
         const source = fs.readFileSync(path.join(root, 'js/chat.js'), 'utf8');
         const helpers = excerpt(source, 'function escapeToolPreviewHtml(', 'function encodeToolMetadata(')
             + excerpt(source, 'function encodeToolMetadata(', 'function formatToolPreviewValue(')
@@ -58,6 +59,12 @@ test('create_image displays tool results, socket media, saved previews, and down
         const agentEvent = excerpt(source, "    ipcRenderer.on('agent-step'", "    ipcRenderer.on('reasoning-step'");
         await page.addScriptTag({ content: `
             const artifactHandler = window.viewer;
+            let handleToolActivity;
+            const seenActivityEvents = new WeakMap();
+            ${excerpt(source, 'function acceptActivityEvent(', 'function scrollActiveConversationToBottom(')}
+            ${excerpt(source, 'function bindToolPreviewToggle(', 'function updateConversationStateForActiveThread(')}
+            function escapeReasoningHtml(text) { return String(text).replace(/[&<>"']/g, value => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[value])); }
+            function autoScrollIfSticky() {}
             window.activeConversation = 'conversation';
             window.invalidations = [];
             function getStreamMessageDiv() { return document.getElementById('message'); }
