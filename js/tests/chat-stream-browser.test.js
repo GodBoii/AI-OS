@@ -33,9 +33,10 @@ test('native histories retain intermediate text, repeated tools and delegated or
         { type: 'delegation_end', delegation_id: 'child', success: true },
         { channel: 'response', agent_name: 'AI', content: 'Final answer.', reasoning_content: 'Already emitted', reasoning_emitted: true },
     ], 'AI');
-    assert.deepEqual(timeline.entries.map(entry => entry.kind), ['message', 'tool', 'reasoning', 'delegation', 'tool', 'reasoning']);
+    assert.deepEqual(timeline.entries.map(entry => entry.kind), ['tool', 'reasoning', 'delegation', 'tool', 'reasoning']);
     assert.deepEqual(timeline.entries.filter(entry => entry.kind === 'tool').map(entry => entry.tool.result), ['first', 'second']);
-    assert.equal(timeline.entries[3].status, 'completed');
+    assert.equal(timeline.entries[2].status, 'completed');
+    assert.deepEqual(timeline.responses, ['Checking now.']);
     assert.equal(timeline.response, 'Final answer.');
     assert.deepEqual(buildActivityTimeline(null).entries, []);
     const separate = buildActivityTimeline(['first', 'second'].flatMap(delegation => [
@@ -44,6 +45,12 @@ test('native histories retain intermediate text, repeated tools and delegated or
     ]));
     assert.equal(separate.entries.length, 2);
     assert.notEqual(separate.entries[0].id, separate.entries[1].id);
+    const legacy = buildActivityTimeline([
+        {channel:'response',agent_name:'AI',is_log:true,content:'Main output with an old log flag.'},
+        {channel:'response',agent_name:'Computer',is_log:true,delegation_id:'child',content:'Delegated detail.'},
+    ], 'AI');
+    assert.equal(legacy.response,'Main output with an old log flag.');
+    assert.equal(legacy.entries[0].content,'Delegated detail.');
 });
 
 test('ordered tool history and scroll following preserve the reader position', { skip: !executablePath }, async t => {
@@ -91,7 +98,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         + excerpt(source, 'function bindToolPreviewToggle(', 'function updateConversationStateForActiveThread(')
         + excerpt(source, 'function findComputerToolLogEntry(', 'async function persistComputerToolAttachment(')
         + excerpt(source, 'function updateReasoningSummary(', 'function createBotMessagePlaceholder(')
-        + excerpt(source, 'function archiveIntermediateResponse(', '/**\n * Adds copy buttons')
+        + excerpt(source, 'function startMainResponseSegment(', '/**\n * Adds copy buttons')
         + excerpt(source, 'function addCopyButtonsToCodeBlocks(', '/**\n * Renders a complete assistant turn')
         + excerpt(source, 'function renderTurnFromEvents(', '/**\n * Extracts conversation history');
     await page.addScriptTag({ content: `
@@ -128,7 +135,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         ${excerpt(source, "    ipcRenderer.on('computer-tool-result-preview'", "    ipcRenderer.send('check-socket-connection'")}
         window.reason=appendReasoningContent;
         window.populate=populateBotMessage;
-        window.archive=archiveIntermediateResponse;
+        window.startSegment=startMainResponseSegment;
         window.renderSaved=renderTurnFromEvents;
         bindReasoningSummary(document.querySelector('.reasoning-summary'),getStreamMessageDiv('message'));
     ` });
@@ -144,21 +151,40 @@ test('ordered tool history and scroll following preserve the reader position', {
         await window['agent-step'](event('tool_end','two'));
         reason('message',{content:'After third screenshot. ',delta:true});
         populate({id:'message',content:'Intermediate **response**.',agent_name:'Aetheria_AI'});
-        archive(getStreamMessageDiv('message'));
+        startSegment(getStreamMessageDiv('message'));
         await window['agent-step']({...event('tool_start','four'),event_id:'unique-start'});
         await window['agent-step']({...event('tool_start','four'),event_id:'unique-start'});
         populate({id:'message',content:'Final **answer**.',agent_name:'Aetheria_AI'});
         const logs=document.querySelector('.detailed-logs');
         return {order:[...logs.children].map(node=>node.classList.contains('reasoning-thought-block')?'thinking':node.classList.contains('tool-log-entry')?'tool':'message'),
             tools:logs.querySelectorAll('.tool-log-entry').length,previews:[...logs.querySelectorAll('[data-output-id]')].map(node=>node.dataset.outputId),
+            mainInLogs:logs.textContent.includes('Intermediate response'),
             final:document.querySelector('.message-content').textContent,summary:document.querySelector('.summary-text').textContent};
     });
-    assert.deepEqual(timeline.order,['thinking','tool','thinking','tool','tool','thinking','message','tool']);
+    assert.deepEqual(timeline.order,['thinking','tool','thinking','tool','tool','thinking','tool']);
     assert.equal(timeline.tools,4);
     assert.deepEqual(timeline.previews,['screen-one','screen-two','screen-three']);
-    assert.match(timeline.final,/Final answer/);
+    assert.match(timeline.final,/Intermediate response[\s\S]*Final answer/);
+    assert.equal(timeline.mainInLogs,false);
     assert.match(timeline.summary,/4 tools/);
     await page.click('.reasoning-summary');
+    assert.equal(await page.$eval('.message-content',node=>node.getBoundingClientRect().height>0 && node.textContent.includes('Intermediate response')),true);
+    await page.screenshot({path:path.join(os.tmpdir(),'aetheria-main-responses-outside.png')});
+    const copied = await page.evaluate(async () => {
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedResponse=text;}}});
+        Object.defineProperty(navigator,'share',{configurable:true,value:undefined});
+        const utilities=await import('/js/ui-utilities.js');
+        utilities.addMessageActionButtons(getStreamMessageDiv('message'));
+        document.querySelector('.copy-btn').click();
+        await Promise.resolve();
+        const copy=window.copiedResponse;
+        window.copiedResponse='';
+        document.querySelector('.share-btn').click();
+        await Promise.resolve();
+        return {copy,share:window.copiedResponse};
+    });
+    assert.match(copied.copy,/Intermediate response[\s\S]*Final answer/);
+    assert.equal(copied.share,copied.copy);
     await page.evaluate(()=>reason('message',{content:'Reader collapsed the dropdown.',delta:true}));
     assert.equal(await page.$eval('#message',node=>node.classList.contains('expanded')),false);
     await page.click('.reasoning-summary');
@@ -215,7 +241,8 @@ test('ordered tool history and scroll following preserve the reader position', {
     await page.click('#chat-jump-latest');
     await page.waitForFunction(()=>document.getElementById('chat-jump-latest').hidden);
     const replay=await page.evaluate(()=>{
-        const events=[{channel:'reasoning_step',step:'First',agent_name:'AI',sequence:1,event_id:'1'},
+        const events=[{channel:'response',agent_name:'Aetheria_AI',content:'Main output before tools.',sequence:0,event_id:'main-first'},
+            {channel:'reasoning_step',step:'First',agent_name:'AI',sequence:1,event_id:'1'},
             {channel:'agent_step',type:'tool_start',name:'screenshot',tool_call_id:'a',sequence:2,event_id:'2'},
             {channel:'reasoning_step',step:'Second',agent_name:'AI',sequence:3,event_id:'3'},
             {channel:'agent_step',type:'tool_end',name:'screenshot',tool_call_id:'a',tool:{tool_output:{metadata:{output_id:'first-image'}}},sequence:4,event_id:'4'},
@@ -223,10 +250,13 @@ test('ordered tool history and scroll following preserve the reader position', {
             {channel:'agent_step',type:'tool_end',name:'screenshot',tool_call_id:'b',tool:{tool_output:{metadata:{output_id:'second-image'}}},sequence:6,event_id:'6'}];
         const host=document.createElement('div');
         renderSaved(host,{metadata:{activity_events:[...events,events[1]]},content:'Saved final answer'});
-        return {order:[...host.querySelector('.detailed-logs').children].map(n=>n.className),previews:[...host.querySelectorAll('.saved-preview')].map(n=>n.textContent)};
+        return {order:[...host.querySelector('.detailed-logs').children].map(n=>n.className),previews:[...host.querySelectorAll('.saved-preview')].map(n=>n.textContent),
+            main:host.querySelector('.message-content').textContent,logs:host.querySelector('.detailed-logs').textContent};
     });
     assert.deepEqual(replay.order,['reasoning-thought-block','tool-log-entry has-preview','reasoning-thought-block','tool-log-entry has-preview']);
     assert.deepEqual(replay.previews,['first-image','second-image']);
+    assert.match(replay.main,/Main output before tools[\s\S]*Saved final answer/);
+    assert.equal(replay.logs.includes('Main output before tools'),false);
     const completion=await page.evaluate(async()=>{
         await window['chat-response']({id:'message',done:true,event_id:'done'});
         const node=getStreamMessageDiv('message');
@@ -246,6 +276,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         const answers=document.createElement('form');answers.className='agent-question-card';answers.textContent='Your saved answers';
         getStreamMessageDiv('message').appendChild(answers);
         window['run-catchup']({messageId:'message',conversationId:'chat',content:'Recovered final',events:[
+            {channel:'response',agent_name:'Aetheria_AI',content:'Recovered main output',event_id:'replay-0'},
             {channel:'reasoning_step',step:'Before',event_id:'replay-1'},
             {channel:'agent_step',type:'tool_start',name:'screenshot',tool_call_id:'r1',event_id:'replay-2'},
             {channel:'agent_step',type:'tool_end',name:'screenshot',tool_call_id:'r1',tool:{tool_output:{metadata:{output_id:'recovered-image'}}},event_id:'replay-3'}]});
@@ -253,7 +284,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         node.querySelector('.reasoning-summary').click();
         return {final:node.querySelector('.message-content').textContent,preview:node.querySelector('.saved-preview').textContent,expanded:node.classList.contains('expanded'),answers:node.querySelector('.agent-question-card')===answers};
     });
-    assert.match(catchup.final,/Recovered final/);
+    assert.match(catchup.final,/Recovered main output[\s\S]*Recovered final/);
     assert.equal(catchup.preview,'recovered-image');
     assert.equal(catchup.expanded,false);
     assert.equal(catchup.answers,true);
