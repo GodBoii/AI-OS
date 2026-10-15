@@ -11,8 +11,8 @@ export function buildActivityTimeline(events = [], primaryOwner = 'Aetheria_AI')
     const delegations = new Map();
     const seen = new Set();
     const pending = [];
+    const responses = [];
     let response = '';
-    let responseOwner = primaryOwner;
     let legacyId = 0;
     const ordered = (Array.isArray(events) ? events : []).filter(event => event && typeof event === 'object');
     if (ordered.length && ordered.every(event => Number.isFinite(event.sequence))) {
@@ -36,10 +36,12 @@ export function buildActivityTimeline(events = [], primaryOwner = 'Aetheria_AI')
         const tool = event.tool || {};
         const name = event.name || tool.tool_name || 'Unknown Tool';
         const owner = event.agent_name || event.team_name || 'Assistant';
+        const delegatedResponse = Boolean(event.delegation_id)
+            || Boolean((event.is_log || event.event) && owner !== primaryOwner);
         const start = kind === 'tool_start' || ['ToolCallStarted', 'TeamToolCallStarted'].includes(event.event);
         const end = kind === 'tool_end' || ['ToolCallCompleted', 'TeamToolCallCompleted'].includes(event.event);
         if (channel === 'assistant_response_reset') {
-            appendText('message', response, { ...event, agent_name: responseOwner });
+            if (response) responses.push(response);
             response = '';
         } else if (kind === 'delegation_start' || kind === 'delegation_end') {
             let entry = delegations.get(event.delegation_id);
@@ -52,7 +54,7 @@ export function buildActivityTimeline(events = [], primaryOwner = 'Aetheria_AI')
             if (kind === 'delegation_end') entry.status = event.success === false ? 'failed' : 'completed';
         } else if (start || end) {
             if (start && response) {
-                appendText('message', response, { agent_name: responseOwner });
+                responses.push(response);
                 response = '';
             }
             let id = activityInvocationId(event);
@@ -84,16 +86,15 @@ export function buildActivityTimeline(events = [], primaryOwner = 'Aetheria_AI')
             appendText('reasoning', event.step || event.reasoning_content || event.content_for_reasoning
                 || event.reasoning_step || '', event);
             if (event.content && ['response', 'RunContent', 'TeamRunContent'].includes(channel)) {
-                if (event.is_log || (event.event && owner !== primaryOwner)) appendText('message', event.content, event);
-                else { response += event.content; responseOwner = owner; }
+                if (delegatedResponse) appendText('message', event.content, event);
+                else response += event.content;
             }
         } else if (channel === 'response' || channel === 'plan_response' || ['RunContent', 'TeamRunContent'].includes(event.event)) {
-            if (event.is_log) appendText('message', event.content, event);
-            else if (event.event && owner !== primaryOwner) appendText('message', event.content, event);
-            else { response += event.content || ''; responseOwner = owner; }
+            if (delegatedResponse) appendText('message', event.content, event);
+            else response += event.content || '';
         } else if (event.event === 'RunCompleted' && owner !== primaryOwner) {
             appendText('message', event.content, event);
         }
     }
-    return { entries, response };
+    return { entries, response, responses };
 }
