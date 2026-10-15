@@ -89,6 +89,7 @@ test('ordered tool history and scroll following preserve the reader position', {
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.evaluate(async () => {
         window.ChatScrollController = (await import('/js/chat-scroll-controller.js')).ChatScrollController;
+        window.QuestionCards = (await import('/js/question-cards.js')).QuestionCards;
         Object.assign(window, await import('/js/chat-activity.js'));
         window.formatter = (await import('/js/message-formatter.js')).messageFormatter;
     });
@@ -117,7 +118,7 @@ test('ordered tool history and scroll following preserve the reader position', {
         function isProjectWorkspaceMode(){return false}
         function isConversationActive(){return true}
         function mountThinkingOrbs(){} function destroyThinkingOrbs(){} function addMessageActionButtons(){}
-        const questionCards={mount(){}};
+        const questionCards=window.questionCards=new QuestionCards({submit:async()=>{},cancel:async()=>{}});
         function getComputerToolMetadata(tool){return tool?.tool_output?.metadata || null}
         function renderToolPreviewPlaceholder(metadata){return '<span class="saved-preview">'+metadata.output_id+'</span>'}
         function hydrateComputerToolPreviews(){}
@@ -273,8 +274,9 @@ test('ordered tool history and scroll following preserve the reader position', {
     });
     assert.deepEqual(latePreview,['late-first-image','screen-two','screen-three']);
     const catchup=await page.evaluate(()=>{
-        const answers=document.createElement('form');answers.className='agent-question-card';answers.textContent='Your saved answers';
-        getStreamMessageDiv('message').appendChild(answers);
+        questionCards.mount({requestId:'saved-question',runId:'message',status:'answered',
+            questions:[{id:'saved',kind:'text',question:'Project name?',options:[]}],answers:{saved:'Workbench'}},getStreamMessageDiv('message'));
+        const answers=getStreamMessageDiv('message').querySelector('.agent-question-card');
         window['run-catchup']({messageId:'message',conversationId:'chat',content:'Recovered final',events:[
             {channel:'response',agent_name:'Aetheria_AI',content:'Recovered main output',event_id:'replay-0'},
             {channel:'reasoning_step',step:'Before',event_id:'replay-1'},
@@ -282,12 +284,15 @@ test('ordered tool history and scroll following preserve the reader position', {
             {channel:'agent_step',type:'tool_end',name:'screenshot',tool_call_id:'r1',tool:{tool_output:{metadata:{output_id:'recovered-image'}}},event_id:'replay-3'}]});
         const node=getStreamMessageDiv('message');
         node.querySelector('.reasoning-summary').click();
-        return {final:node.querySelector('.message-content').textContent,preview:node.querySelector('.saved-preview').textContent,expanded:node.classList.contains('expanded'),answers:node.querySelector('.agent-question-card')===answers};
+        return {final:node.querySelector('.message-content').textContent,preview:node.querySelector('.saved-preview').textContent,expanded:node.classList.contains('expanded'),answers:node.querySelector('.agent-question-card')===answers,
+            nested:!!node.querySelector('.detailed-logs .agent-question-card'),closed:node.querySelector('.agent-question-tool').dataset.open};
     });
     assert.match(catchup.final,/Recovered main output[\s\S]*Recovered final/);
     assert.equal(catchup.preview,'recovered-image');
     assert.equal(catchup.expanded,false);
     assert.equal(catchup.answers,true);
+    assert.equal(catchup.nested,true);
+    assert.equal(catchup.closed,'false');
     const switched=await page.evaluate(async()=>{
         const root=document.getElementById('chat-messages'),first=document.querySelector('.conversation-thread');
         first.classList.remove('hidden');
@@ -307,5 +312,41 @@ test('ordered tool history and scroll following preserve the reader position', {
     assert.equal(switched.unchanged,true);
     assert.equal(switched.restored,'paused');
     assert.equal(switched.id,'recovered');
+    const questionHistory=await page.evaluate(()=>{
+        const host=document.createElement('div');
+        document.body.appendChild(host);
+        const request={requestId:'history-question',runId:'history-run',status:'answered',
+            questions:[{id:'history',kind:'text',question:'Project name?',options:[]}],answers:{history:'Workbench'}};
+        const events=[{type:'tool_start',name:'get_user_input',tool_call_id:'history-ask'},
+            {type:'tool_end',name:'get_user_input',tool_call_id:'history-ask'}];
+        renderSaved(host,{run_id:'history-run',content:'Final response.',events},{inputRequests:[request]});
+        const message=host.querySelector('.message-bot');
+        const result={nested:!!message.querySelector('.detailed-logs .agent-question-card'),
+            tools:message.querySelectorAll('.tool-log-entry').length,
+            closed:message.querySelector('.agent-question-tool').dataset.open,
+            final:message.querySelector('.message-content').textContent.trim(),
+            outside:message.querySelectorAll(':scope > .agent-question-card').length};
+        questionCards.releaseContainer(host);
+        renderSaved(host,{run_id:'history-run',events:[]},{inputRequests:[{...request,status:'pending'}]});
+        result.noEventsHeader=!!host.querySelector('.reasoning-summary');
+        result.pendingOpen=host.querySelector('.message-bot').classList.contains('expanded');
+        questionCards.releaseContainer(host);
+        host.remove();
+        return result;
+    });
+    assert.deepEqual(questionHistory,{nested:true,tools:1,closed:'false',final:'Final response.',outside:0,noEventsHeader:true,pendingOpen:true});
+    const pendingRecovery=await page.evaluate(()=>{
+        const message=getStreamMessageDiv('message');
+        questionCards.mount({requestId:'draft-question',status:'pending',questions:[{id:'draft',kind:'text',question:'Your goal?',options:[]}]},message);
+        const input=message.querySelector('[data-request-id="draft-question"] textarea');
+        input.value='Keep this unsent draft';
+        input.dispatchEvent(new Event('input'));
+        window['run-catchup']({messageId:'message',conversationId:'chat',events:[{channel:'response',agent_name:'Aetheria_AI',content:'Recovered turn'}]});
+        const restored=getStreamMessageDiv('message');
+        const draft=restored.querySelector('[data-request-id="draft-question"] textarea');
+        return {same:draft===input,value:draft.value,nested:!!draft.closest('.detailed-logs'),
+            header:!!restored.querySelector('.reasoning-summary'),open:draft.closest('.agent-question-tool').dataset.open};
+    });
+    assert.deepEqual(pendingRecovery,{same:true,value:'Keep this unsent draft',nested:true,header:true,open:'true'});
     assert.deepEqual(errors,[]);
 });
