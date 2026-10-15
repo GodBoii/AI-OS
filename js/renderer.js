@@ -823,9 +823,10 @@ class UIManager {
         });
         ipcRenderer.on('window-state-changed', (isMaximized) => this.state.setState({ isWindowMaximized: isMaximized }));
         document.addEventListener('click', (event) => {
-            if (event.target.tagName === 'A' && event.target.href && event.target.href.startsWith('http')) {
+            const link = event.target?.closest?.('a[href]');
+            if (link && /^https?:$/.test(link.protocol)) {
                 event.preventDefault();
-                ipcRenderer.send('open-webview', event.target.href);
+                ipcRenderer.send('open-webview', link.href);
             }
         });
 
