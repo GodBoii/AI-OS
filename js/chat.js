@@ -1918,6 +1918,7 @@ function setupIpcListeners() {
         const message = getStreamMessageDiv(request.id);
         if (message) {
             questionCards.mount(request, message);
+            updateReasoningSummary(request.id);
             setThinkingOrbsPaused(message, true);
         }
         autoScrollIfSticky(request.conversationId);
@@ -1957,14 +1958,15 @@ function setupIpcListeners() {
             const positions = [...message.querySelectorAll('.detailed-logs, .reasoning-thought-content')].map(node => node.scrollTop);
             const wrapper = document.createElement('div');
             renderTurnFromEvents(wrapper, { run_id: data.messageId, content: data.content, metadata: { activity_events: data.events } },
-                { conversationId: data.conversationId, inlineArtifacts: isProjectWorkspaceMode() });
+                { conversationId: data.conversationId, inlineArtifacts: isProjectWorkspaceMode(),
+                    hasQuestionTools: !!message.querySelector('.agent-question-tool') });
             const rendered = wrapper.firstElementChild;
             rendered.dataset.streamMessageId = String(data.messageId);
             rendered.dataset.reasoningInitialized = 'true';
             rendered.classList.toggle('expanded', expanded);
             rendered.querySelector('.reasoning-summary')?.setAttribute('aria-expanded', String(expanded));
             destroyThinkingOrbs(message);
-            for (const card of message.querySelectorAll(':scope > .agent-question-card')) rendered.appendChild(card);
+            questionCards.reattach(message, rendered);
             message.replaceWith(rendered);
             message = rendered;
             rendered.querySelectorAll('.detailed-logs, .reasoning-thought-content').forEach((node, index) => {
@@ -3454,7 +3456,7 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         const metadata = entry.metadata || getComputerToolMetadata(tool);
         const preview = metadata ? renderToolPreviewPlaceholder(metadata) : '';
         const name = escapeReasoningHtml(entry.name.replace(/_/g, ' '));
-        return `<div class="tool-log-entry${preview ? ' has-preview' : ''}" data-owner="${owner}" data-invocation-id="${escapeReasoningHtml(entry.id)}" data-tool-call-id="${escapeReasoningHtml(entry.id)}">
+        return `<div class="tool-log-entry${preview ? ' has-preview' : ''}" data-owner="${owner}" data-tool-name="${escapeReasoningHtml(entry.name)}" data-invocation-id="${escapeReasoningHtml(entry.id)}" data-tool-call-id="${escapeReasoningHtml(entry.id)}">
             <button type="button" class="tool-log-header" aria-expanded="false">
                 <i class="fi fi-tr-wisdom tool-log-icon"></i><span class="tool-log-details"><span class="tool-log-action">Used tool: <strong>${name}</strong></span></span>
                 <span class="tool-log-status ${entry.status}"></span>${preview ? '<i class="fas fa-chevron-down tool-log-chevron"></i>' : ''}
@@ -3465,14 +3467,15 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     const thinkingCount = timeline.entries.filter(entry => entry.kind === 'reasoning').length;
     const agentLogCount = new Set(timeline.entries.map(entry => entry.owner)).size;
     let summaryText = "Aetheria ai's Reasoning";
-    let hasReasoning = toolLogCount > 0 || agentLogCount > 0 || thinkingCount > 0;
+    const inputRequests = (options.inputRequests || []).filter(request => request.runId === run.run_id);
+    const hasReasoning = toolLogCount > 0 || agentLogCount > 0 || thinkingCount > 0 || inputRequests.length > 0 || options.hasQuestionTools === true;
 
     if (hasReasoning) {
         const parts = [];
         if (thinkingCount > 0) parts.push(`${thinkingCount} thought${thinkingCount > 1 ? 's' : ''}`);
         if (agentLogCount > 0) parts.push(`${agentLogCount} agent${agentLogCount > 1 ? 's' : ''}`);
         if (toolLogCount > 0) parts.push(`${toolLogCount} tool${toolLogCount > 1 ? 's' : ''}`);
-        summaryText = `Reasoning involved ${parts.join(' and ')}`;
+        summaryText = parts.length ? `Reasoning involved ${parts.join(' and ')}` : 'Reasoning';
     }
 
     // Only show the reasoning header if there are logs to display.
@@ -3502,8 +3505,8 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     destroyThinkingOrbs(targetContainer);
     targetContainer.innerHTML = finalHtml;
 
-    for (const request of options.inputRequests || []) {
-        if (request.runId === run.run_id) questionCards.mount(request, targetContainer.querySelector('.message-bot'));
+    for (const request of inputRequests) {
+        questionCards.mount(request, targetContainer.querySelector('.message-bot'));
     }
 
     const historicalMessage = targetContainer.querySelector('.message-bot');
