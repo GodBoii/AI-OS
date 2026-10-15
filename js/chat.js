@@ -2,6 +2,8 @@
 
 import { messageFormatter } from './message-formatter.js';
 import { ConversationViewCache } from './conversation-view-cache.js';
+import { ChatScrollController } from './chat-scroll-controller.js';
+import { activityInvocationId, buildActivityTimeline } from './chat-activity.js';
 import { QuestionCards } from './question-cards.js';
 import ContextHandler from './context-handler.js';
 import FileAttachmentHandler from './add-files.js';
@@ -62,6 +64,9 @@ let floatingWindowManager = null;
 let audioInputHandler = null;
 let windowsSpeechInputHandler = null;
 let composerContentObserver = null;
+let chatScroll = null;
+let handleToolActivity = null;
+const seenActivityEvents = new WeakMap();
 let connectionStatus = false;
 let planModeEnabled = false;
 let ultraThinkEnabled = false;
@@ -290,6 +295,7 @@ function getOrCreateConversationThread(conversationId) {
 
     thread = document.createElement('div');
     thread.className = 'conversation-thread';
+    thread.classList.toggle('hidden', conversationId !== currentConversationId);
     thread.dataset.conversationId = conversationId;
     chatMessages.appendChild(thread);
     conversationThreads.set(conversationId, thread);
@@ -306,12 +312,13 @@ function getStreamEntry(messageId) {
 
 function getStreamMessageDiv(messageId) {
     const entry = getStreamEntry(messageId);
-    return entry?.element || entry || null;
+    return entry?.element || entry || getChatMessagesRoot()?.querySelector(
+        `[data-stream-message-id="${CSS.escape(String(messageId))}"]`) || null;
 }
 
 function getStreamConversationId(messageId) {
     const entry = getStreamEntry(messageId);
-    return entry?.conversationId || null;
+    return entry?.conversationId || getStreamMessageDiv(messageId)?.closest('.conversation-thread')?.dataset.conversationId || null;
 }
 
 function hasActiveRunForConversation(conversationId) {
@@ -331,51 +338,62 @@ function threadHasMessages(conversationId) {
     return Boolean(thread?.querySelector('.message'));
 }
 
-// --- Sticky Scroll System (like ChatGPT/Claude) ---
-// When user scrolls up manually, stop auto-scrolling.
-// When user sends a new message, re-enable auto-scrolling.
-let userHasScrolledUp = false;
-let lastAutoScrollTime = 0;
-const AUTO_SCROLL_THROTTLE_MS = 80;
+function acceptActivityEvent(message, data) {
+    if (!data.event_id) return true;
+    let seen = seenActivityEvents.get(message);
+    if (!seen) { seen = new Set(); seenActivityEvents.set(message, seen); }
+    if (seen.has(data.event_id)) return false;
+    seen.add(data.event_id);
+    return true;
+}
+
+function getToolActivityIdentity(container, data) {
+    const callId = activityInvocationId(data);
+    if (callId) return `step-${encodeURIComponent(data.id)}-${encodeURIComponent(callId)}`;
+    // Compatibility for old servers: pair a completion with an unfinished invocation.
+    if (data.type === 'tool_end') {
+        const entry = [...container.querySelectorAll('.tool-log-entry')].find(node =>
+            node.dataset.toolName === String(data.name || '') &&
+            node.dataset.owner === (data.agent_name || data.team_name || 'Assistant') &&
+            node.querySelector('.tool-log-status.in-progress'));
+        if (entry) return entry.id.slice('log-entry-'.length);
+    }
+    return `step-${encodeURIComponent(data.id)}-${crypto.randomUUID()}`;
+}
 
 function scrollActiveConversationToBottom() {
-    const chatMessages = getChatMessagesRoot();
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        userHasScrolledUp = false;
+    const thread = getActiveConversationThread();
+    if (chatScroll && thread) {
+        if (chatScroll.id !== currentConversationId) chatScroll.activate(currentConversationId, thread);
+        chatScroll.resume();
     }
 }
 
-/** Scroll during streaming — only if user hasn't scrolled up */
-function autoScrollIfSticky() {
-    if (userHasScrolledUp) return;
-    const now = Date.now();
-    if (now - lastAutoScrollTime < AUTO_SCROLL_THROTTLE_MS) return;
-    lastAutoScrollTime = now;
-    const chatMessages = getChatMessagesRoot();
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+function autoScrollIfSticky(conversationId = currentConversationId) {
+    chatScroll?.schedule(conversationId);
 }
 
-/** Detect when user scrolls up manually */
 function setupScrollDetection() {
-    const chatMessages = getChatMessagesRoot();
-    if (!chatMessages) return;
-    chatMessages.addEventListener('scroll', () => {
-        // If we're near the bottom (within 150px), consider it "at bottom"
-        const distanceFromBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
-        if (distanceFromBottom > 150) {
-            userHasScrolledUp = true;
-        } else {
-            userHasScrolledUp = false;
-        }
-    }, { passive: true });
+    const root = getChatMessagesRoot();
+    if (!root || chatScroll) return;
+    chatScroll = new ChatScrollController(root, document.getElementById('chat-jump-latest'),
+        document.getElementById('floating-input-container'));
+    if (currentConversationId) chatScroll.activate(currentConversationId, getActiveConversationThread());
 }
 
-/** Re-engage auto-scroll when user sends a new message */
-function resetScrollState() {
-    userHasScrolledUp = false;
+function resetScrollState() { chatScroll?.resume(); }
+
+function bindToolPreviewToggle(header) {
+    if (!header || header.dataset.previewBound) return;
+    header.dataset.previewBound = 'true';
+    const toggle = event => {
+        event.stopPropagation();
+        const entry = header.closest('.tool-log-entry');
+        if (!entry?.classList.contains('has-preview')) return;
+        const expanded = entry.classList.toggle('preview-expanded');
+        header.setAttribute('aria-expanded', String(expanded));
+    };
+    header.addEventListener('click', toggle);
 }
 
 function updateConversationStateForActiveThread() {
@@ -529,6 +547,7 @@ function setBackgroundConversationStatus(conversationId, status) {
 }
 
 function destroyConversationState(conversationId) {
+    chatScroll?.forget(conversationId);
     removeBackgroundConversation(conversationId);
 
     const thread = getConversationThread(conversationId);
@@ -559,6 +578,7 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
     if (!previousConversationId || !nextConversationId || previousConversationId === nextConversationId) {
         return;
     }
+    chatScroll?.reassign(previousConversationId, nextConversationId);
 
     const existingThread = getConversationThread(previousConversationId);
     if (existingThread) {
@@ -622,6 +642,7 @@ async function switchConversation(conversationId) {
         }
     }
 
+    chatScroll?.capture();
     setCurrentConversationId(conversationId);
     const primaryRoute = conversationPrimaryRoutes.get(conversationId) || null;
     ultraThinkEnabled = primaryRoute === 'ultra';
@@ -644,7 +665,7 @@ async function switchConversation(conversationId) {
         welcomeDisplay.updateDisplay();
     }
     checkAndShowContentButton();
-    scrollActiveConversationToBottom();
+    chatScroll?.activate(conversationId, nextThread);
     void conversationViews.prune(conversationId);
 }
 
@@ -663,11 +684,10 @@ function hydrateConversationControls(thread) {
         message.querySelectorAll('.message-actions').forEach(actions => actions.remove());
         addMessageActionButtons(message);
     });
-    thread.querySelectorAll('.tool-log-header').forEach(header => header.addEventListener('click', event => {
-        event.stopPropagation();
-        const entry = header.closest('.tool-log-entry');
-        if (entry?.classList.contains('has-preview')) entry.classList.toggle('preview-expanded');
-    }));
+    thread.querySelectorAll('.tool-log-header').forEach(header => {
+        delete header.dataset.previewBound;
+        bindToolPreviewToggle(header);
+    });
     thread.querySelectorAll('.code-block-wrapper').forEach(wrapper => {
         if (wrapper.querySelector('.inline-artifact-code')) return;
         const pre = wrapper.querySelector('pre');
@@ -1374,6 +1394,7 @@ async function hydrateComputerToolPreviews(root) {
             hasMarkup: !!markup,
             previewType: metadata.preview_type || null
         });
+        if (placeholder.dataset.toolMetadata !== encodeToolMetadata(metadata)) continue;
         placeholder.innerHTML = markup || '';
         placeholder.classList.remove('tool-log-preview-loading');
         if (!markup) {
@@ -1415,6 +1436,7 @@ async function attachComputerToolPreview(logEntry, metadata) {
         }
     }
 
+    if (metadata.output_id) logEntry.dataset.outputId = String(metadata.output_id);
     preview.dataset.toolMetadata = encodeToolMetadata(metadata);
     preview.dataset.hydrated = 'false';
     preview.textContent = 'Loading preview...';
@@ -1509,46 +1531,35 @@ function getDelegationLogContainer(messageDiv, messageId, delegationId = null, d
         return messageDiv.querySelector('.detailed-logs');
     }
 
-    const frame = ensureDelegationFrame(
+    ensureDelegationFrame(
         messageDiv,
         messageId,
         delegationId,
         delegatedAgent || 'coder',
         title
     );
-    return frame?.querySelector('.delegation-frame-stream') || messageDiv.querySelector('.detailed-logs');
+    return messageDiv.querySelector('.detailed-logs');
 }
 
-function findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId = null) {
+function findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId = null, callId = null, outputId = null) {
     if (!messageDiv) return null;
-
-    const normalizedName = String(toolName || '').trim();
-    if (!normalizedName) {
-        if (delegationId) {
-            return messageDiv.querySelector(`.tool-log-entry[data-delegation-id="${String(delegationId)}"]:last-of-type`);
-        }
-        return messageDiv.querySelector('.tool-log-entry:last-of-type');
+    const entries = [...messageDiv.querySelectorAll('.tool-log-entry')];
+    if (callId) {
+        const exact = entries.find(entry => entry.dataset.invocationId === String(callId));
+        if (exact) return exact;
+        const native = entries.filter(entry => entry.dataset.toolCallId === String(callId)
+            && (!delegationId || entry.dataset.delegationId === String(delegationId)));
+        return native.length === 1 ? native[0] : null;
     }
-
-    const entries = Array.from(messageDiv.querySelectorAll('.tool-log-entry')).filter((entry) => {
-        if (!delegationId) return true;
-        return entry.dataset.delegationId === String(delegationId);
-    });
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-        const entry = entries[index];
-        if (entry.dataset.messageId === String(messageId) && entry.dataset.toolName === normalizedName) {
-            return entry;
-        }
+    if (outputId) {
+        const match = entries.find(entry => entry.dataset.outputId === String(outputId));
+        if (match) return match;
     }
-
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-        const entry = entries[index];
-        if (entry.dataset.toolName === normalizedName) {
-            return entry;
-        }
-    }
-
-    return null;
+    const candidates = entries.filter(entry => entry.dataset.toolName === String(toolName || '') &&
+        (!delegationId || entry.dataset.delegationId === String(delegationId)) &&
+        entry.querySelector('.tool-log-status.in-progress'));
+    // A completion also carries its own metadata. Ambiguous early previews wait for that event.
+    return candidates.length === 1 ? candidates[0] : null;
 }
 
 async function persistComputerToolAttachment(metadata, toolName = 'computer_tool', conversationId = null) {
@@ -1827,7 +1838,7 @@ function setupIpcListeners() {
             questionCards.mount(request, message);
             setThinkingOrbsPaused(message, true);
         }
-        autoScrollIfSticky();
+        autoScrollIfSticky(request.conversationId);
     });
     ipcRenderer.on('user-question-ack', acknowledgement => {
         const pending = pendingAnswerSubmissions.get(acknowledgement?.requestId);
@@ -1857,23 +1868,45 @@ function setupIpcListeners() {
     ipcRenderer.on('run-catchup', data => {
         if (!data?.messageId || !data.conversationId) return;
         if (!getStreamMessageDiv(data.messageId)) createBotMessagePlaceholder(data.messageId, data.conversationId);
-        if (data.content) populateBotMessage({ id: data.messageId, content: data.content, agent_name: 'Aetheria_AI' });
-        const message = getStreamMessageDiv(data.messageId);
-        if (message) {
-            setThinkingOrbsPaused(message, true);
-            const indicator = message.querySelector('.thinking-indicator');
-            if (indicator) indicator.classList.add('steps-done');
+        let message = getStreamMessageDiv(data.messageId);
+        if (!message) return;
+        if (Array.isArray(data.events) && data.events.length) {
+            const expanded = message.classList.contains('expanded');
+            const positions = [...message.querySelectorAll('.detailed-logs, .reasoning-thought-content')].map(node => node.scrollTop);
+            const wrapper = document.createElement('div');
+            renderTurnFromEvents(wrapper, { run_id: data.messageId, content: data.content, metadata: { activity_events: data.events } },
+                { conversationId: data.conversationId, inlineArtifacts: isProjectWorkspaceMode() });
+            const rendered = wrapper.firstElementChild;
+            rendered.dataset.streamMessageId = String(data.messageId);
+            rendered.dataset.reasoningInitialized = 'true';
+            rendered.classList.toggle('expanded', expanded);
+            rendered.querySelector('.reasoning-summary')?.setAttribute('aria-expanded', String(expanded));
+            destroyThinkingOrbs(message);
+            for (const card of message.querySelectorAll(':scope > .agent-question-card')) rendered.appendChild(card);
+            message.replaceWith(rendered);
+            message = rendered;
+            rendered.querySelectorAll('.detailed-logs, .reasoning-thought-content').forEach((node, index) => {
+                node.scrollTop = positions[index] || 0;
+            });
+            seenActivityEvents.set(message, new Set(data.events.map(event => event.event_id).filter(Boolean)));
+        } else if (data.content) {
+            const main = message.querySelector('.message-content');
+            if (main) main.innerHTML = messageFormatter.format(data.content, { conversationId: data.conversationId });
+            addMessageActionButtons(message);
         }
+        setThinkingOrbsPaused(message, true);
+        messageFormatter.finishStreamingForAllOwners(data.messageId);
         delete ongoingStreams[data.messageId];
+        autoScrollIfSticky(data.conversationId);
     });
     ipcRenderer.on('assistant-response-reset', data => {
         const message = getStreamMessageDiv(data?.id);
-        const content = message?.querySelector('.message-content');
-        if (content) content.replaceChildren();
-        if (data?.id) messageFormatter.pendingContent.delete(`${data.id}-Aetheria_AI`);
+        if (!message || !acceptActivityEvent(message, data)) return;
+        archiveIntermediateResponse(message);
+        autoScrollIfSticky(getStreamConversationId(data.id));
     });
 
-    ipcRenderer.on('plan-response', (data) => {
+    ipcRenderer.on('plan-response', async (data) => {
         if (!data) return;
         if (pendingPlanRequestId && data.requestId && data.requestId !== pendingPlanRequestId) return;
         if (data.stopped) {
@@ -1890,16 +1923,14 @@ function setupIpcListeners() {
             return;
         }
         const planMessageId = data.messageId || pendingPlanMessageId;
+        const planMessage = getStreamMessageDiv(planMessageId);
+        if (!data.step_type && planMessage && !acceptActivityEvent(planMessage, data)) return;
         if (data.reasoning_content && planMessageId) {
             appendPlanReasoningContent(planMessageId, data.reasoning_content, data.agent_name || 'plan_agent');
         }
         if (data.step_type && planMessageId) {
-            const toolLabel = data.name ? String(data.name).replace(/_/g, ' ') : 'Plan Mode';
-            appendPlanModeToolLog(
-                planMessageId,
-                data.step_type === 'tool_end' ? 'completed' : 'in-progress',
-                toolLabel,
-            );
+            flushPlanReasoningContent(planMessageId);
+            await handleToolActivity({ ...data, id: planMessageId, type: data.step_type });
         }
         if (data.streaming && data.content && planMessageId) {
             appendPlanStreamContent(planMessageId, data.content);
@@ -1965,8 +1996,9 @@ function setupIpcListeners() {
             const { streaming = false, done = false, id: messageId } = data;
             const streamConversationId = getStreamConversationId(messageId);
             const messageDiv = getStreamMessageDiv(messageId);
+            if (messageDiv && !acceptActivityEvent(messageDiv, data)) return;
 
-            if (data.reasoning_content && messageId && messageDiv) {
+            if (data.reasoning_content && !data.reasoning_emitted && messageId && messageDiv) {
                 appendReasoningContent(messageId, {
                     content: data.reasoning_content,
                     agentName: data.agent_name || data.team_name || 'Aetheria_AI',
@@ -1996,8 +2028,8 @@ function setupIpcListeners() {
                         // Update the final summary text
                         const summaryText = reasoningSummary.querySelector('.summary-text');
                         if (summaryText) {
-                            const logCount = messageDiv.querySelectorAll('.log-block').length;
-                            const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+                            const logCount = new Set([...messageDiv.querySelectorAll('[data-owner]')].map(node => node.dataset.owner)).size;
+                            const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry[data-tool-call-id]').length;
                             const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
                             if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
@@ -2018,7 +2050,7 @@ function setupIpcListeners() {
                     const ownerName = block.dataset.owner;
                     const delegationId = block.dataset.delegationId || null;
                     const streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
-                    const streamId = `${messageId}-${streamOwnerKey}`;
+                    const streamId = block.dataset.streamId || `${messageId}-${streamOwnerKey}`;
                     const finalContent = messageFormatter.getFinalContent(streamId);
                     const innerContentDiv = block.querySelector('.inner-content');
                     if (finalContent && innerContentDiv) {
@@ -2055,6 +2087,7 @@ function setupIpcListeners() {
 
                 // Add action buttons (copy, share) to the completed message
                 addMessageActionButtons(messageDiv);
+                autoScrollIfSticky(streamConversationId);
                 void conversationViews.prune(currentConversationId);
 
                 // CORRECTED FLOW: Save attachment metadata AFTER AI response completes successfully
@@ -2153,27 +2186,21 @@ function setupIpcListeners() {
                 const logEntry = document.createElement('div');
                 logEntry.className = 'tool-log-entry';
                 logEntry.innerHTML = `
-                    <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
+                    <button type="button" class="tool-log-header" aria-expanded="false">
                         <i class="fi fi-tr-wisdom tool-log-icon"></i>
                         <div class="tool-log-details" style="flex-grow: 1;">
                             <span class="tool-log-action"><strong>Generated a ${mediaType}</strong></span>
                         </div>
                         <span class="tool-log-status completed"></span>
                         <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); color: var(--text-secondary);"></i>
-                    </div>
+                    </button>
                     <div class="tool-log-preview-container"><div class="tool-log-preview-inner" style="width: 100%;"></div></div>
                 `;
                 logsContainer.appendChild(logEntry);
 
                 // Add click event for accordion (if a preview ever gets attached)
                 const header = logEntry.querySelector('.tool-log-header');
-                header.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const container = logEntry.querySelector('.tool-log-preview-container');
-                    if (container && logEntry.classList.contains('has-preview')) {
-                        logEntry.classList.toggle('preview-expanded');
-                    }
-                });
+                bindToolPreviewToggle(header);
 
                 updateReasoningSummary(messageId);
             }
@@ -2227,7 +2254,7 @@ function setupIpcListeners() {
         }
     });
 
-    ipcRenderer.on('agent-step', async (data) => {
+    ipcRenderer.on('agent-step', handleToolActivity = async (data) => {
         const {
             id: messageId,
             type,
@@ -2243,7 +2270,7 @@ function setupIpcListeners() {
         } = data;
         const messageDiv = getStreamMessageDiv(messageId);
         const streamConversationId = getStreamConversationId(messageId);
-        if (!messageId || !messageDiv) return;
+        if (!messageId || !messageDiv || !acceptActivityEvent(messageDiv, data)) return;
 
         const delegatedAgent = delegationId ? normalizeDelegatedAgent(delegatedAgentRaw) : null;
         console.log('[ComputerToolPreview] agent-step received', {
@@ -2285,12 +2312,6 @@ function setupIpcListeners() {
 
         const toolName = name ? name.replace(/_/g, ' ') : 'Unknown Tool';
         const ownerName = agent_name || team_name || 'Assistant';
-        const ownerKey = String(ownerName).replace(/[^a-zA-Z0-9_-]/g, '_');
-        const stepSuffix = delegationId
-            ? `${messageId}-${delegationId}-${ownerKey}-${name || 'tool'}`
-            : `${messageId}-${ownerKey}-${name || 'tool'}`;
-        const stepId = `step-${stepSuffix}`;
-
         const logsContainer = getDelegationLogContainer(
             messageDiv,
             messageId,
@@ -2299,62 +2320,61 @@ function setupIpcListeners() {
             delegationTask || `${ownerName} delegated run`,
         );
         if (!logsContainer) return;
+        const stepId = getToolActivityIdentity(logsContainer, data);
         const logEntryId = `log-entry-${stepId}`;
-        let logEntry = logsContainer.querySelector(`#${logEntryId}`);
+        let logEntry = logsContainer.querySelector(`#${CSS.escape(logEntryId)}`);
 
-        if (type === 'tool_start') {
+        if (type === 'tool_start' || (type === 'tool_end' && !logEntry)) {
             if (!logEntry) {
                 logEntry = document.createElement('div');
                 logEntry.id = logEntryId;
                 logEntry.className = 'tool-log-entry';
                 logEntry.dataset.messageId = String(messageId);
                 logEntry.dataset.toolName = String(name || '');
+                logEntry.dataset.toolCallId = String(data.tool_call_id || tool?.tool_call_id || stepId);
+                logEntry.dataset.invocationId = activityInvocationId(data) || stepId;
+                logEntry.dataset.owner = ownerName;
                 if (delegationId) {
                     logEntry.dataset.delegationId = String(delegationId);
                     logEntry.dataset.delegatedAgent = delegatedAgent || '';
                 }
                 logEntry.innerHTML = `
-                    <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px; cursor: pointer;">
+                    <button type="button" class="tool-log-header" aria-expanded="false">
                         <i class="fi fi-tr-wisdom tool-log-icon"></i>
                         <div class="tool-log-details" style="flex-grow: 1;">
-                            <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
+                            <span class="tool-log-action">Used tool: <strong>${escapeReasoningHtml(toolName)}</strong></span>
                         </div>
                         <span class="tool-log-status in-progress"></span>
                         <i class="fas fa-chevron-down tool-log-chevron" style="display: none; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); color: var(--text-secondary);"></i>
-                    </div>
+                    </button>
                     <div class="tool-log-preview-container"><div class="tool-log-preview-inner" style="width: 100%;"></div></div>
                 `;
                 logsContainer.appendChild(logEntry);
 
                 // Add click event for accordion
                 const header = logEntry.querySelector('.tool-log-header');
-                header.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const container = logEntry.querySelector('.tool-log-preview-container');
-                    if (container && logEntry.classList.contains('has-preview')) {
-                        logEntry.classList.toggle('preview-expanded');
-                    }
-                });
+                bindToolPreviewToggle(header);
 
                 // OPTION B: Update the summary live when a tool starts
                 updateReasoningSummary(messageId);
             }
-        } else if (type === 'tool_end') {
+        }
+        if (type === 'tool_end') {
             const output = parseMaybeJson(tool?.tool_output);
-            const imageFailed = ['create_image', 'generate_image'].includes(name) && output?.ok === false;
+            const imageFailed = Boolean(tool?.tool_call_error || output?.ok === false || output?.status === 'error');
             if (logEntry) {
                 const statusEl = logEntry.querySelector('.tool-log-status');
                 if (statusEl) {
                     statusEl.textContent = '';
                     statusEl.classList.remove('in-progress');
                     statusEl.classList.add(imageFailed ? 'failed' : 'completed');
-                    if (imageFailed) statusEl.title = 'Image generation failed';
+                    if (imageFailed) statusEl.title = output?.error || 'Tool call failed';
                 }
                 if (imageFailed) {
                     const errorMessage = document.createElement('div');
                     errorMessage.className = 'tool-preview-caption';
                     errorMessage.setAttribute('role', 'status');
-                    errorMessage.textContent = output.error || 'Image generation failed.';
+                    errorMessage.textContent = output?.error || 'Tool call failed.';
                     logEntry.querySelector('.tool-log-details')?.appendChild(errorMessage);
                 }
             }
@@ -2432,13 +2452,11 @@ function setupIpcListeners() {
             updateReasoningSummary(messageId);
         }
 
-        if (delegationId) {
-            return;
-        }
-
+        autoScrollIfSticky(streamConversationId);
+        if (delegationId) return;
         const liveStepsContainer = messageDiv.querySelector('.thinking-steps-container');
         if (!liveStepsContainer) return;
-        let liveStepDiv = liveStepsContainer.querySelector(`#${stepId}`);
+        let liveStepDiv = liveStepsContainer.querySelector(`#${CSS.escape(stepId)}`);
 
         if (type === 'tool_start') {
             if (name === 'execute_in_sandbox') {
@@ -2464,10 +2482,12 @@ function setupIpcListeners() {
 
     ipcRenderer.on('reasoning-step', (data) => {
         const messageId = data?.id;
-        if (!messageId) return;
+        const message = getStreamMessageDiv(messageId);
+        if (!messageId || !message || !acceptActivityEvent(message, data)) return;
 
         appendReasoningContent(messageId, {
             content: data.step || data.content || data.reasoning_content || '',
+            delta: Boolean(data.event_id),
             agentName: data.agent_name || data.team_name || 'Aetheria_AI',
             delegationId: data.delegation_id || null,
             delegatedAgent: data.delegated_agent || null,
@@ -2495,7 +2515,7 @@ function setupIpcListeners() {
         if (!logsContainer) return;
 
         if (logEntryId) {
-            const existing = logsContainer.querySelector(`#${logEntryId}`);
+            const existing = logsContainer.querySelector(`#${CSS.escape(logEntryId)}`);
             if (existing) {
                 existing.outerHTML = html;
             } else {
@@ -2863,7 +2883,7 @@ function setupIpcListeners() {
                 );
             }
 
-            const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId);
+            const logEntry = findComputerToolLogEntry(messageDiv, messageId, toolName, delegationId, data.invocation_id || data.tool_call_id, metadata.output_id);
             if (!logEntry) {
                 console.log('[ComputerToolPreview] Preview event could not find matching log entry', {
                     messageId,
@@ -2955,8 +2975,8 @@ function updateReasoningSummary(messageId) {
     if (!summaryText) return;
 
     // Count agents and tools from the detailed logs
-    const logCount = messageDiv.querySelectorAll('.log-block').length;
-    const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry').length;
+    const logCount = new Set([...messageDiv.querySelectorAll('[data-owner]')].map(node => node.dataset.owner)).size;
+    const toolLogCount = messageDiv.querySelectorAll('.tool-log-entry[data-tool-call-id]').length;
     const thinkingCount = messageDiv.querySelectorAll('.reasoning-thought-block').length;
 
     if (logCount === 0 && toolLogCount === 0 && thinkingCount === 0) {
@@ -2973,8 +2993,10 @@ function updateReasoningSummary(messageId) {
     if (logCount > 0 || toolLogCount > 0 || thinkingCount > 0) {
         reasoningSummary.classList.remove('hidden');
         // Auto-expand the dropdown during execution so user can see live updates
-        if (!messageDiv.classList.contains('expanded')) {
+        if (!messageDiv.dataset.reasoningInitialized) {
             messageDiv.classList.add('expanded');
+            messageDiv.dataset.reasoningInitialized = 'true';
+            reasoningSummary.setAttribute('aria-expanded', 'true');
         }
     }
 }
@@ -2985,7 +3007,9 @@ function bindReasoningSummary(reasoningSummary, messageDiv) {
 
     const toggle = () => {
         const expanded = messageDiv.classList.toggle('expanded');
+        messageDiv.dataset.reasoningInitialized = 'true';
         reasoningSummary.setAttribute('aria-expanded', String(expanded));
+        autoScrollIfSticky(messageDiv.closest('.conversation-thread')?.dataset.conversationId);
     };
 
     reasoningSummary.addEventListener('click', toggle);
@@ -3034,15 +3058,16 @@ function appendReasoningContent(messageId, options = {}) {
     );
     if (!logsContainer) return;
 
-    const ownerKey = String(delegationId ? `${agentName}-${delegationId}` : agentName)
-        .replace(/[^a-zA-Z0-9_-]/g, '_');
-    const blockId = `reasoning-thought-${messageId}-${ownerKey}`;
-    let block = logsContainer.querySelector(`#${blockId}`);
+    const ownerKey = `${agentName}:${delegationId || ''}`;
+    let block = logsContainer.lastElementChild;
+    if (!block?.classList.contains('reasoning-thought-block') || block.dataset.reasoningOwner !== ownerKey) block = null;
     if (!block && !hasVisibleText) return;
 
     if (!block) {
         block = document.createElement('div');
-        block.id = blockId;
+        block.dataset.reasoningOwner = ownerKey;
+        block.dataset.owner = agentName;
+        if (delegationId) block.dataset.delegationId = String(delegationId);
         block.className = 'reasoning-thought-block';
         block.dataset.rawReasoning = '';
         block.innerHTML = `
@@ -3057,7 +3082,9 @@ function appendReasoningContent(messageId, options = {}) {
 
     const previous = block.dataset.rawReasoning || '';
     let next = rawText;
-    if (previous && rawText.startsWith(previous)) {
+    if (options.delta) {
+        next = previous + rawText;
+    } else if (previous && rawText.startsWith(previous)) {
         next = rawText;
     } else if (previous && previous.endsWith(rawText)) {
         return;
@@ -3074,7 +3101,7 @@ function appendReasoningContent(messageId, options = {}) {
     }
 
     updateReasoningSummary(messageId);
-    autoScrollIfSticky();
+    autoScrollIfSticky(getStreamConversationId(messageId));
 }
 
 function createBotMessagePlaceholder(messageId, conversationId = currentConversationId) {
@@ -3083,6 +3110,7 @@ function createBotMessagePlaceholder(messageId, conversationId = currentConversa
 
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message message-bot';
+    messageDiv.dataset.streamMessageId = String(messageId);
 
     // OPTION B: Create thinking indicator with BOTH live steps AND hidden summary
     const thinkingIndicator = document.createElement('div');
@@ -3124,7 +3152,18 @@ function createBotMessagePlaceholder(messageId, conversationId = currentConversa
     const reasoningSummary = thinkingIndicator.querySelector('.reasoning-summary');
     bindReasoningSummary(reasoningSummary, messageDiv);
 
-    scrollActiveConversationToBottom();
+    autoScrollIfSticky(conversationId);
+}
+
+function archiveIntermediateResponse(message) {
+    const content = message.querySelector('.message-content');
+    const logs = message.querySelector('.detailed-logs');
+    if (!content || !logs) return;
+    for (const block of [...content.children]) {
+        block.classList.add('log-block', 'intermediate-response');
+        logs.appendChild(block);
+    }
+    message.dataset.responseGeneration = String(Number(message.dataset.responseGeneration || 0) + 1);
 }
 
 function populateBotMessage(data) {
@@ -3162,15 +3201,29 @@ function populateBotMessage(data) {
         return;
     }
 
-    const streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
-    const contentBlockId = `content-block-${messageId}-${streamOwnerKey}`;
-    let contentBlock = messageDiv.querySelector(`[id="${CSS.escape(contentBlockId)}"]`);
+    let streamOwnerKey = delegationId ? `${ownerName}-${delegationId}` : ownerName;
+    const generation = Number(messageDiv.dataset.responseGeneration || 0);
+    streamOwnerKey += `-${generation}`;
+    let contentBlockId = `content-block-${messageId}-${streamOwnerKey}`;
+    let contentBlock = targetContainer.querySelector(`[id="${CSS.escape(contentBlockId)}"]`);
+    if (is_log) {
+        const previous = targetContainer.lastElementChild;
+        contentBlock = previous?.classList.contains('log-block') && previous.dataset.owner === ownerName
+            && (previous.dataset.delegationId || '') === String(delegationId || '') ? previous : null;
+        if (contentBlock) streamOwnerKey = contentBlock.dataset.streamId.slice(String(messageId).length + 1);
+        else {
+            messageDiv.dataset.logSegment = String(Number(messageDiv.dataset.logSegment || 0) + 1);
+            streamOwnerKey += `-log-${messageDiv.dataset.logSegment}`;
+            contentBlockId = `content-block-${messageId}-${streamOwnerKey}`;
+        }
+    }
 
     if (!contentBlock) {
         contentBlock = document.createElement('div');
         contentBlock.id = contentBlockId;
         contentBlock.className = is_log ? 'content-block log-block' : 'content-block';
         contentBlock.dataset.owner = ownerName;
+        contentBlock.dataset.streamId = `${messageId}-${streamOwnerKey}`;
         if (delegationId) {
             contentBlock.dataset.delegationId = String(delegationId);
         }
@@ -3216,7 +3269,7 @@ function populateBotMessage(data) {
     }
 
     // Auto-scroll during streaming (like ChatGPT/Claude)
-    autoScrollIfSticky();
+    autoScrollIfSticky(getStreamConversationId(messageId));
 }
 
 /**
@@ -3289,91 +3342,48 @@ function addCopyButtonsToCodeBlocks(container) {
  * @param {Object} run - The complete 'run' object from the saved session.
  */
 function renderTurnFromEvents(targetContainer, run, options = {}) {
-    if (!targetContainer || !run) {
+    if (!targetContainer) return;
+    if (!run) {
         targetContainer.innerHTML = '<div class="message-text">(Could not render turn)</div>';
         return;
     }
 
-    const events = run.events || [];
-    const mainAgentName = 'Aetheria_AI';
+    const events = run.metadata?.activity_events || run.events || [];
     const inlineArtifacts = options.inlineArtifacts === true;
-
-    // --- AGGREGATION PHASE: Loop through events once to gather all data ---
-    let toolLogsHtml = '';
-    let subAgentBlocksHtml = '';
-    // The final, synthesized content is on the top-level run object.
-    const finalContent = run.content || '';
-
-    // Aggregate reasoning content by owner key to avoid showing each token as a separate block
-    const reasoningByOwner = new Map();
-
-    // Process events to build the reasoning/log section
-    events.forEach(event => {
-        const owner = event.agent_name || event.team_name;
-        const eventType = event.type || event.event;
-        const reasoningText = normalizeReasoningText(event.reasoning_content || event.step || event.content_for_reasoning || '');
-
-        if (reasoningText && (eventType === 'reasoning_step' || event.reasoning_content)) {
-            const ownerKey = getReasoningOwnerLabel(owner || mainAgentName, event.delegated_agent || null);
-            const existing = reasoningByOwner.get(ownerKey) || '';
-            reasoningByOwner.set(ownerKey, existing + reasoningText);
+    const timeline = buildActivityTimeline(events, run.agent_name || run.team_name || 'Aetheria_AI');
+    const finalContent = timeline.response || run.content || '';
+    const formatOptions = { inlineArtifacts, conversationId: options.conversationId || currentConversationId };
+    const toolLogsHtml = timeline.entries.map((entry, index) => {
+        const owner = escapeReasoningHtml(entry.owner);
+        if (entry.kind === 'reasoning') {
+            return `<div class="reasoning-thought-block" data-owner="${owner}">
+                <div class="reasoning-thought-header"><i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i><span>Deep reasoning</span></div>
+                <div class="reasoning-thought-content">${escapeReasoningHtml(normalizeReasoningText(entry.content))}</div>
+            </div>`;
         }
-
-        if (!owner) return;
-
-        // Aggregate tool call events into pre-rendered HTML
-        const isCompletedToolEvent =
-            event.event === 'TeamToolCallCompleted' ||
-            event.event === 'ToolCallCompleted' ||
-            (event.type === 'agent_step' && event.step_type === 'tool_end');
-
-        if (isCompletedToolEvent) {
-            const toolPayload = event.tool || null;
-            const toolName = (toolPayload?.tool_name || event.name || 'Unknown Tool').replace(/_/g, ' ');
-            const metadata = getComputerToolMetadata(toolPayload);
-            const previewHtml = metadata ? renderToolPreviewPlaceholder(metadata) : '';
-            toolLogsHtml += `
-                <div class="tool-log-entry">
-                    <i class="fi fi-tr-wisdom tool-log-icon"></i>
-                    <div class="tool-log-details">
-                        <span class="tool-log-action">Used tool: <strong>${toolName}</strong></span>
-                    </div>
-                    ${previewHtml}
-                    <span class="tool-log-status completed"></span>
-                </div>`;
+        if (entry.kind === 'message') {
+            return `<div class="content-block log-block" data-owner="${owner}"><div class="inner-content">${messageFormatter.format(entry.content, { ...formatOptions, artifactScope: `${run.run_id || 'replay'}-activity-${index}` })}</div></div>`;
         }
-
-        // Aggregate content from sub-agent runs
-        if (event.event === 'RunCompleted' && owner !== mainAgentName) {
-            if (event.content) {
-                const formattedContent = messageFormatter.format(event.content, { inlineArtifacts });
-                subAgentBlocksHtml += `
-                    <div class="content-block log-block">
-                        <div class="inner-content">${formattedContent}</div>
-                    </div>`;
-            }
+        if (entry.kind === 'delegation') {
+            return `<div class="delegation-frame delegation-frame-${entry.name === 'computer' ? 'computer' : 'coder'} delegation-state-${entry.status}">
+                <div class="delegation-frame-header"><span class="delegation-frame-label">${escapeReasoningHtml(entry.name)} agent</span>
+                <span class="delegation-frame-status">${entry.status}</span></div>
+                <div class="delegation-frame-caption">${escapeReasoningHtml(entry.content)}</div></div>`;
         }
-    });
-
-    // Render aggregated reasoning blocks (one per owner instead of one per token)
-    reasoningByOwner.forEach((text, ownerKey) => {
-        const title = escapeReasoningHtml(ownerKey);
-        toolLogsHtml = `
-            <div class="reasoning-thought-block">
-                <div class="reasoning-thought-header">
-                    <i class="fi fi-tr-brain-circuit reasoning-thought-icon"></i>
-                    <span>${title}</span>
-                </div>
-                <div class="reasoning-thought-content">${escapeReasoningHtml(text.trim())}</div>
-            </div>` + toolLogsHtml;
-    });
-
-    // --- ASSEMBLY PHASE: Build the final HTML from the aggregated data ---
-
-    // Create the summary text for the collapsible "Reasoning" header
-    const toolLogCount = (toolLogsHtml.match(/tool-log-entry/g) || []).length;
-    const thinkingCount = (toolLogsHtml.match(/reasoning-thought-block/g) || []).length;
-    const agentLogCount = (subAgentBlocksHtml.match(/log-block/g) || []).length;
+        const tool = { ...entry.tool, tool_output: entry.tool.tool_output ?? entry.tool.result };
+        const metadata = entry.metadata || getComputerToolMetadata(tool);
+        const preview = metadata ? renderToolPreviewPlaceholder(metadata) : '';
+        const name = escapeReasoningHtml(entry.name.replace(/_/g, ' '));
+        return `<div class="tool-log-entry${preview ? ' has-preview' : ''}" data-owner="${owner}" data-invocation-id="${escapeReasoningHtml(entry.id)}" data-tool-call-id="${escapeReasoningHtml(entry.id)}">
+            <button type="button" class="tool-log-header" aria-expanded="false">
+                <i class="fi fi-tr-wisdom tool-log-icon"></i><span class="tool-log-details"><span class="tool-log-action">Used tool: <strong>${name}</strong></span></span>
+                <span class="tool-log-status ${entry.status}"></span>${preview ? '<i class="fas fa-chevron-down tool-log-chevron"></i>' : ''}
+            </button><div class="tool-log-preview-container"><div class="tool-log-preview-inner">${preview}</div></div>
+        </div>`;
+    }).join('');
+    const toolLogCount = timeline.entries.filter(entry => entry.kind === 'tool').length;
+    const thinkingCount = timeline.entries.filter(entry => entry.kind === 'reasoning').length;
+    const agentLogCount = new Set(timeline.entries.map(entry => entry.owner)).size;
     let summaryText = "Aetheria ai's Reasoning";
     let hasReasoning = toolLogCount > 0 || agentLogCount > 0 || thinkingCount > 0;
 
@@ -3402,10 +3412,10 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
     const finalHtml = `
         <div class="message message-bot">
             ${reasoningHeaderHtml}
-            <div class="detailed-logs">${toolLogsHtml}${subAgentBlocksHtml}</div>
+            <div class="detailed-logs">${toolLogsHtml}</div>
             <div class="message-content">
                 <div class="content-block">
-                    <div class="inner-content">${messageFormatter.format(finalContent, { inlineArtifacts }) || '(No final response content)'}</div>
+                    <div class="inner-content">${messageFormatter.format(finalContent, { ...formatOptions, artifactScope: `${run.run_id || 'replay'}-final` }) || '(No final response content)'}</div>
                 </div>
             </div>
         </div>
@@ -3436,7 +3446,8 @@ function renderTurnFromEvents(targetContainer, run, options = {}) {
         messageFormatter.applyInlineEnhancements(targetContainer);
     }
 
-    hydrateComputerToolPreviews(targetContainer);
+    targetContainer.querySelectorAll('.tool-log-header').forEach(header => bindToolPreviewToggle(header));
+    void hydrateComputerToolPreviews(targetContainer);
 
     // Add action buttons to historical messages
     const messageDiv = targetContainer.querySelector('.message-bot');
@@ -3771,7 +3782,7 @@ function updatePlanOutputCard(messageId, planText, done = false) {
         });
         addCopyButtonsToCodeBlocks(targetContainer);
     }
-    autoScrollIfSticky();
+    autoScrollIfSticky(getStreamConversationId(messageId));
 }
 
 function renderPlanOutputCard(messageId, planText) {
@@ -3848,6 +3859,7 @@ function flushPlanReasoningContent(messageId) {
     appendReasoningContent(messageId, {
         content: entry.content,
         agentName: entry.agentName || 'plan_agent',
+        delta: true,
     });
 }
 
@@ -3863,16 +3875,16 @@ function appendPlanModeToolLog(messageId, status = 'in-progress', toolLabel = 'P
     );
     if (!logsContainer) return;
     const logEntryId = `plan-mode-tool-${messageId}`;
-    let logEntry = logsContainer.querySelector(`#${logEntryId}`);
+    let logEntry = logsContainer.querySelector(`#${CSS.escape(logEntryId)}`);
     if (!logEntry) {
         logEntry = document.createElement('div');
         logEntry.id = logEntryId;
-        logEntry.className = 'tool-log-entry';
+        logEntry.className = 'plan-run-status';
         logEntry.innerHTML = `
             <div class="tool-log-header" style="display: flex; align-items: center; width: 100%; gap: 12px;">
                 <i class="fi fi-tr-roadmap tool-log-icon"></i>
                 <div class="tool-log-details" style="flex-grow: 1;">
-                    <span class="tool-log-action">Used tool: <strong>${escapeReasoningHtml(toolLabel || 'Plan Mode')}</strong></span>
+                    <span class="tool-log-action"><strong>${escapeReasoningHtml(toolLabel || 'Plan Mode')}</strong></span>
                 </div>
                 <span class="tool-log-status ${status}"></span>
             </div>
@@ -4779,6 +4791,7 @@ function init() {
         sessionContentViewer.invalidateCache();
         audioInputHandler?.destroy();
         composerContentObserver?.disconnect();
+        chatScroll?.dispose();
     });
 
     window.electron.auth.onAuthChange(user => {
@@ -4789,6 +4802,7 @@ function init() {
         conversationSwitchGeneration++;
         for (const id of [...conversationThreads.keys()]) destroyConversationState(id);
         for (const id of [...conversationViews.archived]) {
+            chatScroll?.forget(id);
             removeBackgroundConversation(id);
             artifactHandler.releaseConversation(id);
             releaseConversationPreviewUrls(id);
