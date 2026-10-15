@@ -5,7 +5,7 @@
   "author": "Aetheria ai aetheriaai1@gmail.com",
   "main": "js/main.js",
   "scripts": {
-    "test:chat-stream": "node --test js/tests/chat-stream-browser.test.js js/tests/create-image-browser.test.js",
+    "test:chat-stream": "node --test js/tests/chat-stream-browser.test.js js/tests/create-image-browser.test.js js/tests/search-preview-browser.test.js",
     "test:desktop-memory": "node --test js/tests/desktop-memory.test.js js/tests/desktop-shell-electron.test.js",
     "test:vault": "vitest run convex/vault.test.ts && node --test js/tests/user-file-vault-browser.test.js",
     "prestart": "node js/check-runtime-config.js",
