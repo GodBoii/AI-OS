@@ -98,6 +98,10 @@ test('search links work live, in history and after recovery without fetching col
         await window['agent-step'](end);
     }, links);
     assert.equal(await page.$$eval('.tool-preview-search li:not([hidden])', nodes => nodes.length), 5);
+    assert.equal(await page.$eval('.tool-log-action', node => node.textContent), 'Searched the web');
+    assert.equal(await page.$eval('.tool-search-count', node => node.textContent), '7 links');
+    assert.equal(await page.$eval('.tool-log-header', node => node.getAttribute('aria-controls')),
+        await page.$eval('.tool-log-preview-container', node => node.id));
     assert.equal(await page.$eval('.tool-log-preview-container', node => node.inert), true);
     assert.equal(iconRequests.length, 0);
     await page.evaluate(() => {
@@ -119,10 +123,18 @@ test('search links work live, in history and after recovery without fetching col
     assert.equal(await page.$eval('.tool-log-preview-container', node => node.inert), false);
     await page.click('.tool-preview-search li:first-child .tool-search-icon img');
     assert.deepEqual(await page.evaluate(() => window.opened), ['open-webview', links[0].url]);
-    await page.click('.tool-search-show-all');
+    await page.focus('.tool-search-show-all');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelectorAll('.tool-search-icon.has-favicon').length === 6);
     assert.equal(iconRequests.length, 7);
     assert.equal(await page.$$eval('.tool-preview-search li:not([hidden])', nodes => nodes.length), 7);
+    assert.equal(await page.$eval('.tool-search-show-all', node => node.textContent), 'Show fewer');
+    assert.equal(await page.$eval('.tool-search-show-all', node => document.activeElement === node), true);
+    await page.keyboard.press('Enter');
+    assert.equal(await page.$$eval('.tool-preview-search li:not([hidden])', nodes => nodes.length), 5);
+    assert.equal(await page.$eval('.tool-search-show-all', node => node.getAttribute('aria-expanded')), 'false');
+    await page.keyboard.press('Enter');
+    assert.equal(iconRequests.length, 7);
     await page.click('.tool-log-header');
     await page.click('.tool-log-header');
     assert.equal(iconRequests.length, 7);
@@ -171,13 +183,36 @@ test('search links work live, in history and after recovery without fetching col
     assert.doesNotMatch(await page.$eval('#saved', node => node.textContent), /Hidden history snippet/);
 
     await page.click('[data-stream-message-id="message"] .tool-log-header');
+    // Exercise the production motion after deterministic interaction checks.
+    await page.evaluate(() => {
+        const sheet = [...document.styleSheets].find(sheet => sheet.ownerNode.tagName === 'STYLE');
+        const index = [...sheet.cssRules].findIndex(rule => rule.selectorText === '*');
+        if (index >= 0) sheet.deleteRule(index);
+    });
+    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
+    assert.equal(await page.$eval('.tool-log-search .tool-log-preview-container', node => getComputedStyle(node).transitionDuration), '0.25s, 0.25s');
+    await page.click('[data-stream-message-id="message"] .tool-log-header');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-stream-message-id="message"] .tool-log-preview-container')).gridTemplateRows === '0px');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-stream-message-id="message"] .tool-log-preview-container')).opacity === '1');
+    await page.hover('[data-stream-message-id="message"] .tool-preview-search a');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-stream-message-id="message"] .tool-search-outward')).opacity === '1');
+    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+    assert.equal(await page.$eval('.tool-log-search .tool-log-preview-container', node => getComputedStyle(node).transitionDuration), '0s');
+    assert.equal(await page.$eval('.tool-log-search .tool-preview-search li', node => getComputedStyle(node).animationName), 'none');
+
+    const device = await page.createCDPSession();
     for (const width of [1440, 390]) {
         await page.setViewport({ width, height: 900 });
+        await device.send('Emulation.setTouchEmulationEnabled', { enabled: width === 390, maxTouchPoints: 1 });
+        if (width === 390) assert.equal(await page.$eval('.tool-preview-search a', node => getComputedStyle(node).minHeight), '44px');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        await page.evaluate(() => document.body.classList.toggle('dark-mode'));
-        if (process.env.SEARCH_PREVIEW_SCREENSHOTS) {
-            fs.mkdirSync(process.env.SEARCH_PREVIEW_SCREENSHOTS, { recursive: true });
-            await page.screenshot({ path:path.join(process.env.SEARCH_PREVIEW_SCREENSHOTS, `search-${width}.png`) });
+        for (const dark of [false, true]) {
+            await page.evaluate(dark => document.body.classList.toggle('dark-mode', dark), dark);
+            if (process.env.SEARCH_PREVIEW_SCREENSHOTS) {
+                fs.mkdirSync(process.env.SEARCH_PREVIEW_SCREENSHOTS, { recursive: true });
+                await page.screenshot({ path:path.join(process.env.SEARCH_PREVIEW_SCREENSHOTS, `search-${dark ? 'dark' : 'light'}-${width}.png`) });
+            }
         }
     }
     assert.deepEqual(errors, []);
