@@ -12,7 +12,7 @@ from sqlalchemy import Column, Float, Index, JSON, MetaData, String, Table, inse
 
 from agno_storage import get_engine
 
-QUESTION_TIMEOUT_SECONDS = 24 * 60 * 60
+QUESTION_TIMEOUT_SECONDS = 10 * 60
 QUESTION_INSTRUCTIONS = (
     "Use ask_user for choices and get_user_input for text replies when missing information prevents useful work. "
     "Ask 1-3 concise questions together. Use 2-4 distinct options for choice questions. "
