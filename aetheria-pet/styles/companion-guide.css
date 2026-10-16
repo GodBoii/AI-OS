@@ -1,0 +1,189 @@
+/* Extracted from styles/experience.css. See source-manifest.json. */
+.companion {
+  position: fixed;
+  right: 24px;
+  bottom: 22px;
+  z-index: 40;
+  max-width: calc(100vw - 32px);
+}
+.companion-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 15px 8px 9px;
+  color: #e5ebdf;
+  border: 1px solid #4b5544;
+  background: #1d241a;
+  border-radius: 40px;
+  box-shadow: 0 5px 30px #0008;
+  font-size: 10px;
+  margin-left: auto;
+  min-height: 46px;
+  transition: background 150ms;
+}
+.companion-trigger svg {
+  width: 29px;
+  height: 29px;
+  color: #d5f49d;
+}
+.companion-trigger:hover,
+.companion-trigger.is-open {
+  background: #303b25;
+}
+.companion-panel {
+  background: #151718;
+  border: 1px solid #45494a;
+  border-radius: 10px;
+  width: 342px;
+  max-width: calc(100vw - 32px);
+  padding: 19px;
+  margin-bottom: 12px;
+  box-shadow: 0 12px 70px #0009;
+  animation: guide-open 250ms var(--exp-ease);
+}
+@keyframes guide-open {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+.companion-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  font-size: 12px;
+}
+.companion-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.companion-heading svg:first-child {
+  width: 23px;
+  height: 23px;
+  color: #d5f49d;
+}
+.companion-heading > div {
+  display: flex;
+  gap: 4px;
+}
+.companion-heading button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #b8bcb4;
+}
+.companion-panel > p {
+  font-size: 12px;
+  line-height: 1.9;
+  color: #c1c7bc;
+  margin-block: 17px 20px;
+}
+.companion-actions {
+  display: grid;
+  gap: 6px;
+}
+.companion-actions > :is(a, button) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #383e34;
+  border-radius: 4px;
+  color: #b8c7a8;
+  font-size: 11px;
+  min-height: 43px;
+}
+.companion-actions > button {
+  background: #d5f49d;
+  color: #111;
+  border-color: #d5f49d;
+}
+.companion-actions > :is(a, button):hover {
+  filter: brightness(1.12);
+}
+.companion-footer {
+  display: block;
+  font-size: 8px;
+  color: #878f81;
+  border-top: 1px solid #353a31;
+  padding-top: 12px;
+  margin-top: 17px;
+}
+.companion-tour {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  font-size: 10px;
+  color: #a4b795;
+}
+.companion-tour button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 9px 15px;
+  border: 1px solid #526445;
+  border-radius: 4px;
+}
+.companion-tour button:last-child {
+  background: #d5f49d;
+  color: #111;
+}
+.companion-tour button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.companion-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 290px;
+  max-width: calc(100vw - 32px);
+  background: #20281b;
+  border: 1px solid #48583b;
+  border-radius: 7px;
+  color: #cfdebe;
+  font-size: 11px;
+  padding: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 5px 30px #0006;
+}
+.companion-hint > button:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  line-height: 1.6;
+  min-height: 36px;
+}
+.companion-hint > button:last-child {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  min-height: 36px;
+}
+.guide-speech-error {
+  font-size: 10px;
+  color: #edc998;
+  line-height: 1.6;
+  display: block;
+  margin-bottom: 12px;
+}
+.experience-home .is-guide-target {
+  outline: 1px solid #6e8750;
+  outline-offset: 12px;
+  border-radius: 3px;
+}
+@media (max-width: 700px) {
+  .companion { right: 16px; bottom: 15px; }
+  .companion-panel { max-height: calc(100dvh - 130px); overflow-y: auto; }
+  .companion-trigger { min-height: 45px; padding-right: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .companion * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
