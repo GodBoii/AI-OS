@@ -5,11 +5,12 @@ from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Optional
 
 
-DEEPSEEK_MODEL_ID = "xiaomi/mimo-v2.6-pro"
-GLM_VIDEO_MODEL_ID = "xiaomi/mimo-v2.6-pro"
-DEFAULT_MODEL_ID = DEEPSEEK_MODEL_ID
-ULTRA_MODEL_ID = DEEPSEEK_MODEL_ID
-VIDEO_MODEL_ID = GLM_VIDEO_MODEL_ID
+DEFAULT_MODEL_ID = "xiaomi/mimo-v2.6-pro"
+ULTRA_MODEL_ID = DEFAULT_MODEL_ID
+VIDEO_MODEL_ID = DEFAULT_MODEL_ID
+# Compatibility names for callers that predate the shared multimodal model.
+DEEPSEEK_MODEL_ID = DEFAULT_MODEL_ID
+GLM_VIDEO_MODEL_ID = DEFAULT_MODEL_ID
 
 STANDARD_THINKING_MODE = "standard"
 ULTRA_THINKING_MODE = "ultra"
@@ -71,39 +72,13 @@ def resolve_primary_model(
     """
     Select the active top-level agent model.
 
-    Standard conversations may be promoted by their first special input.
-    The route remains sticky for later turns. Standard and Ultra use DeepSeek,
-    while video conversations use GLM.
+    Every mode accepts the same media through the shared multimodal model.
+    Keep the Ultra preference for existing conversations, but ignore legacy
+    video routes: attaching media no longer locks the conversation's mode.
     """
     normalized_mode = normalize_thinking_mode(thinking_mode)
     normalized_route = normalize_sticky_route(sticky_route)
     has_video = attachments_include_video(files)
 
-    if normalized_mode == ULTRA_THINKING_MODE and has_video:
-        raise ModelRoutingError(
-            "Video attachments are unavailable in Ultra Think mode.",
-            code="ultra_video_not_supported",
-        )
-
-    if normalized_route == ULTRA_ROUTE and has_video:
-        raise ModelRoutingError(
-            "This Ultra Think conversation cannot accept video attachments.",
-            code="conversation_model_locked_to_ultra",
-        )
-
-    if normalized_route == VIDEO_ROUTE:
-        if normalized_mode == ULTRA_THINKING_MODE:
-            raise ModelRoutingError(
-                "This conversation is using video input mode. Start a new conversation to use Ultra Think.",
-                code="conversation_model_locked_to_video",
-            )
-        return PrimaryModelSelection(VIDEO_MODEL_ID, VIDEO_ROUTE, has_video, normalized_mode)
-
-    if normalized_route == ULTRA_ROUTE:
-        return PrimaryModelSelection(ULTRA_MODEL_ID, ULTRA_ROUTE, has_video, normalized_mode)
-
-    if normalized_mode == ULTRA_THINKING_MODE:
-        return PrimaryModelSelection(ULTRA_MODEL_ID, ULTRA_ROUTE, has_video, normalized_mode)
-    if has_video:
-        return PrimaryModelSelection(VIDEO_MODEL_ID, VIDEO_ROUTE, has_video, normalized_mode)
-    return PrimaryModelSelection(DEFAULT_MODEL_ID, None, has_video, normalized_mode)
+    route = ULTRA_ROUTE if normalized_mode == ULTRA_THINKING_MODE or normalized_route == ULTRA_ROUTE else None
+    return PrimaryModelSelection(DEFAULT_MODEL_ID, route, has_video, normalized_mode)
