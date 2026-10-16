@@ -1,0 +1,91 @@
+/* Portable character styles. Import once alongside AetheriaPet. */
+.aetheria-pet {
+  position: relative;
+  display: block;
+  width: 148px;
+  height: 148px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.aetheria-pet:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.aetheria-pet-flight {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(var(--pet-lean, 0deg));
+}
+.aetheria-pet-reaction { position: relative; display: block; width: 100%; height: 100%; }
+.aetheria-pet-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.aetheria-pet-webgl { position: absolute; inset: 0; display: block; opacity: 0; pointer-events: none; }
+.aetheria-pet-webgl canvas { display: block; width: 100%; height: 100%; }
+.aetheria-pet.is-3d .aetheria-pet-webgl { opacity: 1; }
+.aetheria-pet.is-3d .aetheria-pet-art,
+.aetheria-pet.is-3d .aetheria-pet-satellites { visibility: hidden; }
+.aetheria-pet.is-3d .aetheria-pet-flight { transform: none; }
+.aetheria-pet.is-3d .aetheria-pet-reaction { animation: none; }
+.aetheria-pet-body { transform-origin: 50px 50px; animation: aetheria-float 3.6s ease-in-out infinite; }
+.aetheria-pet-eyes { transform-origin: 50px 47px; animation: aetheria-blink 4.7s infinite; }
+.aetheria-pet-orbit { transform-origin: 50px 50px; animation: aetheria-orbit 14s linear infinite; }
+.aetheria-pet-shadow {
+  position: absolute; bottom: 5px; left: 25%; width: 50%; height: 9px;
+  background: radial-gradient(ellipse, #c9f39838, transparent 70%);
+  transform: scaleX(.8); opacity: .7;
+}
+.aetheria-pet-speed { position: absolute; inset: 0; opacity: 0; }
+.aetheria-pet-speed i {
+  position: absolute; top: 15%; width: 2px; height: 25px; background: currentColor;
+  border-radius: 3px; animation: aetheria-streak 450ms linear infinite;
+}
+.aetheria-pet-speed i:nth-child(1) { left: 24%; animation-delay: -100ms; }
+.aetheria-pet-speed i:nth-child(2) { left: 47%; top: -10%; animation-delay: -280ms; }
+.aetheria-pet-speed i:nth-child(3) { right: 20%; animation-delay: -350ms; }
+.aetheria-pet-satellites, .aetheria-pet-heart, .aetheria-pet-zzz { display: none; position: absolute; pointer-events: none; }
+.aetheria-pet-satellites { inset: 0; font-size: 15px; }
+.aetheria-pet-satellites i { position: absolute; font-style: normal; top: 10%; left: 10%; }
+.aetheria-pet-satellites i:nth-child(2) { left: 75%; top: 3%; animation-delay: -500ms; }
+.aetheria-pet-satellites i:nth-child(3) { left: 85%; top: 57%; animation-delay: -1000ms; }
+.aetheria-pet-heart { top: -2%; right: 6%; font: 28px/1 sans-serif; color: #ffc2d9; }
+.aetheria-pet-zzz { top: 0; right: 3%; font: 12px/1.2 monospace; letter-spacing: 3px; color: #b8c8e8; }
+.aetheria-pet[data-emotion="zooming"] .aetheria-pet-speed { opacity: .65; }
+.aetheria-pet[data-emotion="zooming"] .aetheria-pet-body { animation: aetheria-zoom 320ms ease-in-out infinite alternate; }
+.aetheria-pet[data-emotion="excited"] .aetheria-pet-body { animation: aetheria-happy 700ms ease-in-out infinite alternate; }
+.aetheria-pet[data-emotion="bonked"] .aetheria-pet-reaction { animation: aetheria-bonk 650ms both; }
+.aetheria-pet[data-emotion="bonked"] .aetheria-pet-satellites,
+.aetheria-pet[data-emotion="dizzy"] .aetheria-pet-satellites,
+.aetheria-pet[data-emotion="proud"] .aetheria-pet-satellites { display: block; }
+.aetheria-pet[data-emotion="dizzy"] .aetheria-pet-reaction { animation: aetheria-dizzy 800ms ease-in-out infinite; }
+.aetheria-pet-satellites i { animation: aetheria-spark 900ms ease-in-out infinite alternate; }
+.aetheria-pet[data-emotion="love"] .aetheria-pet-heart { display: block; animation: aetheria-heart 1.2s ease-out infinite; }
+.aetheria-pet[data-emotion="sleepy"] .aetheria-pet-zzz { display: block; animation: aetheria-dream 3s ease-in-out infinite; }
+.aetheria-pet[data-emotion="sleepy"] .aetheria-pet-orbit { animation-duration: 30s; }
+.aetheria-pet[data-emotion="sleepy"] .aetheria-pet-body { animation-duration: 6s; }
+.aetheria-pet:is([data-emotion="bonked"], [data-emotion="dizzy"], [data-emotion="sleepy"], [data-emotion="love"]) .aetheria-pet-eyes { animation: none; }
+@keyframes aetheria-float { 50% { transform: translateY(-4px) rotate(3deg); } }
+@keyframes aetheria-blink { 0%, 44%, 48%, 100% { transform: scaleY(1); } 46% { transform: scaleY(.08); } }
+@keyframes aetheria-orbit { to { transform: rotate(360deg); } }
+@keyframes aetheria-happy { to { transform: translateY(-5px) scale(1.04, .96) rotate(-4deg); } }
+@keyframes aetheria-zoom { to { transform: scale(.94, 1.08); } }
+@keyframes aetheria-bonk {
+  0% { transform: scale(1); }
+  18% { transform: scale(1.18, .72) rotate(-24deg); }
+  42% { transform: scale(.86, 1.12) rotate(18deg); }
+  67% { transform: scale(1.05, .94) rotate(-8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes aetheria-dizzy { 25% { transform: rotate(18deg); } 75% { transform: rotate(-18deg); } }
+@keyframes aetheria-streak { from { transform: translateY(24px) scaleY(.4); opacity: 0; } 30% { opacity: .8; } to { transform: translateY(-25px) scaleY(1); opacity: 0; } }
+@keyframes aetheria-spark { from { transform: scale(.65) rotate(-15deg); opacity: .3; } to { transform: scale(1.1) rotate(15deg); opacity: 1; } }
+@keyframes aetheria-heart { from { transform: translateY(5px) scale(.7); opacity: 0; } 30% { opacity: 1; } to { transform: translateY(-15px) scale(1.1); opacity: 0; } }
+@keyframes aetheria-dream { 50% { transform: translateY(-6px); opacity: .3; } }
+[data-pet-paused="true"] .aetheria-pet *,
+.aetheria-pet[data-paused="true"] * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .aetheria-pet *, .aetheria-pet { animation: none !important; transition: none !important; }
+  .aetheria-pet-flight { transform: none; }
+  .aetheria-pet-speed { display: none; }
+}
