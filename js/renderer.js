@@ -1551,6 +1551,10 @@ class UIManager {
 
     showFeatureLoadError(error) {
         console.error('[UIManager] Feature load failed:', error);
+        if (window.notificationService) {
+            window.notificationService.show(`${error.message}. Try opening it again.`, 'error', 8000);
+            return;
+        }
         const notice = document.createElement('div');
         notice.className = 'notification notification-error';
         notice.setAttribute('role', 'alert');
