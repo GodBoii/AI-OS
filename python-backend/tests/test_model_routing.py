@@ -14,7 +14,6 @@ from model_routing import (  # noqa: E402
     ULTRA_ROUTE,
     VIDEO_MODEL_ID,
     VIDEO_ROUTE,
-    ModelRoutingError,
     attachments_include_video,
     normalize_thinking_mode,
     resolve_primary_model,
@@ -41,7 +40,7 @@ def test_standard_text_turn_uses_default_without_locking_route():
     assert selection.sticky_route is None
 
 
-def test_video_promotes_conversation_to_sticky_glm_video_route():
+def test_video_uses_shared_model_without_locking_conversation_mode():
     selection = resolve_primary_model(
         thinking_mode="standard",
         files=[{"name": "demo.mp4", "type": "video/mp4"}],
@@ -49,7 +48,7 @@ def test_video_promotes_conversation_to_sticky_glm_video_route():
 
     assert selection.model_id == VIDEO_MODEL_ID
     assert selection.model_id == "xiaomi/mimo-v2.6-pro"
-    assert selection.sticky_route == VIDEO_ROUTE
+    assert selection.sticky_route is None
 
     later_selection = resolve_primary_model(
         thinking_mode="standard",
@@ -57,7 +56,7 @@ def test_video_promotes_conversation_to_sticky_glm_video_route():
         sticky_route=selection.sticky_route,
     )
     assert later_selection.model_id == VIDEO_MODEL_ID
-    assert later_selection.sticky_route == VIDEO_ROUTE
+    assert later_selection.sticky_route is None
 
 
 def test_ultra_promotes_conversation_to_sticky_ultra_route():
@@ -75,32 +74,25 @@ def test_ultra_promotes_conversation_to_sticky_ultra_route():
     assert later_selection.sticky_route == ULTRA_ROUTE
 
 
-def test_ultra_rejects_video_in_same_turn():
-    with pytest.raises(ModelRoutingError) as exc_info:
-        resolve_primary_model(
-            thinking_mode="ultra",
-            files=[{"name": "demo.webm", "type": "video/webm"}],
-        )
+@pytest.mark.parametrize("mode", ["standard", "ultra"])
+@pytest.mark.parametrize("route", [None, VIDEO_ROUTE, ULTRA_ROUTE])
+@pytest.mark.parametrize("files", [
+    [],
+    [{"name": "notes.txt", "type": "text/plain", "isText": True, "content": "Read this"}],
+    [{"name": "photo.png", "type": "image/png"}],
+    [{"name": "recording.wav", "type": "audio/wav"}],
+    [{"name": "demo.webm", "type": "video/webm"}],
+    [{"name": "demo.mkv", "type": "application/octet-stream"}],
+    [{"name": "photo.png", "type": "image/png"},
+     {"name": "recording.wav", "type": "audio/wav"},
+     {"name": "demo.mp4", "type": "video/mp4"}],
+])
+def test_all_media_are_accepted_with_current_and_legacy_routes(mode, route, files):
+    selection = resolve_primary_model(thinking_mode=mode, files=files, sticky_route=route)
 
-    assert exc_info.value.code == "ultra_video_not_supported"
-
-
-def test_video_route_cannot_switch_to_ultra():
-    with pytest.raises(ModelRoutingError) as exc_info:
-        resolve_primary_model(thinking_mode="ultra", files=[], sticky_route=VIDEO_ROUTE)
-
-    assert exc_info.value.code == "conversation_model_locked_to_video"
-
-
-def test_ultra_route_cannot_accept_later_video():
-    with pytest.raises(ModelRoutingError) as exc_info:
-        resolve_primary_model(
-            thinking_mode="standard",
-            files=[{"name": "demo.mkv", "type": "application/octet-stream"}],
-            sticky_route=ULTRA_ROUTE,
-        )
-
-    assert exc_info.value.code == "conversation_model_locked_to_ultra"
+    assert selection.model_id == DEFAULT_MODEL_ID == ULTRA_MODEL_ID == VIDEO_MODEL_ID
+    assert selection.has_video is attachments_include_video(files)
+    assert selection.sticky_route == (ULTRA_ROUTE if mode == "ultra" or route == ULTRA_ROUTE else None)
 
 
 @pytest.mark.parametrize("raw_value", [None, "", "unexpected", "standard"])
