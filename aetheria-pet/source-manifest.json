@@ -1,0 +1,67 @@
+{
+  "sourceThread": "codex://threads/01a136b5-2cb6-7053-a1b9-660d5f7a7e88",
+  "sourceRepository": "https://github.com/GodBoii/AI-OS-website",
+  "sourceCommit": "61d729da441f406bfd2104407149610f93f0666c",
+  "copiedOn": "2026-10-16",
+  "files": [
+    {
+      "path": "pets/aetheria/AetheriaPet.tsx",
+      "sha256": "ed162829a4311f197943b943aef81986ccb55fa64bed1d6cf70a59d1dacd5b70"
+    },
+    {
+      "path": "pets/aetheria/animations.css",
+      "sha256": "8852e2f4b9a1de4a46645878518f08828e260b466aa208e2d9d590d138b8c638"
+    },
+    {
+      "path": "pets/aetheria/dynamics.test.ts",
+      "sha256": "bc048b17ee55ea125b658ba2da9166d9b98d370a56e9339d0d0fc43281949a75"
+    },
+    {
+      "path": "pets/aetheria/dynamics.ts",
+      "sha256": "23e1451eee956583aaddb43a8fcdbfdf46c5669ee95bbe2591488a1351fdb605"
+    },
+    {
+      "path": "pets/aetheria/emotions.ts",
+      "sha256": "2f12c51441f1ba3c1b8c39403baeb074a051cf4d9cff99008cc9f57e2a208a11"
+    },
+    {
+      "path": "pets/aetheria/index.ts",
+      "sha256": "077fe4ba8b1404d44486717f9fd4ac6bff4c6348a117d833378f7ad5521572bc"
+    },
+    {
+      "path": "pets/aetheria/README.md",
+      "sha256": "fed36654df9ab0650dc4943014b7bff0ac80135b4a9d5d607e9166bf09ab27f5"
+    },
+    {
+      "path": "pets/aetheria/renderer.ts",
+      "sha256": "e25bdc2906dbfd59ec4a79988a0c20b9762155d7c5f231dd7aa16854a7ab7b26"
+    },
+    {
+      "path": "components/experience/PetCompanion.tsx",
+      "sha256": "77f2bc067ff8a96964a30ab720e1edf04f9891a774009bc0ee7982000f59f4ce"
+    },
+    {
+      "path": "components/experience/Companion.tsx",
+      "sha256": "867c9b892a96cb0b776fb2e8ea0debbf158697df62d0cbcccf041f20d36c3362"
+    },
+    {
+      "path": "components/experience/StarMark.tsx",
+      "sha256": "53ffa16c43426c723f6d6a9b04e9f8244be98f2338fdd0c2a7f7b51b44bb64ed"
+    },
+    {
+      "path": "lib/experience.ts",
+      "sha256": "d945554783666cd90ac5a05f64410a97caeee8d79c3e3e28e9b61c409ba820c5"
+    },
+    {
+      "path": "styles/pet-companion.css",
+      "sha256": "4565b65b1c1112d6731d2ce6aa4d9ac538793479b8c499031d8af1c5e462b807"
+    }
+  ],
+  "extractedFiles": [
+    {
+      "path": "styles/companion-guide.css",
+      "source": "styles/experience.css",
+      "notes": "Companion and guide rules, including compact viewport and reduced-motion overrides. Site-wide resets and tokens are host responsibilities."
+    }
+  ]
+}
