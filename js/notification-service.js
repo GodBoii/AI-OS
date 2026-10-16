@@ -1,604 +1,475 @@
-// notification-service.js - in-app notification (toast) system.
-//
-// Renders transient toasts in the bottom-right corner. This is the in-app
-// surface only; OS-level notifications are handled by native-notification-service.js
-// in the main process.
-//
-// Behaviour worth knowing:
-//   - The countdown hairline *is* the dismiss clock. It is a Web Animations API
-//     animation, so pause and resume are exact and cannot drift from the bar.
-//   - Hovering, focusing, or backgrounding the window holds every timer in the
-//     stack, not just the one under the cursor.
-//   - Dismissing runs in two beats: the card exits, then the surviving cards
-//     glide into their new positions (FLIP, transform only).
-//   - Icons are inline SVG rather than Font Awesome, which is loaded from a CDN
-//     and would render as empty boxes on a cold offline start.
-
+// One Aetheria messenger, one speech bubble. Pending messages keep their own
+// clocks, which only run while that message is visible and the user is away.
 const DEFAULT_DURATION = 5000;
-const MAX_VISIBLE = 4;
+const MAX_PENDING = 20;
+const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">';
+const CLOSE_ICON = `${SVG_OPEN}<path d="m7 7 10 10M17 7 7 17"/></svg>`;
+const RETRY_ICON = `${SVG_OPEN}<path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4"/></svg>`;
+const NEXT_ICON = `${SVG_OPEN}<path d="m9 6 6 6-6 6"/></svg>`;
+const LABELS = { success: 'All done', error: 'Needs attention', warning: 'A heads-up', info: 'An update', connection: 'Connecting', 'computer-tool': 'On it' };
+const SOUND_NOTES = { success: [587.33, 880], info: [587.33, 783.99], connection: [523.25, 698.46], 'computer-tool': [523.25, 659.25], warning: [466.16, 415.3], error: [392, 293.66] };
 
-// Horizontal pointer travel before a press turns into a swipe, and how far the
-// card has to travel before releasing it means "dismiss".
-const DRAG_START_PX = 6;
-const DRAG_DISMISS_PX = 82;
-const DRAG_FADE_PX = 220;
-
-const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    + 'stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">';
-
-// `--draw-len` is the measured path length, rounded up. It drives the
-// stroke-dashoffset reveal in notifications.css.
-const ICONS = {
-    success: `${SVG_OPEN}<circle cx="12" cy="12" r="8.6"/>`
-        + '<path class="notification-icon-draw" style="--draw-len:11" d="M8.4 12.3l2.5 2.5 4.7-5.2"/></svg>',
-
-    error: `${SVG_OPEN}<circle cx="12" cy="12" r="8.6"/>`
-        + '<path class="notification-icon-draw" style="--draw-len:16" d="M9.3 9.3l5.4 5.4M14.7 9.3l-5.4 5.4"/></svg>',
-
-    warning: `${SVG_OPEN}<path d="M12 4.4 2.9 19.6h18.2L12 4.4Z"/>`
-        + '<path class="notification-icon-draw" style="--draw-len:4" d="M12 10.1v3.9"/>'
-        + '<path d="M12 17h.01"/></svg>',
-
-    info: `${SVG_OPEN}<circle cx="12" cy="12" r="8.6"/>`
-        + '<path d="M12 11.2v5"/><path d="M12 7.9h.01"/></svg>',
-
-    connection: `${SVG_OPEN}<circle cx="12" cy="12" r="8.4" opacity="0.28"/>`
-        + '<path d="M20.4 12A8.4 8.4 0 0 0 12 3.6"/></svg>',
-
-    'computer-tool': `${SVG_OPEN}<rect x="3" y="4.6" width="18" height="11.8" rx="2.2"/>`
-        + '<path d="M9 20h6M12 16.4V20"/></svg>'
-};
-
-const CLOSE_ICON = `${SVG_OPEN}<path d="M6.6 6.6l10.8 10.8M17.4 6.6L6.6 17.4"/></svg>`;
-const RETRY_ICON = `${SVG_OPEN}<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>`;
-
-// Two-note cues. Success and info rise, failure falls.
-const SOUND_NOTES = {
-    success: [587.33, 880],
-    info: [587.33, 783.99],
-    connection: [523.25, 698.46],
-    'computer-tool': [523.25, 659.25],
-    warning: [466.16, 415.3],
-    error: [392, 293.66]
-};
+// A code-native character, so its gaze, face, paws and antenna can react
+// independently. The four-point star borrows from Aetheria's existing mark.
+const PET_SVG = `<svg viewBox="0 0 112 116" fill="none" aria-hidden="true" focusable="false">
+    <ellipse class="pet-shadow" cx="57" cy="106" rx="31" ry="4"/>
+    <g class="pet-character">
+        <path class="pet-tail pet-body-fill" d="M81 82c23 7 26-13 17-17 3 10-8 10-15 6"/>
+        <g class="pet-body">
+            <path class="pet-body-fill" d="M28 56c-2-11 1-25 8-31 3-3 9 9 12 11 7-2 14-2 21 0 4-3 9-14 13-10 6 7 6 19 4 29 9 11 10 29 4 39-4 7-12 8-17 7-3 8-14 8-17 2-6 7-16 5-19-2-11 0-18-6-18-17 0-11 3-21 9-28Z"/>
+            <path class="pet-ear" d="m34 35 3 12 6-6M77 35l-2 12-6-6"/>
+            <path class="pet-belly" d="M38 88c8 4 24 5 35 0"/>
+            <g class="pet-face">
+                <g class="pet-eyes"><ellipse cx="44" cy="64" rx="3.2" ry="4.4"/><ellipse cx="68" cy="64" rx="3.2" ry="4.4"/></g>
+                <g class="pet-happy-eyes"><path d="M40 64q4-6 8 0m16 0q4-6 8 0"/></g>
+                <g class="pet-brows"><path d="m40 58 8-3m16 0 8 3"/></g>
+                <path class="pet-smile" d="M52 74q4 4 8 0"/>
+                <path class="pet-concern" d="M52 77q4-4 8 0"/>
+                <ellipse class="pet-cheek" cx="35" cy="73" rx="4" ry="2"/><ellipse class="pet-cheek" cx="77" cy="73" rx="4" ry="2"/>
+            </g>
+            <path class="pet-paw pet-body-fill" d="M28 77c-12-1-12 12-3 14l8-2"/>
+            <path class="pet-wave pet-body-fill" d="M83 79c13 0 16-13 9-15-5-1-5 6-11 5"/>
+        </g>
+        <g class="pet-antenna"><path d="m55 34 1-12"/><path class="pet-star" d="M57 7c1 9 2 10 10 11-8 1-9 2-10 10-1-8-2-9-10-10 8-1 9-2 10-11Z"/></g>
+    </g>
+</svg>`;
 
 class NotificationService {
     constructor() {
         this.notifications = [];
-        this.maxVisible = MAX_VISIBLE;
         this.defaultDuration = DEFAULT_DURATION;
-        this.container = null;
         this.enabled = true;
         this.soundEnabled = false;
-
-        this.hovered = new Set();
-        this.focused = new Set();
-
-        this._cssCache = new Map();
+        this.activeId = null;
+        this.collapsed = false;
+        this.interacting = false;
+        this.dragging = false;
+        this.focusOrigin = null;
         this._audioContext = null;
-        this._reducedMotion = window.matchMedia
-            ? window.matchMedia('(prefers-reduced-motion: reduce)')
-            : null;
-
-        this.init();
-    }
-
-    init() {
+        this._reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
         this.createContainer();
-
-        // A toast that expires while the app is in the background was never seen.
-        document.addEventListener('visibilitychange', () => this.syncTimers());
+        document.addEventListener('visibilitychange', () => {
+            this.container.classList.toggle('is-background', document.hidden);
+            this.syncTimers();
+        });
+        this.resizeObserver = new ResizeObserver(() => {
+            const active = this.active();
+            if (active && !this.collapsed) this.addDisclosure(active);
+        });
+        this.resizeObserver.observe(this.speech);
     }
 
     createContainer() {
-        if (this.container) return;
-
-        this.container = document.createElement('div');
+        this.container = document.createElement('section');
         this.container.className = 'unified-notification-container';
-        this.container.setAttribute('role', 'region');
-        this.container.setAttribute('aria-label', 'Notifications');
-        this.container.setAttribute('aria-live', 'polite');
-        this.container.setAttribute('aria-relevant', 'additions');
+        this.container.setAttribute('aria-label', 'Aetheria notifications');
+        this.container.inert = true;
+        this.container.innerHTML = `<div class="notification-speech" id="aetheria-pet-speech"></div>
+            <button type="button" class="notification-pet" aria-label="Hide notification" aria-expanded="true" aria-controls="aetheria-pet-speech">
+                ${PET_SVG}<span class="pet-message-count" aria-hidden="true"></span>
+            </button>
+            <div class="notification-announcer" role="status" aria-atomic="true"></div>
+            <div class="notification-announcer notification-urgent" role="alert" aria-atomic="true"></div>`;
+        this.speech = this.container.querySelector('.notification-speech');
+        this.pet = this.container.querySelector('.notification-pet');
         document.body.appendChild(this.container);
+        this.pet.addEventListener('click', () => {
+            this.collapsed = !this.collapsed;
+            this.updatePet();
+            this.syncTimers();
+        });
+        this.container.addEventListener('pointerenter', (event) => {
+            if (event.pointerType === 'touch') return;
+            this.interacting = true;
+            this.syncTimers();
+        });
+        this.container.addEventListener('pointerleave', () => {
+            this.interacting = false;
+            this.pet.style.removeProperty('--pet-look-x');
+            this.pet.style.removeProperty('--pet-look-y');
+            this.syncTimers();
+        });
+        this.container.addEventListener('pointermove', (event) => {
+            if (event.pointerType === 'touch' || this.prefersReducedMotion()) return;
+            const rect = this.pet.getBoundingClientRect();
+            this.pet.style.setProperty('--pet-look-x', `${Math.max(-3, Math.min(3, (event.clientX - rect.x - rect.width / 2) / 35))}px`);
+            this.pet.style.setProperty('--pet-look-y', `${Math.max(-2, Math.min(2, (event.clientY - rect.y - rect.height / 2) / 45))}px`);
+        });
+        this.container.addEventListener('focusin', (event) => {
+            if (event.relatedTarget && !this.container.contains(event.relatedTarget)) this.focusOrigin = event.relatedTarget;
+            this.syncTimers();
+        });
+        this.container.addEventListener('focusout', () => queueMicrotask(() => this.syncTimers()));
+        this.container.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            if (this.activeId) this.remove(this.activeId);
+        });
     }
 
-    // ---------------------------------------------------------------- public
-
     show(message, type = 'info', duration = this.defaultDuration) {
-        if (!this.enabled && type !== 'connection') {
-            console.log('[NotificationService] In-app notifications disabled, skipping:', message);
-            return null;
-        }
-
-        const notification = this.createNotification(message, type, duration);
+        if (!this.enabled && type !== 'connection') return null;
+        const knownType = Object.hasOwn(LABELS, type) ? type : 'info';
+        const safeDuration = duration === null || duration === 0 ? null
+            : Number.isFinite(duration) && duration > 0 ? duration : this.defaultDuration;
+        const notification = this.createNotification(String(message), knownType, safeDuration);
         this.addNotification(notification);
-
-        if (this.soundEnabled) {
-            this.playNotificationSound(type);
-        }
-
+        if (this.soundEnabled) this.playNotificationSound(knownType);
         return notification.id;
     }
 
     showConnection(message, showRetry = false) {
-        this.removeConnectionNotifications();
-
-        // No duration: connection state is a status, not a transient confirmation.
-        const notification = this.createNotification(message, 'connection', null, showRetry);
+        // Replace an obsolete connection state before selecting the next message.
+        this.notifications.filter(item => item.type === 'connection').forEach(item => this.detach(item));
+        const notification = this.createNotification(String(message), 'connection', null, showRetry);
         this.addNotification(notification);
         return notification.id;
     }
 
     showComputerTool(message, action) {
-        const notification = this.createNotification(message, 'computer-tool', 3000);
+        if (!this.enabled) return null;
+        const notification = this.createNotification(String(message), 'computer-tool', 3000);
         notification.action = action;
         this.addNotification(notification);
         return notification.id;
     }
 
-    remove(id) {
-        const notification = this.notifications.find((item) => item.id === id);
-        if (!notification || notification.isLeaving) return;
-
-        notification.isLeaving = true;
-        this.hovered.delete(id);
-        this.focused.delete(id);
-        this.stopTimer(notification);
-
-        notification.element.classList.remove('show');
-        notification.element.classList.add('hide');
-
-        window.setTimeout(() => this.detach(notification), this.cssMs('--notification-exit', 200));
-    }
-
     removeConnectionNotifications() {
-        this.notifications
-            .filter((item) => item.type === 'connection')
-            .forEach((item) => this.remove(item.id));
-    }
-
-    clear() {
-        [...this.notifications].forEach((item) => this.remove(item.id));
+        this.notifications.filter(item => item.type === 'connection').forEach(item => this.remove(item.id));
     }
 
     setEnabled(enabled) {
-        this.enabled = enabled;
-        console.log(`[NotificationService] In-app notifications ${enabled ? 'enabled' : 'disabled'}`);
+        this.enabled = Boolean(enabled);
+        if (!this.enabled) this.notifications.filter(item => item.type !== 'connection').forEach(item => this.remove(item.id));
     }
 
-    setSoundEnabled(enabled) {
-        this.soundEnabled = enabled;
-        console.log(`[NotificationService] Notification sounds ${enabled ? 'enabled' : 'disabled'}`);
-    }
+    setSoundEnabled(enabled) { this.soundEnabled = Boolean(enabled); }
 
-    // ------------------------------------------------------------------ dom
+    clear() { [...this.notifications].forEach(item => this.remove(item.id)); }
 
     createNotification(message, type, duration, showRetry = false) {
-        const id = `notification-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-        const element = document.createElement('div');
+        const id = `notification-${crypto.randomUUID()}`;
+        const element = document.createElement('article');
         element.className = `unified-notification notification-${type}`;
-        element.setAttribute('data-notification-id', id);
-
-        // The container is already a polite live region. Errors and warnings are
-        // worth interrupting for; everything else waits its turn. Setting a role
-        // here as well would announce each toast twice.
-        if (type === 'error' || type === 'warning') {
-            element.setAttribute('aria-live', 'assertive');
-        }
-
-        const surface = document.createElement('div');
-        surface.className = 'notification-surface';
-
-        const iconElement = document.createElement('div');
-        iconElement.className = 'notification-icon';
-        iconElement.setAttribute('aria-hidden', 'true');
-        iconElement.innerHTML = this.getIcon(type);
-
-        const content = document.createElement('div');
-        content.className = 'notification-content';
-
-        const messageElement = document.createElement('p');
-        messageElement.className = 'notification-message';
-        messageElement.textContent = message;
-        content.appendChild(messageElement);
-
-        if (showRetry) {
-            const retryBtn = document.createElement('button');
-            retryBtn.type = 'button';
-            retryBtn.className = 'notification-retry-btn';
-            retryBtn.innerHTML = `${RETRY_ICON}<span>Retry</span>`;
-            retryBtn.addEventListener('click', () => {
-                if (window.ipcRenderer) {
-                    window.ipcRenderer.send('restart-python-bridge');
-                }
-            });
-            content.appendChild(retryBtn);
-        }
-
-        const closeBtn = document.createElement('button');
-        closeBtn.type = 'button';
-        closeBtn.className = 'notification-close';
-        closeBtn.innerHTML = CLOSE_ICON;
-        closeBtn.setAttribute('aria-label', 'Dismiss notification');
-        closeBtn.addEventListener('click', () => this.remove(id));
-
-        surface.appendChild(iconElement);
-        surface.appendChild(content);
-        surface.appendChild(closeBtn);
-
-        if (duration) {
-            const progress = document.createElement('div');
-            progress.className = 'notification-progress';
-            progress.setAttribute('aria-hidden', 'true');
-
-            const fill = document.createElement('span');
-            fill.className = 'notification-progress-fill';
-            progress.appendChild(fill);
-            surface.appendChild(progress);
-        }
-
-        element.appendChild(surface);
-
-        return {
-            id,
-            element,
-            surface,
-            type,
-            duration,
-            message,
-            timer: null,
-            hasEntered: false,
-            isLeaving: false
-        };
-    }
-
-    getIcon(type) {
-        return ICONS[type] || ICONS.info;
-    }
-
-    addNotification(notification) {
-        this.notifications.push(notification);
-        this.container.appendChild(notification.element);
-
-        requestAnimationFrame(() => {
-            notification.element.classList.add('show');
-        });
-
-        window.setTimeout(() => {
-            notification.hasEntered = true;
-        }, this.cssMs('--notification-enter', 380));
-
-        this.setupInteractions(notification);
-        this.startTimer(notification);
-        this.manageQueue();
-    }
-
-    // Removing the oldest keeps the corner readable. Anything above the cap
-    // leaves through the normal exit so the stack never snaps.
-    manageQueue() {
-        const active = this.notifications.filter((item) => !item.isLeaving);
-        const overflow = active.length - this.maxVisible;
-
-        for (let index = 0; index < overflow; index += 1) {
-            this.remove(active[index].id);
-        }
-    }
-
-    // Pull the card out, then let the survivors glide up. Measuring in viewport
-    // coordinates keeps this correct even though the container is anchored to the
-    // bottom edge and shrinks as cards leave.
-    detach(notification) {
-        const element = notification.element;
-
-        const survivors = this.notifications
-            .filter((item) => item !== notification && !item.isLeaving && item.hasEntered && item.element.isConnected)
-            .map((item) => ({ element: item.element, top: item.element.getBoundingClientRect().top }));
-
-        const index = this.notifications.indexOf(notification);
-        if (index !== -1) {
-            this.notifications.splice(index, 1);
-        }
-        element.remove();
-
-        if (this.prefersReducedMotion()) return;
-
-        const duration = this.cssMs('--notification-collapse', 300);
-        const easing = this.cssValue('--motion-ease-smooth-out', 'cubic-bezier(0.22, 1, 0.36, 1)');
-
-        survivors.forEach((survivor) => {
-            const delta = survivor.top - survivor.element.getBoundingClientRect().top;
-            if (Math.abs(delta) < 1) return;
-
-            survivor.element.animate(
-                [
-                    { transform: `translate3d(0, ${delta}px, 0)` },
-                    { transform: 'translate3d(0, 0, 0)' }
-                ],
-                { duration, easing }
-            );
-        });
-    }
-
-    // --------------------------------------------------------- interactions
-
-    setupInteractions(notification) {
-        const { element, id } = notification;
-
-        element.addEventListener('mouseenter', () => {
-            this.hovered.add(id);
-            this.syncTimers();
-        });
-
-        element.addEventListener('mouseleave', () => {
-            this.hovered.delete(id);
-            this.syncTimers();
-        });
-
-        // Keyboard users need the same grace period as anyone reading the toast.
-        element.addEventListener('focusin', () => {
-            this.focused.add(id);
-            this.syncTimers();
-        });
-
-        element.addEventListener('focusout', () => {
-            this.focused.delete(id);
-            this.syncTimers();
-        });
-
-        element.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape') return;
+        element.dataset.notificationId = id;
+        element.hidden = true;
+        element.innerHTML = `<div class="notification-surface">
+            <header class="notification-heading"><span class="notification-name">Aetheria</span>
+                <span class="notification-type"></span>
+                <button type="button" class="notification-close" aria-label="Dismiss notification">${CLOSE_ICON}</button>
+            </header>
+            <div class="notification-content"><p class="notification-message is-collapsed" id="${id}-message"></p></div>
+            <div class="notification-actions"></div>
+            <span class="notification-progress-fill" aria-hidden="true"></span>
+        </div>`;
+        const offline = type === 'connection' && !navigator.onLine;
+        element.querySelector('.notification-type').textContent = offline ? 'Offline' : showRetry ? 'Connection lost' : LABELS[type];
+        element.querySelector('.notification-message').textContent = message;
+        element.querySelector('.notification-close').addEventListener('click', (event) => {
             event.stopPropagation();
             this.remove(id);
         });
-
+        const notification = { id, element, surface: element.firstElementChild, type, duration, message,
+            showRetry, offline, expanded: false, retrying: false, timer: null, isLeaving: false };
+        if (showRetry) {
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'notification-retry-btn';
+            retry.innerHTML = `${RETRY_ICON}<span>Try again</span>`;
+            retry.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const ipc = window.electron?.ipcRenderer || window.ipcRenderer;
+                if (ipc?.send) {
+                    ipc.send('restart-python-bridge');
+                    notification.retrying = true;
+                    retry.disabled = true;
+                    retry.querySelector('span').textContent = 'Retrying…';
+                    this.updatePet();
+                    notification.retryTimeout = window.setTimeout(() => {
+                        retry.disabled = false;
+                        notification.retrying = false;
+                        retry.querySelector('span').textContent = 'Try again';
+                        this.updatePet();
+                    }, 5000);
+                } else {
+                    retry.querySelector('span').textContent = 'Open the desktop app to retry';
+                }
+            });
+            element.querySelector('.notification-actions').appendChild(retry);
+        }
         this.setupSwipe(notification);
+        return notification;
     }
 
-    // Flick a toast toward the right edge to dismiss it.
-    setupSwipe(notification) {
-        const { element, surface, id } = notification;
+    active() { return this.notifications.find(item => item.id === this.activeId && !item.isLeaving); }
+    pending() { return this.notifications.filter(item => !item.isLeaving); }
+    priority(item) { return item.type === 'error' || item.showRetry ? 3 : item.type === 'warning' ? 2 : 1; }
 
-        let pointerId = null;
-        let startX = 0;
-        let offset = 0;
-        let dragging = false;
-
-        const reset = () => {
-            pointerId = null;
-            offset = 0;
-            dragging = false;
-        };
-
-        const release = () => {
-            element.classList.remove('is-dragging');
-            surface.style.transform = '';
-            surface.style.opacity = '';
-        };
-
-        surface.addEventListener('pointerdown', (event) => {
-            if (pointerId !== null || notification.isLeaving) return;
-            if (event.pointerType === 'mouse' && event.button !== 0) return;
-            if (event.target.closest('button')) return;
-
-            pointerId = event.pointerId;
-            startX = event.clientX;
-            offset = 0;
-            dragging = false;
-            surface.setPointerCapture(pointerId);
-        });
-
-        surface.addEventListener('pointermove', (event) => {
-            if (event.pointerId !== pointerId) return;
-
-            offset = event.clientX - startX;
-
-            if (!dragging) {
-                if (Math.abs(offset) < DRAG_START_PX) return;
-                dragging = true;
-                element.classList.add('is-dragging');
-            }
-
-            // Resists travel to the left, since that is not the dismiss direction.
-            const pull = offset > 0 ? offset : offset * 0.22;
-            surface.style.transform = `translate3d(${pull}px, 0, 0)`;
-            surface.style.opacity = String(Math.max(0.2, 1 - Math.max(pull, 0) / DRAG_FADE_PX));
-        });
-
-        const finish = (event) => {
-            if (event.pointerId !== pointerId) return;
-
-            const dismissed = dragging && offset >= DRAG_DISMISS_PX;
-
-            if (dragging) {
-                // A drag must not also read as a click. Capturing on the shell
-                // stops the event before it reaches anything inside it, including
-                // handlers other modules attach to the card. The timeout drops the
-                // guard if no click follows, so it can never eat a later one.
-                const suppressClick = (click) => {
-                    click.stopPropagation();
-                    click.preventDefault();
-                };
-
-                element.addEventListener('click', suppressClick, { capture: true, once: true });
-                window.setTimeout(() => {
-                    element.removeEventListener('click', suppressClick, { capture: true });
-                }, 350);
-            }
-
-            if (dismissed) {
-                // Keep the released offset so the card carries on outward while
-                // the shell fades it out. Snapping back first would look broken.
-                reset();
-                this.remove(id);
-                return;
-            }
-
-            release();
-            reset();
-        };
-
-        surface.addEventListener('pointerup', finish);
-        surface.addEventListener('pointercancel', (event) => {
-            if (event.pointerId !== pointerId) return;
-            release();
-            reset();
-        });
+    addNotification(notification) {
+        this.notifications.push(notification);
+        this.speech.appendChild(notification.element);
+        const active = this.active();
+        if (!active || (!this.shouldHoldTimers() && this.priority(notification) > this.priority(active))) {
+            this.select(notification);
+        }
+        // Keep memory bounded during long automated runs. Preserve connection
+        // state and the current message; evict routine notices before failures.
+        while (this.pending().length > MAX_PENDING) {
+            const candidates = this.pending().filter(item => item.id !== this.activeId && item.type !== 'connection');
+            candidates.sort((a, b) => this.priority(a) - this.priority(b));
+            if (!candidates[0]) break;
+            this.detach(candidates[0]);
+        }
+        this.updatePet();
+        this.syncTimers();
     }
 
-    // ------------------------------------------------------------- timing
+    select(notification) {
+        const hadFocus = this.speech.contains(document.activeElement);
+        this.notifications.forEach(item => { item.element.hidden = item !== notification; });
+        this.activeId = notification.id;
+        this.collapsed = false;
+        this.container.inert = false;
+        this.container.classList.add('has-notifications');
+        this.addDisclosure(notification);
+        this.updatePet();
+        if (!notification.timer && notification.duration) {
+            // This invisible WAAPI clock retains exact remaining time when paused.
+            notification.timer = notification.element.querySelector('.notification-progress-fill').animate(
+                [{ opacity: 0 }, { opacity: 0 }], { duration: notification.duration });
+            notification.timer.onfinish = () => this.remove(notification.id);
+        }
+        if (!this.prefersReducedMotion()) {
+            notification.element.animate([
+                { opacity: 0, transform: 'translateY(8px) scale(0.98)' },
+                { opacity: 1, transform: 'translateY(0) scale(1)' }
+            ], { duration: 350, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+        }
+        if (hadFocus) notification.element.querySelector('button').focus({ preventScroll: true });
+        const urgent = notification.type === 'error' || notification.type === 'warning' || notification.showRetry;
+        const announcer = this.container.querySelector(urgent ? '.notification-urgent' : '[role="status"]');
+        this.container.querySelectorAll('.notification-announcer').forEach(node => { node.textContent = ''; });
+        announcer.textContent = `${notification.element.querySelector('.notification-type').textContent}. ${notification.message}`;
+        this.syncTimers();
+    }
 
-    // The progress bar is the clock. One animation, so the bar and the dismiss
-    // can never disagree.
-    startTimer(notification) {
-        if (!notification.duration) return;
+    addDisclosure(notification) {
+        const message = notification.element.querySelector('.notification-message');
+        if (notification.element.querySelector('.notification-details') || message.scrollHeight <= message.clientHeight + 1) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'notification-details';
+        button.textContent = 'Read more';
+        button.setAttribute('aria-expanded', 'false');
+        button.setAttribute('aria-controls', message.id);
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            notification.expanded = !notification.expanded;
+            message.classList.toggle('is-collapsed', !notification.expanded);
+            button.setAttribute('aria-expanded', String(notification.expanded));
+            button.textContent = notification.expanded ? 'Show less' : 'Read more';
+            if (notification.expanded) message.tabIndex = 0;
+            else message.removeAttribute('tabindex');
+            this.syncTimers();
+        });
+        message.after(button);
+    }
 
-        const fill = notification.element.querySelector('.notification-progress-fill');
-        if (!fill) return;
-
-        const timer = fill.animate(
-            [{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }],
-            { duration: notification.duration, easing: 'linear', fill: 'forwards' }
-        );
-
-        timer.onfinish = () => this.remove(notification.id);
-        notification.timer = timer;
-
-        if (this.shouldHoldTimers()) {
-            timer.pause();
-            notification.element.classList.add('is-paused');
+    updatePet() {
+        const pending = this.pending();
+        const active = this.active();
+        if (pending.length === 0) {
+            if (this.container.contains(document.activeElement) && this.focusOrigin?.isConnected) {
+                this.focusOrigin.focus({ preventScroll: true });
+            }
+            this.container.classList.remove('has-notifications');
+            this.container.inert = true;
+            this.interacting = false;
+            return;
+        }
+        this.container.classList.toggle('is-tucked', this.collapsed);
+        this.speech.inert = this.collapsed;
+        this.speech.setAttribute('aria-hidden', String(this.collapsed));
+        this.pet.setAttribute('aria-expanded', String(!this.collapsed));
+        this.pet.setAttribute('aria-label', `${this.collapsed ? 'Show' : 'Hide'} notification${pending.length > 1 ? `, ${pending.length} messages` : ''}`);
+        const count = this.pet.querySelector('.pet-message-count');
+        count.textContent = pending.length > 1 ? String(pending.length) : '';
+        if (active) {
+            this.container.dataset.mood = active.retrying ? 'connection' : active.offline ? 'warning' : active.showRetry ? 'error' : active.type;
+            let next = active.element.querySelector('.notification-next');
+            if (pending.length > 1 && !next) {
+                next = document.createElement('button');
+                next.type = 'button';
+                next.className = 'notification-next';
+                next.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const items = this.pending();
+                    const index = items.findIndex(item => item.id === this.activeId);
+                    this.select(items[(index + 1) % items.length]);
+                    this.active().element.querySelector('.notification-next')?.focus({ preventScroll: true });
+                });
+                active.element.querySelector('.notification-actions').appendChild(next);
+            }
+            if (next) {
+                next.hidden = pending.length < 2;
+                next.innerHTML = `<span>${pending.length - 1} more</span>${NEXT_ICON}`;
+                next.setAttribute('aria-label', `Next notification, ${pending.length - 1} more`);
+            }
+            let clear = active.element.querySelector('.notification-clear');
+            if (pending.length > 1 && !clear) {
+                clear = document.createElement('button');
+                clear.type = 'button';
+                clear.className = 'notification-clear';
+                clear.textContent = 'Dismiss all';
+                clear.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    this.clear();
+                });
+                active.element.querySelector('.notification-actions').appendChild(clear);
+            }
+            if (clear) clear.hidden = pending.length < 2;
         }
     }
 
-    // Pause rather than cancel. Cancelling a forwards-filled animation snaps the
-    // bar back to full width, which is visible for the length of the exit.
-    stopTimer(notification) {
-        if (!notification.timer) return;
-        notification.timer.onfinish = null;
-        if (notification.timer.playState === 'running') notification.timer.pause();
-        notification.timer = null;
+    remove(id) {
+        const notification = this.notifications.find(item => item.id === id);
+        if (!notification || notification.isLeaving) return;
+        notification.isLeaving = true;
+        notification.timer?.cancel();
+        if (id !== this.activeId) {
+            this.detach(notification);
+            this.updatePet();
+            return;
+        }
+        const hadFocus = notification.element.contains(document.activeElement) || document.activeElement === this.pet;
+        notification.element.inert = true;
+        notification.element.classList.add('hide');
+        if (this.pending().length === 0) {
+            this.container.classList.remove('has-notifications');
+            this.container.inert = true;
+            this.interacting = false;
+            if (hadFocus && this.focusOrigin?.isConnected) this.focusOrigin.focus({ preventScroll: true });
+        } else if (hadFocus) this.pet.focus({ preventScroll: true });
+        window.setTimeout(() => {
+            this.detach(notification);
+            // A new arrival may already have taken over during the exit.
+            if (!this.active()) {
+                const next = this.pending().sort((a, b) => this.priority(b) - this.priority(a))[0];
+                if (next) {
+                    this.select(next);
+                    if (hadFocus) next.element.querySelector('button').focus({ preventScroll: true });
+                }
+            }
+            this.updatePet();
+            this.syncTimers();
+        }, this.prefersReducedMotion() ? 0 : 200);
+    }
+
+    detach(notification) {
+        if (notification.element.contains(document.activeElement)) this.pet.focus({ preventScroll: true });
+        notification.timer?.cancel();
+        window.clearTimeout(notification.retryTimeout);
+        notification.element.remove();
+        this.notifications = this.notifications.filter(item => item !== notification);
+        if (this.activeId === notification.id) this.activeId = null;
+    }
+
+    setupSwipe(notification) {
+        const surface = notification.surface;
+        let pointerId = null;
+        let startX = 0;
+        let distance = 0;
+        const reset = () => {
+            pointerId = null;
+            distance = 0;
+            this.dragging = false;
+            surface.style.transform = '';
+            surface.style.opacity = '';
+            notification.element.classList.remove('is-dragging');
+            this.syncTimers();
+        };
+        surface.addEventListener('pointerdown', (event) => {
+            if (pointerId !== null || notification.isLeaving || event.target.closest('button') || event.button !== 0) return;
+            pointerId = event.pointerId;
+            startX = event.clientX;
+            surface.setPointerCapture(pointerId);
+            this.dragging = true;
+            this.syncTimers();
+        });
+        surface.addEventListener('pointermove', (event) => {
+            if (event.pointerId !== pointerId) return;
+            distance = Math.max(0, event.clientX - startX);
+            if (distance < 6) return;
+            notification.element.classList.add('is-dragging');
+            surface.style.transform = `translateX(${distance}px)`;
+            surface.style.opacity = String(Math.max(0.2, 1 - distance / 250));
+        });
+        surface.addEventListener('pointerup', (event) => {
+            if (event.pointerId !== pointerId) return;
+            if (distance > 6) {
+                const suppressClick = click => { click.preventDefault(); click.stopPropagation(); };
+                notification.element.addEventListener('click', suppressClick, { capture: true, once: true });
+                window.setTimeout(() => notification.element.removeEventListener('click', suppressClick, true), 350);
+            }
+            if (distance >= 82) this.remove(notification.id);
+            reset();
+        });
+        surface.addEventListener('lostpointercapture', reset);
+        surface.addEventListener('pointercancel', reset);
     }
 
     shouldHoldTimers() {
-        return this.hovered.size > 0 || this.focused.size > 0 || document.hidden;
+        return this.interacting || this.dragging || this.collapsed || document.hidden
+            || this.container.contains(document.activeElement) || Boolean(this.active()?.expanded);
     }
 
     syncTimers() {
         const hold = this.shouldHoldTimers();
-
-        this.notifications.forEach((notification) => {
-            if (notification.isLeaving) return;
-
-            notification.element.classList.toggle('is-paused', hold && Boolean(notification.timer));
-            if (!notification.timer) return;
-
-            if (hold) {
-                if (notification.timer.playState === 'running') notification.timer.pause();
-            } else if (notification.timer.playState === 'paused') {
-                notification.timer.play();
-            }
+        this.notifications.forEach(item => {
+            if (!item.timer || item.isLeaving) return;
+            if (hold || item.id !== this.activeId) item.timer.pause();
+            else if (item.timer.playState === 'paused') item.timer.play();
         });
     }
 
-    // --------------------------------------------------------------- tokens
-
-    prefersReducedMotion() {
-        return Boolean(this._reducedMotion && this._reducedMotion.matches);
-    }
-
-    cssValue(name, fallback) {
-        if (this._cssCache.has(name)) return this._cssCache.get(name);
-
-        let value = fallback;
-        if (this.container) {
-            const raw = getComputedStyle(this.container).getPropertyValue(name).trim();
-            if (raw) value = raw;
-        }
-
-        this._cssCache.set(name, value);
-        return value;
-    }
-
-    cssMs(name, fallback) {
-        const raw = this.cssValue(name, `${fallback}ms`);
-        const parsed = raw.endsWith('ms')
-            ? Number.parseFloat(raw)
-            : Number.parseFloat(raw) * 1000;
-
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    }
-
-    // ---------------------------------------------------------------- sound
+    prefersReducedMotion() { return this._reducedMotion.matches; }
 
     getAudioContext() {
         if (this._audioContext) return this._audioContext;
-
-        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextCtor) return null;
-
-        try {
-            // One context for the lifetime of the page. Chromium caps how many a
-            // document may hold, and the old code built a fresh one per toast.
-            this._audioContext = new AudioContextCtor();
-        } catch (error) {
-            return null;
-        }
-
+        const Constructor = window.AudioContext || window.webkitAudioContext;
+        if (!Constructor) return null;
+        try { this._audioContext = new Constructor(); }
+        catch { return null; }
         return this._audioContext;
     }
 
     playNotificationSound(type = 'info') {
         const context = this.getAudioContext();
         if (!context) return;
-
-        if (context.state === 'suspended') {
-            context.resume().catch(() => {});
-        }
-
-        const notes = SOUND_NOTES[type] || SOUND_NOTES.info;
-        const start = context.currentTime;
-
+        if (context.state === 'suspended') context.resume().catch(() => {});
         const master = context.createGain();
         master.gain.value = 0.06;
-
-        // Trims the harshness off a bare oscillator.
-        const tone = context.createBiquadFilter();
-        tone.type = 'lowpass';
-        tone.frequency.value = 2400;
-
-        tone.connect(master);
         master.connect(context.destination);
-
-        notes.forEach((frequency, index) => {
-            const at = start + index * 0.07;
+        (SOUND_NOTES[type] || SOUND_NOTES.info).forEach((frequency, index) => {
+            const at = context.currentTime + index * 0.07;
             const oscillator = context.createOscillator();
             const envelope = context.createGain();
-
-            oscillator.type = 'triangle';
-            oscillator.frequency.setValueAtTime(frequency, at);
-
+            oscillator.type = 'sine';
+            oscillator.frequency.value = frequency;
             envelope.gain.setValueAtTime(0.0001, at);
             envelope.gain.exponentialRampToValueAtTime(1, at + 0.012);
             envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.24);
-
             oscillator.connect(envelope);
-            envelope.connect(tone);
+            envelope.connect(master);
             oscillator.start(at);
             oscillator.stop(at + 0.26);
+            oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
         });
+        window.setTimeout(() => master.disconnect(), 500);
     }
 }
 
-// Create singleton instance
 const notificationService = new NotificationService();
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = notificationService;
-}
-
-// Both spellings are in use across the renderer. Without the capitalised alias,
-// chat.js, to-do-list.js, context-handler.js and windows-speech-input-handler.js
-// silently fall back to console logs or hand-rolled inline toasts.
+if (typeof module !== 'undefined' && module.exports) module.exports = notificationService;
 window.notificationService = notificationService;
 window.NotificationService = notificationService;
