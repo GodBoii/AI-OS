@@ -26,7 +26,7 @@ import config
 from extensions import socketio
 from supabase_client import supabase_client
 from session_service import ConnectionManager
-from agent_runner import run_agent_and_stream
+from agent_runner import run_agent_and_stream, process_files, build_inline_text_files_prompt
 from plan_agent import stream_plan, build_plan_prompt
 from title_generator import generate_and_save_title
 from run_state_manager import RunStateManager
@@ -669,6 +669,9 @@ def on_plan_request(data: str):
             )
 
         incoming_config = _sanitize_plan_config(dict(data.get("config", {}) or {}))
+        incoming_files = data.get("files", [])
+        if not isinstance(incoming_files, list):
+            incoming_files = []
 
         if data.get("supports_user_questions") is True:
             if not conversation_id or not message_id:
@@ -687,9 +690,10 @@ def on_plan_request(data: str):
             join_room(f"conv:{conversation_id}")
             _register_socket_conversation(sid, conversation_id)
             save_title(conversation_id, str(user.id), raw_message.split("\n")[0][:120] or "Plan")
-            turn_data = {"user_message": raw_message, "files": [], "plan_request_id": request_id,
+            turn_data = {"user_message": raw_message, "files": incoming_files, "plan_request_id": request_id,
+                "thinking_mode": normalize_thinking_mode(data.get("thinking_mode")),
                 "plan_prompt": build_plan_prompt(message=raw_message, config=incoming_config,
-                    files=data.get("files", []), selected_sessions=data.get("selected_sessions", []),
+                    files=incoming_files, selected_sessions=data.get("selected_sessions", []),
                     workspace_context=data.get("workspace_context", {}))}
             if run_state_manager_instance:
                 run_state_manager_instance.start_run(conversation_id, message_id, str(user.id))
@@ -705,13 +709,17 @@ def on_plan_request(data: str):
             "conversationId": conversation_id,
             "model": DEFAULT_MODEL_ID,
         }
+        images, audio, videos, other_files = process_files(incoming_files, str(user.id))
         for event in stream_plan(
             message=raw_message,
             config=incoming_config,
-            files=data.get("files", []),
+            files=incoming_files,
             selected_sessions=data.get("selected_sessions", []),
             workspace_context=data.get("workspace_context", {}),
             debug_mode=config.AGNO_DEBUG_MODE,
+            media={"images": images or None, "audio": audio or None,
+                "videos": videos or None, "files": other_files or None},
+            attachment_text=build_inline_text_files_prompt(incoming_files),
         ):
             event_type = event.get("type")
             if event_type == "content":
