@@ -1044,6 +1044,8 @@ def run_agent_and_stream(
 
         if requested_mode == "plan":
             final_user_message = turn_data["plan_prompt"]
+            if inline_text_files_prompt:
+                final_user_message = f"{inline_text_files_prompt}\n{final_user_message}"
         previous_usage = (continuation or {}).get("context", {}).get("usage_snapshot", {})
         root_run_id = (continuation or {}).get("run_id") or str(uuid.uuid4())
         last_heartbeat = 0.0
