@@ -206,7 +206,9 @@ test('Electron shell preserves background chat, archived actions and workspace f
     assert.doesNotMatch(await page.$eval('.session-history-content', node => node.textContent), /Stale prompt|Stale answer/);
     await page.evaluate(() => contextHandler.closeSessionHistoryViewer());
     await page.click('#project-workspace-icon');
-    await page.waitForFunction(() => document.querySelector('.notification[role="alert"]')?.textContent.includes('Try opening it again'));
+    await page.waitForFunction(() => document.querySelector('.notification-urgent[role="alert"]')?.textContent.includes('Try opening it again'));
+    assert.equal(await page.$eval('.unified-notification-container', node => node.classList.contains('has-notifications')), true);
+    assert.equal(await page.$$eval('.notification-pet', nodes => nodes.length), 1);
     assert.equal(await page.evaluate(() => stateManager.getState().isProjectWorkspaceOpen), false);
     await page.click('#project-workspace-icon');
     await page.waitForFunction(() => !!window.projectWorkspace && !!window.githubPanel && !!window.designModeController);
