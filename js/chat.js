@@ -181,62 +181,15 @@ const supportedFileTypes = {
     'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska'
 };
 
-const videoAttachmentExtensions = new Set(['mp4', 'webm', 'avi', 'mov', 'mkv']);
-
-function isVideoAttachment(file) {
-    const mimeType = String(file?.type || file?.mime_type || '').trim().toLowerCase();
-    if (mimeType.startsWith('video/')) return true;
-    const name = String(file?.name || file?.filename || '').trim().toLowerCase();
-    const extension = name.includes('.') ? name.split('.').pop() : '';
-    return videoAttachmentExtensions.has(extension);
-}
-
-function getAttachedFilesIncludingPending() {
-    return Array.isArray(fileAttachmentHandler?.attachedFiles)
-        ? fileAttachmentHandler.attachedFiles
-        : [];
-}
-
-function hasVideoAttachments(files = getAttachedFilesIncludingPending()) {
-    return Array.from(files || []).some(isVideoAttachment);
-}
-
 function getConversationPrimaryRoute() {
     return currentConversationId ? conversationPrimaryRoutes.get(currentConversationId) || null : null;
 }
 
-function validateAttachmentForCurrentMode(file) {
-    if (!isVideoAttachment(file)) return { allowed: true };
-    if (ultraThinkEnabled || getConversationPrimaryRoute() === 'ultra') {
-        return {
-            allowed: false,
-            message: 'Video attachments are unavailable in Ultra Think mode.'
-        };
-    }
-    return { allowed: true };
-}
-
-function commitPrimaryRouteForSend(files) {
-    const route = getConversationPrimaryRoute();
-    const includesVideo = hasVideoAttachments(files);
-    if ((ultraThinkEnabled || route === 'ultra') && includesVideo) {
-        showNotification('Video attachments are unavailable in Ultra Think mode.', 'error');
-        return false;
-    }
-    if (route === 'video' && ultraThinkEnabled) {
-        showNotification('Start a new conversation to use Ultra Think after video input.', 'error');
-        return false;
-    }
-
-    if (!route && currentConversationId) {
-        if (ultraThinkEnabled) {
-            conversationPrimaryRoutes.set(currentConversationId, 'ultra');
-        } else if (includesVideo) {
-            conversationPrimaryRoutes.set(currentConversationId, 'video');
-        }
+function commitPrimaryRouteForSend() {
+    if (ultraThinkEnabled && currentConversationId) {
+        conversationPrimaryRoutes.set(currentConversationId, 'ultra');
     }
     syncUltraThinkButton();
-    return true;
 }
 
 function setCurrentConversationId(conversationId) {
@@ -3771,28 +3724,18 @@ function syncUltraThinkButton() {
     const route = getConversationPrimaryRoute();
     if (route === 'ultra') ultraThinkEnabled = true;
     button.classList.toggle('active', ultraThinkEnabled);
-    button.classList.toggle('is-locked', route === 'ultra' || route === 'video');
+    button.classList.toggle('is-locked', route === 'ultra');
     button.setAttribute('aria-pressed', ultraThinkEnabled ? 'true' : 'false');
-    button.setAttribute('aria-disabled', route === 'ultra' || route === 'video' ? 'true' : 'false');
-    button.title = route === 'video'
-        ? 'Start a new conversation to use Ultra Think after video input'
-        : route === 'ultra'
-            ? 'Ultra Think is active for this conversation'
-            : 'Use Ultra Think for this conversation';
+    button.setAttribute('aria-disabled', route === 'ultra' ? 'true' : 'false');
+    button.title = route === 'ultra'
+        ? 'Ultra Think is active for this conversation'
+        : 'Use Ultra Think for this conversation';
     syncComposerModeVisual();
 }
 
 function setUltraThinkEnabled(enabled) {
     const nextEnabled = Boolean(enabled);
     const route = getConversationPrimaryRoute();
-    if (nextEnabled && route === 'video') {
-        showNotification('Start a new conversation to use Ultra Think after video input.', 'error');
-        return false;
-    }
-    if (nextEnabled && hasVideoAttachments()) {
-        showNotification('Remove video attachments before enabling Ultra Think.', 'error');
-        return false;
-    }
     if (!nextEnabled && route === 'ultra') {
         showNotification('Ultra Think is fixed for this conversation. Start a new conversation to change modes.', 'error');
         return false;
@@ -4062,6 +4005,7 @@ async function requestPlanFromAgent() {
         selected_sessions: selectedSessions,
         workspace_context: resolveWorkspaceContextPayload(),
         accessToken: session.access_token,
+        thinking_mode: ultraThinkEnabled ? 'ultra' : 'standard',
         config: buildOutgoingAgentConfig()
     });
 }
@@ -4145,14 +4089,7 @@ async function handleSendMessage() {
         return;
     }
 
-    if (!commitPrimaryRouteForSend(attachedFiles)) {
-        floatingInput.disabled = false;
-        sendMessageBtn.disabled = false;
-        sendMessageBtn.classList.remove('sending');
-        window.chatSendInProgress = false;
-        updatePrimaryComposerAction();
-        return;
-    }
+    commitPrimaryRouteForSend();
 
     // Check if we need to create a new backend session (after error)
     if (window.needsNewBackendSession) {
@@ -4760,9 +4697,7 @@ function init() {
     }
     setupIpcListeners();
     initializeAutoExpandingTextarea();
-    fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize, {
-        validateAttachment: validateAttachmentForCurrentMode
-    });
+    fileAttachmentHandler = new FileAttachmentHandler(null, supportedFileTypes, maxFileSize);
 
     // Expose fileAttachmentHandler globally for context re-use
     window.fileAttachmentHandler = fileAttachmentHandler;
