@@ -4396,6 +4396,9 @@ function initializeAutoExpandingTextarea() {
 }
 
 function showNotification(message, type = 'error', duration = 10000) {
+    if (window.notificationService) {
+        return window.notificationService.show(message, type, duration);
+    }
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     const icon = document.createElement('i');
