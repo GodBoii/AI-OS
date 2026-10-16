@@ -7,6 +7,7 @@ from agno.run.team import TeamRunEvent
 from agno.tools.duckduckgo import DuckDuckGoTools
 
 from tool_event_payload import serialize_tool_event
+from model_routing import DEFAULT_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def create_plan_agent(debug_mode: bool = True, enable_read_only_tools: bool = Tr
         metadata={"plan_mode": True},
         store_media=False,
         store_events=True,
-        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
+        model=get_openrouter_model(DEFAULT_MODEL_ID),
         tools=([DuckDuckGoTools()] if enable_read_only_tools else []) + question_tools(enable_user_questions),
         instructions=[
             "<system_instructions>",
@@ -175,6 +176,8 @@ def stream_plan(
     selected_sessions: Optional[List[Dict[str, Any]]] = None,
     workspace_context: Optional[Dict[str, Any]] = None,
     debug_mode: bool = True,
+    media: Optional[Dict[str, Any]] = None,
+    attachment_text: str = "",
 ):
     prompt = build_plan_prompt(
         message=message,
@@ -183,6 +186,8 @@ def stream_plan(
         selected_sessions=selected_sessions,
         workspace_context=workspace_context,
     )
+    if attachment_text:
+        prompt = f"{attachment_text}\n{prompt}"
     last_error: Optional[Exception] = None
     for enable_read_only_tools in (True, False):
         final_chunks: List[str] = []
@@ -195,6 +200,7 @@ def stream_plan(
             )
             for chunk in agent.run(
                 prompt,
+                **(media or {}),
                 stream=True,
                 stream_events=True,
             ):
