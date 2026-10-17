@@ -1459,6 +1459,45 @@ def assistant_chat():
         }), 500
 
 
+@api_bp.route('/mic/dictate', methods=['POST'])
+@limiter.limit('20 per minute')
+def mic_dictate():
+    """Authenticated literal dictation, separate from the intelligent mic."""
+    from groq_dictation import DictationError, MAX_AUDIO_BYTES, MODEL, transcribe
+
+    user, error = get_user_from_token(request)
+    if error:
+        return jsonify({"ok": False, "error": error[0]}), error[1]
+    try:
+        enforce_usage_limit(str(user.id))
+    except UsageLimitExceeded as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "code": "subscription_limit_exceeded",
+            "limit_info": exc.summary,
+        }), 429
+    except Exception:
+        logger.exception("Usage check failed for normal dictation user=%s", user.id)
+        return jsonify({"ok": False, "error": "Could not check voice input access. Please try again."}), 503
+
+    if request.content_length and request.content_length > 4 * ((MAX_AUDIO_BYTES + 2) // 3) + 1024:
+        return jsonify({"ok": False, "error": "Recording is too large."}), 413
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "A JSON object is required."}), 400
+    try:
+        text = transcribe(data.get("audio"), data.get("format", "webm"), data.get("language", ""))
+        logger.info("Normal dictation complete user=%s model=%s text_len=%s", user.id, MODEL, len(text))
+        return jsonify({"ok": True, "text": text, "backend": "groq", "model": MODEL}), 200
+    except DictationError as exc:
+        logger.warning("Normal dictation rejected user=%s status=%s", user.id, exc.status)
+        return jsonify({"ok": False, "error": str(exc)}), exc.status
+    except Exception:
+        logger.exception("Normal dictation failed user=%s", user.id)
+        return jsonify({"ok": False, "error": "Normal dictation failed. Please try again."}), 502
+
+
 @api_bp.route('/mic/transcribe', methods=['POST'])
 @limiter.limit('30 per minute')
 def mic_transcribe():
