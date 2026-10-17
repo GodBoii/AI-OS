@@ -1,6 +1,7 @@
 // chat.js (Final, Corrected Version with Simplified Event Handling)
 
 import { messageFormatter } from './message-formatter.js';
+import GroqSpeechInputHandler from './groq-speech-input-handler.js';
 import { ConversationViewCache } from './conversation-view-cache.js';
 import { ChatScrollController } from './chat-scroll-controller.js';
 import { activityInvocationId, buildActivityTimeline } from './chat-activity.js';
@@ -62,7 +63,7 @@ let shuffleMenuController = null;
 let welcomeDisplay = null;
 let floatingWindowManager = null;
 let audioInputHandler = null;
-let windowsSpeechInputHandler = null;
+let normalSpeechInputHandler = null;
 let composerContentObserver = null;
 let chatScroll = null;
 let handleToolActivity = null;
@@ -626,6 +627,9 @@ function reassignConversationThread(previousConversationId, nextConversationId) 
 // - Redraws active layouts, sidebar icons, and welcome boards.
 async function switchConversation(conversationId) {
     if (!conversationId) return;
+    if (conversationId !== currentConversationId && normalSpeechInputHandler?.isActive()) {
+        await normalSpeechInputHandler.cancel();
+    }
     const switchGeneration = ++conversationSwitchGeneration;
     try { await conversationViews.restore(conversationId); }
     catch (error) { showNotification(`Could not reopen conversation: ${error.message}`, 'error'); return; }
@@ -1697,8 +1701,8 @@ async function startNewConversation() {
     if (audioInputHandler && (audioInputHandler.isRecording || audioInputHandler.isProcessing)) {
         await audioInputHandler.cancelRecording();
     }
-    if (windowsSpeechInputHandler?.isActive?.()) {
-        await windowsSpeechInputHandler.cancel();
+    if (normalSpeechInputHandler?.isActive?.()) {
+        await normalSpeechInputHandler.cancel();
     }
 
     // CRITICAL: Save any pending attachment metadata before terminating
@@ -3637,7 +3641,7 @@ function updatePrimaryComposerAction() {
     if (!sendButton) return;
 
     const smartVoiceActive = Boolean(audioInputHandler?.isRecording || audioInputHandler?.isProcessing);
-    const normalVoiceActive = Boolean(windowsSpeechInputHandler?.isActive?.());
+    const normalVoiceActive = Boolean(normalSpeechInputHandler?.isActive?.());
     const sending = Boolean(window.chatSendInProgress || sendButton.classList.contains('sending') || planGenerationInProgress);
     const shouldShowSend = hasComposerContent();
 
@@ -4723,17 +4727,16 @@ function init() {
         }
     }
 
-    // The standard microphone uses Windows-native, literal dictation.
+    // The standard microphone sends literal dictation to Groq Whisper.
     const micButton = document.getElementById('mic-button');
-    if (micButton && window.WindowsSpeechInputHandler) {
-        windowsSpeechInputHandler = new WindowsSpeechInputHandler();
-        const initialized = windowsSpeechInputHandler.initialize(micButton, elements.input, {
-            language: navigator.language || 'en-US',
+    if (micButton) {
+        normalSpeechInputHandler = new GroqSpeechInputHandler();
+        const initialized = normalSpeechInputHandler.initialize(micButton, elements.input, {
             canStart: () => !(audioInputHandler?.isRecording || audioInputHandler?.isProcessing),
             onStateChange: updatePrimaryComposerAction,
         });
         if (!initialized) {
-            console.warn('Windows native speech input handler could not be initialized');
+            console.warn('Normal speech input handler could not be initialized');
         }
     }
 
@@ -4842,6 +4845,7 @@ function init() {
         window.historyContentPreview?.dispose();
         sessionContentViewer.invalidateCache();
         audioInputHandler?.destroy();
+        normalSpeechInputHandler?.destroy();
         composerContentObserver?.disconnect();
         chatScroll?.dispose();
     });
@@ -4852,6 +4856,7 @@ function init() {
             return;
         }
         conversationSwitchGeneration++;
+        void normalSpeechInputHandler?.cancel();
         for (const id of [...conversationThreads.keys()]) destroyConversationState(id);
         for (const id of [...conversationViews.archived]) {
             chatScroll?.forget(id);
