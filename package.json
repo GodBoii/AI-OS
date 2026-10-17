@@ -18,7 +18,7 @@
     "test:typing": "node --test js/tests/typing-input.test.js js/tests/typing-browser.test.js js/tests/typing-settings-browser.test.js",
     "test:cross-platform": "node --test js/tests/cross-platform.test.js",
     "test:native-features": "node --test js/tests/native-features.test.js",
-    "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs",
+    "test:voice-input": "node --test js/tests/windows-speech-input-handler.test.mjs js/tests/groq-speech-input-browser.test.js",
     "rebuild:native": "node node_modules/@electron/rebuild/lib/cli.js -f -w node-pty",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
