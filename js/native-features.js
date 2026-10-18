@@ -158,6 +158,7 @@ function installNativeFeatures({
 
     const quickPrompt = new QuickPromptWindow({
         BrowserWindow,
+        Menu,
         globalShortcut,
         screen,
         ipcMain,
