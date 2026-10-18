@@ -4,14 +4,17 @@
 // floats above other windows; Enter sends the text to a new conversation in
 // the main window, Esc or clicking elsewhere closes it.
 
+const { installTextContextMenu } = require('./text-context-menu');
+
 const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+Space';
 const WINDOW_WIDTH = 640;
 const WINDOW_HEIGHT = 132;
 const MAX_PROMPT_LENGTH = 20000;
 
 class QuickPromptWindow {
-    constructor({ BrowserWindow, globalShortcut, screen, ipcMain, preloadPath, htmlPath, onSubmit, accelerator = DEFAULT_ACCELERATOR, logger = console }) {
+    constructor({ BrowserWindow, Menu, globalShortcut, screen, ipcMain, preloadPath, htmlPath, onSubmit, accelerator = DEFAULT_ACCELERATOR, logger = console }) {
         this.BrowserWindow = BrowserWindow;
+        this.Menu = Menu;
         this.globalShortcut = globalShortcut;
         this.screen = screen;
         this.preloadPath = preloadPath;
@@ -78,6 +81,7 @@ class QuickPromptWindow {
     }
 
     hide() {
+        this.textMenu?.close();
         if (this.window && !this.window.isDestroyed() && this.window.isVisible()) this.window.hide();
     }
 
@@ -122,11 +126,21 @@ class QuickPromptWindow {
                 contextIsolation: true,
                 nodeIntegration: false,
                 sandbox: true,
+                spellcheck: true,
             },
         });
         // Float above full-screen apps too.
         this.window.setAlwaysOnTop(true, 'pop-up-menu');
-        this.window.on('blur', () => this.hide());
+        const win = this.window;
+        this.textMenu = installTextContextMenu(win, { Menu: this.Menu, onClose: () => {
+            // Menu dismissal can precede native focus restoration.
+            setImmediate(() => {
+                if (!win.isDestroyed() && !this.textMenu.isOpen && !win.isFocused()) this.hide();
+            });
+        } });
+        win.on('blur', () => {
+            if (!this.textMenu.isOpen) this.hide();
+        });
         this.window.loadFile(this.htmlPath);
         return this.window;
     }
