@@ -3811,7 +3811,7 @@ function updatePlanOutputCard(messageId, planText, done = false) {
             </div>
             <div class="plan-output-body">
                 <div class="plan-output-content">${formattedPlan}</div>
-                <textarea class="plan-output-editor hidden" aria-label="Edit generated plan">${escapeReasoningHtml(planText || '')}</textarea>
+                <textarea class="plan-output-editor hidden" aria-label="Edit generated plan" spellcheck="true">${escapeReasoningHtml(planText || '')}</textarea>
             </div>
             <div class="plan-output-actions">
                 <button type="button" class="plan-output-edit">Edit</button>
