@@ -86,11 +86,11 @@
             <div class="task-form-section">
                 <div class="task-form-group">
                     <label for="task-name">Task Name <span class="required">*</span></label>
-                    <input type="text" id="task-name" placeholder="What should the AI do?" autocomplete="off">
+                    <input type="text" id="task-name" placeholder="What should the AI do?" autocomplete="off" spellcheck="true">
                 </div>
                 <div class="task-form-group">
                     <label for="task-description">Description</label>
-                    <textarea id="task-description" placeholder="Additional context..." rows="2"></textarea>
+                    <textarea id="task-description" placeholder="Additional context..." rows="2" spellcheck="true"></textarea>
                 </div>
             </div>
             <div class="task-form-section">
@@ -151,7 +151,7 @@
                     Instructions
                 </div>
                 <div class="task-form-group">
-                    <textarea id="task-instructions" placeholder="E.g. 'Summarize in bullet points', 'Use formal tone'..." rows="3"></textarea>
+                    <textarea id="task-instructions" placeholder="E.g. 'Summarize in bullet points', 'Use formal tone'..." rows="3" spellcheck="true"></textarea>
                 </div>
             </div>
             <div class="task-form-section">
@@ -209,7 +209,7 @@
                 <div class="task-form-group"><label for="user-name">Name</label><input type="text" id="user-name" placeholder="Your name"></div>
                 <div class="task-form-group"><label for="user-email">Email</label><input type="email" id="user-email" placeholder="Your email"></div>
                 <div class="task-form-group"><label for="user-location">Location</label><input type="text" id="user-location" placeholder="Your location"></div>
-                <div class="task-form-group"><label for="user-timezone">Timezone</label><input type="text" id="user-timezone" placeholder="e.g. Asia/Kolkata"></div>
+                <div class="task-form-group"><label for="user-timezone">Timezone</label><input type="text" id="user-timezone" placeholder="e.g. Asia/Kolkata" spellcheck="false"></div>
                 <div class="task-form-group"><label for="user-language">Language</label><input type="text" id="user-language" placeholder="Preferred language"></div>
             </div>
             <div class="task-form-section">
@@ -222,8 +222,8 @@
             <div class="task-form-section">
                 <div class="task-form-section-title">Capabilities</div>
                 <div class="task-form-group"><label for="allowed-actions">Allowed Actions</label><input type="text" id="allowed-actions" placeholder="comma-separated"></div>
-                <div class="task-form-group"><label for="restricted-domains">Restricted Domains</label><input type="text" id="restricted-domains" placeholder="comma-separated"></div>
-                <div class="task-form-group"><label for="api-keys">API Keys (JSON)</label><textarea id="api-keys" placeholder='{"service": "key"}'></textarea></div>
+                <div class="task-form-group"><label for="restricted-domains">Restricted Domains</label><input type="text" id="restricted-domains" placeholder="comma-separated" spellcheck="false"></div>
+                <div class="task-form-group"><label for="api-keys">API Keys (JSON)</label><textarea id="api-keys" placeholder='{"service": "key"}' spellcheck="false"></textarea></div>
                 <div class="task-form-group"><label for="tools">Tools</label><input type="text" id="tools" placeholder="comma-separated"></div>
             </div>
             <div class="task-form-section">
@@ -237,7 +237,7 @@
                 <div class="task-form-group checkbox-group"><input type="checkbox" id="filesystem-access"><label for="filesystem-access">Filesystem</label></div>
                 <div class="task-form-group checkbox-group"><input type="checkbox" id="network-access"><label for="network-access">Network</label></div>
                 <div class="task-form-group checkbox-group"><input type="checkbox" id="api-access"><label for="api-access">API</label></div>
-                <div class="task-form-group"><label for="credentials">Credentials (JSON)</label><textarea id="credentials" placeholder='{"service": {"user": "...", "pass": "..."}}'></textarea></div>
+                <div class="task-form-group"><label for="credentials">Credentials (JSON)</label><textarea id="credentials" placeholder='{"service": {"user": "...", "pass": "..."}}' spellcheck="false"></textarea></div>
             </div>
         </div>
         <div class="task-modal-footer">
