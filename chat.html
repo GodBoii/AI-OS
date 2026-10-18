@@ -30,7 +30,7 @@
             <div id="project-local-terminal-shell" class="project-local-terminal-shell" role="application" aria-label="Local terminal" tabindex="0"></div>
             <pre id="project-local-terminal-output" class="project-local-terminal-output hidden" aria-hidden="true"></pre>
             <div class="project-local-terminal-input-row hidden" aria-hidden="true">
-                <input id="project-local-terminal-input" class="project-local-terminal-input" type="text"
+                <input id="project-local-terminal-input" class="project-local-terminal-input" type="text" spellcheck="false"
                     placeholder="Type command and press Enter" />
                 <button id="project-local-terminal-send" class="project-local-terminal-send" aria-label="Send command">
                     <i class="fas fa-arrow-right"></i>
@@ -99,7 +99,7 @@
                         </button>
                         <div class="design-mode-section-body">
                             <div class="design-mode-control-group">
-                                <textarea id="design-mode-text-input" class="design-mode-textarea" rows="2" placeholder="Select an element to edit text..."></textarea>
+                                <textarea id="design-mode-text-input" class="design-mode-textarea" rows="2" spellcheck="true" placeholder="Select an element to edit text..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -308,7 +308,7 @@
                             <span>Target</span>
                             <strong id="design-mode-comment-target-label">No element selected</strong>
                         </div>
-                        <textarea id="design-mode-comment-input" class="design-mode-textarea design-mode-comment-input" rows="3" placeholder="Describe the design change you want..."></textarea>
+                        <textarea id="design-mode-comment-input" class="design-mode-textarea design-mode-comment-input" rows="3" spellcheck="true" placeholder="Describe the design change you want..."></textarea>
                         <div class="design-mode-comment-composer-actions">
                             <button id="design-mode-comment-cancel-btn" class="design-mode-comment-secondary-btn" type="button">Cancel</button>
                             <button id="design-mode-comment-add-btn" class="design-mode-comment-primary-btn" type="button">Add Comment</button>
@@ -767,7 +767,7 @@
     </div>
 
     <!-- Main prompt field -->
-    <textarea id="floating-input" class="floating-input" placeholder="Ask anything" rows="1"></textarea>
+    <textarea id="floating-input" class="floating-input" placeholder="Ask anything" rows="1" spellcheck="true" aria-label="Message"></textarea>
 
     <!-- NEW: A dedicated toolbar for all buttons -->
     <div class="input-toolbar">
@@ -909,7 +909,7 @@
         </div>
         <div class="context-search">
             <i class="fas fa-search"></i>
-            <input type="text" id="session-search" placeholder="Search your chats..." />
+            <input type="text" id="session-search" placeholder="Search your chats..." spellcheck="false" />
         </div>
     </div>
     <div class="context-content">
