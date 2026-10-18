@@ -23,6 +23,7 @@ const { installNativeFeatures } = require('./native-features.js');
 const { parseLaunchAction } = require('./app-actions.js');
 const { extractFilePaths } = require('./file-open.js');
 const { parseNotificationLink } = require('./run-notification.js');
+const { installTextContextMenu } = require('./text-context-menu');
 
 let mainWindow;
 let appTray = null;
@@ -398,6 +399,7 @@ function createWindow() {
         icon: icon,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
+            spellcheck: true,
             nodeIntegration: true,
             contextIsolation: true,
             enableRemoteModule: true,
@@ -413,6 +415,8 @@ function createWindow() {
         transparent: true,
         skipTaskbar: false  // Explicitly show in taskbar
     });
+
+    installTextContextMenu(mainWindow, { Menu });
 
     // Additional Windows-specific icon handling
     // This ensures the icon is properly set for the window and taskbar
