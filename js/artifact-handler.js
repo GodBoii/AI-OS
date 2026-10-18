@@ -1950,7 +1950,7 @@ class ArtifactHandler {
             <div>${candidateInfo}</div>
             <div style="margin-top: 12px; display: grid; gap: 6px;">
                 <label for="deploy-slug-input" style="font-weight: 600;">Subdomain Slug</label>
-                <input id="deploy-slug-input" type="text" value="${this.escapeHtml(proposedSlug || 'site')}" placeholder="your-site-name" style="height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.18); color: inherit; padding: 0 10px;" />
+                <input id="deploy-slug-input" type="text" spellcheck="false" value="${this.escapeHtml(proposedSlug || 'site')}" placeholder="your-site-name" style="height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.18); color: inherit; padding: 0 10px;" />
                 <div id="deploy-slug-helper" style="font-size: 12px; opacity: 0.85;">Edit this to choose your public site name.</div>
                 <div id="deploy-slug-error" style="font-size: 12px; color: #f87171; min-height: 16px;"></div>
             </div>
@@ -1961,7 +1961,7 @@ class ArtifactHandler {
                 ${files.map((file, index) => `
                     <div class="deploy-editor-row" data-row-index="${index}">
                         <input class="deploy-editor-include" type="checkbox" checked />
-                        <input class="deploy-editor-path" type="text" value="${this.escapeHtml(file.path)}" />
+                        <input class="deploy-editor-path" type="text" spellcheck="false" value="${this.escapeHtml(file.path)}" />
                         <span class="deploy-editor-type">${this.escapeHtml(file.content_type || this.inferContentTypeFromPath(file.path))}</span>
                     </div>
                 `).join('')}
