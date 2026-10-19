@@ -415,6 +415,19 @@ body:not(.dark-mode) .ghp-tabs {
     border-bottom-color: rgba(0, 0, 0, 0.06);
 }
 
+/* The shared recipe also styles artifact tabs with a light background. */
+body.dark-mode .github-panel .ghp-tabs {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.055);
+}
+
+body.dark-mode .github-panel {
+    color-scheme: dark;
+    --tabs-text-active: #f0f0f2;
+    --tabs-text-muted: #a1a1aa;
+    --tabs-pill-bg: rgba(255, 255, 255, 0.085);
+}
+
 .ghp-tabs-pill {
     position: absolute;
     top: 6px;
