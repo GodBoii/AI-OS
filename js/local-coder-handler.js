@@ -281,7 +281,7 @@ class LocalCoderHandler {
         };
     }
 
-    async readWorkspaceFile({ conversationId, rootPath, relativePath }) {
+    async readWorkspaceFile({ conversationId, rootPath, relativePath, previewOnly = false }) {
         const root = await this._resolveRootPath(conversationId, rootPath);
         if (!root.ok) return { success: false, error: root.error };
         if (!relativePath) return { success: false, error: 'path is required' };
@@ -290,30 +290,49 @@ class LocalCoderHandler {
         if (!target.ok) return { success: false, error: target.error };
 
         try {
-            const data = await fsp.readFile(target.path);
+            let data;
+            let size;
+            if (previewOnly) {
+                const handle = await fsp.open(target.path, 'r');
+                try {
+                    const stats = await handle.stat();
+                    if (!stats.isFile()) return { success: false, error: 'Path is not a file' };
+                    size = stats.size;
+                    const buffer = Buffer.alloc(Math.min(size, 300000));
+                    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+                    data = buffer.subarray(0, bytesRead);
+                } finally {
+                    await handle.close();
+                }
+            } else {
+                data = await fsp.readFile(target.path);
+                size = data.length;
+            }
             const isBinary = data.includes(0);
             if (isBinary) {
                 return {
                     success: true,
                     path: relativePath,
                     is_binary: true,
-                    size_bytes: data.length,
+                    size_bytes: size,
                     content: null,
-                    content_base64: data.toString('base64'),
+                    ...(previewOnly ? {} : { content_base64: data.toString('base64') }),
                 };
             }
 
-            const textContent = data.toString('utf8');
+            const textContent = previewOnly
+                ? new TextDecoder().decode(data, { stream: size > data.length })
+                : data.toString('utf8');
             const limit = 300000;
             const truncated = textContent.slice(0, limit);
             return {
                 success: true,
                 path: relativePath,
                 is_binary: false,
-                size_bytes: data.length,
-                truncated: textContent.length > truncated.length,
+                size_bytes: size,
+                truncated: size > data.length || textContent.length > truncated.length,
                 content: truncated,
-                content_base64: data.toString('base64'),
+                ...(previewOnly ? {} : { content_base64: data.toString('base64') }),
             };
         } catch (error) {
             return { success: false, error: error.message };
@@ -324,11 +343,14 @@ class LocalCoderHandler {
         const root = await this._resolveRootPath(conversationId, rootPath);
         if (!root.ok) return { success: false, error: root.error };
 
+        if (this.watchers.get(conversationId)?.getWatched && this.getWorkspaceContext(conversationId)?.watched_root === root.path) {
+            return { success: true, root_path: root.path };
+        }
         this.stopWatching(conversationId);
         const watcher = chokidar.watch(root.path, {
             persistent: true,
             ignoreInitial: true,
-            ignored: [/node_modules/, /\.git/],
+            ignored: (candidate) => this._isIgnoredPath(this._toRelativeUnix(root.path, candidate)),
         });
 
         watcher.on('all', (event, changedPath) => {
@@ -340,6 +362,7 @@ class LocalCoderHandler {
         });
 
         this.watchers.set(conversationId, watcher);
+        this.setWorkspaceContext(conversationId, { watched_root: root.path });
         return { success: true, root_path: root.path };
     }
 
@@ -1011,8 +1034,7 @@ class LocalCoderHandler {
 
     _isIgnoredPath(relPath) {
         const normalized = String(relPath || '').replace(/\\/g, '/');
-        return normalized.includes('/node_modules/') || normalized.startsWith('node_modules/')
-            || normalized.includes('/.git/') || normalized.startsWith('.git/');
+        return normalized.split('/').some(part => /^(?:node_modules|\.git|__pycache__|\.cache|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.venv(?:[-.].*)?|venv|\.tox)$/.test(part));
     }
 
     _toRelativeUnix(root, fullPath) {
@@ -1024,24 +1046,28 @@ class LocalCoderHandler {
         const stack = [rootPath];
 
         while (stack.length > 0 && files.length < limit) {
-            const current = stack.pop();
-            let entries;
-            try {
-                entries = await fsp.readdir(current, { withFileTypes: true });
-            } catch (_error) {
-                continue;
-            }
+            const directories = stack.splice(0, 8);
+            const batches = await Promise.all(directories.map(async current => {
+                try {
+                    return { current, entries: await fsp.readdir(current, { withFileTypes: true }) };
+                } catch (error) {
+                    if (current === rootPath) throw error;
+                    if (!['ENOENT', 'EACCES', 'EPERM'].includes(error.code)) throw error;
+                    return { current, entries: [] };
+                }
+            }));
+            for (const { current, entries } of batches) {
+                for (const entry of entries) {
+                    if (files.length >= limit) break;
+                    const absPath = path.join(current, entry.name);
+                    const rel = this._toRelativeUnix(baseRoot, absPath);
+                    if (this._isIgnoredPath(rel)) continue;
 
-            for (const entry of entries) {
-                if (files.length >= limit) break;
-                const absPath = path.join(current, entry.name);
-                const rel = this._toRelativeUnix(baseRoot, absPath);
-                if (this._isIgnoredPath(rel)) continue;
-
-                if (entry.isDirectory()) {
-                    stack.push(absPath);
-                } else if (entry.isFile()) {
-                    files.push(rel);
+                    if (entry.isDirectory()) {
+                        stack.push(absPath);
+                    } else if (entry.isFile()) {
+                        files.push(rel);
+                    }
                 }
             }
         }
