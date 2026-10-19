@@ -26,6 +26,7 @@ test('workspace tree supports disclosure, keyboard navigation, previews and syst
     await page.addScriptTag({ content: `${source.slice(0, source.indexOf('const projectWorkspace = new ProjectWorkspace();'))}\nwindow.ProjectWorkspace = ProjectWorkspace;` });
     await page.evaluate(() => {
         const workspace = Object.create(window.ProjectWorkspace.prototype);
+        workspace.workspaceStates = new Map();
         workspace.el = { tree: document.getElementById('tree'), previewContent: document.getElementById('preview') };
         workspace.getExecutionTarget = () => 'cloud';
         window.currentConversationId = 'tree-check';
