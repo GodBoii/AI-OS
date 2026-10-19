@@ -917,6 +917,7 @@ function createWindow() {
             conversationId: body.conversationId,
             rootPath: body.rootPath,
             relativePath: body.path,
+            previewOnly: body.previewOnly === true,
         });
     });
 
