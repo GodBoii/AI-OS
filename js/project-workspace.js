@@ -5,6 +5,7 @@ class ProjectWorkspace {
         this.currentTreeSource = null;
         this.latestSyncedPaths = [];
         this.selectedFilePath = null;
+        this.previewRequest = 0;
         this.workspaceStates = new Map();
         this.syncDebounceTimer = null;
         this.terminalVisible = false;
@@ -438,6 +439,18 @@ class ProjectWorkspace {
                     title: 'Local workspace has unpublished changes',
                     subtitle: 'Re-deploy to publish your latest local edits.',
                 });
+            }
+            if (data.event === 'change') {
+                const root = String(state?.local_context?.root_path || '').replace(/\\/g, '/').replace(/\/$/, '');
+                if (String(data.path || '').replace(/\\/g, '/') === `${root}/${this.selectedFilePath}`) {
+                    clearTimeout(this.previewRefreshTimer);
+                    this.previewRefreshTimer = setTimeout(() => {
+                        if (this.selectedFilePath && !this.el.mainPreview?.classList.contains('hidden')) {
+                            void this.openFilePreview(this.selectedFilePath);
+                        }
+                    }, 160);
+                }
+                return;
             }
             if (this.syncDebounceTimer) {
                 clearTimeout(this.syncDebounceTimer);
@@ -1115,6 +1128,8 @@ class ProjectWorkspace {
     }
 
     hideMainFilePreview() {
+        this.previewRequest = (this.previewRequest || 0) + 1;
+        this.fileViewer?.clear();
         if (this.el.mainPreview) {
             this.el.mainPreview.classList.add('hidden');
         }
@@ -1290,7 +1305,36 @@ class ProjectWorkspace {
         return div.innerHTML;
     }
 
+    getWorkspaceKey() {
+        const state = this.getState();
+        return JSON.stringify([this.getConversationId(), this.getExecutionTarget(),
+            state?.local_context?.root_path, this.activeProject?.site_id, this.activeProject?.deployment_id]);
+    }
+
     async syncWorkspaceTree() {
+        const key = this.getWorkspaceKey();
+        if (this.treeSync?.key === key) {
+            this.treeSync.repeat = true;
+            return this.treeSync.promise;
+        }
+        const sync = { key, repeat: false };
+        this.treeSync = sync;
+        sync.promise = this.loadWorkspaceTree(key).finally(() => {
+            if (this.treeSync !== sync) return;
+            this.treeSync = null;
+            if (sync.repeat && this.getWorkspaceKey() === key) {
+                clearTimeout(this.syncDebounceTimer);
+                this.syncDebounceTimer = setTimeout(() => this.syncWorkspaceTree(), 160);
+            }
+        });
+        return sync.promise;
+    }
+
+    async loadWorkspaceTree(key) {
+        if (this.renderedTreeKey && this.renderedTreeKey !== key) {
+            this.selectedFilePath = null;
+            this.hideMainFilePreview();
+        }
         // Initialize activeProject if it doesn't exist (handles fresh local mode start)
         if (!this.activeProject) {
             const state = this.getState();
@@ -1377,6 +1421,7 @@ class ProjectWorkspace {
                 }
             }
 
+            if (key !== this.getWorkspaceKey()) return;
             if (!paths.length) {
                 if (mode === 'local') {
                     this.updateRedeployUI({ visible: false, dirty: false });
@@ -1393,15 +1438,24 @@ class ProjectWorkspace {
                 return;
             }
 
+            const unchanged = this.renderedTreeKey === key && paths.length === this.latestSyncedPaths.length
+                && paths.every((path, index) => path === this.latestSyncedPaths[index]);
             this.currentTreeSource = source || (mode === 'local' ? 'local' : 'workspace');
             this.latestSyncedPaths = [...paths];
-            this.selectedFilePath = null;
-            this.renderTreeFromPaths(paths);
+            if (!unchanged) {
+                if (!paths.includes(this.selectedFilePath)) {
+                    this.selectedFilePath = null;
+                    this.hideMainFilePreview();
+                }
+                this.renderTreeFromPaths(paths);
+                this.renderedTreeKey = key;
+            }
             this.updateDeployUI(paths);
-            this.setPreviewPlaceholder(`Loaded ${paths.length} files. Click a file to preview.`);
+            if (!this.selectedFilePath) this.setPreviewPlaceholder(`Loaded ${paths.length} files. Click a file to preview.`);
             this.setStatus(`Loaded ${paths.length} file${paths.length === 1 ? '' : 's'} from ${this.currentTreeSource}.`);
             await this.refreshDeploymentModificationStatus();
         } catch (error) {
+            if (key !== this.getWorkspaceKey()) return;
             this.latestSyncedPaths = [];
             this.updateDeployUI([]);
             this.setStatus(`Sync failed: ${error.message}`);
@@ -1415,6 +1469,8 @@ class ProjectWorkspace {
     }
 
     setPreviewPlaceholder(message) {
+        this.previewRequest = (this.previewRequest || 0) + 1;
+        this.fileViewer?.clear(message);
         if (this.el.previewTitle) {
             this.el.previewTitle.textContent = 'File Preview';
         }
@@ -2015,6 +2071,12 @@ class ProjectWorkspace {
 
     async openFilePreview(path, rowEl) {
         if (!path) return;
+        rowEl ||= Array.from(this.el.tree?.querySelectorAll('.project-file-row') || [])
+            .find(row => row.dataset.path === path);
+        const request = this.previewRequest = (this.previewRequest || 0) + 1;
+        const workspaceKey = this.getWorkspaceKey();
+        const isCurrent = () => request === this.previewRequest && workspaceKey === this.getWorkspaceKey();
+        this.fileViewer?.clear('Loading file content...');
 
         this.clearSelectedRows();
         if (rowEl) {
@@ -2051,6 +2113,7 @@ class ProjectWorkspace {
                     conversationId,
                     rootPath,
                     path: String(path),
+                    previewOnly: true,
                 });
                 if (!payload?.success) {
                     throw new Error(payload?.error || 'Failed to read local file');
@@ -2075,10 +2138,11 @@ class ProjectWorkspace {
                 });
             }
 
+            if (!isCurrent()) return;
             if (payload?.is_binary) {
                 const binaryText =
                     `[Binary file]\nPath: ${path}\nSize: ${payload.size_bytes || 0} bytes\n\nBinary content preview is not shown.`;
-                this.el.previewContent.textContent = binaryText;
+                if (this.el.previewContent) this.el.previewContent.textContent = binaryText;
                 if (this.el.mainPreviewContent) {
                     this.el.mainPreviewContent.textContent = binaryText;
                 }
@@ -2090,13 +2154,19 @@ class ProjectWorkspace {
                 ? '\n\n[Preview truncated for large file]'
                 : '';
             const previewText = `${body}${truncNote}`;
-            this.el.previewContent.textContent = previewText;
+            if (this.el.previewContent) this.el.previewContent.textContent = previewText;
             if (this.el.mainPreviewContent) {
-                this.el.mainPreviewContent.textContent = previewText;
+                if (!this.fileViewer) {
+                    const { ProjectFileViewer } = await import('./project-file-viewer.js');
+                    if (!isCurrent()) return;
+                    this.fileViewer = new ProjectFileViewer(this.el.mainPreviewContent, this.el.mainPreviewCloseBtn);
+                }
+                await this.fileViewer.show(path, body, Boolean(payload?.truncated));
             }
         } catch (error) {
+            if (!isCurrent()) return;
             const errorText = `Failed to load file: ${error.message}`;
-            this.el.previewContent.textContent = errorText;
+            if (this.el.previewContent) this.el.previewContent.textContent = errorText;
             if (this.el.mainPreviewContent) {
                 this.el.mainPreviewContent.textContent = errorText;
             }
