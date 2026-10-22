@@ -13,6 +13,9 @@ from mobile_tools import MobileTools
 
 logger = logging.getLogger(__name__)
 
+# The native assistant runs on the lighter MiMo model for fast voice replies.
+SYSTEM_ASSISTANT_MODEL_ID = "xiaomi/mimo-v2.6-flash"
+
 
 def get_system_assistant(
     mobile_tools_config: Optional[Dict[str, Any]] = None,
@@ -88,7 +91,7 @@ def get_system_assistant(
     tools.extend(question_tools(enable_user_questions))
     agent = Agent(
         name="Aetheria_System_Assistant",
-        model=get_openrouter_model("xiaomi/mimo-v2.6-pro"),
+        model=get_openrouter_model(SYSTEM_ASSISTANT_MODEL_ID),
         instructions=system_instructions,
         tools=tools,
         user_id=user_id,
