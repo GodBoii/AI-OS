@@ -290,15 +290,19 @@
         { sel: '.tabs-sidebar [data-tab="memory"]', icon: 'brain', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="capabilities"]', icon: 'cpu', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="settings"]', icon: 'gear', variant: 'tab' },
+        { sel: '.tabs-sidebar [data-tab="appearance"]', icon: 'sparkles', variant: 'tab' },
+        { sel: '.tabs-sidebar [data-tab="notifications"]', icon: 'bell', variant: 'tab' },
+        { sel: '.tabs-sidebar [data-tab="shortcuts"]', icon: 'keyboard', variant: 'tab' },
+        { sel: '.tabs-sidebar [data-tab="desktop"]', icon: 'monitor', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="about"]', icon: 'info', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="support"]', icon: 'headset', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="updates"]', icon: 'refresh', variant: 'tab' },
 
         // ── Settings card headers ──
-        { sel: '#settings-tab [data-settings-icon="notifications"]', icon: 'bell', variant: 'card' },
-        { sel: '#settings-tab [data-settings-icon="shortcuts"]', icon: 'keyboard', variant: 'card' },
-        { sel: '#settings-tab [data-settings-icon="appearance"]', icon: 'sparkles', variant: 'card' },
-        { sel: '#settings-tab [data-settings-icon="general"]', icon: 'gear', variant: 'card' },
+        { sel: '.settings-tab-panel [data-settings-icon="notifications"]', icon: 'bell', variant: 'card' },
+        { sel: '.settings-tab-panel [data-settings-icon="shortcuts"]', icon: 'keyboard', variant: 'card' },
+        { sel: '.settings-tab-panel [data-settings-icon="appearance"]', icon: 'sparkles', variant: 'card' },
+        { sel: '.settings-tab-panel [data-settings-icon="general"]', icon: 'gear', variant: 'card' },
 
         // ── Chat composer toolbar ──
         { sel: '.input-toolbar .add-btn', icon: 'plus', variant: 'composer' },
