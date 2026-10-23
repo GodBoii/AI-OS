@@ -2,6 +2,127 @@
 
 ---
 
+## [v1.4.7] - October 23, 2026
+
+Project file previews for source, Markdown, HTML, and Mermaid, browser takeover and recovery controls, and a settings sidebar split into six sections.
+
+### 1. Project File Viewer and Rich Previews
+
+- Added `ProjectFileViewer` with syntax highlighting for 30+ languages and configuration formats through `highlight.js`, including JavaScript, TypeScript, Python, Rust, C#, C/C++, Go, Bash, PowerShell, Dockerfile, YAML, TOML, Markdown, LaTeX, Elixir, Haskell, and CMake. Less common grammars (Protobuf, Nix, Dart, Scala, Groovy) load on demand, so they cost nothing until a matching file opens.
+- Added a toggle between highlighted source and a formatted preview for Markdown, Mermaid, HTML, and SVG files. The button reports its state with `aria-pressed` and has a visible focus ring.
+- Markdown previews render GitHub Flavored Markdown tables, blockquotes, fenced code, and embedded Mermaid diagrams through `marked`.
+- HTML and SVG previews run in an iframe with an empty `sandbox` attribute. A Content Security Policy allows inline styles plus data and blob images and fonts, blocks scripts, network requests, and form posts, and DOMPurify sanitizes the markup. The frame also carries `referrerpolicy="no-referrer"` and cannot reach the parent page.
+- Mermaid diagrams render with `securityLevel: 'strict'`, HTML labels disabled, and a 50 KB source limit. The rendered SVG is sanitized again, and diagrams follow the current light or dark theme.
+- Large files stay readable. Previews stop at 300 KB, files above 100 KB show plain text with a notice instead of highlighting, and the preview toggle hides when content is truncated or has no formatted mode.
+- Light and dark syntax colors come from shared tokens (`--syntax-keyword`, `--syntax-string`, `--syntax-number`, `--syntax-function`, `--syntax-comment`, `--syntax-variable`) so both themes stay consistent.
+
+### 2. Faster Workspace Scanning
+
+- Local workspace scans read directories in parallel batches of 8 instead of walking them one at a time.
+- `readWorkspaceFile` accepts `previewOnly`, which reads at most 300 KB from the file handle and skips base64 encoding. Opening a large file in the tree no longer copies the whole file through IPC.
+- Ignore rules now skip `node_modules`, `.git`, `__pycache__`, `.cache`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.venv*`, `venv`, and `.tox`.
+- `LocalCoderHandler` reuses an existing file watcher when the workspace root has not changed.
+- Preview requests and tree sync use revision counters, so a slow response cannot overwrite a newer file selection.
+- The open preview reloads when its file changes on disk.
+
+### 3. Browser Takeover and Recovery
+
+- Added runtime controls under Settings > Browser: Take control, Pause, Resume automation, Restart to apply mode, and Close browser, plus status, tab list, and recent activity.
+- Pause and takeover close the command gate immediately. A running action finishes, queued commands return a paused result, and nothing replays on resume. A generation counter drops commands that were queued before a pause and resume pair.
+- When an agent needs the browser while automation is paused, a native prompt offers Resume browser actions or Keep paused. It works with Settings closed and with Chrome not running. Concurrent requests share one prompt. Declining or waiting 60 seconds leaves automation paused without showing the prompt again for that request.
+- Settings > Browser keeps an Enable browser automation button visible while paused, stopped, or disconnected, including when Chrome is closed. Enabling does not launch Chrome.
+- Recovery waits up to 30 seconds for active work before prompting. If the work is still running, the browser tool returns a paused result with a path to Settings instead of holding the request past its deadline.
+- After takeover, page actions that use old element IDs or coordinates are rejected until the agent reads a fresh view. Status checks, tab listing, and explicit navigation still work.
+- Pause affects browser execution only. It does not stop the model stream or the rest of the chat run.
+- Opening a site for sign-in pauses automation and keeps tabs and page state. Takeover brings a background window to the primary display. Headless Chrome cannot show a window, so the UI offers a confirmed visible restart and explains that tabs and unsaved changes will close. Canceling leaves the session paused and intact.
+- Close and restart wait for active work, invalidate queued commands, and leave automation paused. Chrome receives a graceful close request so cookies flush and profile locks release, with bounded termination as a fallback.
+- Tab actions require a paused browser and use stable page identities instead of indexes. Closing a stale tab or the last remaining tab returns an error.
+- Recent activity keeps the last 30 actions in memory and shows the latest 12. It records action names, timestamps, and outcomes only. It does not store typed text, credentials, screenshots, or raw command payloads. The UI shows hostnames without URL query strings.
+- Cookie inspection and clearing remain in the Sign-in and site data card. An empty cookie list no longer implies that every site is signed out.
+
+### 4. Settings Split into Sidebar Sections
+
+- Replaced the single Settings tab with six sidebar sections: General, Appearance, Browser, Notifications, Keyboard Shortcuts, and Desktop Integration.
+- Kept existing control IDs and stored preference keys, so moving controls between sections does not reset saved choices.
+- Each section scrolls its content area to the top when opened and initializes its listeners and animated icons on demand.
+- The sidebar now scrolls when the section list is taller than the window, and the content area can shrink without horizontal overflow.
+- Settings cards no longer lift or pulse on hover. The glass shimmer and border accent remain.
+- Removed the Account Skills tab. Its native tools now appear in an expanded Capabilities section with new Presentations, File Storage, and Memory entries, rewritten capability copy, and an inline SVG icon for Image Generation.
+
+### 5. Dark Mode Polish
+
+- Fixed GitHub panel tabs and native controls in dark mode with an explicit `color-scheme: dark` and darker tab backgrounds, muted labels, and pill indicators.
+
+### 6. Tests and Documentation
+
+- Added `js/tests/browser-runtime.test.js` covering lazy status reads, preference persistence, pause and resume ordering, queue recovery, bounded activity, real Chromium tab identities, cookie persistence, consent races, stale interactions, and slow work.
+- Added `js/tests/browser-runtime-ui.test.js` covering takeover controls, keyboard use, save failures, restart confirmation, text escaping, both themes, responsive layouts, reduced motion, and refresh cleanup.
+- Added `js/tests/fixtures/browser-runtime-electron.cjs` to verify that Electron takeover reveals a background window and keeps its page and form state.
+- Added `js/tests/settings-sections-browser.test.js` covering section navigation, saved preferences, single-active panel behavior, stationary hover, and overflow.
+- Added `js/tests/project-file-viewer-browser.test.js`, `js/tests/project-file-tree-browser.test.js`, and `js/tests/local-workspace-files.test.js` for highlighting, previews, sandboxing, themes, tree behavior, bounded reads, watcher reuse, and ignore rules.
+- Added `docs/browser-controls.md` describing browser preferences, pause and resume behavior, tab and activity limits, and recovery scenarios.
+- Isolated test environment variables in `js/tests/spelling-electron.test.js` so `ELECTRON_RUN_AS_NODE` no longer breaks the Electron spelling run.
+
+### 7. Packaging and Maintenance
+
+- Bumped the application version to `1.4.7` in `package.json` and `package-lock.json`.
+- Built the Windows NSIS installer `aetheria-ai-Setup-1.4.7.exe`, its blockmap, `latest.yml`, and the unpacked `win-unpacked` distribution.
+- Switched the native system assistant model to `xiaomi/mimo-v2.6-flash` for faster voice replies.
+
+---
+
+## [v1.4.6] - October 18, 2026
+
+Groq Whisper Large v3 normal voice dictation, native Electron text editing and spelling context menus with custom dictionary support, Groq GPT OSS 120B conversation title generator, and desktop packaging.
+
+### 1. Groq Whisper Large v3 Voice Dictation
+
+- Routed normal microphone recording through Groq's high-speed Whisper Large v3 (`whisper-large-v3`) speech-to-text service.
+- Added authenticated backend endpoint `POST /api/mic/dictate` with Bearer token authentication, rate limiting (20/min), and user subscription usage limit enforcement.
+- Built server-side Groq client in `python-backend/groq_dictation.py` supporting multi-format audio conversion (`wav`, `webm`, `ogg`, `mp3`, `mp4`, `m4a`, `flac`), automatic language detection, and strict 8 MiB size limit validation.
+- Implemented frontend `GroqSpeechInputHandler` with responsive audio waveform visualization, 2-minute recording timeout, and graceful cancellation without mutating composer state on page unload, chat switches, or sign-out.
+- Decoupled normal dictation from the intelligent mic agent (`/api/mic/transcribe`), preserving self-correction capabilities on the intelligent mic while delivering fast, literal, zero-rewrite transcription for normal dictation.
+- Removed dependency on local Windows speech recognition packs and external voice runtime setups.
+
+### 2. Native Spelling Suggestions and Text Context Menu
+
+- Integrated native Electron context menus via `installTextContextMenu` across the desktop application.
+- Added inline spelling corrections directly in context menus with one-click word replacement via `contents.replaceMisspelling()`.
+- Added custom dictionary management with "Add to dictionary" (`contents.session.addWordToSpellCheckerDictionary()`) and graceful handling of empty suggestion states.
+- Enabled native clipboard and history actions: Undo, Redo, Cut, Copy, Paste, and Select All with contextual enable/disable states based on edit flags and selection status.
+- Enabled spellchecking on input fields across the app:
+  - Chat input and design prompt fields in `chat.html`.
+  - Quick Prompt floating composer in `quick-prompt.html`.
+  - Interactive plan editors in `js/chat.js`.
+  - Task prose titles and descriptions in `to-do-list.html`.
+  - User feedback input in `aios.html`.
+- Implemented selective exclusion guards:
+  - Excluded structured technical inputs (dates, tags, memory identifiers, deployment paths, and web slugs) from spellchecking.
+  - Excluded generated HTML previews and remote iframe content from triggering desktop context menus.
+- Preserved Quick Prompt window visibility and focus during context menu interaction, preventing the window from auto-dismissing when correcting spelling.
+- Added keyboard accessibility support with Shift+F10 menu invocation and proper focus return.
+
+### 3. Conversation Title Generation with Groq GPT OSS 120B
+
+- Switched automatic conversation title generation from OpenRouter to Groq's `openai/gpt-oss-120b` model for near-instant title synthesis upon first message.
+- Hardened title generator agent instructions with strict title-only guardrails: enforces single-line 3 to 4 word titles, prevents instruction injection or message execution, and prohibits Markdown/quotes formatting.
+
+### 4. Tests and Verification
+
+- Added `js/tests/spelling-electron.test.js` verifying Electron spelling replacements, undo/redo cycles, Quick Prompt menu focus preservation, preview exclusions, and keyboard shortcuts.
+- Added `js/tests/fixtures/spelling-electron.cjs` isolated Electron test fixture.
+- Added `js/tests/text-context-menu.test.js` testing menu exclusions, readonly selections, and navigation safety.
+- Added `js/tests/groq-speech-input-browser.test.js` covering MediaRecorder capture, cancellation handling, exclusion guards, and audio waveform teardown.
+- Added `python-backend/tests/test_groq_dictation.py` covering backend authentication, multi-format payloads, size constraints, and provider failure handling.
+- Added `docs/voice-input.md` comprehensive architecture and configuration documentation.
+
+### 5. Packaging and Maintenance
+
+- Bumped application version to `1.4.6` in `package.json` and `package-lock.json`.
+- Built production Windows installer `aetheria-ai-Setup-1.4.6.exe` and unpacked distribution.
+
+---
+
 ## [v1.4.5] - October 16, 2026
 
 Aetheria pet messenger for in-app notifications, unified multimodal model across all conversation modes, and full media support in interactive plans.
