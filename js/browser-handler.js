@@ -53,7 +53,7 @@ function groupCookiesBySite(cookies) {
 }
 
 class BrowserHandler {
-    constructor(eventEmitter, appDataPath, getAuthTokenFunc, settings) {
+    constructor(eventEmitter, appDataPath, getAuthTokenFunc, settings, { requestResume = null, resumeTimeoutMs = 60000 } = {}) {
         this.eventEmitter = eventEmitter;
         this.appDataPath = appDataPath;
         this.getAuthToken = getAuthTokenFunc;
@@ -80,6 +80,11 @@ class BrowserHandler {
         this.tabIds = new WeakMap();
         this.nextTabId = 1;
         this.manualActionsPending = 0;
+        this.requestResume = requestResume;
+        this.resumeTimeoutMs = resumeTimeoutMs;
+        this.resumeRequest = null;
+        this.declinedResumeGeneration = null;
+        this.needsFreshView = false;
     }
 
     runtimeSnapshot() {
@@ -87,6 +92,7 @@ class BrowserHandler {
             state: this.runtimeState,
             connected: this.isConnected,
             busy: this.isProcessingCommand,
+            transitioning: this.manualActionsPending > 0,
             control: this.controlMode,
             mode: this.activeVisibility,
             preferredMode: this.settings.get().visibility,
@@ -113,6 +119,7 @@ class BrowserHandler {
     }
 
     pauseAutomation() {
+        this.resumeRequest?.resolve(false);
         this.controlMode = 'manual';
         this.commandGeneration += 1;
         this._clearIdleTimer();
@@ -122,9 +129,63 @@ class BrowserHandler {
     resumeAutomation() {
         if (this.isProcessingCommand || this.manualActionsPending) return { success: false, error: 'Wait for the current action to finish before resuming.' };
         this.controlMode = 'agent';
+        this.needsFreshView = true;
+        this.resumeRequest?.resolve(true);
         this.signInPending = false;
-        this._touchIdle();
+        if (this.isConnected || this.managedBrowserProcess) this._touchIdle();
         return { success: true, ...this.runtimeSnapshot() };
+    }
+
+    _requestAutomationResume() {
+        if (this.controlMode === 'agent') return Promise.resolve(true);
+        const generation = this.commandGeneration;
+        if (this.resumeRequest?.generation === generation) return this.resumeRequest.promise;
+        if (!this.requestResume || this.declinedResumeGeneration === generation) return Promise.resolve(false);
+        const request = { generation, controller: new AbortController() };
+        const answer = new Promise(resolve => { request.resolve = resolve; });
+        this.resumeRequest = request;
+        const timeout = setTimeout(() => request.resolve(false), this.resumeTimeoutMs);
+        request.promise = answer.then(allowed => {
+            if (allowed && generation === this.commandGeneration && this.controlMode === 'manual') this.resumeAutomation();
+            const resumed = generation === this.commandGeneration && this.controlMode === 'agent';
+            if (!resumed && generation === this.commandGeneration) this.declinedResumeGeneration = generation;
+            return resumed;
+        }).finally(() => {
+            clearTimeout(timeout);
+            request.controller.abort();
+            if (this.resumeRequest === request) this.resumeRequest = null;
+        });
+        Promise.resolve().then(() => this.requestResume({ signal: request.controller.signal }))
+            .then(allowed => request.resolve(allowed === true), error => {
+                console.warn('[Browser] Resume prompt failed:', error.message);
+                request.resolve(false);
+            });
+        return request.promise;
+    }
+
+    async _handlePausedCommand(payload) {
+        // Finish any active browser/user action before offering to return control.
+        const generation = this.commandGeneration;
+        if (this.requestResume) {
+            let timer;
+            const ready = await Promise.race([
+                this.commandQueue.then(() => true),
+                new Promise(resolve => { timer = setTimeout(() => resolve(false), Math.min(this.resumeTimeoutMs, 30000)); }),
+            ]).finally(() => clearTimeout(timer));
+            if (!ready) {
+                this._emitResult(payload?.request_id, { status: 'error', paused: true,
+                    error: 'The current browser action is still finishing. Browser automation stays paused. Resume it in Settings > Browser after that action finishes, then continue this task.' });
+                return;
+            }
+        }
+        if (generation !== this.commandGeneration) {
+            this._emitResult(payload?.request_id, { status: 'error', paused: true, error: 'Browser control changed while this request was waiting. Read browser status again before continuing.' });
+            return;
+        }
+        const resumed = await this._requestAutomationResume();
+        if (resumed && generation === this.commandGeneration) return this._enqueueCommand(payload);
+        this._emitResult(payload?.request_id, { status: 'error', paused: true,
+            error: 'Browser automation is paused. Resume browser actions in Settings > Browser, even if Chrome is closed, then continue this task. Do not retry automatically.' });
     }
 
     async _showWindow() {
@@ -326,9 +387,7 @@ class BrowserHandler {
 
     _enqueueCommand(commandPayload) {
         if (this.controlMode !== 'agent') {
-            this._emitResult(commandPayload?.request_id, { status: 'error', paused: true,
-                error: 'Browser automation is paused by the user. Wait for the user to resume; do not retry automatically.' });
-            return Promise.resolve();
+            return this._handlePausedCommand(commandPayload);
         }
         this._clearIdleTimer();
         const generation = this.commandGeneration;
@@ -338,6 +397,11 @@ class BrowserHandler {
             if (this.controlMode !== 'agent' || generation !== this.commandGeneration) {
                 this._emitResult(commandPayload?.request_id, { status: 'error', paused: true,
                     error: 'Browser automation was paused by the user. Wait for the user to resume; do not retry this action automatically.' });
+                return;
+            }
+            if (this.needsFreshView && !['status', 'get_view', 'list_tabs', 'navigate', 'open_new_tab', 'switch_to_tab', 'go_back', 'go_forward', 'refresh'].includes(commandPayload.action)) {
+                this._emitResult(commandPayload.request_id, { status: 'error', refresh_required: true,
+                    error: 'The browser was under user control. Call get_current_view before interacting with the page again; old element IDs and coordinates may be stale.' });
                 return;
             }
             this.isProcessingCommand = true;
@@ -433,7 +497,13 @@ class BrowserHandler {
      * @returns {Promise<{ok: boolean, error?: string}>}
      */
     async _launchManagedBrowser(visibilityOverride) {
-        if (this.managedBrowserProcess) return { ok: true };
+        if (this.managedBrowserProcess) {
+            if (this.runtimeState !== 'disconnected') return { ok: true };
+            // Chrome can disconnect before its process-exit event arrives.
+            // Release that instance before launching, rather than waiting on a
+            // debugging endpoint that will never come back.
+            await this.closeBrowser();
+        }
         const paths = this._getBrowserPaths();
         if (!paths) {
             return { ok: false, error: 'No Chrome, Edge, Brave or Chromium installation was found on this computer.' };
@@ -1252,6 +1322,7 @@ class BrowserHandler {
                 editable_elements: interactive_elements.filter(e => e.isEditable).length,
                 focused_element: interactive_elements.find(e => e.isFocused) || null
             };
+            this.needsFreshView = false;
             if (screenshot_path) {
                 viewData.screenshot_path = screenshot_path;
             } else {
@@ -1273,6 +1344,8 @@ class BrowserHandler {
 
     async cleanup() {
         console.log('Cleaning up BrowserHandler...');
+        this.pauseAutomation();
+        this.resumeRequest?.controller.abort();
         await this.closeBrowser();
 
         // The profile directory is where the agent's logins live. Wiping it is now
