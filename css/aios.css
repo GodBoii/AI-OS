@@ -122,6 +122,8 @@ body:not(.dark-mode) .floating-window {
 /* Left Sidebar */
 .tabs-sidebar {
     width: 220px;
+    flex-shrink: 0;
+    overflow-y: auto;
     background-color: var(--elevated-bg);
     border-right: none;
     padding: 24px 0;
@@ -218,6 +220,7 @@ body:not(.dark-mode) .tab-btn i {
 /* Right Content Area */
 .tab-content-area {
     flex: 1;
+    min-width: 0;
     padding: 32px 40px;
     overflow-y: auto;
     background-color: var(--elevated-bg);
@@ -377,11 +380,6 @@ body:not(.dark-mode) .tab-content-area {
 }
 
 .settings-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 
-        0 12px 30px rgba(45, 55, 72, 0.20),
-        0 4px 12px rgba(45, 55, 72, 0.15),
-        0 0 0 1px rgba(45, 55, 72, 0.08);
     border-color: var(--accent-color);
 }
 
@@ -764,11 +762,6 @@ button.secondary:hover {
 }
 
 .settings-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 
-        0 12px 30px rgba(45, 55, 72, 0.20),
-        0 4px 12px rgba(45, 55, 72, 0.15),
-        0 0 0 1px rgba(45, 55, 72, 0.08);
     border-color: var(--accent-color);
 }
 
