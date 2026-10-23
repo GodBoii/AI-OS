@@ -166,26 +166,6 @@
     animation: badgePulse 2s var(--easing-smooth) infinite;
 }
 
-/* Hover glow effect for cards */
-@keyframes cardGlow {
-    0%, 100% {
-        box-shadow: 
-            0 12px 30px rgba(45, 55, 72, 0.20),
-            0 4px 12px rgba(45, 55, 72, 0.15),
-            0 0 0 1px rgba(45, 55, 72, 0.08);
-    }
-    50% {
-        box-shadow: 
-            0 16px 40px rgba(45, 55, 72, 0.25),
-            0 6px 16px rgba(45, 55, 72, 0.18),
-            0 0 0 1px var(--accent-color);
-    }
-}
-
-.settings-card:hover {
-    animation: cardGlow 2s var(--easing-smooth) infinite;
-}
-
 /* GitHub dropdown slide animation */
 @keyframes dropdownSlide {
     from {
