@@ -11,12 +11,14 @@ const { installBrowserIpc } = require('../browser-ipc');
 const { createLazyDesktopController } = require('../lazy-desktop-controller');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const http = require('node:http');
+const { createBrowserResumePrompt } = require('../browser-resume-prompt');
 
-function setup(t) {
+function setup(t, options) {
     const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'aetheria-browser-runtime-'));
     const settings = new BrowserSettings(folder);
     const emitter = new EventEmitter();
-    const handler = new BrowserHandler(emitter, folder, async () => null, settings);
+    const handler = new BrowserHandler(emitter, folder, async () => null, settings, options);
     t.after(async () => {
         handler._clearIdleTimer();
         if (handler.managedBrowserProcess) await handler.closeBrowser();
@@ -36,10 +38,13 @@ test('status stays lazy and mode changes persist without closing a running brows
     installBrowserIpc({ ipcMain: { handle: (name, callback) => routes.set(name, callback) }, browserHandler: controller, browserSettings: settings });
     const invoke = (name, payload) => routes.get(name)(null, payload);
     assert.equal((await invoke('browser-data', { action: 'runtime' })).state, 'stopped');
-    assert.equal((await invoke('browser-data', { action: 'pause' })).success, false);
+    assert.equal((await invoke('browser-data', { action: 'resume' })).success, true);
     assert.equal(created, 0);
+    assert.equal((await invoke('browser-data', { action: 'pause' })).success, true);
+    assert.equal(created, 1);
+    assert.equal((await invoke('browser-data', { action: 'resume' })).success, true);
     await invoke('browser-settings:set', { visibility: 'headless' });
-    assert.equal(created, 0);
+    assert.equal(created, 1);
     controller.pauseAutomation();
     handler.activeVisibility = 'visible';
     await invoke('browser-settings:set', { visibility: 'background' });
@@ -49,6 +54,166 @@ test('status stays lazy and mode changes persist without closing a running brows
     const status = await invoke('browser-data', { action: 'runtime' });
     assert.equal(status.preferredMode, 'background');
     assert.equal((await invoke('browser-data', { action: 'switchTab', id: '../bad' })).success, false);
+});
+
+test('paused and stopped browser can be enabled without launching or connecting', async t => {
+    const { handler } = setup(t);
+    handler.pauseAutomation();
+    handler.runtimeState = 'disconnected';
+    assert.equal(handler.resumeAutomation().success, true);
+    assert.equal(handler.controlMode, 'agent');
+    assert.equal(handler.isConnected, false);
+    assert.equal(handler.managedBrowserProcess, null);
+    assert.equal(handler.idleTimer, null);
+});
+
+test('one recovery prompt covers concurrent requests, and acceptance resumes safe reads', async t => {
+    let answer;
+    let prompts = 0;
+    const { handler, emitter } = setup(t, { requestResume: () => {
+        prompts++;
+        return new Promise(resolve => { answer = resolve; });
+    } });
+    const results = [];
+    emitter.on('browser-command-result', payload => results.push(payload));
+    handler.handleCommand = async payload => handler._emitResult(payload.request_id, { status: 'success' });
+    handler.pauseAutomation();
+    const first = handler._enqueueCommand({ action: 'status', request_id: 'status' });
+    const second = handler._enqueueCommand({ action: 'get_view', request_id: 'view' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prompts, 1);
+    answer(true);
+    await Promise.all([first, second]);
+    assert.equal(results.length, 2);
+    assert.ok(results.every(result => result.result.status === 'success'));
+    assert.equal(handler.controlMode, 'agent');
+    assert.equal(handler.resumeRequest, null);
+});
+
+test('denied and timed out prompts leave recovery available and do not reopen repeatedly', async t => {
+    for (const requestResume of [async () => false, () => new Promise(() => {}), async () => { throw new Error('Fixture dialog error'); }]) {
+        let prompts = 0;
+        let signal;
+        const { handler, emitter } = setup(t, { resumeTimeoutMs: 20, requestResume: options => {
+            prompts++; signal = options.signal; return requestResume();
+        } });
+        const results = [];
+        emitter.on('browser-command-result', payload => results.push(payload));
+        handler.pauseAutomation();
+        await handler._enqueueCommand({ action: 'status', request_id: 'one' });
+        await handler._enqueueCommand({ action: 'status', request_id: 'two' });
+        assert.equal(prompts, 1);
+        assert.equal(signal.aborted, true);
+        assert.ok(results.every(result => result.result.paused && result.result.error.includes('Settings > Browser')));
+        assert.equal(handler.resumeAutomation().success, true);
+        assert.equal(handler.controlMode, 'agent');
+    }
+});
+
+test('settings resume dismisses an open prompt, while a new pause invalidates its answer', async t => {
+    let answer;
+    let signal;
+    const { handler, emitter } = setup(t, { requestResume: options => {
+        signal = options.signal;
+        return new Promise(resolve => { answer = resolve; });
+    } });
+    const results = [];
+    emitter.on('browser-command-result', payload => results.push(payload));
+    handler.handleCommand = async payload => handler._emitResult(payload.request_id, { status: 'success' });
+    handler.pauseAutomation();
+    const pending = handler._enqueueCommand({ action: 'status', request_id: 'first' });
+    await new Promise(resolve => setImmediate(resolve));
+    handler.resumeAutomation();
+    await pending;
+    assert.equal(signal.aborted, true);
+    assert.equal(results[0].result.status, 'success');
+    handler.pauseAutomation();
+    const stale = handler._enqueueCommand({ action: 'status', request_id: 'stale' });
+    await new Promise(resolve => setImmediate(resolve));
+    handler.pauseAutomation();
+    answer(true);
+    await stale;
+    assert.equal(handler.controlMode, 'manual');
+    assert.equal(results[1].result.paused, true);
+});
+
+test('enabling after takeover refuses stale clicks and typed text until a fresh view', async t => {
+    const { handler, emitter } = setup(t, { requestResume: async () => true });
+    const results = [];
+    const executed = [];
+    emitter.on('browser-command-result', payload => results.push(payload));
+    handler.handleCommand = async payload => {
+        executed.push(payload.action);
+        handler._emitResult(payload.request_id, { status: 'success' });
+    };
+    handler.pauseAutomation();
+    await handler._enqueueCommand({ action: 'type', request_id: 'old', text: 'old field data' });
+    assert.equal(results[0].result.refresh_required, true);
+    assert.deepEqual(executed, []);
+    await handler._enqueueCommand({ action: 'get_view', request_id: 'read' });
+    assert.deepEqual(executed, ['get_view']);
+});
+
+test('native recovery prompt requires an explicit choice and a live window', async () => {
+    const calls = [];
+    const window = { isDestroyed: () => false, isMinimized: () => true, restore: () => calls.push('restore'), show: () => calls.push('show'), focus: () => calls.push('focus') };
+    const signal = new AbortController().signal;
+    const prompt = createBrowserResumePrompt({ getWindow: () => window, dialog: { showMessageBox: async (parent, options) => {
+        assert.equal(parent, window);
+        assert.equal(options.signal, signal);
+        assert.equal(options.defaultId, 1);
+        assert.equal(options.cancelId, 1);
+        return { response: 0 };
+    } } });
+    assert.equal(await prompt({ signal }), true);
+    assert.deepEqual(calls, ['restore', 'show', 'focus']);
+    assert.equal(await createBrowserResumePrompt({ getWindow: () => null, dialog: {} })({ signal }), false);
+});
+
+test('failed browser launch leaves an accessible resume path', async t => {
+    const { handler } = setup(t);
+    handler._getBrowserPaths = () => null;
+    const result = await handler.openBrowserWindow();
+    assert.equal(result.success, false);
+    assert.match(result.error, /installation/);
+    assert.equal(handler.controlMode, 'manual');
+    assert.equal(handler.resumeAutomation().success, true);
+    assert.equal(handler.managedBrowserProcess, null);
+});
+
+test('slow in-flight work cannot leave the recovery request waiting indefinitely', async t => {
+    let finish;
+    let prompts = 0;
+    const { handler, emitter } = setup(t, { resumeTimeoutMs: 20, requestResume: async () => { prompts++; return true; } });
+    handler.commandQueue = new Promise(resolve => { finish = resolve; });
+    const results = [];
+    emitter.on('browser-command-result', payload => results.push(payload));
+    handler.pauseAutomation();
+    await handler._enqueueCommand({ action: 'status', request_id: 'waiting' });
+    assert.equal(results[0].result.paused, true);
+    assert.equal(prompts, 0);
+    finish();
+    assert.equal(handler.resumeAutomation().success, true);
+});
+
+test('cleanup cancels a pending consent request and ignores a late approval', async t => {
+    let approve;
+    let signal;
+    const { handler, emitter } = setup(t, { requestResume: options => {
+        signal = options.signal;
+        return new Promise(resolve => { approve = resolve; });
+    } });
+    const results = [];
+    emitter.on('browser-command-result', payload => results.push(payload));
+    handler.pauseAutomation();
+    const pending = handler._enqueueCommand({ action: 'status', request_id: 'shutdown' });
+    await new Promise(resolve => setImmediate(resolve));
+    await handler.cleanup();
+    approve(true);
+    await pending;
+    assert.equal(signal.aborted, true);
+    assert.equal(results[0].result.paused, true);
+    assert.equal(handler.controlMode, 'manual');
 });
 
 test('pause finishes the active action, rejects queued actions and never replays them on resume', async t => {
@@ -180,4 +345,43 @@ test('Electron takeover reveals a background window without replacing its page',
     const { stdout } = await promisify(execFile)(require('electron'), [path.join(__dirname, 'fixtures/browser-runtime-electron.cjs')],
         { timeout: 40000, windowsHide: true, maxBuffer: 1024 * 1024 });
     assert.ok(stdout.includes('BROWSER_TAKEOVER_OK'));
+    assert.ok(stdout.includes('BROWSER_RECOVERY_PROMPT_OK'));
+});
+
+test('paused status request resumes through the production prompt and opens five real tabs', { skip: !executablePath, timeout: 45000 }, async t => {
+    let prompts = 0;
+    const requestResume = createBrowserResumePrompt({
+        getWindow: () => ({ isDestroyed: () => false, isMinimized: () => false, show: () => {}, focus: () => {} }),
+        dialog: { showMessageBox: async () => { prompts++; return { response: 0 }; } },
+    });
+    const { handler, settings, emitter } = setup(t, { requestResume });
+    settings.update({ visibility: 'headless' });
+    // Capture the actual page and DOM without using authenticated cloud storage.
+    handler._uploadScreenshot = async () => null;
+    const server = http.createServer((request, response) => {
+        response.setHeader('Content-Type', 'text/html');
+        response.end(`<title>Site ${request.url.slice(1)}</title><button>Continue</button>`);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise(resolve => server.close(resolve)));
+    const results = new Map();
+    emitter.on('browser-command-result', payload => results.set(payload.request_id, payload.result));
+    handler.pauseAutomation();
+    await handler._enqueueCommand({ action: 'status', request_id: 'connect' });
+    assert.equal(results.get('connect').status, 'connected');
+    assert.equal(prompts, 1);
+    for (let index = 1; index <= 5; index++) {
+        await handler._enqueueCommand({ action: 'open_new_tab', request_id: `tab-${index}`, url: `http://127.0.0.1:${server.address().port}/${index}` });
+        assert.equal(results.get(`tab-${index}`).status, 'success');
+    }
+    const runtime = await handler.getRuntime();
+    assert.equal(runtime.tabs.filter(tab => /^Site [1-5]$/.test(tab.title)).length, 5);
+    assert.equal(handler.needsFreshView, false);
+    assert.equal(handler.controlMode, 'agent');
+    handler.pauseAutomation();
+    await handler.browser.close();
+    await handler._enqueueCommand({ action: 'status', request_id: 'reconnect' });
+    assert.equal(results.get('reconnect').status, 'connected');
+    assert.equal(prompts, 2);
+    assert.equal(handler.runtimeSnapshot().control, 'agent');
 });
