@@ -71,6 +71,130 @@ class BrowserHandler {
         // Set while a user-initiated sign-in window is open so the idle reaper
         // cannot close Chrome out from under someone entering a password.
         this.signInPending = false;
+        this.controlMode = 'agent';
+        this.commandGeneration = 0;
+        this.runtimeState = 'stopped';
+        this.activeVisibility = null;
+        this.activity = [];
+        this.currentActivity = null;
+        this.tabIds = new WeakMap();
+        this.nextTabId = 1;
+        this.manualActionsPending = 0;
+    }
+
+    runtimeSnapshot() {
+        return {
+            state: this.runtimeState,
+            connected: this.isConnected,
+            busy: this.isProcessingCommand,
+            control: this.controlMode,
+            mode: this.activeVisibility,
+            preferredMode: this.settings.get().visibility,
+            activity: this.activity.map(entry => ({ ...entry })),
+        };
+    }
+
+    // Observation never launches or reconnects Chrome and never joins its work queue.
+    async getRuntime() {
+        const snapshot = this.runtimeSnapshot();
+        const browser = this.browser;
+        if (!this.isConnected || !browser) return { success: true, ...snapshot, tabs: [] };
+        try {
+            const pages = await browser.pages();
+            const tabs = await Promise.all(pages.map(async page => {
+                if (!this.tabIds.has(page)) this.tabIds.set(page, String(this.nextTabId++));
+                return { id: this.tabIds.get(page), title: await page.title().catch(() => ''),
+                    url: page.url(), active: page === this.page };
+            }));
+            return { success: true, ...this.runtimeSnapshot(), tabs };
+        } catch (error) {
+            return { success: false, ...this.runtimeSnapshot(), tabs: [], error: 'Could not read browser tabs. Refresh to retry.' };
+        }
+    }
+
+    pauseAutomation() {
+        this.controlMode = 'manual';
+        this.commandGeneration += 1;
+        this._clearIdleTimer();
+        return { success: true, ...this.runtimeSnapshot() };
+    }
+
+    resumeAutomation() {
+        if (this.isProcessingCommand || this.manualActionsPending) return { success: false, error: 'Wait for the current action to finish before resuming.' };
+        this.controlMode = 'agent';
+        this.signInPending = false;
+        this._touchIdle();
+        return { success: true, ...this.runtimeSnapshot() };
+    }
+
+    async _showWindow() {
+        if (this.activeVisibility === 'headless') {
+            return { success: false, requiresRestart: true, error: 'Headless mode has no window. Restart visibly to take control. This closes open tabs and unsaved page changes.' };
+        }
+        let session;
+        try {
+            session = await this.page.createCDPSession();
+            const { windowId } = await session.send('Browser.getWindowForTarget');
+            await session.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+            const area = electron.screen.getPrimaryDisplay().workArea;
+            await session.send('Browser.setWindowBounds', { windowId, bounds: { left: area.x + 40, top: area.y + 40 } });
+            await this.page.bringToFront();
+            return { success: true, url: this.page.url() };
+        } finally {
+            if (session) await session.detach().catch(() => {});
+        }
+    }
+
+    async takeControl() {
+        return this._runManualAction(async () => {
+            if (!this.isConnected || !this.page) return { success: false, error: 'The browser is not connected. Open it to sign in.' };
+            try { return await this._showWindow(); }
+            catch (error) { return { success: false, error: 'Automation is paused, but the window could not be shown. Try opening it again.' }; }
+        });
+    }
+
+    async stopAutomation() {
+        return this._runManualAction(async () => {
+            await this.closeBrowser();
+            return { success: true, ...this.runtimeSnapshot() };
+        });
+    }
+
+    async restartBrowser({ visible = false } = {}) {
+        return this._runManualAction(async () => {
+            await this.closeBrowser();
+            const launch = await this._launchManagedBrowser(visible ? 'visible' : undefined);
+            if (!launch.ok) return { success: false, error: launch.error };
+            if (!(await this._waitForBrowserReady())) return { success: false, error: 'The browser did not become ready. Try opening it again.' };
+            if (visible) await this._showWindow();
+            this.signInPending = true;
+            return { success: true, ...this.runtimeSnapshot() };
+        });
+    }
+
+    _runManualAction(task) {
+        this.pauseAutomation();
+        this.manualActionsPending += 1;
+        return this._serialize(task).finally(() => { this.manualActionsPending -= 1; });
+    }
+
+    async changeRuntimeTab(action, id) {
+        if (this.controlMode !== 'manual') return { success: false, error: 'Pause automation before changing tabs.' };
+        return this._serialize(async () => {
+            if (this.controlMode !== 'manual' || !this.isConnected) return { success: false, error: 'Pause a connected browser before changing tabs.' };
+            const pages = await this.browser.pages();
+            const page = pages.find(item => this.tabIds.get(item) === id);
+            if (!page) return { success: false, error: 'That tab has closed. Refresh the list.' };
+            if (action === 'closeTab') {
+                if (pages.length === 1) return { success: false, error: 'Keep at least one tab open.' };
+                await page.close();
+                if (this.page === page) this.page = pages.find(item => item !== page);
+            } else {
+                this.page = page;
+                if (this.activeVisibility !== 'headless') await this._showWindow();
+            }
+            return { success: true };
+        });
     }
 
     async _uploadScreenshot(screenshotBase64) {
@@ -176,6 +300,7 @@ class BrowserHandler {
             }
             await this._sleep(400);
         }
+        this.runtimeState = 'disconnected';
         return false;
     }
 
@@ -200,11 +325,25 @@ class BrowserHandler {
     }
 
     _enqueueCommand(commandPayload) {
+        if (this.controlMode !== 'agent') {
+            this._emitResult(commandPayload?.request_id, { status: 'error', paused: true,
+                error: 'Browser automation is paused by the user. Wait for the user to resume; do not retry automatically.' });
+            return Promise.resolve();
+        }
         this._clearIdleTimer();
+        const generation = this.commandGeneration;
         // Reporting and bookkeeping live inside the serialized task so the next
         // queued command cannot start before this one has released the flag.
-        this._serialize(async () => {
+        return this._serialize(async () => {
+            if (this.controlMode !== 'agent' || generation !== this.commandGeneration) {
+                this._emitResult(commandPayload?.request_id, { status: 'error', paused: true,
+                    error: 'Browser automation was paused by the user. Wait for the user to resume; do not retry this action automatically.' });
+                return;
+            }
             this.isProcessingCommand = true;
+            this.currentActivity = { id: commandPayload.request_id, action: String(commandPayload.action), at: Date.now(), status: 'working' };
+            this.activity.unshift(this.currentActivity);
+            this.activity.length = Math.min(this.activity.length, 30);
             try {
                 await this.handleCommand(commandPayload);
             } catch (error) {
@@ -216,6 +355,7 @@ class BrowserHandler {
                 }
             } finally {
                 this.isProcessingCommand = false;
+                this.currentActivity = null;
                 // Armed only after the queue drains, so a long run of commands
                 // never races the reaper.
                 this._touchIdle();
@@ -259,8 +399,7 @@ class BrowserHandler {
 
     /**
      * Chrome bakes these flags in at spawn time, so a visibility change only takes
-     * effect on the next launch. main.js closes the running instance when that
-     * setting changes so the next command relaunches here.
+     * effect on the next launch. Saving preferences never interrupts active work.
      */
     _launchArgs(userDataDir, visibility) {
         const args = [
@@ -301,21 +440,31 @@ class BrowserHandler {
         }
         await this._resolveDebugPort();
         const visibility = visibilityOverride || this.settings.get().visibility;
+        this.activeVisibility = visibility;
+        this.runtimeState = 'starting';
         const args = this._launchArgs(paths.userDataDir, visibility);
         console.log(`Launching browser (${visibility}): ${paths.executablePath} ${args.join(' ')}`);
         try {
-            this.managedBrowserProcess = spawn(paths.executablePath, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+            const launchedProcess = spawn(paths.executablePath, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+            this.managedBrowserProcess = launchedProcess;
             this.managedBrowserProcess.stdout.on('data', (data) => console.log(`BrowserHandler (stdout): ${data}`));
             this.managedBrowserProcess.stderr.on('data', (data) => console.error(`BrowserHandler (stderr): ${data}`));
-            this.managedBrowserProcess.on('error', (err) => console.error('Failed to start browser process:', err));
+            this.managedBrowserProcess.on('error', (err) => {
+                console.error('Failed to start browser process:', err);
+                if (this.managedBrowserProcess === launchedProcess) this.runtimeState = 'disconnected';
+            });
             this.managedBrowserProcess.on('close', (code) => {
                 console.log(`Browser process exited with code ${code}`);
+                if (this.managedBrowserProcess !== launchedProcess) return;
                 this.managedBrowserProcess = null;
                 this.isConnected = false;
+                this.runtimeState = 'disconnected';
+                this.activeVisibility = null;
             });
             console.log('Browser process launched successfully');
             return { ok: true };
         } catch (error) {
+            this.runtimeState = 'disconnected';
             console.error('Error launching browser:', error);
             return { ok: false, error: `Failed to start the browser: ${error.message}` };
         }
@@ -323,23 +472,53 @@ class BrowserHandler {
 
     /**
      * Drops the CDP connection and kills Chrome if we own the process. Called by
-     * the idle reaper, by settings changes that need a relaunch, and on quit.
+     * the idle reaper, explicit restart/close actions, and on quit.
      * Safe to call when nothing is running.
      */
     async closeBrowser() {
         this._clearIdleTimer();
         this.signInPending = false;
-        if (this.browser) {
-            // A disconnect during shutdown is not worth failing the caller over.
-            await this.browser.disconnect().catch(() => {});
-        }
+        const browser = this.browser;
+        const ownedProcess = this.managedBrowserProcess;
+        // Relinquish references first so delayed disconnect/exit events from this
+        // instance cannot clear a replacement browser during an explicit restart.
         this.browser = null;
+        this.managedBrowserProcess = null;
         this.page = null;
         this.isConnected = false;
-        if (this.managedBrowserProcess) {
-            this.managedBrowserProcess.kill();
-            this.managedBrowserProcess = null;
+        let exited;
+        if (ownedProcess && ownedProcess.exitCode === null) {
+            exited = new Promise(resolve => {
+                const timer = setTimeout(() => {
+                    ownedProcess.removeListener('close', onClose);
+                    resolve(false);
+                }, 5000);
+                const onClose = () => { clearTimeout(timer); resolve(true); };
+                ownedProcess.once('close', onClose);
+            });
         }
+        if (browser) {
+            // The managed profile belongs to this app. Ask Chrome to release it
+            // cleanly before another process opens its databases and file locks.
+            if (ownedProcess) {
+                let timeout;
+                await Promise.race([browser.close().catch(() => {}), new Promise(resolve => { timeout = setTimeout(resolve, 4000); })])
+                    .finally(() => clearTimeout(timeout));
+            }
+            else await browser.disconnect().catch(() => {});
+        }
+        if (ownedProcess && !browser && ownedProcess.exitCode === null) ownedProcess.kill();
+        const didExit = exited ? await exited : true;
+        if (!didExit && ownedProcess.exitCode === null) {
+            ownedProcess.kill();
+            await new Promise(resolve => {
+                const timer = setTimeout(() => { ownedProcess.removeListener('close', onClose); resolve(); }, 2000);
+                const onClose = () => { clearTimeout(timer); resolve(); };
+                ownedProcess.once('close', onClose);
+            });
+        }
+        this.runtimeState = 'stopped';
+        this.activeVisibility = null;
     }
 
     _clearIdleTimer() {
@@ -356,6 +535,7 @@ class BrowserHandler {
      */
     _touchIdle() {
         this._clearIdleTimer();
+        if (this.controlMode === 'manual') return;
         this.signInPending = false;
         const minutes = this.settings.get().idleCloseMinutes;
         if (!minutes) return;
@@ -370,7 +550,7 @@ class BrowserHandler {
     /** Bringing a window forward is only correct when the user asked to see it. */
     async _focusPage() {
         if (!this.page) return;
-        if (this.settings.get().visibility !== 'visible') return;
+        if ((this.activeVisibility || this.settings.get().visibility) !== 'visible') return;
         await this.page.bringToFront().catch(() => {});
     }
 
@@ -388,11 +568,25 @@ class BrowserHandler {
         if (normalized && this.settings.isBlocked(normalized)) {
             return { success: false, error: 'That site is on your blocked list.' };
         }
+        if (normalized) {
+            try {
+                if (!['http:', 'https:'].includes(new URL(normalized).protocol)) throw new Error('Unsupported URL');
+            } catch (error) { return { success: false, error: 'Enter an HTTP or HTTPS address.' }; }
+        }
 
-        return this._serialize(async () => {
+        return this._runManualAction(async () => {
             try {
                 // The profile directory only supports one Chrome at a time, so a
                 // hidden instance has to go before a visible one can take its place.
+                if (this.isConnected && this.page) {
+                    if (this.activeVisibility === 'headless') return this._showWindow();
+                    if (normalized) {
+                        this.page = await this.browser.newPage();
+                        await this.page.goto(normalized, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    }
+                    this.signInPending = true;
+                    return await this._showWindow();
+                }
                 await this.closeBrowser();
                 const launch = await this._launchManagedBrowser('visible');
                 if (!launch.ok) return { success: false, error: launch.error };
@@ -512,21 +706,25 @@ class BrowserHandler {
                 // null means "use the real window size", which is right for both
                 // headful modes. Headless has no window, so it needs an explicit
                 // viewport to match the one requested at launch.
-                const defaultViewport = this.settings.get().visibility === 'headless'
+                const defaultViewport = (this.activeVisibility || this.settings.get().visibility) === 'headless'
                     ? this._headlessViewport()
                     : null;
                 this.browser = await puppeteer.connect({ browserURL: browserUrl, defaultViewport });
                 this.isConnected = true;
+                this.runtimeState = 'connected';
                 console.log('Successfully connected to browser via CDP.');
                 const pages = await this.browser.pages();
                 this.page = pages[0] || await this.browser.newPage();
                 console.log(`Connected to page: ${this.page.url()}`);
                 this.browser.removeAllListeners('disconnected');
+                const connectedBrowser = this.browser;
                 this.browser.on('disconnected', () => {
+                    if (this.browser !== connectedBrowser) return;
                     console.log('Browser disconnected.');
                     this.isConnected = false;
                     this.browser = null;
                     this.page = null;
+                    this.runtimeState = 'disconnected';
                 });
                 return true;
             } catch (error) {
@@ -1067,6 +1265,9 @@ class BrowserHandler {
     }
 
     _emitResult(request_id, result) {
+        if (this.currentActivity?.id === request_id) {
+            this.currentActivity.status = ['error', 'disconnected'].includes(result.status) ? 'failed' : 'completed';
+        }
         this.eventEmitter.emit('browser-command-result', { request_id, result });
     }
 
