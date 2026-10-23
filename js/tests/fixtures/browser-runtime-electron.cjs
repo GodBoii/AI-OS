@@ -1,4 +1,4 @@
-const { app, screen } = require('electron');
+const { app, screen, dialog, BrowserWindow } = require('electron');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -6,6 +6,7 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const BrowserHandler = require('../../browser-handler');
 const BrowserSettings = require('../../browser-settings');
+const { createBrowserResumePrompt } = require('../../browser-resume-prompt');
 
 app.whenReady().then(async () => {
     const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'aetheria-browser-window-'));
@@ -31,6 +32,17 @@ app.whenReady().then(async () => {
         assert.ok(bounds.top >= area.y && bounds.top < area.y + area.height);
         await session.detach();
         assert.equal(handler.resumeAutomation().success, true);
+        const promptWindow = new BrowserWindow({ show: false, width: 400, height: 200 });
+        const controller = new AbortController();
+        const prompt = createBrowserResumePrompt({ dialog, getWindow: () => promptWindow });
+        const timer = setTimeout(() => controller.abort(), 200);
+        try {
+            assert.equal(await prompt({ signal: controller.signal }), false);
+        } finally {
+            clearTimeout(timer);
+            promptWindow.destroy();
+        }
+        process.stdout.write('BROWSER_RECOVERY_PROMPT_OK\n');
         process.stdout.write('BROWSER_TAKEOVER_OK\n');
     } catch (error) {
         console.error(error);
