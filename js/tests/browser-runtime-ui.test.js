@@ -51,6 +51,7 @@ test('Browser UI supports status, takeover, tabs, save failures and both themes'
             if (channel !== 'browser-data') return {};
             if (payload.action === 'runtime') {
                 window.runtimeReads++;
+                if (window.failRuntimeRead) return null;
                 return structuredClone({ ...window.runtime, preferredMode: window.preferences.visibility });
             }
             window.actions.push(payload);
@@ -74,6 +75,29 @@ test('Browser UI supports status, takeover, tabs, save failures and both themes'
     });
     await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Not running');
     assert.deepEqual(await page.evaluate(() => window.actions), []);
+    await page.click('[data-browser-action="pause"]');
+    await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Browser automation paused');
+    assert.equal(await page.$eval('[data-browser-action="resume"]', button => button.textContent), 'Enable browser automation');
+    await page.click('[data-browser-action="resume"]');
+    await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Not running');
+    assert.equal(await page.evaluate(() => window.actions.some(action => action.action === 'open')), false);
+    for (const state of ['stopped', 'disconnected']) {
+        await page.evaluate(state => {
+            Object.assign(window.runtime, { state, connected: false, control: 'manual' });
+            window.AIOS._watchBrowserRuntime();
+        }, state);
+        await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Browser automation paused');
+        assert.equal(await page.$eval('[data-browser-action="resume"]', button => button.disabled || button.hidden), false);
+        await page.click('[data-browser-action="resume"]');
+        await page.waitForFunction(() => window.runtime.control === 'agent' && !window.AIOS._browserRuntimeBusy);
+    }
+    await page.evaluate(() => { window.failRuntimeRead = true; window.AIOS._watchBrowserRuntime(); });
+    await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Status unavailable');
+    assert.equal(await page.$eval('[data-browser-action="resume"]', button => button.disabled || button.hidden), false);
+    await page.click('[data-browser-action="resume"]');
+    await page.waitForFunction(() => !window.AIOS._browserRuntimeBusy);
+    await page.evaluate(() => { window.failRuntimeRead = false; window.runtime.state = 'stopped'; window.AIOS._watchBrowserRuntime(); });
+    await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'Not running');
     await page.click('#browser-runtime-open');
     await page.waitForFunction(() => document.getElementById('browser-runtime-state').textContent === 'You have control');
     await page.click('[data-browser-action="resume"]');
