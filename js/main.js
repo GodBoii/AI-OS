@@ -8,6 +8,7 @@ const http = require('http');
 const { EventEmitter } = require('events');
 const BrowserSettings = require('./browser-settings.js');
 const { installBrowserIpc } = require('./browser-ipc');
+const { createBrowserResumePrompt } = require('./browser-resume-prompt');
 const { createLazyDesktopController } = require('./lazy-desktop-controller');
 const NativeNotificationService = require('./native-notification-service.js');
 const WindowsNativeSpeechService = require('./windows-native-speech-service.js');
@@ -511,7 +512,9 @@ function createWindow() {
     const appDataPath = app.getPath('userData');
     browserSettings = new BrowserSettings(appDataPath);
     browserHandler = createLazyDesktopController({
-        factory: () => new (require('./browser-handler'))(mainProcessEmitter, appDataPath, getAuthToken, browserSettings),
+        factory: () => new (require('./browser-handler'))(mainProcessEmitter, appDataPath, getAuthToken, browserSettings, {
+            requestResume: createBrowserResumePrompt({ dialog, getWindow: () => mainWindow }),
+        }),
         emitter: mainProcessEmitter, commandChannel: 'execute-browser-command',
         resultChannel: 'browser-command-result', commandMethod: '_enqueueCommand',
     });
