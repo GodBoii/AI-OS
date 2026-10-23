@@ -3764,28 +3764,37 @@ class AIOS {
     _renderBrowserRuntime(result) {
         const state = document.getElementById('browser-runtime-state');
         if (!state) return;
-        if (!result?.success) {
+        if (!result?.success && !['agent', 'manual'].includes(result?.control)) {
             state.textContent = 'Status unavailable';
             document.getElementById('browser-runtime-meta').textContent = result?.error || 'Could not read browser status. Retrying...';
             document.querySelectorAll('#browser-runtime [data-browser-action], #browser-runtime [data-browser-confirm]').forEach(button => { button.disabled = true; });
+            const resume = document.querySelector('#browser-runtime [data-browser-action="resume"]');
+            resume.hidden = false;
+            resume.disabled = this._browserRuntimeBusy;
+            resume.textContent = 'Enable browser automation';
             return;
         }
         const manual = result.control === 'manual';
         const connected = result.connected === true;
         state.textContent = result.busy ? (manual ? 'Pausing after the current action' : 'Working')
-            : connected ? (manual ? 'You have control' : 'Ready for the agent')
+            : manual ? (connected ? 'You have control' : 'Browser automation paused')
+            : connected ? 'Ready for the agent'
             : result.state === 'starting' ? 'Starting browser' : result.state === 'disconnected' ? 'Browser disconnected' : 'Not running';
         state.dataset.state = result.busy ? 'working' : connected ? 'connected' : 'stopped';
         const tabs = Array.isArray(result.tabs) ? result.tabs : [];
         const modes = { visible: 'Visible', background: 'Background', headless: 'Headless' };
         const meta = document.getElementById('browser-runtime-meta');
-        meta.textContent = connected ? `${modes[result.mode] || 'Browser'} · ${tabs.length} ${tabs.length === 1 ? 'tab' : 'tabs'}` : 'A separate browser profile on this computer.';
+        meta.textContent = connected ? `${modes[result.mode] || 'Browser'} · ${tabs.length} ${tabs.length === 1 ? 'tab' : 'tabs'}`
+            : manual ? 'Enable browser automation below to let the agent launch Chrome again.'
+            : 'Browser automation is enabled. Chrome starts when an agent needs it.';
         if (connected && result.mode !== result.preferredMode) meta.textContent += ` · ${modes[result.preferredMode]} on next start`;
+        if (!result.success) meta.textContent += ' · Could not read tabs. Retrying...';
         for (const button of document.querySelectorAll('#browser-runtime [data-browser-action], #browser-runtime [data-browser-confirm]')) {
             const action = button.dataset.browserAction || button.dataset.browserConfirm;
-            button.hidden = !connected || (action === 'resume' ? !manual : action === 'pause' ? manual
-                : action === 'restart' ? result.mode === result.preferredMode : action === 'takeControl' ? manual && result.mode !== 'headless' : false);
-            button.disabled = this._browserRuntimeBusy || !connected || (action === 'resume' && result.busy)
+            button.hidden = action === 'resume' ? !manual : action === 'pause' ? manual
+                : !connected || (action === 'restart' ? result.mode === result.preferredMode : action === 'takeControl' ? manual && result.mode !== 'headless' : false);
+            if (action === 'resume') button.textContent = connected ? 'Resume browser actions' : 'Enable browser automation';
+            button.disabled = this._browserRuntimeBusy || (action === 'resume' ? result.busy || result.transitioning : action === 'pause' ? false : !connected)
                 || (button.dataset.tabId && (!manual || (action === 'closeTab' && tabs.length === 1)));
         }
         document.getElementById('browser-runtime-open').textContent = connected ? 'Show browser' : 'Open browser';
