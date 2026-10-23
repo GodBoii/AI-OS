@@ -21,15 +21,34 @@ stops its refresh loop when another settings section opens.
 ## Taking control
 
 Pause and takeover immediately close the gate for new browser commands. An action
-already running finishes. Commands queued before the pause, including commands
-that reach the queue during a pause, receive an explicit paused result and are
-never replayed on resume. A generation counter also discards stale commands when
-the user pauses and resumes before a queued command starts.
+already running finishes. Commands queued before the pause receive an explicit
+paused result and are never replayed on resume. A generation counter also
+discards stale commands when the user pauses and resumes before a queued command
+starts.
+
+A new agent request made while paused offers a native resume prompt even when
+Settings is closed or Chrome is not running. The current request waits for the
+user's explicit choice so an accepted status request can continue the same task.
+Concurrent requests share one prompt. Declining or a 60-second timeout keeps
+automation paused without reopening the prompt repeatedly. Settings > Browser
+always exposes Enable browser automation while paused, independently of the
+Chrome connection. Enabling does not launch Chrome. Resuming through Settings
+also dismisses any pending prompt.
+
+Recovery waits at most 30 seconds for active work before offering the prompt.
+If that work is still running, it returns a specific paused result with a Settings
+recovery path instead of waiting past the browser tool response deadline. A new
+pause or shutdown invalidates a pending consent answer.
+
+After takeover, page interactions using prior element IDs or coordinates are
+rejected until the agent reads a fresh view. Status, tab listing, and explicit
+navigation can proceed. A successful current view clears this requirement.
 
 The controls pause browser execution only. They do not suspend the model stream
-or the whole chat run. Resuming opens the browser command gate; a chat task that
-has ended needs a follow-up message. This avoids changing the existing server
-run-control protocol or affecting tasks that are not using this browser.
+or the whole chat run. Accepting a pending resume prompt continues that tool
+request. A chat task that already ended after a declined or expired prompt needs
+a follow-up message. This avoids changing the server run-control protocol or
+affecting tasks that are not using this browser.
 
 Opening the browser for sign-in also pauses browser execution. Existing visible
 and background sessions keep their tabs and page state. Takeover restores a
@@ -61,6 +80,21 @@ checks still apply to explicit navigation; redirect, popup, and link enforcement
 remain separate work.
 
 ## Verification
+
+| Scenario | Expected recovery |
+| --- | --- |
+| Browser stopped, automation enabled | Agent status starts the browser normally. |
+| Browser paused and stopped or disconnected | Settings shows Enable browser automation; a new agent request offers consent. |
+| Browser paused and connected | Resume browser actions remains visible. |
+| Sign-in or takeover | Active work finishes; further page interaction needs explicit resume and a fresh view. |
+| User closes Chrome while paused | Resume and a subsequent status request can relaunch it. |
+| Missing browser executable | Launch reports the missing installation; automation can still be enabled. |
+| Prompt declined, closed, expired, or failed | Browser stays paused; Settings remains usable. |
+| Concurrent agent requests | One prompt; no repeated clicks or typing against old page state. |
+| Settings resume while a prompt is open | Prompt closes and the pending request observes the new state. |
+| New pause or shutdown during consent | Late consent cannot restart automation. |
+| Status or tab read fails | Enable remains available rather than disappearing with connection controls. |
+| Headless takeover | Explicit visible restart confirmation preserves the existing session on cancellation. |
 
 - `js/tests/browser-runtime.test.js` covers lazy IPC reads, preference persistence,
   pause/resume ordering, queue recovery, bounded activity, real Chromium tab
