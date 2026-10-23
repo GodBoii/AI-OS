@@ -10,7 +10,10 @@ function installBrowserIpc({ ipcMain, browserHandler, browserSettings }) {
                 busy: false, control: 'agent', mode: null, preferredMode: browserSettings.get().visibility,
                 tabs: [], activity: [] };
         }
-        if (['pause', 'resume', 'takeControl', 'stop', 'switchTab', 'closeTab', 'restart'].includes(action) && !current) {
+        if (action === 'resume' && !current) {
+            return { success: true, state: 'stopped', connected: false, busy: false, control: 'agent' };
+        }
+        if (['takeControl', 'stop', 'switchTab', 'closeTab', 'restart'].includes(action) && !current) {
             return { success: false, error: 'Open the browser first.' };
         }
         try {
@@ -19,7 +22,7 @@ function installBrowserIpc({ ipcMain, browserHandler, browserSettings }) {
                 case 'listSites': return await browserHandler.listSites();
                 case 'clearSite': return await browserHandler.clearSite(domain);
                 case 'clearAllCookies': return await browserHandler.clearAllCookies();
-                case 'pause': return current.pauseAutomation();
+                case 'pause': return browserHandler.pauseAutomation();
                 case 'resume': return current.resumeAutomation();
                 case 'takeControl': return await current.takeControl();
                 case 'stop': return await current.stopAutomation();
