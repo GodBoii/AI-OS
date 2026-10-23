@@ -2,28 +2,25 @@
 
 ---
 
-## [v1.4.7] - October 23, 2026
+## [v1.4.8] - October 23, 2026
 
-Project file previews for source, Markdown, HTML, and Mermaid, browser takeover and recovery controls, and a settings sidebar split into six sections.
+Settings split into dedicated sidebar sections, browser takeover and recovery controls, a lighter native assistant, and fresh desktop packaging.
 
-### 1. Project File Viewer and Rich Previews
+### 1. Settings Split into Sidebar Sections
 
-- Added `ProjectFileViewer` with syntax highlighting for 30+ languages and configuration formats through `highlight.js`, including JavaScript, TypeScript, Python, Rust, C#, C/C++, Go, Bash, PowerShell, Dockerfile, YAML, TOML, Markdown, LaTeX, Elixir, Haskell, and CMake. Less common grammars (Protobuf, Nix, Dart, Scala, Groovy) load on demand, so they cost nothing until a matching file opens.
-- Added a toggle between highlighted source and a formatted preview for Markdown, Mermaid, HTML, and SVG files. The button reports its state with `aria-pressed` and has a visible focus ring.
-- Markdown previews render GitHub Flavored Markdown tables, blockquotes, fenced code, and embedded Mermaid diagrams through `marked`.
-- HTML and SVG previews run in an iframe with an empty `sandbox` attribute. A Content Security Policy allows inline styles plus data and blob images and fonts, blocks scripts, network requests, and form posts, and DOMPurify sanitizes the markup. The frame also carries `referrerpolicy="no-referrer"` and cannot reach the parent page.
-- Mermaid diagrams render with `securityLevel: 'strict'`, HTML labels disabled, and a 50 KB source limit. The rendered SVG is sanitized again, and diagrams follow the current light or dark theme.
-- Large files stay readable. Previews stop at 300 KB, files above 100 KB show plain text with a notice instead of highlighting, and the preview toggle hides when content is truncated or has no formatted mode.
-- Light and dark syntax colors come from shared tokens (`--syntax-keyword`, `--syntax-string`, `--syntax-number`, `--syntax-function`, `--syntax-comment`, `--syntax-variable`) so both themes stay consistent.
+- Replaced the single Settings tab with six sidebar sections: General, Appearance, Browser, Notifications, Keyboard Shortcuts, and Desktop Integration.
+- Kept existing control IDs and stored preference keys, so moving controls between sections does not reset saved choices.
+- Each section scrolls its content area to the top when opened and initializes its listeners and animated icons on demand.
+- The sidebar now scrolls when the section list is taller than the window, and the content area can shrink without horizontal overflow.
+- Settings cards no longer lift or pulse on hover. The glass shimmer and border accent remain.
 
-### 2. Faster Workspace Scanning
+### 2. Account Skills Tab Removed, Capabilities Expanded
 
-- Local workspace scans read directories in parallel batches of 8 instead of walking them one at a time.
-- `readWorkspaceFile` accepts `previewOnly`, which reads at most 300 KB from the file handle and skips base64 encoding. Opening a large file in the tree no longer copies the whole file through IPC.
-- Ignore rules now skip `node_modules`, `.git`, `__pycache__`, `.cache`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.venv*`, `venv`, and `.tox`.
-- `LocalCoderHandler` reuses an existing file watcher when the workspace root has not changed.
-- Preview requests and tree sync use revision counters, so a slow response cannot overwrite a newer file selection.
-- The open preview reloads when its file changes on disk.
+- Removed the Account Skills tab. Its native tools now live in the Capabilities section.
+- Added Presentations, File Storage, and Memory entries to Capabilities.
+- Rewrote the capability copy to describe what each module does.
+- Replaced the Image Generation capability icon with an inline SVG.
+- Removed the unused Skills styles and navigation icon mapping.
 
 ### 3. Browser Takeover and Recovery
 
@@ -40,34 +37,64 @@ Project file previews for source, Markdown, HTML, and Mermaid, browser takeover 
 - Recent activity keeps the last 30 actions in memory and shows the latest 12. It records action names, timestamps, and outcomes only. It does not store typed text, credentials, screenshots, or raw command payloads. The UI shows hostnames without URL query strings.
 - Cookie inspection and clearing remain in the Sign-in and site data card. An empty cookie list no longer implies that every site is signed out.
 
-### 4. Settings Split into Sidebar Sections
+### 4. Native Assistant Model
 
-- Replaced the single Settings tab with six sidebar sections: General, Appearance, Browser, Notifications, Keyboard Shortcuts, and Desktop Integration.
-- Kept existing control IDs and stored preference keys, so moving controls between sections does not reset saved choices.
-- Each section scrolls its content area to the top when opened and initializes its listeners and animated icons on demand.
-- The sidebar now scrolls when the section list is taller than the window, and the content area can shrink without horizontal overflow.
-- Settings cards no longer lift or pulse on hover. The glass shimmer and border accent remain.
-- Removed the Account Skills tab. Its native tools now appear in an expanded Capabilities section with new Presentations, File Storage, and Memory entries, rewritten capability copy, and an inline SVG icon for Image Generation.
+- Switched the native system assistant to `xiaomi/mimo-v2.6-flash` for faster voice replies.
 
-### 5. Dark Mode Polish
-
-- Fixed GitHub panel tabs and native controls in dark mode with an explicit `color-scheme: dark` and darker tab backgrounds, muted labels, and pill indicators.
-
-### 6. Tests and Documentation
+### 5. Tests and Documentation
 
 - Added `js/tests/browser-runtime.test.js` covering lazy status reads, preference persistence, pause and resume ordering, queue recovery, bounded activity, real Chromium tab identities, cookie persistence, consent races, stale interactions, and slow work.
 - Added `js/tests/browser-runtime-ui.test.js` covering takeover controls, keyboard use, save failures, restart confirmation, text escaping, both themes, responsive layouts, reduced motion, and refresh cleanup.
 - Added `js/tests/fixtures/browser-runtime-electron.cjs` to verify that Electron takeover reveals a background window and keeps its page and form state.
 - Added `js/tests/settings-sections-browser.test.js` covering section navigation, saved preferences, single-active panel behavior, stationary hover, and overflow.
-- Added `js/tests/project-file-viewer-browser.test.js`, `js/tests/project-file-tree-browser.test.js`, and `js/tests/local-workspace-files.test.js` for highlighting, previews, sandboxing, themes, tree behavior, bounded reads, watcher reuse, and ignore rules.
 - Added `docs/browser-controls.md` describing browser preferences, pause and resume behavior, tab and activity limits, and recovery scenarios.
-- Isolated test environment variables in `js/tests/spelling-electron.test.js` so `ELECTRON_RUN_AS_NODE` no longer breaks the Electron spelling run.
 
-### 7. Packaging and Maintenance
+### 6. Packaging and Maintenance
 
-- Bumped the application version to `1.4.7` in `package.json` and `package-lock.json`.
-- Built the Windows NSIS installer `aetheria-ai-Setup-1.4.7.exe`, its blockmap, `latest.yml`, and the unpacked `win-unpacked` distribution.
-- Switched the native system assistant model to `xiaomi/mimo-v2.6-flash` for faster voice replies.
+- Bumped the application version to `1.4.8` in `package.json` and `package-lock.json`.
+- Built the Windows NSIS installer `aetheria-ai-Setup-1.4.8.exe`, its blockmap, `latest.yml`, and the unpacked `win-unpacked` distribution.
+
+---
+
+## [v1.4.7] - October 21, 2026
+
+Interactive project workspace file viewer with multi-language syntax highlighting, sandboxed HTML and Mermaid diagram previews, high-performance workspace scanning, and GitHub dark mode polish.
+
+### 1. Interactive Project File Viewer & Rich Previews
+
+- Added interactive `ProjectFileViewer` supporting multi-language syntax highlighting across 30+ programming languages and configuration formats via `highlight.js` (including JavaScript, TypeScript, Python, Rust, C#, C/C++, Go, Bash, PowerShell, Dockerfile, YAML, TOML, Markdown, LaTeX, Elixir, Haskell, and CMake).
+- Added a dual-mode preview toggle button (`Show source` / `Show formatted preview`) enabling quick switching between syntax-highlighted source code and rich formatted previews.
+- Implemented secure, sandboxed HTML document previews running inside an isolated `iframe` with strict Content Security Policy (`default-src 'none'`, inline styles only, data/blob images and fonts, no scripts, no remote networking, and no form submissions) sanitized with DOMPurify.
+- Implemented formatted Markdown document rendering supporting GitHub Flavored Markdown tables, blockquotes, code blocks, and embedded diagrams via `marked`.
+- Integrated live Mermaid diagram rendering for `.mermaid` / `.mmd` files and embedded markdown diagrams, featuring automatic light/dark theme adaptation, strict security options, and size validation.
+- Added visual status notices for truncated large files (>300 KB) and non-highlighted large source files (>100 KB).
+
+### 2. High-Performance Workspace Scanning and Streaming
+
+- Parallelized local workspace directory traversal: file scanning now walks directories in concurrent batches of 8 directories rather than sequential crawling, significantly reducing file tree loading times.
+- Bounded preview file reads: introduced `previewOnly: true` in the `readWorkspaceFile` IPC channel to read only up to the 300 KB preview limit directly from file handles without buffering or base64-encoding large files.
+- Expanded directory ignore rules to exclude build, virtual environment, and test cache folders (`__pycache__`, `.cache`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.venv*`, `venv`, `.tox`, `node_modules`, `.git`).
+- Optimized file system watcher lifecycles in `LocalCoderHandler` by reusing existing watchers when the root workspace directory remains unchanged.
+- Hardened preview and tree synchronization against race conditions using revision tracking (`previewRequest`, `treeSync`), discarding stale responses during rapid user navigation.
+- Added live auto-reload: automatically reloads the file preview when the currently viewed file is edited and saved on disk.
+
+### 3. Styling & Dark Mode Polish
+
+- Unified syntax highlighting themes across light and dark modes with dedicated CSS custom property tokens (`--syntax-keyword`, `--syntax-string`, `--syntax-number`, `--syntax-function`, `--syntax-comment`, `--syntax-variable`).
+- Fixed GitHub panel tabs, pill indicators, and native controls in dark mode with explicit `color-scheme: dark` and high-contrast tab pill indicators.
+- Added accessible keyboard navigation, visible focus styling (`:focus-visible`), and ARIA landmarks (`aria-pressed`, `aria-label`, `tabindex="0"`) on file preview containers and toggle controls.
+
+### 4. Tests and Verification
+
+- Added `js/tests/project-file-viewer-browser.test.js` verifying syntax highlighting, HTML iframe sandboxing, Markdown and Mermaid rendering, theme synchronization, and request races.
+- Added `js/tests/local-workspace-files.test.js` verifying bounded preview reads, watcher reuse, and exclusion filters.
+- Added `js/tests/project-file-tree-browser.test.js` covering file tree disclosure, preview switching, keyboard interactions, and accent styling.
+- Isolated test environment variables in `js/tests/spelling-electron.test.js` to eliminate `ELECTRON_RUN_AS_NODE` interference.
+
+### 5. Packaging and Maintenance
+
+- Bumped application version to `1.4.7` in `package.json` and `package-lock.json`.
+- Built production Windows installer `aetheria-ai-Setup-1.4.7.exe` and unpacked distribution.
 
 ---
 
