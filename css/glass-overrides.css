@@ -257,9 +257,8 @@ body.project-panel-open:not(.dark-mode) .sidebar {
   background: var(--glass-l2) !important;
   border-color: var(--glass-edge-bright) !important;
   box-shadow: 
-    var(--glass-shadow-panel),
-    var(--glass-inset-rich) !important;
-  transform: translateY(-4px) !important;
+    var(--glass-shadow-card),
+    var(--glass-inset-top) !important;
 }
 
 /* Card header divider */
