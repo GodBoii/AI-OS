@@ -8,9 +8,11 @@ const { setTimeout: delay } = require('node:timers/promises');
 
 test('Electron corrects one occurrence with undo and preserves Quick Prompt during menu use', { timeout: 90000 }, async t => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'aetheria-spelling-'));
+    const env = { ...process.env, SPELLING_TEST_PROFILE: profile };
+    delete env.ELECTRON_RUN_AS_NODE;
     const browser = await puppeteer.launch({ executablePath: require('electron'), ignoreDefaultArgs: true,
         args: [path.join(__dirname, 'fixtures/spelling-electron.cjs'), '--remote-debugging-port=0'],
-        env: { ...process.env, SPELLING_TEST_PROFILE: profile } });
+        env });
     t.after(async () => {
         await browser.close();
         fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
