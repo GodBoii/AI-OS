@@ -3098,14 +3098,24 @@ class AIOS {
         const contentArea = document.querySelector('.tab-content-area');
         if (!sidebar || !contentArea) return;
 
-        // Insert Settings tab button before the About button
+        const sections = [
+            { tab: 'settings', label: 'General', icon: 'fi fi-tr-gears', cards: ['settings-general-title', 'settings-typing-title'] },
+            { tab: 'appearance', label: 'Appearance', icon: 'fas fa-magic', cards: ['settings-appearance-title'] },
+            { tab: 'browser', label: 'Browser', icon: 'fas fa-globe', cards: ['settings-browser-title', 'settings-sessions-title'] },
+            { tab: 'notifications', label: 'Notifications', icon: 'fi fi-tr-bell-ring', cards: ['settings-notif-title'] },
+            { tab: 'shortcuts', label: 'Keyboard Shortcuts', icon: 'fi fi-tr-keyboard', cards: ['settings-kb-title'] },
+            { tab: 'desktop', label: 'Desktop Integration', icon: 'fas fa-desktop', cards: ['settings-desktop-title'] },
+        ];
         const aboutBtn = sidebar.querySelector('[data-tab="about"]');
-        if (aboutBtn && !sidebar.querySelector('[data-tab="settings"]')) {
-            const settingsBtn = document.createElement('button');
-            settingsBtn.className = 'tab-btn';
-            settingsBtn.dataset.tab = 'settings';
-            settingsBtn.innerHTML = '<i class="fi fi-tr-gears"></i><span>Settings</span>';
-            sidebar.insertBefore(settingsBtn, aboutBtn);
+        for (const { tab, label, icon } of sections) {
+            if (sidebar.querySelector(`[data-tab="${tab}"]`)) continue;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tab-btn';
+            button.dataset.tab = tab;
+            button.setAttribute('aria-controls', `${tab}-tab`);
+            button.innerHTML = `<i class="${icon}" aria-hidden="true"></i><span>${label}</span>`;
+            sidebar.insertBefore(button, aboutBtn);
         }
 
         // Create the Settings tab content panel
@@ -3410,7 +3420,31 @@ class AIOS {
             }
         }
 
-        // Re-query tabs/tabContents so the new elements are picked up by cacheElements
+        // Move the existing controls before binding listeners so IDs and saved
+        // preferences stay the same across the separate sidebar sections.
+        const settingsPanel = document.getElementById('settings-tab');
+        for (const { tab, label, cards } of sections) {
+            let panel = document.getElementById(`${tab}-tab`);
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = `${tab}-tab`;
+                panel.className = 'tab-content';
+                const heading = document.createElement('h3');
+                heading.className = 'tab-heading';
+                panel.appendChild(heading);
+                contentArea.insertBefore(panel, document.getElementById('about-tab'));
+            }
+            panel.classList.add('settings-tab-panel');
+            const heading = panel.querySelector('.tab-heading');
+            heading.textContent = label;
+            heading.id = `${tab}-heading`;
+            panel.setAttribute('aria-labelledby', heading.id);
+            for (const title of cards) {
+                const card = settingsPanel.querySelector(`section[aria-labelledby="${title}"]`);
+                if (card) panel.appendChild(card);
+            }
+        }
+
         this.initSettingsListeners();
 
         // The nav button and card headers above only exist now, so the animated
@@ -3771,7 +3805,8 @@ class AIOS {
             this.loadUserFiles();
         } else if (tabName === 'memory') {
             this.loadMemories();
-        } else if (tabName === 'settings') {
+        } else if (document.getElementById(`${tabName}-tab`)?.classList.contains('settings-tab-panel')) {
+            document.querySelector('.tab-content-area')?.scrollTo(0, 0);
             this.initSettingsListeners();
         }
     }
