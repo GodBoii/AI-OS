@@ -245,13 +245,13 @@ body:not(.dark-mode) .settings-shortcut-keys kbd {
 /* css/aios.css also defines .settings-card-header, with justify-content:
    space-between for a different [.settings-card-header-left, .settings-card-actions]
    structure. Cards in this tab are [icon, text], so space-between shoved every
-   title block to the far right edge. Scoped to #settings-tab so the other
+   title block to the far right edge. Scoped to settings panels so the other
    structure keeps its own behaviour. */
-#settings-tab .settings-card-header {
+.settings-tab-panel .settings-card-header {
     justify-content: flex-start;
 }
 
-#settings-tab .settings-card-header > div:not(.settings-card-icon) {
+.settings-tab-panel .settings-card-header > div:not(.settings-card-icon) {
     flex: 1;
     min-width: 0;
     text-align: left;
