@@ -283,7 +283,6 @@
 
         // ── Settings window navigation ──
         { sel: '.tabs-sidebar [data-tab="account"]', icon: 'user', variant: 'tab' },
-        { sel: '.tabs-sidebar [data-tab="skills"]', icon: 'sparkles', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="integration"]', icon: 'plug', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="deployments"]', icon: 'rocket', variant: 'tab' },
         { sel: '.tabs-sidebar [data-tab="database"]', icon: 'vault', variant: 'tab' },
