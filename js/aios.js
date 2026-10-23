@@ -3269,36 +3269,68 @@ class AIOS {
 
                 <!-- Browser Automation Section -->
                 <section class="settings-card" aria-labelledby="settings-browser-title">
+                    <div class="browser-runtime" id="browser-runtime">
+                        <div class="browser-runtime-heading">
+                            <div>
+                                <span class="browser-eyebrow">On this computer</span>
+                                <p class="browser-runtime-state" id="browser-runtime-state" role="status">Checking browser...</p>
+                                <p class="browser-runtime-meta" id="browser-runtime-meta">Your agent uses a separate browser profile.</p>
+                            </div>
+                            <button class="settings-field-btn browser-primary" type="button" id="browser-runtime-open">Open browser</button>
+                        </div>
+                        <div class="browser-runtime-actions">
+                            <button class="settings-field-btn" type="button" data-browser-action="takeControl" disabled>Take control</button>
+                            <button class="settings-field-btn" type="button" data-browser-action="pause" disabled>Pause</button>
+                            <button class="settings-field-btn" type="button" data-browser-action="resume" hidden>Resume automation</button>
+                            <button class="settings-field-btn" type="button" data-browser-confirm="restart" hidden>Restart to apply mode</button>
+                            <button class="settings-field-btn" type="button" data-browser-confirm="stop" disabled>Close browser</button>
+                        </div>
+                        <p class="settings-field-status" id="browser-runtime-feedback" role="status" aria-live="polite"></p>
+                        <div class="browser-confirm" id="browser-runtime-confirm" hidden>
+                            <p id="browser-confirm-message"></p>
+                            <button class="settings-field-btn" type="button" id="browser-confirm-accept">Restart browser</button>
+                            <button class="settings-field-btn" type="button" id="browser-confirm-cancel">Cancel</button>
+                        </div>
+                        <details class="browser-details" id="browser-runtime-details">
+                            <summary>Tabs and recent activity <span id="browser-tab-count"></span></summary>
+                            <div class="t-panel-slide" data-open="false">
+                                <p class="browser-runtime-meta">Pause automation to switch or close tabs.</p>
+                                <ul class="browser-runtime-list" id="browser-runtime-tabs" aria-label="Browser tabs"></ul>
+                                <h5>Recent activity</h5>
+                                <ol class="browser-runtime-list" id="browser-runtime-activity" aria-label="Recent browser actions"></ol>
+                            </div>
+                        </details>
+                    </div>
                     <div class="settings-card-header">
                         <div class="settings-card-icon" data-settings-icon="browser"><i class="fas fa-globe"></i></div>
                         <div>
-                            <h4 id="settings-browser-title" class="settings-card-title">Browser Automation</h4>
-                            <p class="settings-card-desc">How the agent drives Chrome on this computer.</p>
+                            <h4 id="settings-browser-title" class="settings-card-title">Window behavior</h4>
+                            <p class="settings-card-desc">Preferences for the agent's browser.</p>
                         </div>
                     </div>
                     <div class="settings-items">
                         <div class="settings-toggle-row">
                             <div class="settings-toggle-info">
                                 <label class="settings-toggle-label" for="settings-browser-visibility">Window mode</label>
-                                <span class="settings-toggle-hint">Visible shows the window. Background runs a real browser that never takes focus. Hidden runs it headless, which is faster but blocked by more sites. Applies on the next browser start.</span>
+                                <span class="settings-toggle-hint" id="browser-mode-hint">Applies on the next start. Your current session stays open.</span>
                             </div>
                             <select class="settings-field-select" id="settings-browser-visibility">
                                 <option value="visible">Visible</option>
                                 <option value="background">Background</option>
-                                <option value="headless">Hidden</option>
+                                <option value="headless">Headless</option>
                             </select>
                         </div>
                         <div class="settings-toggle-row">
                             <div class="settings-toggle-info">
                                 <label class="settings-toggle-label" for="settings-browser-idle">Close when idle</label>
-                                <span class="settings-toggle-hint">Minutes of inactivity before the browser closes to free memory. It reopens on the next request. Set 0 to keep it running.</span>
+                                <span class="settings-toggle-hint">Minutes without agent activity. Set 0 for never. Paused and sign-in sessions stay open.</span>
                             </div>
                             <input class="settings-field-input settings-field-num" type="number" id="settings-browser-idle" min="0" max="600" step="1" placeholder="15">
                         </div>
                         <div class="settings-stack-row">
                             <div class="settings-toggle-info">
                                 <label class="settings-toggle-label" for="settings-browser-blocked">Blocked sites</label>
-                                <span class="settings-toggle-hint">One domain per line. Subdomains are covered too, so <code>google.com</code> also blocks <code>mail.google.com</code>.</span>
+                                <span class="settings-toggle-hint">One domain per line, including subdomains. Applies to direct agent navigation.</span>
                             </div>
                             <textarea class="settings-field-input settings-field-textarea" id="settings-browser-blocked" rows="3" spellcheck="false" placeholder="bank.example.com"></textarea>
                         </div>
@@ -3310,15 +3342,15 @@ class AIOS {
                     <div class="settings-card-header">
                         <div class="settings-card-icon" data-settings-icon="sessions"><i class="fas fa-key"></i></div>
                         <div>
-                            <h4 id="settings-sessions-title" class="settings-card-title">Browser Sign-in &amp; Cookies</h4>
-                            <p class="settings-card-desc">The logins the agent's browser remembers.</p>
+                            <h4 id="settings-sessions-title" class="settings-card-title">Sign-in and site data</h4>
+                            <p class="settings-card-desc">Manage the profile your agent uses.</p>
                         </div>
                     </div>
                     <div class="settings-items">
                         <div class="settings-stack-row">
                             <div class="settings-toggle-info">
-                                <label class="settings-toggle-label" for="settings-browser-open-url">Open the agent's browser</label>
-                                <span class="settings-toggle-hint">Opens the exact Chrome profile the agent uses, with no agent attached. Sign in to Chrome or to any site, including 2FA and passkeys, and every later run reuses it, hidden mode included. Leave the address empty to just open the window.</span>
+                                <label class="settings-toggle-label" for="settings-browser-open-url">Open a site to sign in</label>
+                                <span class="settings-toggle-hint">Automation pauses while you sign in. Resume it when you are ready.</span>
                             </div>
                             <div class="settings-field-pair">
                                 <input class="settings-field-input" type="text" id="settings-browser-open-url" placeholder="Optional: accounts.google.com" spellcheck="false" autocomplete="url">
@@ -3328,7 +3360,7 @@ class AIOS {
                         </div>
                         <div class="settings-toggle-row">
                             <div class="settings-toggle-info">
-                                <span class="settings-toggle-label">Stay signed in</span>
+                                <label class="settings-toggle-label" for="settings-browser-keep-signed-in">Stay signed in</label>
                                 <span class="settings-toggle-hint">Keep these logins between sessions. Off wipes the whole browser profile when you quit Aetheria ai.</span>
                             </div>
                             <label class="aios-toggle">
@@ -3338,8 +3370,8 @@ class AIOS {
                         </div>
                         <div class="settings-stack-row">
                             <div class="settings-toggle-info">
-                                <span class="settings-toggle-label" id="settings-browser-sites-label">Saved sites and cookies</span>
-                                <span class="settings-toggle-hint">Every site the agent's browser is holding cookies for. Clearing one signs the agent out of it and removes what that site stored.</span>
+                                <span class="settings-toggle-label" id="settings-browser-sites-label">Stored site data</span>
+                                <span class="settings-toggle-hint">Sites with saved cookies. This list does not verify sign-in status.</span>
                             </div>
                             <div class="settings-field-pair">
                                 <button class="settings-field-btn" type="button" id="settings-browser-sites-refresh">Refresh</button>
@@ -3511,6 +3543,9 @@ class AIOS {
         const typingStatus = document.getElementById('settings-typing-speed-status');
         if (!ipc?.invoke) {
             if (typingStatus) typingStatus.textContent = 'Available in the desktop app.';
+            const runtimeStatus = document.getElementById('browser-runtime-state');
+            if (runtimeStatus) runtimeStatus.textContent = 'Available in the desktop app';
+            document.querySelectorAll('#browser-tab button, #browser-tab input, #browser-tab select, #browser-tab textarea').forEach(el => { el.disabled = true; });
             return;
         }
 
@@ -3539,16 +3574,34 @@ class AIOS {
             }
         };
 
+        for (const [id] of fields) {
+            const field = document.getElementById(id);
+            if (field && field.dataset.settingsBound !== '1') field.disabled = true;
+        }
+        this._bindBrowserRuntime(call);
         const settings = await call('browser-settings:get');
         if (!settings) {
             if (typingStatus) typingStatus.textContent = 'Could not load typing speed. Reopen Settings to retry.';
+            const hint = document.getElementById('browser-mode-hint');
+            if (hint) hint.textContent = 'Could not load preferences. Reopen Browser to retry.';
             return;
         }
 
         for (const [id, key, read] of fields) {
             const el = document.getElementById(id);
             if (!el) continue;
+            if (el.dataset.saving === '1') continue;
             paint(el, key, settings);
+            el.disabled = false;
+            let status = document.getElementById(`${id}-status`);
+            if (!status) {
+                status = document.createElement('span');
+                status.id = `${id}-status`;
+                status.className = 'settings-field-status';
+                status.setAttribute('role', 'status');
+                el.closest('.settings-toggle-row, .settings-stack-row')?.querySelector('.settings-toggle-info')?.append(status);
+            }
+            el.setAttribute('aria-describedby', [...new Set(`${el.getAttribute('aria-describedby') || ''} ${status.id}`.trim().split(/\s+/))].join(' '));
             if (key === 'typingSpeed') {
                 el.disabled = false;
                 if (typingStatus) typingStatus.textContent = '';
@@ -3559,10 +3612,10 @@ class AIOS {
             if (el.dataset.settingsBound === '1') continue;
             el.dataset.settingsBound = '1';
             el.addEventListener('change', async () => {
-                if (key === 'typingSpeed') {
-                    el.disabled = true;
-                    if (typingStatus) typingStatus.textContent = 'Saving typing speed...';
-                }
+                el.dataset.saving = '1';
+                el.disabled = true;
+                status.classList.remove('is-error');
+                status.textContent = key === 'typingSpeed' ? 'Saving typing speed...' : 'Saving...';
                 const saved = await call('browser-settings:set', { [key]: read(el) });
                 if (saved) {
                     paint(el, key, saved);
@@ -3570,14 +3623,208 @@ class AIOS {
                 } else {
                     paint(el, key, { [key]: JSON.parse(el.dataset.savedValue) });
                 }
-                if (key === 'typingSpeed') {
-                    el.disabled = false;
-                    if (typingStatus) typingStatus.textContent = saved ? 'Typing speed saved.' : 'Could not save typing speed. Your previous choice is still active.';
-                }
+                el.dataset.saving = '0';
+                el.disabled = false;
+                status.classList.toggle('is-error', !saved);
+                status.textContent = saved ? (key === 'typingSpeed' ? 'Typing speed saved.' : 'Saved.') : 'Could not save. Your previous choice is still active.';
+                this._syncBrowserModes();
+                if (this.currentTab === 'browser') this._watchBrowserRuntime();
             });
         }
 
+        this._bindBrowserRuntime(call);
         this._bindBrowserSessions(call);
+    }
+
+    _syncBrowserModes() {
+        const select = document.getElementById('settings-browser-visibility');
+        document.querySelectorAll('input[name="browser-window-mode"]').forEach(radio => {
+            radio.checked = radio.value === select.value;
+            radio.disabled = select.disabled;
+        });
+        const hint = document.getElementById('browser-mode-hint');
+        if (hint && select) {
+            const descriptions = { visible: 'Shows the browser window.', background: 'Runs without bringing the window forward.', headless: 'Runs without a window. Some sites may reject this mode.' };
+            hint.textContent = `${descriptions[select.value]} Applies on the next start.`;
+        }
+    }
+
+    _bindBrowserRuntime(call) {
+        const root = document.getElementById('browser-runtime');
+        if (!root?.closest('#browser-tab')) return;
+        this._browserRuntimeCall = call;
+        const select = document.getElementById('settings-browser-visibility');
+        if (!document.getElementById('browser-mode-options')) {
+            const group = document.createElement('fieldset');
+            group.id = 'browser-mode-options';
+            group.className = 'browser-mode-options';
+            const legend = document.createElement('legend');
+            legend.className = 'browser-sr-only';
+            legend.textContent = 'Window mode';
+            group.append(legend);
+            for (const [value, text] of [['visible', 'Visible'], ['background', 'Background'], ['headless', 'Headless']]) {
+                const label = document.createElement('label');
+                const radio = document.createElement('input');
+                radio.type = 'radio'; radio.name = 'browser-window-mode'; radio.value = value;
+                const caption = document.createElement('span'); caption.textContent = text;
+                label.append(radio, caption); group.append(label);
+                radio.addEventListener('change', () => {
+                    select.value = radio.value;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    this._syncBrowserModes();
+                });
+            }
+            select.after(group);
+            select.classList.add('browser-native-mode');
+        }
+        this._syncBrowserModes();
+        if (root.dataset.bound !== '1') {
+            root.dataset.bound = '1';
+            root.addEventListener('click', event => {
+                const action = event.target.closest('button[data-browser-action]');
+                const confirm = event.target.closest('button[data-browser-confirm]');
+                if (action) this._runBrowserRuntime({ action: action.dataset.browserAction, id: action.dataset.tabId });
+                if (confirm) this._confirmBrowserRuntime({ action: confirm.dataset.browserConfirm });
+            });
+            document.getElementById('browser-runtime-open').addEventListener('click', () => this._runBrowserRuntime({ action: 'open' }));
+            document.getElementById('browser-confirm-cancel').addEventListener('click', () => {
+                document.getElementById('browser-runtime-confirm').hidden = true;
+                document.getElementById('browser-runtime-open').focus();
+            });
+            document.getElementById('browser-confirm-accept').addEventListener('click', () => {
+                document.getElementById('browser-runtime-confirm').hidden = true;
+                this._runBrowserRuntime(this._browserConfirmedAction);
+            });
+            document.getElementById('browser-runtime-details').addEventListener('toggle', event => {
+                event.target.querySelector('.t-panel-slide').dataset.open = String(event.target.open);
+            });
+        }
+        if (this.currentTab === 'browser') this._watchBrowserRuntime();
+    }
+
+    _confirmBrowserRuntime(payload) {
+        this._browserConfirmedAction = payload;
+        const stopping = payload.action === 'stop';
+        document.getElementById('browser-confirm-message').textContent = stopping
+            ? 'Close the browser after the current action finishes? Open tabs and unsaved page changes will close. Automation stays paused.'
+            : 'Restart the browser after the current action finishes? Open tabs and unsaved page changes will close. Automation stays paused.';
+        const accept = document.getElementById('browser-confirm-accept');
+        accept.textContent = stopping ? 'Close browser' : payload.visible ? 'Restart visibly' : 'Restart browser';
+        document.getElementById('browser-runtime-confirm').hidden = false;
+        accept.focus();
+    }
+
+    async _runBrowserRuntime(payload) {
+        if (this._browserRuntimeBusy || !payload) return;
+        this._browserRuntimeBusy = true;
+        const feedback = document.getElementById('browser-runtime-feedback');
+        feedback.classList.remove('is-error');
+        feedback.textContent = 'Applying browser action. An action already in progress will finish first.';
+        document.querySelectorAll('#browser-runtime button').forEach(button => { button.disabled = true; });
+        const result = await this._browserRuntimeCall('browser-data', payload);
+        this._browserRuntimeBusy = false;
+        document.querySelectorAll('#browser-runtime button').forEach(button => { button.disabled = false; });
+        feedback.classList.toggle('is-error', !result?.success);
+        const messages = {
+            open: 'Browser open. Automation is paused while you sign in.',
+            pause: 'Browser actions paused. An action already in progress finishes first.',
+            takeControl: 'Browser actions paused. Resume when you are ready.',
+            resume: 'Browser actions resumed. Continue the chat if its task has stopped.',
+            stop: 'Browser closed. Automation stays paused.',
+            restart: 'Browser restarted. Resume browser actions when you are ready.',
+            switchTab: 'Switched tab.', closeTab: 'Tab closed.',
+        };
+        feedback.textContent = result?.success ? messages[payload.action] || 'Browser updated.' : result?.error || 'Could not update the browser. Try again.';
+        if (result?.requiresRestart) this._confirmBrowserRuntime({ action: 'restart', visible: true });
+        this._watchBrowserRuntime();
+    }
+
+    _stopBrowserRuntime() {
+        clearTimeout(this._browserRuntimeTimer);
+        this._browserRuntimeVersion = (this._browserRuntimeVersion || 0) + 1;
+    }
+
+    _watchBrowserRuntime() {
+        this._stopBrowserRuntime();
+        if (this.currentTab !== 'browser' || !this._browserRuntimeCall) return;
+        const version = this._browserRuntimeVersion;
+        const poll = async () => {
+            if (version !== this._browserRuntimeVersion) return;
+            const panel = document.getElementById('browser-tab');
+            if (!document.hidden && panel?.getClientRects().length && !panel.closest('.floating-window')?.classList.contains('hidden')) {
+                const result = await this._browserRuntimeCall('browser-data', { action: 'runtime' });
+                if (version !== this._browserRuntimeVersion) return;
+                this._renderBrowserRuntime(result);
+            }
+            this._browserRuntimeTimer = setTimeout(poll, 2000);
+        };
+        poll();
+    }
+
+    _renderBrowserRuntime(result) {
+        const state = document.getElementById('browser-runtime-state');
+        if (!state) return;
+        if (!result?.success) {
+            state.textContent = 'Status unavailable';
+            document.getElementById('browser-runtime-meta').textContent = result?.error || 'Could not read browser status. Retrying...';
+            document.querySelectorAll('#browser-runtime [data-browser-action], #browser-runtime [data-browser-confirm]').forEach(button => { button.disabled = true; });
+            return;
+        }
+        const manual = result.control === 'manual';
+        const connected = result.connected === true;
+        state.textContent = result.busy ? (manual ? 'Pausing after the current action' : 'Working')
+            : connected ? (manual ? 'You have control' : 'Ready for the agent')
+            : result.state === 'starting' ? 'Starting browser' : result.state === 'disconnected' ? 'Browser disconnected' : 'Not running';
+        state.dataset.state = result.busy ? 'working' : connected ? 'connected' : 'stopped';
+        const tabs = Array.isArray(result.tabs) ? result.tabs : [];
+        const modes = { visible: 'Visible', background: 'Background', headless: 'Headless' };
+        const meta = document.getElementById('browser-runtime-meta');
+        meta.textContent = connected ? `${modes[result.mode] || 'Browser'} · ${tabs.length} ${tabs.length === 1 ? 'tab' : 'tabs'}` : 'A separate browser profile on this computer.';
+        if (connected && result.mode !== result.preferredMode) meta.textContent += ` · ${modes[result.preferredMode]} on next start`;
+        for (const button of document.querySelectorAll('#browser-runtime [data-browser-action], #browser-runtime [data-browser-confirm]')) {
+            const action = button.dataset.browserAction || button.dataset.browserConfirm;
+            button.hidden = !connected || (action === 'resume' ? !manual : action === 'pause' ? manual
+                : action === 'restart' ? result.mode === result.preferredMode : action === 'takeControl' ? manual && result.mode !== 'headless' : false);
+            button.disabled = this._browserRuntimeBusy || !connected || (action === 'resume' && result.busy)
+                || (button.dataset.tabId && (!manual || (action === 'closeTab' && tabs.length === 1)));
+        }
+        document.getElementById('browser-runtime-open').textContent = connected ? 'Show browser' : 'Open browser';
+        document.getElementById('browser-tab-count').textContent = tabs.length ? String(tabs.length) : '';
+        const signature = JSON.stringify([tabs, manual, result.activity]);
+        if (signature === this._browserRuntimeSignature) return;
+        this._browserRuntimeSignature = signature;
+        const list = document.getElementById('browser-runtime-tabs');
+        list.replaceChildren();
+        for (const tab of tabs) {
+            const row = document.createElement('li');
+            const text = document.createElement('span');
+            text.className = 'browser-tab-text';
+            const title = document.createElement('strong'); title.textContent = tab.title || 'Untitled tab';
+            const domain = document.createElement('span');
+            try { domain.textContent = new URL(tab.url).hostname || 'New tab'; } catch (_error) { domain.textContent = 'Browser page'; }
+            text.append(title, domain);
+            if (tab.active) row.setAttribute('aria-current', 'true');
+            row.append(text);
+            for (const [action, label] of [['switchTab', tab.active ? 'Current' : 'Switch'], ['closeTab', 'Close']]) {
+                const button = document.createElement('button'); button.type = 'button'; button.className = 'settings-field-btn';
+                button.textContent = label; button.dataset.browserAction = action; button.dataset.tabId = tab.id;
+                button.setAttribute('aria-label', `${label} ${tab.title || 'tab'}`);
+                button.disabled = !manual || this._browserRuntimeBusy || (action === 'closeTab' && tabs.length === 1);
+                row.append(button);
+            }
+            list.append(row);
+        }
+        if (!tabs.length) list.textContent = connected ? 'No tabs available.' : 'Open the browser to see its tabs.';
+        const activity = document.getElementById('browser-runtime-activity');
+        activity.replaceChildren();
+        const labels = { status: 'Connect browser', navigate: 'Open page', get_view: 'Read page', click: 'Click element', type: 'Enter text', scroll: 'Scroll page', go_back: 'Go back', go_forward: 'Go forward', list_tabs: 'Read tabs', open_new_tab: 'Open tab', switch_to_tab: 'Switch tab', close_tab: 'Close tab', hover: 'Hover element', press_key: 'Press key', refresh: 'Reload page', extract_text: 'Extract text', extract_table: 'Extract table' };
+        for (const entry of (Array.isArray(result.activity) ? result.activity : []).slice(0, 12)) {
+            const row = document.createElement('li');
+            const label = document.createElement('span'); label.textContent = labels[entry.action] || 'Browser action';
+            const status = document.createElement('span'); status.textContent = entry.status === 'working' ? 'In progress' : entry.status === 'failed' ? 'Failed' : 'Completed';
+            row.append(label, status); activity.append(row);
+        }
+        if (!activity.childElementCount) activity.textContent = 'Agent actions will appear here. Typed text is not recorded.';
     }
 
     /**
@@ -3610,6 +3857,8 @@ class AIOS {
             buttons.forEach((button) => { button.disabled = false; });
             if (!result?.success) {
                 say(status, result?.error || 'That did not work.', true);
+                if (result?.requiresRestart) this._confirmBrowserRuntime({ action: 'restart', visible: true });
+                if (this.currentTab === 'browser') this._watchBrowserRuntime();
                 return null;
             }
             onDone(result);
@@ -3648,13 +3897,14 @@ class AIOS {
             render(result.sites);
             say(listStatus, result.sites.length
                 ? `${result.sites.length} site${result.sites.length === 1 ? '' : 's'} with saved cookies.`
-                : 'No saved cookies. The browser is signed out of everything.');
+                : 'No saved cookies found. Some sites use other storage for sign-in.');
         });
 
         if (openBtn.dataset.settingsBound !== '1') {
             openBtn.dataset.settingsBound = '1';
             const open = () => run([openBtn], openStatus, 'Opening the browser…', { action: 'open', url: openUrl.value }, () => {
-                say(openStatus, 'The browser is open. Sign in, then close the window when you are done.');
+                say(openStatus, 'The browser is open and automation is paused. Sign in, then resume automation above.');
+                this._watchBrowserRuntime();
             });
             openBtn.addEventListener('click', open);
             openUrl.addEventListener('keydown', (event) => {
@@ -3790,6 +4040,7 @@ class AIOS {
     }
 
     switchTab(tabName) {
+        this._stopBrowserRuntime();
         this.elements.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
         this.elements.tabContents.forEach(content => content.classList.toggle('active', content.id === `${tabName}-tab`));
         this.currentTab = tabName;
