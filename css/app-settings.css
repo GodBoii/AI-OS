@@ -3,6 +3,103 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Settings Cards ────────────────────────────────────────────────── */
+
+/* Browser settings keep the existing theme and stationary card shimmer. */
+#browser-tab {
+    --text-primary: var(--text-color, #e2e8f0);
+    --panel-open-dur: 220ms;
+    --panel-close-dur: 150ms;
+    --panel-translate-y: 6px;
+    --panel-blur: 2px;
+    --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#browser-tab .settings-card { border-radius: 12px; box-shadow: none; }
+#browser-tab .settings-card::before, #browser-tab .settings-card::after { pointer-events: none; }
+#browser-tab .settings-card-header { padding: 18px 24px 14px; margin-bottom: 0; justify-content: flex-start; }
+#browser-tab .settings-card-icon { display: none; }
+#browser-tab .settings-card-title { font-size: 14px; }
+#browser-tab .settings-toggle-hint { font-size: 12px; line-height: 1.55; max-width: 54ch; }
+#browser-tab .settings-field-status:empty { display: none; }
+#browser-tab .settings-field-status { min-height: 1.4em; }
+#browser-tab .browser-native-mode { display: none; }
+#browser-tab [hidden] { display: none; }
+#browser-tab button { cursor: pointer; }
+#browser-tab button:disabled { cursor: not-allowed; opacity: .45; }
+#browser-tab :is(button, summary, input, textarea):focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+.browser-runtime { padding: 24px; border-bottom: 1px solid var(--border-color); }
+.browser-runtime-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.browser-runtime-heading > div { min-width: 0; }
+.browser-eyebrow { color: var(--text-secondary); font-size: 11px; letter-spacing: .04em; }
+.browser-runtime-state { color: var(--text-primary); font-size: 20px; font-weight: 600; letter-spacing: -.025em; margin: 7px 0; line-height: 1.3; }
+.browser-runtime-state::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 50%; background: var(--text-secondary); vertical-align: middle; }
+.browser-runtime-state[data-state="connected"]::before { background: var(--accent-color, currentColor); }
+.browser-runtime-state[data-state="working"]::before { background: #c28b30; }
+.browser-runtime-meta { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 4px 0 12px; overflow-wrap: anywhere; }
+.browser-runtime-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+#browser-tab .browser-primary { background: var(--action-primary-bg, #e2e8f0); color: var(--action-primary-fg, #151515); border-color: transparent; flex-shrink: 0; font-weight: 600; }
+#browser-tab .browser-primary:hover:not(:disabled) { background: var(--action-primary-hover, #cbd5e1); }
+.browser-mode-options { display: flex; flex-shrink: 0; gap: 2px; border: 1px solid var(--border-color); padding: 3px; margin: 0; border-radius: 9px; min-width: 0; }
+.browser-mode-options label { position: relative; cursor: pointer; margin: 0; }
+.browser-mode-options input, .browser-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.browser-mode-options span { display: block; padding: 8px 10px; border-radius: 6px; font-size: 12px; color: var(--text-secondary); transition: background 150ms ease, color 150ms ease; }
+.browser-mode-options input:checked + span { color: var(--text-primary); background: var(--hover-bg, rgb(128 128 128 / 16%)); }
+.browser-mode-options input:focus-visible + span { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.browser-mode-options input:disabled + span { opacity: .45; cursor: progress; }
+.browser-details { margin-top: 12px; border-top: 1px solid var(--border-color); }
+.browser-details summary { padding: 14px 0 4px; color: var(--text-primary); font-size: 12px; cursor: pointer; }
+.browser-details summary span { color: var(--text-secondary); margin-left: 5px; font-variant-numeric: tabular-nums; }
+.browser-details h5 { color: var(--text-primary); font-size: 12px; font-weight: 600; margin: 20px 0 8px; }
+.browser-runtime-list { list-style: none; padding: 0; margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); max-height: 240px; overflow-y: auto; }
+.browser-runtime-list li { display: flex; align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px solid var(--border-color); }
+.browser-runtime-list li > :first-child { flex: 1; min-width: 0; }
+.browser-runtime-list li[aria-current="true"] .browser-tab-text strong { color: var(--text-primary); }
+.browser-tab-text strong, .browser-tab-text > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-tab-text strong { font-weight: 500; }
+.browser-runtime-list .settings-field-btn { padding: 6px 8px; font-size: 11px; }
+.browser-confirm { padding: 12px; margin: 12px 0; border: 1px solid var(--border-color); border-radius: 8px; }
+.browser-confirm p { font-size: 12px; color: var(--text-primary); line-height: 1.6; margin: 0 0 10px; }
+.browser-confirm button + button { margin-left: 6px; }
+
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+@media (max-width: 700px) {
+    #browser-tab .settings-toggle-row { flex-direction: column; align-items: stretch; gap: 10px; }
+    #browser-tab .settings-toggle-row:has(.aios-toggle) { flex-direction: row; align-items: center; }
+    #browser-tab .settings-toggle-hint { max-width: none; }
+    .browser-mode-options { align-self: flex-start; }
+    .browser-runtime { padding: 18px; }
+    .browser-runtime-heading { flex-wrap: wrap; }
+    .browser-runtime-state { font-size: 18px; }
+    #browser-tab .settings-field-pair { flex-wrap: wrap; }
+    #browser-tab .settings-field-pair input { flex: 1 1 160px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .t-panel-slide { transition: none !important; }
+    #browser-tab *, #browser-tab *::before, #browser-tab *::after { transition: none; animation: none; }
+}
+
 .settings-card {
     background: var(--bg-secondary, #1a1a2e);
     border: 1px solid var(--border-color, rgba(255,255,255,0.06));
